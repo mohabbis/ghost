@@ -59,7 +59,8 @@ impl LLMConfig {
         let model = match provider {
             LLMProviderType::OpenAI => env::var("GHOST_AI_MODEL")
                 .unwrap_or_else(|_| "gpt-4o".to_string()),
-            LLMProviderType::Claude => "claude-3-opus-20240229".to_string(),
+            LLMProviderType::Claude => env::var("GHOST_AI_MODEL")
+                .unwrap_or_else(|_| "claude-sonnet-4-6".to_string()),
             LLMProviderType::Local => "local-heuristic".to_string(),
         };
 
@@ -117,7 +118,7 @@ impl LLMProvider for OpenAIProvider {
         ax_tree: Option<&str>,
         element_context: &[ElementInfo],
     ) -> anyhow::Result<Vec<InputEvent>> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self.config.api_key()
             .ok_or_else(|| anyhow::anyhow!("OPENAI_API_KEY not set"))?;
 
         let client = reqwest::Client::new();
@@ -199,7 +200,7 @@ impl LLMProvider for ClaudeProvider {
         ax_tree: Option<&str>,
         element_context: &[ElementInfo],
     ) -> anyhow::Result<Vec<InputEvent>> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self.config.api_key()
             .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))?;
 
         let client = reqwest::Client::new();
@@ -219,7 +220,7 @@ impl LLMProvider for ClaudeProvider {
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", api_key)
             .header("Content-Type", "application/json")
-            .header("anthropic-version", "bedrock-2023-05-31")
+            .header("anthropic-version", "2023-06-01")
             .json(&serde_json::json!({
                 "model": self.config.model,
                 "messages": [
@@ -357,6 +358,18 @@ pub fn describe_event(event: &InputEvent) -> String {
         }
         InputEvent::Delay { ms, .. } => {
             format!("Wait {}ms", ms)
+        }
+        InputEvent::Wait { condition, timeout_ms, .. } => {
+            format!("Wait for condition (timeout {}ms): {:?}", timeout_ms, condition)
+        }
+        InputEvent::VisualCheck { threshold, .. } => {
+            format!("Visual check (threshold {})", threshold)
+        }
+        InputEvent::Variable { name, value_template, .. } => {
+            format!("Set variable {} = {}", name, value_template)
+        }
+        InputEvent::VariableRef { name } => {
+            format!("Ref variable ${}", name)
         }
     }
 }

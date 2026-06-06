@@ -106,7 +106,7 @@ pub struct ExecutionHistory {
 impl ExecutionHistory {
     /// Create a new execution history manager
     pub fn new() -> anyhow::Result<Self> {
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let logs_dir = data_dir.join("ghost").join("logs");
