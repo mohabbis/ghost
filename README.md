@@ -1,21 +1,30 @@
 # 👻 Ghost
 
-An AI widget for macOS that **watches what you do, then helps you automate it.**
+Your **smart AI parrot helper/geek** — an intelligent desktop companion that watches what you do, learns your patterns, and proactively helps with repetitive tasks.
 
-Ghost sits on top of macOS Accessibility. It can observe your actions (today: global
-clicks), record them as a repeatable sequence, and replay them for you. The roadmap is
-to layer AI reasoning on top of this observe → understand → automate loop so Ghost can
-recognize repetitive work and offer to do it for you.
+Like a clever parrot, Ghost observes your behavior silently and pops up with suggestions: *"Hey, I noticed you copy-paste customer info every morning — want me to automate that?"* It's more than just recording/replaying inputs; it's an active assistant that understands your workflow and offers help before you even ask.
 
-> Early stage. The observe/record/replay engine works; the AI layer is what comes next.
+> Early stage. The observe/learn/assist engine works; the AI layer is getting smarter.
 
-## How it works
+## What is Ghost?
 
-Ghost is a [Tauri 2](https://tauri.app) desktop app with a marketing site deployable to Vercel/Netlify.
+Ghost is your **smart AI parrot** — an intelligent assistant that:
+- **Observes** your desktop activity silently, learning your unique patterns
+- **Learns** what workflows you repeat and when you do them
+- **Assists** proactively with "Hey, I noticed you..." style suggestions
+- **Automates** repetitive tasks so you can focus on what matters
+
+It sits on top of macOS Accessibility (and Windows UIA) to understand your clicks, keystrokes, and workflow intent — then turns those actions into reliable automations.
+
+## How it helps (like a smart parrot)
+
+1. **Observe** — Your parrot silently watches your desktop activity, learning your unique patterns
+2. **Learn** — It builds understanding of your intent and recognizes when you repeat actions  
+3. **Assist** — Pops up with proactive suggestions: "Hey, I noticed you ___"
 
 - **Frontend** (`src/`) — plain vanilla HTML/CSS/JS, no bundler. The UI for recording and
   replaying lives here and talks to Rust over Tauri IPC. Also serves as the static marketing
-  site when deployed to Vercel or Netlify.
+  site when deployed to Vercel or Netlify, featuring the smart AI parrot demo.
 - **Backend** (`src-tauri/`) — Rust. The platform-specific integration:
   - **macOS** — `src-tauri/src/platform/macos.rs`: CGEventTap for recording, AXUIElement for
     element lookup, enigo for replay.
@@ -121,6 +130,8 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 - [x] Enterprise audit logging for compliance
 - [x] Accessibility permission handling (check/request)
 - [x] Real-time event timeline visualization
+- [x] Smart AI parrot with proactive observation notifications
+- [x] Typing animation showing "Hey, I noticed you..." patterns
 - [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
 - [ ] Keyboard modifier tracking and character mapping
 - [ ] Scroll event phase handling

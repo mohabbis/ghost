@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Ghost is a macOS-first AI automation widget that watches repetitive workflows and replays them for you."
+      content="Ghost is your smart AI parrot helper — an intelligent desktop companion that observes your behavior, learns patterns, and provides proactive help."
     />
-    <title>Ghost — automate the work you repeat</title>
+    <title>Ghost — Your smart AI parrot helper</title>
     <script type="module" src="/main.js" defer></script>
   </head>
 
@@ -20,9 +20,9 @@
           <span>Ghost</span>
         </a>
         <nav class="nav__links" aria-label="Page sections">
-          <a href="#how-it-works">How it works</a>
-          <a href="#use-cases">Use cases</a>
-          <a href="#preview">Preview</a>
+          <a href="#how-it-works">How it helps</a>
+          <a href="#use-cases">Examples</a>
+          <a href="#preview">Get access</a>
         </nav>
         <a class="btn btn--small" href="#waitlist">Join waitlist</a>
       </header>
@@ -30,39 +30,60 @@
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero__copy">
-            <p class="eyebrow">Mac automation, trained by example</p>
-            <h1 id="hero-title">Show Ghost once. Let it repeat the workflow forever.</h1>
+            <p class="eyebrow">Your smart AI parrot helper</p>
+            <h1 id="hero-title">Hey, I noticed you... <span class="typed-text" id="typed-text"></span></h1>
             <p class="hero__lede">
-              Ghost watches the clicks, screens, and intent behind repetitive desktop work, then turns
-              those actions into reliable automations you can replay on demand.
+              Ghost is your intelligent desktop companion that watches, learns, and proactively helps with repetitive tasks.
+              Like a clever parrot, it observes your patterns and offers smart suggestions before you even ask.
             </p>
             <div class="hero__actions">
-              <a class="btn" href="#waitlist">Request early access</a>
-              <a class="btn btn--ghost" href="#how-it-works">See how it works</a>
+              <a class="btn" href="#waitlist">Meet your AI parrot</a>
+              <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
             </div>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
-                <dt>3 steps</dt>
-                <dd>Observe, understand, replay</dd>
+                <dt>🤖 Observant</dt>
+                <dd>Watches your workflows silently</dd>
               </div>
               <div>
-                <dt>macOS</dt>
-                <dd>Built for native workflows</dd>
+                <dt>💡 Proactive</dt>
+                <dd>Offers help before you ask</dd>
               </div>
               <div>
-                <dt>0 scripts</dt>
-                <dd>No brittle setup required</dd>
+                <dt>🦜 Learning</dt>
+                <dd>Adapts to your patterns</dd>
               </div>
             </dl>
           </div>
 
-          <aside class="hero-card" aria-label="Ghost recording preview">
+          <aside class="hero-card" aria-label="Ghost AI parrot in action">
             <div class="window-bar" aria-hidden="true">
               <span></span><span></span><span></span>
             </div>
+            
+            <!-- AI Parrot Avatar -->
+            <div class="parrot-avatar" aria-hidden="true">
+              <div class="parrot-face">
+                <div class="parrot-eye"></div>
+                <div class="parrot-eye"></div>
+                <div class="parrot-beak"></div>
+              </div>
+            </div>
+            
+            <!-- Smart Insights Panel -->
+            <div class="smart-insights" id="smart-insights">
+              <div class="insight-bubble" id="insight-bubble">
+                <span class="insight-icon">🦜</span>
+                <span class="insight-text" id="insight-text">Observing your workflow patterns...</span>
+              </div>
+            </div>
+            
+            <!-- Dynamic notifications -->
+            <div class="notifications" id="notifications"></div>
+            
             <div class="recording-status">
               <span class="pulse" aria-hidden="true"></span>
-              Ready to record
+              Ready to learn your patterns
             </div>
             <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap;">
               <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
@@ -95,6 +116,22 @@
               <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
               <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
             </div>
+            
+            <!-- Smart Observer Mode -->
+            <div class="observer-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
+              <button class="btn btn--ghost btn--small" onclick="startSmartObserver()">Start Observer 🤖</button>
+              <button class="btn btn--ghost btn--small" onclick="stopSmartObserver()">Stop Observer</button>
+              <button class="btn btn--ghost btn--small" onclick="observeCurrentSession()">Observe Session</button>
+              <button class="btn btn--ghost btn--small" onclick="generateGeekInsights()">Geek Mode 🔧</button>
+            </div>
+            
+            <!-- Phase 4 Features -->
+            <div class="phase4-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
+              <button class="btn btn--ghost btn--small" onclick="replayWithVisualCheck()">Visual Check 👁️</button>
+              <button class="btn btn--ghost btn--small" onclick="captureBaseline()">Capture Baseline</button>
+              <button class="btn btn--ghost btn--small" onclick="createDataSource()">Data Source 📊</button>
+              <button class="btn btn--ghost btn--small" onclick="loadVariablesFromSource()">Load Variables</button>
+            </div>
             <div class="events-timeline" style="max-height: 200px; overflow-y: auto; background: rgba(7, 8, 19, 0.42); border-radius: 12px; padding: 12px; margin-top: 12px;">
               <p style="color: var(--muted); font-size: 0.85rem; margin: 0;">Events will appear here...</p>
             </div>
@@ -126,52 +163,52 @@
 
         <section id="how-it-works" class="section" aria-labelledby="how-title">
           <div class="section__heading">
-            <p class="eyebrow">How it works</p>
-            <h2 id="how-title">Automation without writing automation.</h2>
+            <p class="eyebrow">How it helps</p>
+            <h2 id="how-title">Your AI parrot watches, learns, and assists.</h2>
           </div>
           <div class="feature-grid">
             <article class="feature-card">
               <span class="feature-card__icon" aria-hidden="true">👁️</span>
               <h3>Observe</h3>
-              <p>Record a normal workflow across native macOS apps while Ghost captures the important actions.</p>
+              <p>Your parrot silently watches your desktop activity, learning your unique patterns and workflows.</p>
             </article>
             <article class="feature-card">
-              <span class="feature-card__icon" aria-hidden="true">🧠</span>
-              <h3>Understand</h3>
-              <p>Turn low-level clicks into a higher-level task plan that knows what should happen next.</p>
+              <span class="feature-card__icon" aria-hidden="true">🤖</span>
+              <h3>Learn</h3>
+              <p>It builds understanding of your intent and notices when you repeat the same actions.</p>
             </article>
             <article class="feature-card">
-              <span class="feature-card__icon" aria-hidden="true">⚡</span>
-              <h3>Replay</h3>
-              <p>Run the workflow again, skip the busywork, and keep control with checkpoints for sensitive steps.</p>
+              <span class="feature-card__icon" aria-hidden="true">💡</span>
+              <h3>Assist</h3>
+              <p>Like a helpful geek, it pops up with suggestions: "Hey, I noticed you do this every Tuesday..."</p>
             </article>
           </div>
         </section>
 
         <section id="use-cases" class="section split" aria-labelledby="use-title">
           <div>
-            <p class="eyebrow">Use cases</p>
-            <h2 id="use-title">Built for the chores that live outside your browser.</h2>
+            <p class="eyebrow">Proactive help examples</p>
+            <h2 id="use-title">Your AI parrot notices patterns and offers smart suggestions.</h2>
             <p>
-              Ghost is designed for operators, founders, and support teams who repeat the same desktop
-              flows every day but cannot justify a custom integration for each one.
+              Ghost acts like that geeky friend who's always watching and ready to help. It learns your habits
+              and speaks up when it sees something repetitive.
             </p>
           </div>
           <ul class="check-list">
-            <li>Copy customer context between internal tools and native apps.</li>
-            <li>Process invoices, screenshots, forms, and back-office queues.</li>
-            <li>Recreate QA paths without maintaining a brittle script.</li>
-            <li>Delegate repeatable research and admin routines to an AI helper.</li>
+            <li>🦜 "Hey, I noticed you copy-paste customer info every morning — want me to automate that?"</li>
+            <li>🦜 "Recognized your weekly report pattern — I can have it ready by 9am."</li>
+            <li>🦜 "I see you opening these 5 apps in the same order — let me set up a launcher."</li>
+            <li>🦜 "That form you fill out daily? I can pre-fill it and double-check your work."</li>
           </ul>
         </section>
 
         <section id="preview" class="section cta" aria-labelledby="cta-title">
           <div>
-            <p class="eyebrow">Private preview</p>
-            <h2 id="cta-title">Bring Ghost into your workflow early.</h2>
+            <p class="eyebrow">Meet your AI parrot</p>
+            <h2 id="cta-title">Get a smart desktop companion that notices and helps.</h2>
             <p>
-              We are opening a small preview for macOS teams with repetitive workflows that are too custom
-              for off-the-shelf automation.
+              Join the preview and experience the future of proactive AI assistance on macOS.
+              Your parrot is ready to learn your workflows.
             </p>
           </div>
           <form id="waitlist" class="waitlist" name="ghost-waitlist" method="post" data-netlify="true">
@@ -185,8 +222,8 @@
               <input name="email" type="email" autocomplete="email" placeholder="ada@company.com" required />
             </label>
             <label>
-              <span>Workflow you want Ghost to automate</span>
-              <textarea name="workflow" rows="4" placeholder="Tell us about the repetitive desktop task..." required></textarea>
+              <span>Workflow you want your AI parrot to learn</span>
+              <textarea name="workflow" rows="4" placeholder="Tell me about the repetitive task you do... (I'll watch and assist!)" required></textarea>
             </label>
             <button class="btn" type="submit">Get in touch</button>
           </form>

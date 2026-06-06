@@ -279,6 +279,58 @@ pub fn save_workflow_with_sidecar(
     Ok(name)
 }
 
+// ===== Phase 4A: Visual Regression Replay Commands =====
+
+/// Execute a workflow with visual regression checks
+#[tauri::command]
+pub fn replay_with_visual_check(
+    events: Vec<InputEvent>,
+    visual_checks: Vec<crate::core::events::VisualCheckPoint>,
+    engine: State<GhostEngine>,
+) -> Result<bool, String> {
+    engine
+        .replay_with_visual_check(&events, &visual_checks)
+        .map_err(|e| e.to_string())
+}
+
+/// Capture and save a baseline screenshot for visual regression testing
+#[tauri::command]
+pub fn capture_baseline_screenshot(
+    name: String,
+    region: Option<(i32, i32, i32, i32)>, // x, y, width, height
+    engine: State<GhostEngine>,
+) -> Result<String, String> {
+    engine
+        .capture_baseline(&name, region)
+        .map_err(|e| e.to_string())
+}
+
+// ===== Phase 4C: Data-Driven Testing Commands =====
+
+/// Create a data source for variable-driven workflows
+#[tauri::command]
+pub fn create_data_source(
+    name: String,
+    source_type: String, // "csv", "json", "environment"
+    path: Option<String>,
+    engine: State<GhostEngine>,
+) -> Result<String, String> {
+    engine
+        .create_data_source(&name, &source_type, path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+/// Load variables from a data source
+#[tauri::command]
+pub fn load_variables(
+    data_source_name: String,
+    engine: State<GhostEngine>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    engine
+        .load_variables(&data_source_name)
+        .map_err(|e| e.to_string())
+}
+
 // ===== Reliability Feature Commands =====
 
 /// Execute a workflow with reliability features
@@ -401,4 +453,130 @@ pub fn get_audit_logs(limit: Option<usize>, state: tauri::State<'_, CloudState>)
     } else {
         Err("Cloud sync not initialized".to_string())
     }
+}
+
+// ===== Phase 5: Execution & Analytics Commands =====
+
+/// Get execution history for a workflow
+#[tauri::command]
+pub fn get_execution_history(
+    workflow_name: String,
+    engine: State<GhostEngine>
+) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
+    let history_lock = engine.execution_tracker.lock().unwrap();
+    if let Some(ref history) = *history_lock {
+        history.get_history(&workflow_name).map_err(|e| e.to_string())
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Get all execution records (limited)
+#[tauri::command]
+pub fn get_all_executions(
+    limit: Option<usize>,
+    engine: State<GhostEngine>
+) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
+    let history_lock = engine.execution_tracker.lock().unwrap();
+    if let Some(ref history) = *history_lock {
+        history.get_all_records(limit).map_err(|e| e.to_string())
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Get workflow analytics summary
+#[tauri::command]
+pub fn get_workflow_analytics(
+    workflow_name: String,
+    engine: State<GhostEngine>
+) -> Result<serde_json::Value, String> {
+    let history_lock = engine.execution_tracker.lock().unwrap();
+    if let Some(ref history) = *history_lock {
+        let success_rate = history.get_success_rate(&workflow_name).unwrap_or(1.0);
+        let avg_duration = history.get_avg_duration(&workflow_name).unwrap_or(0);
+        let hotspots = history.get_failure_hotspots(&workflow_name).unwrap_or_default();
+        
+        Ok(serde_json::json!({
+            "workflow_name": workflow_name,
+            "success_rate": success_rate,
+            "average_duration_ms": avg_duration,
+            "failure_hotspots": hotspots,
+            "total_executions": history.get_history(&workflow_name).map(|r| r.len()).unwrap_or(0)
+        })
+    } else {
+        Err("Execution tracker not initialized".to_string())
+    }
+}
+
+// ===== Phase 4: Smart Observer Mode Commands =====
+
+/// Start the Smart Observer - watch and learn user patterns
+#[tauri::command]
+pub fn start_observer(engine: State<GhostEngine>) -> Result<bool, String> {
+    engine.start_observer();
+    Ok(true)
+}
+
+/// Stop the Smart Observer
+#[tauri::command]
+pub fn stop_observer(engine: State<GhostEngine>) -> Result<bool, String> {
+    engine.stop_observer();
+    Ok(true)
+}
+
+/// Check if observer is active
+#[tauri::command]
+pub fn is_observer_active(engine: State<GhostEngine>) -> bool {
+    engine.is_observer_active()
+}
+
+/// Set observer interval in milliseconds
+#[tauri::command]
+pub fn set_observer_interval(interval_ms: u64, engine: State<GhostEngine>) -> Result<(), String> {
+    engine.set_observer_interval(interval_ms);
+    Ok(())
+}
+
+/// Record events as observed patterns
+#[tauri::command]
+pub fn observe_events(
+    events: Vec<InputEvent>,
+    app_name: String,
+    engine: State<GhostEngine>
+) -> Result<u32, String> {
+    engine.observe_events(&events, &app_name);
+    let patterns = engine.get_learned_patterns(Some(&app_name));
+    Ok(patterns.len() as u32)
+}
+
+/// Get proactive automation suggestions
+#[tauri::command]
+pub fn get_proactive_suggestions(engine: State<GhostEngine>) -> Vec<crate::core::knowledge::ProactiveSuggestion> {
+    engine.get_proactive_suggestions()
+}
+
+/// Get learned patterns (optionally filtered by app)
+#[tauri::command]
+pub fn get_learned_patterns(
+    app_name: Option<String>,
+    engine: State<GhostEngine>
+) -> Vec<crate::core::knowledge::LearnedPattern> {
+    engine.get_learned_patterns(app_name.as_deref())
+}
+
+/// Get app usage statistics
+#[tauri::command]
+pub fn get_app_usage_stats(engine: State<GhostEngine>) -> Vec<crate::core::knowledge::AppUsageStats> {
+    engine.get_app_usage_stats()
+}
+
+/// Generate geek mode insights for events
+#[tauri::command]
+pub fn generate_geek_insights(
+    events: Vec<InputEvent>,
+    app_name: String,
+    engine: State<GhostEngine>
+) -> crate::core::knowledge::GeekDetails {
+    engine.generate_geek_insights(&events, &app_name)
 }

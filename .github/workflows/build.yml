@@ -1,0 +1,68 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src, clippy
+
+      - name: Security Audit
+        run: cargo audit
+        
+      - name: Build Tauri app
+        run: cargo build --release
+        working-directory: ./src-tauri
+
+      - name: Code Signing (macOS)
+        if: runner.os == 'macOS'
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          
+      - name: Notarize (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xcrun notarytool submit \
+            --apple-id ${{ secrets.APPLE_ID }} \
+            --team-id ${{ secrets.APPLE_TEAM_ID }} \
+            --password ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }} \
+            --wait \
+            ./src-tauri/target/release/bundle/macos/*.app.zip
+      
+      - name: Code Signing (Windows)
+        if: runner.os == 'Windows'
+        uses: dlemstra/code-sign-action@v3
+        with:
+          certificate: ${{ secrets.WINDOWS_CERTIFICATE }}
+          password: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          files: ./src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghost-${{ runner.os }}
+          path: ./src-tauri/target/release/bundle/**

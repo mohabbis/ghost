@@ -27,6 +27,15 @@ pub struct Checkpoint {
     pub requires_confirmation: bool,
 }
 
+/// Visual checkpoint for visual regression testing
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VisualCheckPoint {
+    pub event_index: usize,
+    pub name: String,
+    pub baseline_screenshot_path: Option<String>,
+    pub threshold: f32,
+}
+
 /// Reliability settings for workflow execution
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReliabilitySettings {
@@ -181,6 +190,7 @@ impl Default for Workflow {
             reliability: None,
         }
     }
+}
 
 /// Accessibility element metadata captured during recording.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

@@ -1,0 +1,44 @@
+# cargo-deny configuration for license and security checking
+
+[licenses]
+# List of explicitly allowed licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+]
+
+# Deny licenses that are problematic
+deny = [
+    "AGPL-3.0",
+    "GPL-2.0",
+    "GPL-3.0",
+]
+
+# Confidence threshold for detecting licenses
+confidence-threshold = 0.8
+
+# Multiple versions check
+[licenses.private]
+ignore-ws = true
+
+[bans]
+# Deny multiple versions of the same crate
+multiple-versions = "warn"
+wildcards = "allow"
+
+# Deny crates from specific registries
+deny = [
+    # Example: deny crates from crates.io with pre-release versions
+]
+
+[advisories]
+# Security advisory database
+ignore = []
+# GitHub token for private advisories (optional)
+github-audit = true
