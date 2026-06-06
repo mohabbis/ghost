@@ -69,10 +69,21 @@ This document summarizes the transformation of the Ghost recorder/replayer into 
 - **Baseline capture** for screenshot comparison
 - **Mismatch handling** with retry/fail/log options
 
+### Phase 4B: Smart Observer Mode ✅
+- **Pattern learning** - watches and learns your patterns
+- **Proactive suggestions** - recommends automations via "Hey, I noticed you..." style notifications
+- **App usage analytics** - tracks how you use different applications
+- **Live observation** - real-time pattern detection
+
 ### Phase 4C: Data-Driven Testing ✅
 - **CSV/JSON data sources** for variable injection
 - **Environment variable data sources**
 - **Template resolution** for dynamic values
+
+### Phase 4D: Geek Mode Insights ✅
+- **Performance metrics** - total duration, average delays, bottleneck detection
+- **Event timing analysis** - per-event timing breakdown
+- **Technical insights** for power users who want to optimize workflows
 
 ### Smart AI Parrot Helper/Geek Mode ✅
 - **Smart Observer Mode** - watches and learns your patterns
@@ -227,7 +238,11 @@ Reliability:      replay_with_reliability
 Cloud Sync:       init_cloud_sync, cloud_authenticate, cloud_sync_workflows,
                   create_workspace, get_audit_logs
 Phase 4A:         replay_with_visual_check, capture_baseline_screenshot
+Phase 4B:         start_observer, stop_observer, is_observer_active, set_observer_interval,
+                  observe_events, get_proactive_suggestions, get_learned_patterns,
+                  get_app_usage_stats, generate_geek_insights
 Phase 4C:         create_data_source, load_variables
+Phase 4D:         get_performance_metrics, get_event_timing_analysis (via generate_geek_insights)
 Smart Observer:   start_observer, stop_observer, is_observer_active, set_observer_interval,
                   observe_events, get_proactive_suggestions, get_learned_patterns,
                   get_app_usage_stats, generate_geek_insights
