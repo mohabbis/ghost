@@ -113,6 +113,8 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 
 ## Status
 
+All Phase 4 features are now in production on `master`:
+
 - [x] Platform-agnostic engine foundation (Phase 0)
 - [x] Full macOS backend: CGEventTap, AXUIElement, enigo replay with speed control
 - [x] Full Windows backend: Win32 hooks, UIA, enigo replay with speed control  
@@ -130,8 +132,7 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 - [x] Enterprise audit logging for compliance
 - [x] Accessibility permission handling (check/request)
 - [x] Real-time event timeline visualization
-- [x] Smart AI parrot with proactive observation notifications
-- [x] Typing animation showing "Hey, I noticed you..." patterns
+- [x] **Smart AI Parrot UI** - interactive marketing site with parrot avatar, typing animation, and proactive notifications
 - [x] **Phase 4A: Visual Regression** - Visual checkpoints during replay with SSIM comparison, baseline capture, mismatch handling
 - [x] **Phase 4B: Smart Observer Mode** - Watches/learns patterns, proactive suggestions, pattern detection
 - [x] **Phase 4C: Data-Driven Testing** - CSV/JSON/Environment data sources, template resolution
