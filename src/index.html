@@ -43,14 +43,14 @@
             <div class="hero__actions">
               <!-- Mac -->
               <a class="btn btn--download" data-show="mac"
-                 href="/downloads/Ghost.dmg"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
                  aria-label="Download Ghost for macOS">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                 Download for Mac
               </a>
               <!-- Windows -->
               <a class="btn btn--download" data-show="windows"
-                 href="/downloads/Ghost_Setup.exe"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
                  aria-label="Download Ghost for Windows">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
                 Download for Windows
@@ -84,7 +84,7 @@
               <span></span><span></span><span></span>
             </div>
 
-            <!-- AI Parrot Avatar -->
+            <!-- Parrot avatar -->
             <div class="parrot-avatar" aria-hidden="true">
               <div class="parrot-face">
                 <div class="parrot-eye"></div>
@@ -93,94 +93,82 @@
               </div>
             </div>
 
-            <!-- Smart Insights Panel -->
+            <!-- Speech bubble — updated by sim + real app -->
             <div class="smart-insights" id="smart-insights">
               <div class="insight-bubble" id="insight-bubble">
                 <span class="insight-icon">🦜</span>
-                <span class="insight-text" id="insight-text">Observing your workflow patterns...</span>
+                <span class="insight-text" id="insight-text">Watching your screen silently…</span>
               </div>
             </div>
 
-            <!-- Dynamic notifications -->
             <div class="notifications" id="notifications"></div>
 
-            <div class="recording-status">
-              <span class="pulse" aria-hidden="true"></span>
-              Ready to learn your patterns
-            </div>
-            <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap;">
-              <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
-              <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
-              <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()">Replay</button>
-              <button class="btn btn--ghost btn--small" id="replayReliableBtn" onclick="replayWithReliability()" disabled>Replay Reliable</button>
-              <button class="btn btn--ghost btn--small" id="cancelBtn" onclick="cancelReplay()" disabled>Cancel</button>
-              <button class="btn btn--ghost btn--small" id="pauseBtn" onclick="pauseReplay()" disabled>Pause</button>
-              <button class="btn btn--ghost btn--small" id="resumeBtn" onclick="resumeReplay()" disabled>Resume</button>
-            </div>
-            <div class="workflow-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
-              <button class="btn btn--ghost btn--small" onclick="saveWorkflow()">Save Workflow</button>
-              <button class="btn btn--ghost btn--small" onclick="saveWorkflowWithMetadata()">Save with AI</button>
-              <button class="btn btn--ghost btn--small" onclick="analyzeWorkflow()">Analyze</button>
-              <button class="btn btn--ghost btn--small" onclick="optimizeWorkflow()">Optimize</button>
-              <button class="btn btn--ghost btn--small" onclick="loadWorkflow()">Load Workflow</button>
-              <button class="btn btn--ghost btn--small" onclick="inspectElementAtCursor()">Inspect Element</button>
-              <select class="btn btn--ghost btn--small" onchange="setSpeed(parseFloat(this.value))" style="cursor: pointer;">
-                <option value="0.5">0.5x Speed</option>
-                <option value="1.0" selected>1.0x Speed</option>
-                <option value="1.5">1.5x Speed</option>
-                <option value="2.0">2.0x Speed</option>
-              </select>
+            <!-- ── Browser simulation (visible on the website) ── -->
+            <div class="ghost-sim" id="ghost-sim">
+              <div class="sim-status-bar">
+                <span class="pulse" id="sim-pulse" aria-hidden="true"></span>
+                <span class="sim-phase" id="sim-phase">Observing…</span>
+                <span class="sim-progress-wrap"><span class="sim-progress" id="sim-progress"></span></span>
+              </div>
+              <ol class="sim-steps" id="sim-steps" aria-label="Live simulation"></ol>
+              <div class="sim-footer" id="sim-footer" hidden>
+                <span class="demo-savings">✅ Workflow saved · Runs automatically next time</span>
+                <a class="btn btn--small" href="#download">Download Ghost</a>
+              </div>
             </div>
 
-            <div class="cloud-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
-              <button class="btn btn--ghost btn--small" onclick="initCloudSync()">Init Cloud</button>
-              <button class="btn btn--ghost btn--small" onclick="cloudLogin()">Login</button>
-              <button class="btn btn--ghost btn--small" onclick="syncToCloud()">Sync to Cloud</button>
-              <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
-              <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
+            <!-- ── Real Tauri app controls (shown only inside the app) ── -->
+            <div class="tauri-only" hidden>
+              <div class="recording-status">
+                <span class="pulse" aria-hidden="true"></span>
+                Ready to learn your patterns
+              </div>
+              <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+                <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
+                <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
+                <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()">Replay</button>
+                <button class="btn btn--ghost btn--small" id="replayReliableBtn" onclick="replayWithReliability()" disabled>Replay Reliable</button>
+                <button class="btn btn--ghost btn--small" id="cancelBtn" onclick="cancelReplay()" disabled>Cancel</button>
+                <button class="btn btn--ghost btn--small" id="pauseBtn" onclick="pauseReplay()" disabled>Pause</button>
+                <button class="btn btn--ghost btn--small" id="resumeBtn" onclick="resumeReplay()" disabled>Resume</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">
+                <button class="btn btn--ghost btn--small" onclick="saveWorkflow()">Save Workflow</button>
+                <button class="btn btn--ghost btn--small" onclick="saveWorkflowWithMetadata()">Save with AI</button>
+                <button class="btn btn--ghost btn--small" onclick="analyzeWorkflow()">Analyze</button>
+                <button class="btn btn--ghost btn--small" onclick="optimizeWorkflow()">Optimize</button>
+                <button class="btn btn--ghost btn--small" onclick="loadWorkflow()">Load Workflow</button>
+                <button class="btn btn--ghost btn--small" onclick="inspectElementAtCursor()">Inspect Element</button>
+                <select class="btn btn--ghost btn--small" onchange="setSpeed(parseFloat(this.value))" style="cursor:pointer;">
+                  <option value="0.5">0.5x</option>
+                  <option value="1.0" selected>1.0x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2.0">2.0x</option>
+                </select>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">
+                <button class="btn btn--ghost btn--small" onclick="initCloudSync()">Init Cloud</button>
+                <button class="btn btn--ghost btn--small" onclick="cloudLogin()">Login</button>
+                <button class="btn btn--ghost btn--small" onclick="syncToCloud()">Sync</button>
+                <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
+                <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;border-top:1px solid #374151;padding-top:12px;">
+                <button class="btn btn--ghost btn--small" onclick="startSmartObserver()">Observer 🤖</button>
+                <button class="btn btn--ghost btn--small" onclick="stopSmartObserver()">Stop Observer</button>
+                <button class="btn btn--ghost btn--small" onclick="observeCurrentSession()">Observe Session</button>
+                <button class="btn btn--ghost btn--small" onclick="generateGeekInsights()">Geek Mode 🔧</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;border-top:1px solid #374151;padding-top:12px;">
+                <button class="btn btn--ghost btn--small" onclick="replayWithVisualCheck()">Visual Check 👁️</button>
+                <button class="btn btn--ghost btn--small" onclick="captureBaseline()">Capture Baseline</button>
+                <button class="btn btn--ghost btn--small" onclick="createDataSource()">Data Source 📊</button>
+                <button class="btn btn--ghost btn--small" onclick="loadVariablesFromSource()">Load Variables</button>
+              </div>
+              <div class="events-timeline" style="max-height:200px;overflow-y:auto;background:rgba(7,8,19,.42);border-radius:12px;padding:12px;margin-top:12px;">
+                <p style="color:var(--muted);font-size:.85rem;margin:0;">Events will appear here…</p>
+              </div>
             </div>
-
-            <!-- Smart Observer Mode -->
-            <div class="observer-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
-              <button class="btn btn--ghost btn--small" onclick="startSmartObserver()">Start Observer 🤖</button>
-              <button class="btn btn--ghost btn--small" onclick="stopSmartObserver()">Stop Observer</button>
-              <button class="btn btn--ghost btn--small" onclick="observeCurrentSession()">Observe Session</button>
-              <button class="btn btn--ghost btn--small" onclick="generateGeekInsights()">Geek Mode 🔧</button>
-            </div>
-
-            <!-- Phase 4 Features -->
-            <div class="phase4-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
-              <button class="btn btn--ghost btn--small" onclick="replayWithVisualCheck()">Visual Check 👁️</button>
-              <button class="btn btn--ghost btn--small" onclick="captureBaseline()">Capture Baseline</button>
-              <button class="btn btn--ghost btn--small" onclick="createDataSource()">Data Source 📊</button>
-              <button class="btn btn--ghost btn--small" onclick="loadVariablesFromSource()">Load Variables</button>
-            </div>
-            <div class="events-timeline" style="max-height: 200px; overflow-y: auto; background: rgba(7, 8, 19, 0.42); border-radius: 12px; padding: 12px; margin-top: 12px;">
-              <p style="color: var(--muted); font-size: 0.85rem; margin: 0;">Events will appear here...</p>
-            </div>
-            <ol class="timeline">
-              <li>
-                <span class="timeline__step">01</span>
-                <div>
-                  <strong>Detect the target</strong>
-                  <p>Finds the app, element, and context you clicked.</p>
-                </div>
-              </li>
-              <li>
-                <span class="timeline__step">02</span>
-                <div>
-                  <strong>Infer the intent</strong>
-                  <p>Groups repeatable actions into a reusable task.</p>
-                </div>
-              </li>
-              <li>
-                <span class="timeline__step">03</span>
-                <div>
-                  <strong>Replay safely</strong>
-                  <p>Runs the workflow back with review points when needed.</p>
-                </div>
-              </li>
-            </ol>
           </aside>
         </section>
 
@@ -299,7 +287,7 @@
               Runs natively on Apple Silicon and Intel.
             </p>
             <a class="btn btn--download cta-download-btn" data-show="mac"
-               href="/downloads/Ghost.dmg">
+               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg">
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
               Download Ghost.dmg
             </a>
@@ -313,7 +301,7 @@
               Supports Windows 10 and 11, 64-bit.
             </p>
             <a class="btn btn--download cta-download-btn" data-show="windows"
-               href="/downloads/Ghost_Setup.exe">
+               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe">
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
               Download Ghost Setup.exe
             </a>
@@ -375,6 +363,128 @@
           modal.style.display = "none";
         }
       }
+    </script>
+
+    <script>
+      // ── Hero card: show sim in browser, real controls in Tauri ────
+      (function () {
+        const inTauri = !!(window.__TAURI__);
+        if (inTauri) {
+          document.getElementById("ghost-sim").hidden = true;
+          document.querySelectorAll(".tauri-only").forEach(el => el.hidden = false);
+        }
+      })();
+    </script>
+
+    <script>
+      // ── Ghost simulation (browser only) ───────────────────────────
+      const SIM_SCENARIOS = [
+        {
+          phase: "Recording morning routine…",
+          speech: "I see you opening the same 5 apps every morning.",
+          steps: [
+            { icon: "💻", text: "Launch Chrome → restore tab session" },
+            { icon: "📧", text: "Open Gmail → filter priority inbox" },
+            { icon: "📝", text: "Open Notion → navigate to Today page" },
+            { icon: "💻", text: "Open VS Code → reopen last workspace" },
+            { icon: "🪟", text: "Snap windows into your layout" },
+          ],
+          replayPhase: "Replaying at 2×…",
+          replaySpeech: "Running your morning routine. Done in 4 seconds.",
+        },
+        {
+          phase: "Recording timesheet workflow…",
+          speech: "You fill this timesheet every Friday. Let me learn it.",
+          steps: [
+            { icon: "🌐", text: "Open HR portal → navigate to Timesheet" },
+            { icon: "🔑", text: "Auto-fill credentials" },
+            { icon: "📋", text: "Enter 40 h across Mon–Fri" },
+            { icon: "✅", text: "Click Submit → confirm dialog" },
+            { icon: "📸", text: "Capture screenshot as proof" },
+          ],
+          replayPhase: "Replaying workflow…",
+          replaySpeech: "Timesheet submitted! Saved you 8 minutes.",
+        },
+        {
+          phase: "Recording standup post…",
+          speech: "Noticed you post to #standup every morning. On it.",
+          steps: [
+            { icon: "📋", text: "Read yesterday's Notion tasks" },
+            { icon: "✍️", text: "Format standup (done / doing / blockers)" },
+            { icon: "💬", text: "Open Slack → navigate to #standup" },
+            { icon: "📤", text: "Paste and send message" },
+            { icon: "🔔", text: "Set reminder for tomorrow" },
+          ],
+          replayPhase: "Posting to Slack…",
+          replaySpeech: "Standup posted. Saved you 6 minutes.",
+        },
+      ];
+
+      let simIdx = 0;
+
+      function runSim() {
+        const s = SIM_SCENARIOS[simIdx % SIM_SCENARIOS.length];
+        simIdx++;
+
+        const phaseEl   = document.getElementById("sim-phase");
+        const progressEl= document.getElementById("sim-progress");
+        const stepsEl   = document.getElementById("sim-steps");
+        const footerEl  = document.getElementById("sim-footer");
+        const speechEl  = document.getElementById("insight-text");
+        const pulseEl   = document.getElementById("sim-pulse");
+
+        if (!phaseEl) return;
+
+        // Reset
+        stepsEl.innerHTML = "";
+        footerEl.hidden = true;
+        progressEl.style.width = "0%";
+        phaseEl.textContent = s.phase;
+        speechEl.textContent = s.speech;
+        pulseEl.style.background = "var(--success)";
+
+        const total = s.steps.length;
+        let i = 0;
+
+        function addStep() {
+          if (i >= total) {
+            // Replay phase
+            setTimeout(() => {
+              phaseEl.textContent = s.replayPhase;
+              pulseEl.style.background = "var(--accent)";
+              speechEl.textContent = s.replaySpeech;
+              progressEl.style.width = "100%";
+              // Mark steps complete
+              stepsEl.querySelectorAll(".sim-step").forEach(el => el.classList.add("sim-step--done"));
+              setTimeout(() => {
+                footerEl.hidden = false;
+                // Next scenario after pause
+                setTimeout(runSim, 4000);
+              }, 1800);
+            }, 600);
+            return;
+          }
+
+          const step = s.steps[i];
+          const li = document.createElement("li");
+          li.className = "sim-step";
+          li.innerHTML = `<span class="sim-step__icon">${step.icon}</span><span class="sim-step__text">${step.text}</span><span class="sim-step__check">✓</span>`;
+          stepsEl.appendChild(li);
+
+          // Animate in
+          requestAnimationFrame(() => li.classList.add("sim-step--active"));
+
+          progressEl.style.width = `${((i + 1) / total) * 80}%`;
+          i++;
+          setTimeout(addStep, 900);
+        }
+
+        setTimeout(addStep, 500);
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        if (!window.__TAURI__) runSim();
+      });
     </script>
 
     <script>
