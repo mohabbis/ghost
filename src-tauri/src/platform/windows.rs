@@ -287,11 +287,27 @@ impl ElementLocator for WindowsLocator {
 }
 
 /// Windows replay engine using enigo.
-struct WindowsReplayer;
+struct WindowsReplayer {
+    speed_factor: Arc<Mutex<f32>>,
+}
+
+impl WindowsReplayer {
+    fn new() -> Self {
+        WindowsReplayer {
+            speed_factor: Arc::new(Mutex::new(1.0)),
+        }
+    }
+    
+    /// Set playback speed factor (1.0 = normal, 2.0 = 2x speed, etc.)
+    fn set_speed(&self, factor: f32) {
+        *self.speed_factor.lock().unwrap() = factor.max(0.1);
+    }
+}
 
 impl ReplayEngine for WindowsReplayer {
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
         let mut enigo = Enigo::new();
+        let speed = *self.speed_factor.lock().unwrap();
 
         for event in events {
             if stop_flag.load(Ordering::Relaxed) {
@@ -334,7 +350,9 @@ impl ReplayEngine for WindowsReplayer {
                     enigo.scroll(*dx, *dy);
                 }
                 InputEvent::Delay { ms } => {
-                    std::thread::sleep(std::time::Duration::from_millis(*ms));
+                    // Apply speed factor to delay
+                    let adjusted_ms = (*ms as f32 / speed) as u64;
+                    std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
                 }
             }
         }

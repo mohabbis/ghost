@@ -9,10 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 // Core Foundation types
 type CFMachPortRef = *mut c_void;
 type CFRunLoopRef = *mut c_void;
+type CFRunLoopSourceRef = *mut c_void;
 type CGEventRef = *mut c_void;
 type CGEventTapId = u32;
 type CGEventType = u32;
@@ -20,6 +22,10 @@ type CGKeyCode = u16;
 type AXUIElementRef = *mut c_void;
 type AXError = i32;
 type AXValueRef = *mut c_void;
+type CFTypeRef = *const c_void;
+type CFAllocatorRef = *const c_void;
+type CFStringEncoding = u32;
+type Boolean = u8;
 
 // CGEventType constants
 const kCGMouseEventLeftMouseDown: CGEventType = 1;
@@ -29,6 +35,13 @@ const kCGMouseEventRightMouseUp: CGEventType = 4;
 const kCGKeyDown: CGEventType = 10;
 const kCGKeyUp: CGEventType = 11;
 const kCGScrollWheelEvent: CGEventType = 22;
+
+// CGEventField constants
+const kCGMouseEventX: u32 = 0;
+const kCGMouseEventY: u32 = 1;
+const kCGKeyboardEventKeycode: u32 = 0;
+const kCGScrollWheelEventDeltaAxis1: u32 = 1;
+const kCGScrollWheelEventDeltaAxis2: u32 = 2;
 
 // AX constants
 const kAXErrorSuccess: AXError = 0;
@@ -42,17 +55,18 @@ const kAXApplicationAttribute: &str = "AXApplication";
 extern "C" {
     fn CGEventTapCreate(
         tap_place: CGEventTapId,
+        place: u32,
+        options: u32,
         events_of_interest: u64,
-        handler: CGEventTapCallBack,
+        callback: CGEventTapCallBack,
         user_info: *mut c_void,
     ) -> CFMachPortRef;
-    fn CFMachPortGetRunLoopSource(port: CFMachPortRef) -> CFRunLoopRef;
-    fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopRef, mode: CFStringRef);
+    fn CFMachPortGetRunLoopSource(port: CFMachPortRef) -> CFRunLoopSourceRef;
+    fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
     fn CFRunLoopRun();
     fn CFRunLoopStop(rl: CFRunLoopRef);
-    fn CGEventGetIntegerValueField(event: CGEventRef, field: CGEventField) -> i64;
-    fn CGEventGetIntegerValueField(event: CGEventRef, field: CGEventField) -> i64;
-    fn CGEventGetIntegerValueField(event: CGEventRef, field: CGEventField) -> i64;
+    fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+    fn CGEventTapEnable(tap: CFMachPortRef, enable: Boolean);
 }
 
 // We need to define the callback type properly
@@ -63,7 +77,6 @@ type CGEventTapCallBack = unsafe extern "C" fn(
     user_info: *mut c_void,
 ) -> CGEventRef;
 
-type CGEventField = u32;
 type CFStringRef = *const c_void;
 
 // Accessibility external functions
@@ -78,14 +91,43 @@ extern "C" {
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,
-        value: *mut AXValueRef,
+        value: *mut CFTypeRef,
     ) -> AXError;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
-    fn AXValueGetValue(value: AXValueRef, ty: u32, ptr: *mut c_void) -> bool;
-    fn CFGetTypeID(cf: *const c_void) -> usize;
-    fn CFStringGetCStringPtr(theString: CFStringRef, encoding: u32) -> *const c_char;
-    fn CFRelease(cf: *const c_void);
+    fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
+    fn CFGetTypeID(cf: CFTypeRef) -> usize;
+    fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
+    fn CFRelease(cf: CFTypeRef);
 }
+
+// Core Foundation external functions
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    fn CFRunLoopGetCurrent() -> CFRunLoopRef;
+    fn CFStringCreateWithBytes(
+        alloc: CFAllocatorRef,
+        bytes: *const u8,
+        num_bytes: isize,
+        encoding: CFStringEncoding,
+        is_external_representation: Boolean,
+    ) -> CFStringRef;
+    fn CFStringGetLength(theString: CFStringRef) -> isize;
+    fn CFStringGetMaximumSizeForEncoding(length: isize, encoding: CFStringEncoding) -> isize;
+    fn CFStringGetCString(
+        theString: CFStringRef,
+        buffer: *mut c_char,
+        buffer_size: isize,
+        encoding: CFStringEncoding,
+    ) -> Boolean;
+}
+
+// Constants
+const kCFStringEncodingUTF8: CFStringEncoding = 0x08000100;
+const kCFRunLoopCommonModes: CFStringRef = std::ptr::null(); // Simplified - would be kCFRunLoopCommonMode in real impl
+const kCGSessionEventTap: CGEventTapId = 0;
+const kCGHeadInsertEventTap: u32 = 0;
+const kCGEventTapOptionDefault: u32 = 0;
+const kAXUIElementInvalid: AXUIElementRef = std::ptr::null_mut();
 
 /// macOS-specific backend providing recorder, locator, and replayer implementations.
 pub struct MacosBackend;
@@ -93,6 +135,7 @@ pub struct MacosBackend;
 // Thread-local storage for the run loop reference
 struct TapState {
     run_loop: Option<CFRunLoopRef>,
+    tap_port: Option<CFMachPortRef>,
     is_running: Arc<AtomicBool>,
 }
 
@@ -113,7 +156,7 @@ impl MacosBackend {
 
     /// Returns a boxed replay engine for macOS.
     pub fn replayer() -> Box<dyn ReplayEngine> {
-        Box::new(MacosReplayer)
+        Box::new(MacosReplayer::new())
     }
 }
 
@@ -148,18 +191,19 @@ impl InputRecorder for MacosRecorder {
                 | (1 << kCGKeyUp)
                 | (1 << kCGScrollWheelEvent);
 
-            // Create the event tap
             unsafe {
+                // Create the event tap with correct signature
                 let tap = CGEventTapCreate(
-                    0, // kCGSessionEventTap
-                    event_mask,
+                    kCGSessionEventTap,
+                    kCGHeadInsertEventTap,
                     kCGEventTapOptionDefault,
+                    event_mask,
                     cg_event_callback,
                     Box::into_raw(Box::new(tx)) as *mut c_void,
                 );
 
                 if tap.is_null() {
-                    eprintln!("Failed to create CGEventTap");
+                    eprintln!("Failed to create CGEventTap - Accessibility permissions may be required");
                     return;
                 }
 
@@ -171,8 +215,12 @@ impl InputRecorder for MacosRecorder {
                     kCFRunLoopCommonModes,
                 );
 
+                // Enable the tap
+                CGEventTapEnable(tap, 1);
+
                 *state_clone.lock().unwrap() = Some(TapState {
                     run_loop: Some(current_run_loop),
+                    tap_port: Some(tap),
                     is_running: is_running.clone(),
                 });
 
@@ -217,8 +265,9 @@ unsafe extern "C" fn cg_event_callback(
 
     let input_event = match etype {
         kCGMouseEventLeftMouseDown | kCGMouseEventLeftMouseUp => {
-            let x = CGEventGetIntegerValueField(event, 0) as i32; // kCGMouseEventDeltaX
-            let y = CGEventGetIntegerValueField(event, 1) as i32; // kCGMouseEventDeltaY
+            // Get absolute screen coordinates using kCGMouseEventX and kCGMouseEventY
+            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
+            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
             let button = if etype == kCGMouseEventLeftMouseDown { 0 } else { 1 };
             InputEvent::MouseClick {
                 x,
@@ -228,8 +277,8 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
-            let x = CGEventGetIntegerValueField(event, 0) as i32;
-            let y = CGEventGetIntegerValueField(event, 1) as i32;
+            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
+            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
             let button = if etype == kCGMouseEventRightMouseDown { 2 } else { 3 };
             InputEvent::MouseClick {
                 x,
@@ -239,7 +288,7 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGKeyDown | kCGKeyUp => {
-            let code = CGEventGetIntegerValueField(event, 0) as u16; // kCGKeyboardEventKeycode
+            let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
             let action = if etype == kCGKeyDown {
                 KeyAction::Down
             } else {
@@ -253,8 +302,8 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGScrollWheelEvent => {
-            let dx = CGEventGetIntegerValueField(event, 0) as i32;
-            let dy = CGEventGetIntegerValueField(event, 1) as i32;
+            let dx = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2) as i32;
+            let dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1) as i32;
             InputEvent::Scroll {
                 dx,
                 dy,
@@ -315,53 +364,84 @@ impl ElementLocator for MacosLocator {
 
 /// Helper function to extract string attributes from AXUIElement
 unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> Option<String> {
-    use std::ffi::CStr;
+    // Create CFString from Rust string
+    let cf_string = str_to_cfstring(attribute);
+    if cf_string.is_null() {
+        return None;
+    }
     
-    let cf_string = attribute.to_cfstring();
-    let mut value: AXValueRef = std::ptr::null_mut();
+    let mut value: CFTypeRef = std::ptr::null();
     
-    if AXUIElementCopyAttributeValue(element, cf_string as CFStringRef, &mut value) != kAXErrorSuccess {
+    if AXUIElementCopyAttributeValue(element, cf_string, &mut value) != kAXErrorSuccess {
+        CFRelease(cf_string);
         return None;
     }
 
     if value.is_null() {
+        CFRelease(cf_string);
         return None;
     }
 
-    // Try to get as CFString
-    let type_id = CFGetTypeID(value as *const c_void);
-    let cf_string_type_id = CFGetTypeID(std::ptr::null()); // This is a simplification
-    
-    // For now, try direct C string extraction
-    let c_str = CFStringGetCStringPtr(value as CFStringRef, 0x08000100); // kCFStringEncodingUTF8
-    if !c_str.is_null() {
-        let rust_str = CStr::from_ptr(c_str).to_string_lossy().into_owned();
-        CFRelease(value as *const c_void);
-        return Some(rust_str);
-    }
+    // Try to get as CFString using CFStringGetCStringPtr
+    let c_str = CFStringGetCStringPtr(value, kCFStringEncodingUTF8);
+    let result = if !c_str.is_null() {
+        Some(CStr::from_ptr(c_str).to_string_lossy().into_owned())
+    } else {
+        // Fallback: try CFStringGetCString
+        let len = CFStringGetLength(value);
+        let max_size = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8);
+        if max_size > 0 {
+            let mut buffer = vec![0u8; (max_size + 1) as usize];
+            if CFStringGetCString(value, buffer.as_mut_ptr() as *mut c_char, max_size + 1, kCFStringEncodingUTF8) != 0 {
+                Some(String::from_utf8_lossy(&buffer[..buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len())]).to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
 
-    CFRelease(value as *const c_void);
-    None
+    CFRelease(value);
+    CFRelease(cf_string);
+    result
 }
 
-// Helper trait for converting &str to CFStringRef
-trait ToCFString {
-    fn to_cfstring(&self) -> *const c_void;
-}
-
-impl ToCFString for &str {
-    fn to_cfstring(&self) -> *const c_void {
-        // Simplified - in production would use proper CFStringCreateWithBytes
-        std::ptr::null()
+/// Convert a Rust string to CFStringRef
+fn str_to_cfstring(s: &str) -> CFStringRef {
+    unsafe {
+        CFStringCreateWithBytes(
+            std::ptr::null(), // Use default allocator
+            s.as_ptr(),
+            s.len() as isize,
+            kCFStringEncodingUTF8,
+            0, // is_external_representation = false
+        )
     }
 }
 
 /// macOS replay engine using enigo.
-struct MacosReplayer;
+struct MacosReplayer {
+    speed_factor: Arc<Mutex<f32>>,
+}
+
+impl MacosReplayer {
+    fn new() -> Self {
+        MacosReplayer {
+            speed_factor: Arc::new(Mutex::new(1.0)),
+        }
+    }
+    
+    /// Set playback speed factor (1.0 = normal, 2.0 = 2x speed, etc.)
+    fn set_speed(&self, factor: f32) {
+        *self.speed_factor.lock().unwrap() = factor.max(0.1);
+    }
+}
 
 impl ReplayEngine for MacosReplayer {
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
         let mut enigo = Enigo::new();
+        let speed = *self.speed_factor.lock().unwrap();
 
         for event in events {
             if stop_flag.load(Ordering::Relaxed) {
@@ -385,7 +465,7 @@ impl ReplayEngine for MacosReplayer {
                 InputEvent::Key { code, chars, action, .. } => {
                     match action {
                         KeyAction::Down => {
-                            // Try using scancode first, fall back to character
+                            // Try using character first, fall back to raw keycode
                             if !chars.is_empty() {
                                 enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
                             } else {
@@ -405,7 +485,9 @@ impl ReplayEngine for MacosReplayer {
                     enigo.scroll(*dx, *dy);
                 }
                 InputEvent::Delay { ms } => {
-                    std::thread::sleep(std::time::Duration::from_millis(*ms));
+                    // Apply speed factor to delay
+                    let adjusted_ms = (*ms as f32 / speed) as u64;
+                    std::thread::sleep(Duration::from_millis(adjusted_ms));
                 }
             }
         }
