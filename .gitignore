@@ -1,1 +1,4 @@
-Nothing should be ignored in this case, as only a markdown file (AI_LAYER_MARKETING_PLAN.md) was added without any build artifacts, dependencies, or temporary files.
+```
+# Documentation
+CLAUDE_HANDOFF.md
+```
