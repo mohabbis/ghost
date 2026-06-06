@@ -1,5 +1,41 @@
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+// AI Parrot proactive notifications
+const parrotPatterns = [
+  "Hey, I noticed you...",
+  "...copy that pattern often",
+  "...repeat that workflow",
+  "...could automate this",
+  "...do this daily, right?"
+];
+
+let parrotIndex = 0;
+let parrotCharIndex = 0;
+const parrotSpeed = 100;
+
+function typeParrotMessage() {
+  const msgEl = document.getElementById("parrotMessage");
+  if (!msgEl) return;
+  
+  const currentText = parrotPatterns[parrotIndex];
+  const visibleText = currentText.slice(0, parrotCharIndex);
+  
+  msgEl.innerHTML = visibleText + '<span class="typing-cursor">|</span>';
+  
+  parrotCharIndex++;
+  
+  if (parrotCharIndex <= currentText.length) {
+    setTimeout(typeParrotMessage, parrotSpeed);
+  } else {
+    // Text complete, wait then start next pattern
+    setTimeout(() => {
+      parrotIndex = (parrotIndex + 1) % parrotPatterns.length;
+      parrotCharIndex = 0;
+      setTimeout(typeParrotMessage, 500);
+    }, 2000);
+  }
+}
+
 function revealOnScroll() {
   if (prefersReducedMotion.matches || !("IntersectionObserver" in window)) return;
 
@@ -108,3 +144,10 @@ function updateRecordingUI() {
 
 // Initialize UI state
 updateRecordingUI();
+
+// Start parrot typing animation
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(typeParrotMessage, 1000);
+});
+
+console.log("Ghost - AI Parrot Helper initialized");
