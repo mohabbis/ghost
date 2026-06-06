@@ -1,10 +1,24 @@
 # 👻 Ghost
 
+[![Latest Release](https://img.shields.io/github/v/release/mohabbis/ghost?style=flat-square&label=Download&color=8d7bff)](https://github.com/mohabbis/ghost/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/mohabbis/ghost/rust.yml?style=flat-square&label=Build)](https://github.com/mohabbis/ghost/actions/workflows/rust.yml)
+[![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=flat-square&logo=apple)](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
 Your **smart AI parrot helper/geek** — an intelligent desktop companion that watches what you do, learns your patterns, and proactively helps with repetitive tasks.
 
 Like a clever parrot, Ghost observes your behavior silently and pops up with suggestions: *"Hey, I noticed you copy-paste customer info every morning — want me to automate that?"* It's more than just recording/replaying inputs; it's an active assistant that understands your workflow and offers help before you even ask.
 
-> Early stage. The observe/learn/assist engine works; the AI layer is getting smarter.
+## Download
+
+| Platform | Link |
+|---|---|
+| 🍎 macOS (Apple Silicon + Intel) | [**Ghost.dmg**](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
+| 🪟 Windows 10 / 11 (64-bit) | [**Ghost_Setup.exe**](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
+
+> [!NOTE]
+> macOS blocks unsigned apps by default. Right-click the `.app` → **Open** → **Open Anyway** to run it the first time.
 
 ## What is Ghost?
 
