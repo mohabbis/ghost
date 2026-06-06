@@ -485,6 +485,16 @@ h3 {
   flex-direction: column;
   align-items: center;
   margin: -8px 0 16px;
+  cursor: pointer;
+  transition: transform 200ms ease;
+}
+
+.ai-parrot-container:hover {
+  transform: scale(1.05);
+}
+
+.ai-parrot-container:active {
+  transform: scale(0.98);
 }
 
 .ai-parrot {

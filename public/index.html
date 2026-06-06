@@ -25,6 +25,7 @@
         <nav class="nav__links" aria-label="Page sections">
           <a href="#how-it-works">How it works</a>
           <a href="#use-cases">Use cases</a>
+          <a href="#app-preview">The app</a>
           <a href="#preview">Preview</a>
         </nav>
         <a class="btn btn--small" href="#waitlist">Join waitlist</a>
@@ -33,11 +34,11 @@
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero__copy">
-            <p class="eyebrow">Mac automation, trained by example</p>
+            <p class="eyebrow">Mac & Windows automation, trained by your behavior</p>
             <h1 id="hero-title">Show Ghost once. Let it repeat the workflow forever.</h1>
             <p class="hero__lede">
-              Ghost watches the clicks, screens, and intent behind repetitive desktop work, then turns
-              those actions into reliable automations you can replay on demand.
+              Ghost watches your desktop activity, learns repetitive patterns, and offers proactive suggestions. 
+              When you show it a workflow once, it turns those actions into reliable automations you can replay.
             </p>
             <div class="hero__actions">
               <a class="btn" href="#waitlist">Request early access</a>
@@ -49,7 +50,7 @@
                 <dd>Observe, understand, replay</dd>
               </div>
               <div>
-                <dt>macOS</dt>
+                <dt>macOS <span style="opacity: 0.5;">• Windows</span></dt>
                 <dd>Built for native workflows</dd>
               </div>
               <div>
@@ -159,6 +160,69 @@
             <li>Recreate QA paths without maintaining a brittle script.</li>
             <li>Delegate repeatable research and admin routines to an AI helper.</li>
           </ul>
+        </section>
+
+        <section id="app-preview" class="section cta" aria-labelledby="app-title" style="margin-top: 40px;">
+          <div>
+            <p class="eyebrow">Desktop app</p>
+            <h2 id="app-title">Your AI parrot lives in the menu bar.</h2>
+            <p>
+              Ghost runs quietly in your menu bar (macOS) or system tray (Windows), watching for patterns
+              and offering proactive help when it spots repetitive work. Click the parrot to see examples!
+            </p>
+          </div>
+          <div style="display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;">
+            <div class="mockup-screen" style="background: #101226; border-radius: 12px; padding: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); flex: 1; min-width: 280px; max-width: 400px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <span class="brand__mark" style="width: 24px; height: 24px; font-size: 12px;">🦜</span>
+                <strong style="color: var(--text); font-size: 14px;">Ghost Helper</strong>
+                <span style="margin-left: auto; color: var(--success); font-size: 11px;">● Observing</span>
+              </div>
+              
+              <div class="suggestion-bubble" style="background: rgba(141, 123, 255, 0.15); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;">
+                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
+                  <span style="color: var(--accent-warm); font-weight: 600;">🤖 Hey!</span> I noticed you copy-pasting between apps...<br>
+                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Automate this workflow</span>
+                </p>
+              </div>
+              
+              <div class="suggestion-bubble" style="background: rgba(255, 184, 107, 0.1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;">
+                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
+                  <span style="color: var(--accent-warm); font-weight: 600;">🦜 Tip:</span> That looks like your morning routine...<br>
+                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Save as "Morning Setup"</span>
+                </p>
+              </div>
+              
+              <div class="suggestion-bubble" style="background: rgba(131, 246, 196, 0.12); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;">
+                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
+                  <span style="color: var(--accent-warm); font-weight: 600;">⚡ Geek Mode:</span> 12ms avg delay, bottleneck at step 2<br>
+                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Show insights</span>
+                </p>
+              </div>
+            </div>
+            
+            <div class="platform-support" style="flex: 1; min-width: 280px; max-width: 400px; text-align: left;">
+              <h3 style="font-size: 1.1rem; margin-bottom: 16px;">Coming to your platform</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 1.5rem;">🍏</span>
+                  <div>
+                    <strong style="color: var(--text);">macOS</strong>
+                    <p style="margin: 0; color: var(--muted); font-size: 0.9rem;">Native CGEventTap, AXUIElement integration</p>
+                  </div>
+                  <span style="margin-left: auto; color: var(--success); font-size: 0.8rem;">Available</span>
+                </li>
+                <li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 1.5rem;">🪟</span>
+                  <div>
+                    <strong style="color: var(--text);">Windows</strong>
+                    <p style="margin: 0; color: var(--muted); font-size: 0.9rem;">Win32 Hooks, UI Automation API</p>
+                  </div>
+                  <span style="margin-left: auto; color: var(--accent-warm); font-size: 0.8rem;">Beta</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </section>
 
         <section id="preview" class="section cta" aria-labelledby="cta-title">
