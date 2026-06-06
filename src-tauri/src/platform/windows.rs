@@ -3,6 +3,7 @@
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Enigo, MouseButton, MouseControllable};
+use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;

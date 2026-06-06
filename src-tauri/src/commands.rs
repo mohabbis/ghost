@@ -155,7 +155,7 @@ pub fn request_accessibility() -> bool {
 
 /// Analyze a workflow and return AI-powered insights
 #[tauri::command]
-pub fn analyze_workflow(name: String, events: Vec<InputEvent>, engine: State<GhostEngine>) -> crate::core::events::WorkflowAnalysis {
+pub fn analyze_workflow(name: String, events: Vec<InputEvent>, engine: State<GhostEngine>) -> crate::core::ai::WorkflowAnalysis {
     engine.analyze_workflow(&events, &name)
 }
 
@@ -248,7 +248,7 @@ pub fn save_workflow_with_sidecar(
         .map(|p| p.to_string_lossy().to_string())?;
 
     // Save sidecar metadata file
-    let data_dir = tauri::api::path::data_dir()
+    let data_dir = dirs::data_dir()
         .ok_or_else(|| "Could not determine data directory".to_string())?;
     let meta_path = data_dir.join("ghost").join("workflows").join(format!("{}.meta.json", name));
     
@@ -400,13 +400,15 @@ pub fn cloud_authenticate(token: String, state: tauri::State<'_, CloudState>) ->
 
 #[tauri::command]
 pub fn cloud_sync_workflows(
-    name: String,
-    events: Vec<InputEvent>, 
-    description: String,
+    name: Option<String>,
+    events: Vec<InputEvent>,
+    description: Option<String>,
     state: tauri::State<'_, CloudState>
 ) -> Result<Vec<String>, String> {
     let manager_lock = state.manager.lock().unwrap();
     if let Some(manager) = manager_lock.as_ref() {
+        let name = name.unwrap_or_else(|| "Unnamed Workflow".to_string());
+        let description = description.unwrap_or_default();
         // Convert events to workflow with proper metadata
         let workflow = crate::core::events::Workflow {
             name,

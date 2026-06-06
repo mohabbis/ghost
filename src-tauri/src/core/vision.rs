@@ -69,9 +69,30 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
     
     #[cfg(target_os = "windows")]
     {
-        // Windows implementation would use BitBlt or similar
-        // For now, return empty (placeholder)
-        anyhow::Err(anyhow::anyhow!("Windows screenshot not implemented"))
+        use std::process::Command;
+        let temp_path = std::env::temp_dir().join("ghost_screenshot.png");
+        let temp_str = temp_path.to_string_lossy().replace('\\', "\\\\");
+        let script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms; \
+             Add-Type -AssemblyName System.Drawing; \
+             $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
+             $bmp = New-Object System.Drawing.Bitmap($s.Width, $s.Height); \
+             $g = [System.Drawing.Graphics]::FromImage($bmp); \
+             $g.CopyFromScreen($s.Location, [System.Drawing.Point]::Empty, $s.Size); \
+             $bmp.Save('{}'); \
+             $g.Dispose(); $bmp.Dispose()",
+            temp_str
+        );
+        let status = Command::new("powershell")
+            .args(["-NonInteractive", "-Command", &script])
+            .status()?;
+        if status.success() && temp_path.exists() {
+            let bytes = std::fs::read(&temp_path)?;
+            let _ = std::fs::remove_file(&temp_path);
+            Ok(bytes)
+        } else {
+            anyhow::bail!("PowerShell screenshot failed")
+        }
     }
     
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -106,9 +127,9 @@ pub fn create_thumbnail(img: &DynamicImage, max_size: u32) -> DynamicImage {
 
 /// Convert image to base64 for transmission
 pub fn image_to_base64(img: &DynamicImage) -> String {
-    let mut bytes: Vec<u8> = Vec::new();
-    img.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
-    base64::encode(&bytes)
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut cursor, image::ImageFormat::Png).unwrap_or(());
+    base64::encode(cursor.into_inner())
 }
 
 /// Decode base64 to image
