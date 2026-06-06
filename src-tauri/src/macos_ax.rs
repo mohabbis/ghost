@@ -4,8 +4,8 @@ use core_foundation::dictionary::CFDictionary;
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopRef};
 use core_foundation::string::CFString;
 use core_graphics::event::{
-    CallbackResult, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
-    CGEventType,
+    CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+    CallbackResult,
 };
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};

@@ -1,4 +1,6 @@
 mod commands;
+
+#[cfg(target_os = "macos")]
 mod macos_ax;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
