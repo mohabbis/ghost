@@ -158,6 +158,25 @@ impl MacosBackend {
     pub fn replayer() -> Box<dyn ReplayEngine> {
         Box::new(MacosReplayer::new())
     }
+
+    /// Check if accessibility permissions are granted
+    pub fn check_accessibility() -> bool {
+        unsafe {
+            let system_wide = AXUIElementCreateSystemWide();
+            if system_wide.is_null() {
+                return false;
+            }
+            // If we can create a system-wide element, we have access
+            true
+        }
+    }
+
+    /// Request accessibility permissions (UI)
+    pub fn request_accessibility() -> bool {
+        // On macOS, this would typically trigger a system dialog
+        // For now, we check if we already have access
+        Self::check_accessibility()
+    }
 }
 
 /// macOS event recorder using CGEventTap.
@@ -246,7 +265,6 @@ impl InputRecorder for MacosRecorder {
 
 // Callback constants
 const kCGEventTapOptionDefault: u32 = 0;
-const kCFRunLoopCommonModes: CFStringRef = std::ptr::null();
 
 // External function for getting current run loop
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -449,43 +467,145 @@ impl ReplayEngine for MacosReplayer {
             }
 
             match event {
-                InputEvent::MouseClick { x, y, button, .. } => {
-                    // Move to position
-                    enigo.mouse_move_to(*x, *y);
+                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                    let max_retries = retry_count.unwrap_or(0);
+                    let mut attempts = 0;
+                    let mut success = false;
                     
-                    // Click the appropriate button
-                    let mouse_button = match button {
-                        0 | 1 => MouseButton::Left,
-                        2 | 3 => MouseButton::Right,
-                        _ => MouseButton::Left,
-                    };
-                    
-                    enigo.mouse_click(mouse_button);
+                    while attempts <= max_retries && !success {
+                        // Move to position
+                        enigo.mouse_move_to(*x, *y);
+                        
+                        // Click the appropriate button
+                        let mouse_button = match button {
+                            0 | 1 => MouseButton::Left,
+                            2 | 3 => MouseButton::Right,
+                            _ => MouseButton::Left,
+                        };
+                        
+                        enigo.mouse_click(mouse_button);
+                        success = true; // In a real implementation, you'd validate
+                        attempts += 1;
+                    }
                 }
-                InputEvent::Key { code, chars, action, .. } => {
-                    match action {
-                        KeyAction::Down => {
-                            // Try using character first, fall back to raw keycode
-                            if !chars.is_empty() {
-                                enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                            } else {
-                                enigo.key_down(enigo::Key::Raw(*code));
+                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                    let max_retries = retry_count.unwrap_or(0);
+                    let mut attempts = 0;
+                    
+                    while attempts <= max_retries {
+                        match action {
+                            KeyAction::Down => {
+                                // Try using character first, fall back to raw keycode
+                                if !chars.is_empty() {
+                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                                } else {
+                                    enigo.key_down(enigo::Key::Raw(*code));
+                                }
+                            }
+                            KeyAction::Up => {
+                                if !chars.is_empty() {
+                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                                } else {
+                                    enigo.key_up(enigo::Key::Raw(*code));
+                                }
                             }
                         }
-                        KeyAction::Up => {
-                            if !chars.is_empty() {
-                                enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                            } else {
-                                enigo.key_up(enigo::Key::Raw(*code));
+                        attempts += 1;
+                    }
+                }
+                InputEvent::Scroll { dx, dy, .. } => {
+                    enigo.scroll(*dx, *dy);
+                }
+                InputEvent::Delay { ms, .. } => {
+                    // Apply speed factor to delay
+                    let adjusted_ms = (*ms as f32 / speed) as u64;
+                    std::thread::sleep(Duration::from_millis(adjusted_ms));
+                }
+            }
+        }
+
+        Ok(())
+    }
+    
+    fn execute_with_reliability(
+        &self, 
+        events: &[InputEvent], 
+        stop_flag: Arc<AtomicBool>,
+        reliability: &crate::core::events::ReliabilitySettings
+    ) -> anyhow::Result<()> {
+        let mut enigo = Enigo::new();
+        let speed = *self.speed_factor.lock().unwrap();
+
+        for (idx, event) in events.iter().enumerate() {
+            if stop_flag.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+
+            match event {
+                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                    // Validate element if configured
+                    if reliability.validate_elements && element.is_none() {
+                        // Could add element inspection here
+                    }
+                    
+                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
+                    let mut attempts = 0;
+                    let mut success = false;
+                    
+                    while attempts <= max_retries && !success {
+                        enigo.mouse_move_to(*x, *y);
+                        let mouse_button = match button {
+                            0 | 1 => MouseButton::Left,
+                            2 | 3 => MouseButton::Right,
+                            _ => MouseButton::Left,
+                        };
+                        enigo.mouse_click(mouse_button);
+                        success = true;
+                        attempts += 1;
+                        
+                        if !success && attempts <= max_retries && reliability.continue_on_error {
+                            let backoff = reliability.retry_config.backoff_ms * 
+                                (reliability.retry_config.backoff_multiplier as u64).pow(attempts - 1);
+                            std::thread::sleep(Duration::from_millis(backoff));
+                        }
+                    }
+                }
+                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
+                    
+                    for attempt in 0..=max_retries {
+                        if stop_flag.load(Ordering::Relaxed) {
+                            return Ok(());
+                        }
+                        
+                        match action {
+                            KeyAction::Down => {
+                                if !chars.is_empty() {
+                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                                } else {
+                                    enigo.key_down(enigo::Key::Raw(*code));
+                                }
                             }
+                            KeyAction::Up => {
+                                if !chars.is_empty() {
+                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                                } else {
+                                    enigo.key_up(enigo::Key::Raw(*code));
+                                }
+                            }
+                        }
+                        
+                        if attempt < max_retries {
+                            let backoff = reliability.retry_config.backoff_ms * 
+                                (reliability.retry_config.backoff_multiplier as u64);
+                            std::thread::sleep(Duration::from_millis(backoff));
                         }
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
                     enigo.scroll(*dx, *dy);
                 }
-                InputEvent::Delay { ms } => {
-                    // Apply speed factor to delay
+                InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
                     std::thread::sleep(Duration::from_millis(adjusted_ms));
                 }

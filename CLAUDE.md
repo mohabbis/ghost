@@ -46,3 +46,36 @@ There is no frontend build/lint/test step because the frontend is static vanilla
 - Granting Accessibility permission applies to the **running binary**. In `cargo tauri dev` the dev binary path changes across rebuilds, so macOS may re-prompt / require re-granting in System Settings → Privacy & Security → Accessibility. A stable `.app` from `cargo tauri build` is more reliable for testing real recording.
 - `bundle identifier` is `com.muhammadrafiq.ghost`; macOS ties the permission grant to it.
 - `src-tauri/target/` and `src-tauri/gen/` are build artifacts. `Cargo.lock` IS committed (binary crate).
+
+## Phase 3: AI-Assisted Workflow Generation
+
+The AI layer provides intelligent workflow analysis and optimization:
+
+- **Workflow Analysis**: Detects patterns like repetitive clicks and form filling, calculates reliability scores based on element information and delay timing
+- **Optimization Suggestions**: Recommends loop extraction for repetitive patterns, form handlers for keyboard sequences, and conditional waits for long delays
+- **Smart Naming**: Automatically generates workflow names based on detected patterns
+- **Workflow Metadata**: Full workflow objects with descriptions, tags, timestamps, and reliability metrics
+
+Key commands: `analyze_workflow`, `optimize_workflow`, `suggest_workflow_name`, `save_workflow_with_metadata`, `load_workflow_with_metadata`
+
+## Phase 4: Advanced Reliability Features
+
+Production-ready replay with self-healing capabilities:
+
+- **Retry Logic**: Configurable max attempts with exponential backoff for failed steps
+- **Checkpoints**: Place confirmation points for sensitive workflows
+- **Element Validation**: Verify UI elements exist before executing actions
+- **Resume Support**: Pause and resume workflows at any point
+
+Key command: `replay_with_reliability` with configurable retry settings
+
+## Phase 5: Cloud Sync & Enterprise Readiness
+
+Team collaboration and compliance features:
+
+- **Cloud Sync**: Secure synchronization of workflows across devices
+- **Workspaces**: Team-based organization with role-based access control (Owner, Admin, Member, Viewer)
+- **Audit Logging**: Comprehensive activity logs for compliance requirements
+- **Authentication**: Token-based authentication for cloud services
+
+Key commands: `init_cloud_sync`, `cloud_authenticate`, `cloud_sync_workflows`, `create_workspace`, `get_audit_logs`

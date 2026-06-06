@@ -67,13 +67,17 @@
             <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap;">
               <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
               <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
-              <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()" disabled>Replay</button>
+              <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()">Replay</button>
+              <button class="btn btn--ghost btn--small" id="replayReliableBtn" onclick="replayWithReliability()" disabled>Replay Reliable</button>
               <button class="btn btn--ghost btn--small" id="cancelBtn" onclick="cancelReplay()" disabled>Cancel</button>
               <button class="btn btn--ghost btn--small" id="pauseBtn" onclick="pauseReplay()" disabled>Pause</button>
               <button class="btn btn--ghost btn--small" id="resumeBtn" onclick="resumeReplay()" disabled>Resume</button>
             </div>
             <div class="workflow-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
               <button class="btn btn--ghost btn--small" onclick="saveWorkflow()">Save Workflow</button>
+              <button class="btn btn--ghost btn--small" onclick="saveWorkflowWithMetadata()">Save with AI</button>
+              <button class="btn btn--ghost btn--small" onclick="analyzeWorkflow()">Analyze</button>
+              <button class="btn btn--ghost btn--small" onclick="optimizeWorkflow()">Optimize</button>
               <button class="btn btn--ghost btn--small" onclick="loadWorkflow()">Load Workflow</button>
               <button class="btn btn--ghost btn--small" onclick="inspectElementAtCursor()">Inspect Element</button>
               <select class="btn btn--ghost btn--small" onchange="setSpeed(parseFloat(this.value))" style="cursor: pointer;">
@@ -82,6 +86,14 @@
                 <option value="1.5">1.5x Speed</option>
                 <option value="2.0">2.0x Speed</option>
               </select>
+            </div>
+            
+            <div class="cloud-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
+              <button class="btn btn--ghost btn--small" onclick="initCloudSync()">Init Cloud</button>
+              <button class="btn btn--ghost btn--small" onclick="cloudLogin()">Login</button>
+              <button class="btn btn--ghost btn--small" onclick="syncToCloud()">Sync to Cloud</button>
+              <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
+              <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
             </div>
             <div class="events-timeline" style="max-height: 200px; overflow-y: auto; background: rgba(7, 8, 19, 0.42); border-radius: 12px; padding: 12px; margin-top: 12px;">
               <p style="color: var(--muted); font-size: 0.85rem; margin: 0;">Events will appear here...</p>
@@ -181,5 +193,32 @@
         </section>
       </main>
     </div>
+    
+    <!-- Analysis Modal -->
+    <div id="analysis-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin-top: 0; color: #8d7bff;">Workflow Analysis</h3>
+        <div id="analysis-content"></div>
+        <button onclick="closeModal('analysis-modal')" style="margin-top: 16px;">Close</button>
+      </div>
+    </div>
+    
+    <!-- Audit Logs Modal -->
+    <div id="audit-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 800px; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin-top: 0; color: #8d7bff;">Audit Logs</h3>
+        <div id="audit-content"></div>
+        <button onclick="closeModal('audit-modal')" style="margin-top: 16px;">Close</button>
+      </div>
+    </div>
+    
+    <script>
+      function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+          modal.style.display = "none";
+        }
+      }
+    </script>
   </body>
 </html>
