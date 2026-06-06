@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+/// Shared event schema for cross-platform input events.
+/// All variants are serializable for IPC transmission.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum InputEvent {
     MouseClick {
@@ -24,6 +26,7 @@ pub enum InputEvent {
     },
 }
 
+/// Accessibility element metadata captured during recording.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ElementInfo {
     pub role: String,
@@ -32,6 +35,7 @@ pub struct ElementInfo {
     pub fallback_coords: Option<(i32, i32)>,
 }
 
+/// Keyboard action state for key events.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum KeyAction {
     Down,
