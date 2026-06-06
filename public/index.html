@@ -57,12 +57,34 @@
           </div>
 
           <aside class="hero-card" aria-label="Ghost recording preview">
+            <div class="ai-parrot-container" aria-label="AI Parrot Assistant">
+              <svg class="ai-parrot" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="parrotGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#8d7bff" />
+                    <stop offset="50%" stop-color="#c8b6ff" />
+                    <stop offset="100%" stop-color="#ffb86b" />
+                  </linearGradient>
+                </defs>
+                <ellipse cx="50" cy="70" rx="35" ry="25" fill="url(#parrotGradient)" opacity="0.3" />
+                <g class="parrot-head">
+                  <circle cx="50" cy="45" r="22" fill="url(#parrotGradient)" />
+                  <circle cx="42" cy="42" r="4" fill="#070813" />
+                  <circle cx="58" cy="42" r="4" fill="#070813" />
+                  <path d="M45 52 Q50 58 55 52" stroke="#070813" stroke-width="2" fill="none" />
+                  <polygon points="32,35 28,25 34,28" fill="#ffb86b" />
+                </g>
+              </svg>
+              <div class="parrot-message" id="parrotMessage">
+                Hey, I noticed you...
+                <span class="typing-cursor">|</span>
+              </div>
+            </div>
             <div class="window-bar" aria-hidden="true">
               <span></span><span></span><span></span>
             </div>
             <div class="recording-status">
-              <span class="pulse" aria-hidden="true"></span>
-              Ready to record
+              <span class="pulse" aria-hidden="true"></span> Ready to record
             </div>
             <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0;">
               <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
