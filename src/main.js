@@ -99,6 +99,40 @@ async function replayWorkflow() {
   }
 }
 
+async function replayWithReliability() {
+  if (!invoke) {
+    alert("Tauri not available - running in static mode");
+    return;
+  }
+  
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+  
+  try {
+    const maxAttempts = parseInt(prompt("Max retry attempts (default 3):", "3") || "3");
+    const backoffMs = parseInt(prompt("Backoff ms (default 500):", "500") || "500");
+    const backoffMult = parseFloat(prompt("Backoff multiplier (default 2.0):", "2.0") || "2.0");
+    
+    isPlaying = true;
+    updateRecordingUI();
+    await invoke("replay_with_reliability", {
+      events: recordedEvents,
+      max_attempts: maxAttempts,
+      backoff_ms: backoffMs,
+      backoff_multiplier: backoffMult
+    });
+    isPlaying = false;
+    updateRecordingUI();
+  } catch (error) {
+    console.error("Failed to replay with reliability:", error);
+    isPlaying = false;
+    updateRecordingUI();
+    alert("Replay failed: " + error);
+  }
+}
+
 async function cancelReplay() {
   if (!invoke) return;
   try {
@@ -196,6 +230,282 @@ async function inspectElementAtCursor() {
   }
 }
 
+// ===== AI-Powered Workflow Functions =====
+
+async function analyzeWorkflow() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+  
+  try {
+    const name = prompt("Enter workflow name for analysis:", "MyWorkflow") || "MyWorkflow";
+    const analysis = await invoke("analyze_workflow", { name, events: recordedEvents });
+    displayAnalysisResults(analysis);
+  } catch (error) {
+    console.error("Failed to analyze workflow:", error);
+    alert("Failed to analyze workflow: " + error);
+  }
+}
+
+async function optimizeWorkflow() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+  
+  try {
+    const optimized = await invoke("optimize_workflow", { events: recordedEvents });
+    const originalCount = recordedEvents.length;
+    recordedEvents = optimized;
+    updateRecordingUI();
+    refreshTimeline();
+    alert(`Optimized workflow: ${originalCount} events → ${optimized.length} events`);
+  } catch (error) {
+    console.error("Failed to optimize workflow:", error);
+    alert("Failed to optimize workflow: " + error);
+  }
+}
+
+function refreshTimeline() {
+  const timelineEl = document.querySelector(".events-timeline");
+  if (timelineEl) {
+    timelineEl.innerHTML = "";
+    recordedEvents.forEach(event => addEventToTimeline(event));
+  }
+}
+
+async function suggestWorkflowName() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+  
+  try {
+    const suggestion = await invoke("suggest_workflow_name", { events: recordedEvents });
+    const name = prompt("Suggested workflow name:", suggestion) || suggestion;
+    return name;
+  } catch (error) {
+    console.error("Failed to suggest name:", error);
+    return prompt("Enter workflow name:");
+  }
+}
+
+async function saveWorkflowWithMetadata() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+  
+  try {
+    const name = await suggestWorkflowName();
+    if (!name) return;
+    
+    const description = prompt("Workflow description:", "") || "";
+    const tagsInput = prompt("Tags (comma-separated):", "") || "";
+    const tags = tagsInput.split(",").map(t => t.trim()).filter(t => t);
+    
+    const path = await invoke("save_workflow_with_metadata", {
+      name,
+      events: recordedEvents,
+      description,
+      tags
+    });
+    alert(`Workflow saved to: ${path}`);
+  } catch (error) {
+    console.error("Failed to save workflow:", error);
+    alert("Failed to save workflow: " + error);
+  }
+}
+
+function displayAnalysisResults(analysis) {
+  const modal = document.getElementById("analysis-modal");
+  if (!modal) return;
+  
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+  
+  content.innerHTML = `
+    <h3>Workflow Analysis: ${analysis.workflow_name}</h3>
+    <p><strong>Total Events:</strong> ${analysis.total_events}</p>
+    <p><strong>Estimated Duration:</strong> ${analysis.estimated_duration_ms}ms</p>
+    <p><strong>Reliability Score:</strong> ${(analysis.reliability_score * 100).toFixed(1)}%</p>
+    <p><strong>Element Richness:</strong> ${(analysis.element_richness * 100).toFixed(1)}%</p>
+    
+    ${analysis.patterns.length > 0 ? `
+    <h4>Detected Patterns</h4>
+    <ul>
+      ${analysis.patterns.map(p => `<li>${p.description} (confidence: ${(p.confidence * 100).toFixed(1)}%)</li>`).join("")}
+    </ul>
+    ` : ""}
+    
+    ${analysis.suggested_optimizations.length > 0 ? `
+    <h4>Suggested Optimizations</h4>
+    <ul>
+      ${analysis.suggested_optimizations.map(o => `<li>${o.description}</li>`).join("")}
+    </ul>
+    ` : ""}
+    
+    <button onclick="closeModal('analysis-modal')">Close</button>
+  `;
+  
+  modal.style.display = "block";
+}
+
+function closeModal(modalId = "analysis-modal") {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+// ===== Cloud Sync Functions =====
+
+let cloudSyncState = {
+  isAuthenticated: false,
+  config: null
+};
+
+async function initCloudSync() {
+  if (!invoke) {
+    alert("Tauri not available - running in static mode");
+    return;
+  }
+  
+  try {
+    const apiEndpoint = prompt("API Endpoint:", "https://api.ghost.example.com") || "https://api.ghost.example.com";
+    const autoSync = confirm("Enable auto-sync? (OK for yes, Cancel for no)");
+    
+    await invoke("init_cloud_sync", {
+      config: {
+        api_endpoint: apiEndpoint,
+        auth_token: null,
+        auto_sync: autoSync,
+        sync_interval_ms: 30000
+      }
+    });
+    
+    cloudSyncState.config = { apiEndpoint, autoSync };
+    alert("Cloud sync initialized!");
+  } catch (error) {
+    console.error("Failed to init cloud sync:", error);
+    alert("Failed to initialize cloud sync: " + error);
+  }
+}
+
+async function cloudLogin() {
+  if (!invoke) return;
+  
+  try {
+    const token = prompt("Enter your auth token:") || "";
+    if (!token) return;
+    
+    const success = await invoke("cloud_authenticate", { token });
+    if (success) {
+      cloudSyncState.isAuthenticated = true;
+      alert("Authenticated successfully!");
+    }
+  } catch (error) {
+    console.error("Cloud auth failed:", error);
+    alert("Authentication failed: " + error);
+  }
+}
+
+async function syncToCloud() {
+  if (!invoke) return;
+  if (!cloudSyncState.isAuthenticated) {
+    alert("Please authenticate first");
+    return;
+  }
+  
+  try {
+    const synced = await invoke("cloud_sync_workflows", { events: recordedEvents });
+    alert(`Synced ${synced.length} workflows to cloud`);
+  } catch (error) {
+    console.error("Sync failed:", error);
+    alert("Sync failed: " + error);
+  }
+}
+
+async function createWorkspace() {
+  if (!invoke) return;
+  if (!cloudSyncState.isAuthenticated) {
+    alert("Please authenticate first");
+    return;
+  }
+  
+  try {
+    const name = prompt("Workspace name:") || "";
+    if (!name) return;
+    
+    const workspace = await invoke("create_workspace", {
+      name,
+      owner_id: "current_user" // In real app, get from auth
+    });
+    
+    alert(`Created workspace: ${workspace.name}`);
+  } catch (error) {
+    console.error("Create workspace failed:", error);
+    alert("Failed to create workspace: " + error);
+  }
+}
+
+async function viewAuditLogs() {
+  if (!invoke) return;
+  if (!cloudSyncState.isAuthenticated) {
+    alert("Please authenticate first");
+    return;
+  }
+  
+  try {
+    const limit = prompt("Number of logs to retrieve:", "50") || "50";
+    const logs = await invoke("get_audit_logs", { limit: parseInt(limit) });
+    displayAuditLogs(logs);
+  } catch (error) {
+    console.error("Failed to get audit logs:", error);
+    alert("Failed to get audit logs: " + error);
+  }
+}
+
+function displayAuditLogs(logs) {
+  const modal = document.getElementById("audit-modal");
+  if (!modal) return;
+  
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+  
+  content.innerHTML = `
+    <h3>Audit Logs</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead>
+        <tr style="border-bottom: 1px solid #374151;">
+          <th style="text-align: left; padding: 8px;">Timestamp</th>
+          <th style="text-align: left; padding: 8px;">User</th>
+          <th style="text-align: left; padding: 8px;">Action</th>
+          <th style="text-align: left; padding: 8px;">Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${logs.map(log => `
+          <tr style="border-bottom: 1px solid #374151;">
+            <td style="padding: 8px;">${new Date(log.timestamp * 1000).toLocaleString()}</td>
+            <td style="padding: 8px;">${log.user_id}</td>
+            <td style="padding: 8px;">${log.action}</td>
+            <td style="padding: 8px;">${log.details}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <button onclick="closeModal('audit-modal')" style="margin-top: 16px;">Close</button>
+  `;
+  
+  modal.style.display = "block";
+}
+
 function addEventToTimeline(event) {
   const timelineEl = document.querySelector(".events-timeline");
   if (!timelineEl) return;
@@ -231,6 +541,7 @@ function updateRecordingUI() {
   const recordBtn = document.getElementById("recordBtn");
   const stopBtn = document.getElementById("stopBtn");
   const replayBtn = document.getElementById("replayBtn");
+  const replayReliableBtn = document.getElementById("replayReliableBtn");
   const cancelBtn = document.getElementById("cancelBtn");
   const pauseBtn = document.getElementById("pauseBtn");
   const resumeBtn = document.getElementById("resumeBtn");
@@ -257,6 +568,7 @@ function updateRecordingUI() {
   if (recordBtn) recordBtn.disabled = isRecording || isPlaying;
   if (stopBtn) stopBtn.disabled = !isRecording;
   if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  if (replayReliableBtn) replayReliableBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;

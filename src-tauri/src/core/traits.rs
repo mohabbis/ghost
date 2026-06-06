@@ -1,7 +1,7 @@
 //! Core traits for platform-agnostic input handling.
 //! All traits are Send + Sync for thread-safe cross-platform operation.
 
-use crate::core::events::{ElementInfo, InputEvent};
+use crate::core::events::{ElementInfo, InputEvent, ReliabilitySettings};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -28,4 +28,13 @@ pub trait ReplayEngine: Send + Sync {
     /// Execute a sequence of input events.
     /// The stop_flag can be set to true from another thread to cancel replay.
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()>;
+    
+    /// Execute a sequence of input events with reliability features.
+    /// Supports retry logic, checkpoints, and validation.
+    fn execute_with_reliability(
+        &self, 
+        events: &[InputEvent], 
+        stop_flag: Arc<AtomicBool>,
+        reliability: &ReliabilitySettings
+    ) -> anyhow::Result<()>;
 }

@@ -106,17 +106,88 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 
 - [x] Platform-agnostic engine foundation (Phase 0)
 - [x] Full macOS backend: CGEventTap, AXUIElement, enigo replay with speed control
-- [x] Full Windows backend: Win32 hooks, UIA stub, enigo replay with speed control  
+- [x] Full Windows backend: Win32 hooks, UIA, enigo replay with speed control  
 - [x] Thread-safe mpsc bridge with atomic cancellation
 - [x] Marketing site with Vercel/Netlify deployment
 - [x] Interactive recording controls in frontend
 - [x] Workflow save/load functionality
-- [x] Playback speed control (0.5x - 2.0x)
+- [x] Playback speed control (0.1x - 2.0x+)
 - [x] Pause/resume replay functionality
+- [x] AI-powered workflow analysis and optimization
+- [x] Workflow naming suggestions using pattern detection
+- [x] Reliability replay with configurable retry and backoff strategies
+- [x] Cloud sync capabilities with authentication
+- [x] Workspace management for team collaboration
+- [x] Enterprise audit logging for compliance
+- [x] Accessibility permission handling (check/request)
 - [x] Real-time event timeline visualization
 - [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
 - [ ] Keyboard modifier tracking and character mapping
 - [ ] Scroll event phase handling
-- [ ] AI layer: detect repetitive tasks and suggest automations
-- [ ] CI/CD pipeline for automated builds
-- [ ] Unit tests for InputEvent serialization
+- [ ] Cross-platform desktop deployment
+
+## API Reference
+
+### Recording Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `start_recording` | Begin capturing input events | `app: AppHandle`, `engine: GhostEngine` |
+| `stop_recording` | Stop the active recording session | `engine: GhostEngine` |
+| `get_recorded_events` | Get all events from current session | `engine: GhostEngine` |
+
+### Playback Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `replay_workflow` | Execute a sequence of events | `events: Vec<InputEvent>`, `engine: GhostEngine` |
+| `cancel_replay` | Immediately stop ongoing replay | `engine: GhostEngine` |
+| `pause_replay` | Pause a running replay | `engine: GhostEngine` |
+| `resume_replay` | Resume a paused replay | `engine: GhostEngine` |
+| `is_replay_paused` | Check if replay is paused | `engine: GhostEngine` |
+| `is_replay_running` | Check if replay is active | `engine: GhostEngine` |
+| `set_playback_speed` | Set speed factor (0.1x-2.0x+) | `factor: f32`, `engine: GhostEngine` |
+| `get_playback_speed` | Get current speed factor | `engine: GhostEngine` |
+
+### Workflow Management
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `save_workflow` | Save events to JSON file | `name: String`, `events: Vec<InputEvent>`, `engine: State<GhostEngine>` |
+| `load_workflow` | Load events from JSON file | `name: String`, `engine: State<GhostEngine>` |
+| `delete_workflow` | Remove workflow from disk | `name: String`, `engine: State<GhostEngine>` |
+| `list_workflows` | List all saved workflow names | Returns `Vec<String>` |
+| `save_workflow_with_metadata` | Save workflow with description/tags | `name`, `events`, `description`, `tags`, `engine` |
+| `load_workflow_with_metadata` | Load complete workflow object | `name: String`, `engine: State<GhostEngine>` |
+
+### AI-Powered Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `analyze_workflow` | Get AI insights about a workflow | `name: String`, `events: Vec<InputEvent>`, `engine: State<GhostEngine>` |
+| `optimize_workflow` | Generate optimized event sequence | `events: Vec<InputEvent>`, `engine: State<GhostEngine>` |
+| `suggest_workflow_name` | Generate name from event patterns | `events: Vec<InputEvent>`, `engine: State<GhostEngine>` |
+
+### Reliability Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `replay_with_reliability` | Execute with retry/backoff/checkpoints | `events`, `max_attempts`, `backoff_ms`, `backoff_multiplier`, `checkpoints`, `engine` |
+
+### Cloud Sync Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `init_cloud_sync` | Initialize cloud manager | `config: CloudConfig`, `state: State<CloudState>` |
+| `cloud_authenticate` | Login with auth token | `token: String`, `state: State<CloudState>` |
+| `cloud_sync_workflows` | Sync workflows to cloud | `name`, `events`, `description`, `state` |
+| `create_workspace` | Create team workspace | `name: String`, `owner_id: String`, `state: State<CloudState>` |
+| `get_audit_logs` | Retrieve audit entries | `limit: Option<usize>`, `state: State<CloudState>` |
+
+### Platform Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `check_accessibility` | Check platform permissions | None |
+| `request_accessibility` | Prompt for permission dialog | None |
+| `inspect_element` | Get UI element info at coords | `x: i32`, `y: i32`, `engine: State<GhostEngine>` |
