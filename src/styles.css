@@ -673,6 +673,116 @@ h3 {
   100% { box-shadow: 0 0 0 0 rgba(131, 246, 196, 0); }
 }
 
+/* ── Hero simulation (browser-only demo) ───────────────────── */
+
+.ghost-sim {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.sim-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(131, 246, 196, 0.08);
+  border: 1px solid rgba(131, 246, 196, 0.2);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--success);
+}
+
+.sim-phase {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-progress-wrap {
+  flex: 0 0 80px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+
+.sim-progress {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  border-radius: 99px;
+  transition: width 0.7s ease;
+}
+
+.sim-steps {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sim-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(7, 8, 19, 0.5);
+  font-size: 0.88rem;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
+}
+
+.sim-step--active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sim-step--done {
+  border-color: rgba(131, 246, 196, 0.35);
+}
+
+.sim-step--done .sim-step__check {
+  color: var(--success);
+}
+
+.sim-step__icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.sim-step__text {
+  flex: 1;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.sim-step__check {
+  color: transparent;
+  font-weight: 900;
+  font-size: 0.85rem;
+  transition: color 0.3s ease;
+  flex-shrink: 0;
+}
+
+.sim-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  animation: step-in 0.4s ease-out;
+}
+
 /* ── Platform-aware visibility ──────────────────────────────── */
 
 [data-show] { display: none !important; }
