@@ -105,13 +105,18 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 ## Status
 
 - [x] Platform-agnostic engine foundation (Phase 0)
-- [x] Full macOS backend: CGEventTap, AXUIElement, enigo replay
-- [x] Full Windows backend: Win32 hooks, UIA stub, enigo replay
+- [x] Full macOS backend: CGEventTap, AXUIElement, enigo replay with speed control
+- [x] Full Windows backend: Win32 hooks, UIA stub, enigo replay with speed control  
 - [x] Thread-safe mpsc bridge with atomic cancellation
 - [x] Marketing site with Vercel/Netlify deployment
 - [x] Interactive recording controls in frontend
+- [x] Workflow save/load functionality
+- [x] Playback speed control (0.5x - 2.0x)
+- [x] Pause/resume replay functionality
+- [x] Real-time event timeline visualization
 - [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
 - [ ] Keyboard modifier tracking and character mapping
 - [ ] Scroll event phase handling
 - [ ] AI layer: detect repetitive tasks and suggest automations
-- [ ] Workflow persistence and library
+- [ ] CI/CD pipeline for automated builds
+- [ ] Unit tests for InputEvent serialization

@@ -1,21 +1,39 @@
 ```
 # Dependencies
+node_modules/
 target/
-**/target/
 
 # Build artifacts
-**/*.rs.bk
-**/*.tmp
+dist/
+build/
 
-# IDE
-.vscode/
-.idea/
-
-# Logs
+# Logs and temp files
 *.log
+*.tmp
 
 # Environment
 .env
 .env.local
 *.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Rust/Cargo (if applicable)
+Cargo.lock
+*.rs.bk
+
+# Tauri specific
+src-tauri/target/
+**/*.app
+**/*.exe
+**/*.dll
+**/*.so
 ```
