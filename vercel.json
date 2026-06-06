@@ -1,6 +1,6 @@
 {
-  "buildCommand": "mkdir -p public && cp -r src/* public/",
-  "outputDirectory": "public",
+  "buildCommand": "echo 'No build required'",
+  "outputDirectory": "src",
   "devCommand": "npx serve src",
   "installCommand": "echo 'No dependencies required'",
   "framework": null,
