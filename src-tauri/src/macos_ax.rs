@@ -9,7 +9,7 @@ use std::ptr;
 use std::sync::OnceLock;
 use std::thread;
 use tauri::AppHandle;
-use crate::ClickEvent;
+use crate::{ClickEvent, ElementInfo};
 
 // Global event tap reference
 static EVENT_TAP: OnceLock<EventTapRefWrapper> = OnceLock::new();
@@ -49,31 +49,43 @@ unsafe extern "C" fn event_tap_callback(
         let result = AXUIElementCopyElementAtPosition(element, point.x as f32, point.y as f32, &mut clicked_element);
         
         if result == 0 && !clicked_element.is_null() {
-            // Get the title/role of the element
+            // Get the title/role/description of the element
             let mut title_cf: CFStringRef = ptr::null_mut();
             let title_result = AXUIElementCopyAttributeValue(clicked_element, kAXTitleAttribute as CFStringRef, &mut title_cf as *mut _ as *mut _);
             
             let mut role_cf: CFStringRef = ptr::null_mut();
             let role_result = AXUIElementCopyAttributeValue(clicked_element, kAXRoleAttribute as CFStringRef, &mut role_cf as *mut _ as *mut _);
             
+            let mut description_cf: CFStringRef = ptr::null_mut();
+            let description_result = AXUIElementCopyAttributeValue(clicked_element, kAXDescriptionAttribute as CFStringRef, &mut description_cf as *mut _ as *mut _);
+            
             let title = if title_result == 0 && !title_cf.is_null() {
                 CFString::wrap_under_create_rule(title_cf).to_string()
             } else {
-                String::from("Unknown")
+                String::from("")
             };
             
             let role = if role_result == 0 && !role_cf.is_null() {
                 CFString::wrap_under_create_rule(role_cf).to_string()
             } else {
-                String::from("Unknown")
+                String::from("")
             };
             
-            // Create click event
+            let description = if description_result == 0 && !description_cf.is_null() {
+                CFString::wrap_under_create_rule(description_cf).to_string()
+            } else {
+                String::from("")
+            };
+            
+            // Create click event with enriched element info
             let click_event = ClickEvent {
                 x: point.x,
                 y: point.y,
-                title,
-                role,
+                element: ElementInfo {
+                    role,
+                    title,
+                    description,
+                },
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()

@@ -5,11 +5,17 @@ mod macos_ax;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ElementInfo {
+    pub role: String,
+    pub title: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClickEvent {
     pub x: f64,
     pub y: f64,
-    pub title: String,
-    pub role: String,
+    pub element: ElementInfo,
     pub timestamp: u64,
 }
 
