@@ -6,17 +6,29 @@
     <title>Ghost</title>
     <script type="module" src="/src/main.ts"></script>
     <style>
-      body { font-family: system-ui; background: #0f0f11; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-      button { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; margin: 8px; cursor: pointer; }
+      :root {
+        --accent: #7c5cff;
+        --record: #ff4d5e;
+        --bg: #0f0f11;
+        --text: #fff;
+        --muted: #a1a1aa;
+      }
+      body { font-family: system-ui; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+      h1 { margin-bottom: 8px; }
+      button { background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; margin: 8px; cursor: pointer; transition: opacity 0.2s; }
+      button:hover:not(:disabled) { opacity: 0.9; }
       button:disabled { background: #4b5563; cursor: not-allowed; }
-      #status { margin-top: 20px; color: #a1a1aa; }
+      #recordBtn { background: var(--record); }
+      #status { margin-top: 20px; color: var(--muted); max-width: 400px; text-align: center; line-height: 1.5; }
+      .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
     </style>
   </head>
   <body>
     <h1>Ghost 🦜</h1>
-    <button id="recordBtn">Record</button>
-    <button id="stopBtn">Stop</button>
-    <button id="replayBtn" disabled>Replay</button>
+    <p class="subtitle">Your AI automation parrot — learns by watching</p>
+    <button id="recordBtn">● Record</button>
+    <button id="stopBtn">■ Stop</button>
+    <button id="replayBtn" disabled>▶ Replay</button>
     <p id="status">Idle</p>
   </body>
 </html>

@@ -6,13 +6,36 @@ const replayBtn = document.getElementById("replayBtn") as HTMLButtonElement;
 const statusEl = document.getElementById("status") as HTMLElement;
 
 let isRecording = false;
-let capturedClick: { x: number; y: number; title: string; role: string } | null = null;
+let capturedClick: { 
+  x: number; 
+  y: number; 
+  element: { 
+    role: string; 
+    title: string; 
+    description: string 
+  } 
+} | null = null;
 
 // Listen for click events from Rust
 window.__TAURI__.event.listen("ghost:click-captured", (event) => {
-  const payload = event.payload as { x: number; y: number; title: string; role: string };
+  const payload = event.payload as { x: number; y: number; element: { role: string; title: string; description: string } };
   capturedClick = payload;
-  statusEl.textContent = `Captured: "${payload.title}" (${payload.role}) at (${payload.x}, ${payload.y})`;
+  
+  // Build human-readable description
+  const elem = payload.element;
+  let description = `Clicked at (${payload.x}, ${payload.y})`;
+  
+  if (elem.role || elem.title) {
+    const roleText = elem.role ? elem.role.replace('AX', '') : 'Element';
+    const titleText = elem.title ? `"${elem.title}" ` : '';
+    description = `Clicked ${titleText}${roleText.toLowerCase()}`;
+    
+    if (elem.description) {
+      description += ` - ${elem.description}`;
+    }
+  }
+  
+  statusEl.textContent = description;
   replayBtn.disabled = false;
 });
 
