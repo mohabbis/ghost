@@ -273,7 +273,7 @@ pub fn save_workflow_with_sidecar(
             .collect::<Vec<_>>()
     });
 
-    fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)
+    fs::write(&meta_path, serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
     Ok(name)
@@ -465,8 +465,8 @@ pub fn get_execution_history(
     workflow_name: String,
     engine: State<GhostEngine>
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
-    let history_lock = engine.execution_tracker.lock().unwrap();
-    if let Some(ref history) = *history_lock {
+    let tracker = engine.get_execution_tracker();
+    if let Some(ref history) = tracker {
         history.get_history(&workflow_name).map_err(|e| e.to_string())
     } else {
         Ok(Vec::new())
@@ -479,8 +479,8 @@ pub fn get_all_executions(
     limit: Option<usize>,
     engine: State<GhostEngine>
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
-    let history_lock = engine.execution_tracker.lock().unwrap();
-    if let Some(ref history) = *history_lock {
+    let tracker = engine.get_execution_tracker();
+    if let Some(ref history) = tracker {
         history.get_all_records(limit).map_err(|e| e.to_string())
     } else {
         Ok(Vec::new())
@@ -493,8 +493,8 @@ pub fn get_workflow_analytics(
     workflow_name: String,
     engine: State<GhostEngine>
 ) -> Result<serde_json::Value, String> {
-    let history_lock = engine.execution_tracker.lock().unwrap();
-    if let Some(ref history) = *history_lock {
+    let tracker = engine.get_execution_tracker();
+    if let Some(ref history) = tracker {
         let success_rate = history.get_success_rate(&workflow_name).unwrap_or(1.0);
         let avg_duration = history.get_avg_duration(&workflow_name).unwrap_or(0);
         let hotspots = history.get_failure_hotspots(&workflow_name).unwrap_or_default();

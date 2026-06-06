@@ -825,6 +825,11 @@ impl GhostEngine {
         self.knowledge_base.get_app_usage()
     }
 
+    /// Get execution tracker reference
+    pub fn get_execution_tracker(&self) -> Option<std::sync::MutexGuard<'_, Option<ExecutionHistory>>> {
+        self.execution_tracker.lock().ok()
+    }
+
     /// Generate a "geek mode" insight for events
     pub fn generate_geek_insights(
         &self,

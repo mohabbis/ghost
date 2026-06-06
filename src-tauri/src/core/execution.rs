@@ -317,20 +317,24 @@ pub mod tracker {
         pub fn complete(&self) -> anyhow::Result<()> {
             let mut inner = self.inner.lock().unwrap();
             if let Some(ref mut record) = inner.active {
-                record.complete(inner.events_count, inner.start_time.elapsed().as_millis() as u64);
-                inner.history.save(record)?;
+                let events_count = inner.events_count;
+                let duration_ms = inner.start_time.elapsed().as_millis() as u64;
+                record.complete(events_count, duration_ms);
             }
-            inner.active = None;
+            if let Some(record) = inner.active.take() {
+                inner.history.save(&record)?;
+            }
             Ok(())
         }
 
         pub fn fail(&self, error: &str, screenshot_path: Option<String>) -> anyhow::Result<()> {
             let mut inner = self.inner.lock().unwrap();
             if let Some(ref mut record) = inner.active {
-                record.fail(error, screenshot_path);
-                inner.history.save(record)?;
+                record.fail(error, screenshot_path.clone());
             }
-            inner.active = None;
+            if let Some(record) = inner.active.take() {
+                inner.history.save(&record)?;
+            }
             Ok(())
         }
 
@@ -338,9 +342,10 @@ pub mod tracker {
             let mut inner = self.inner.lock().unwrap();
             if let Some(ref mut record) = inner.active {
                 record.cancel();
-                inner.history.save(record)?;
             }
-            inner.active = None;
+            if let Some(record) = inner.active.take() {
+                inner.history.save(&record)?;
+            }
             Ok(())
         }
     }
