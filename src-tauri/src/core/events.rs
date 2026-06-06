@@ -10,7 +10,7 @@ pub enum InputEvent {
     },
     Key {
         code: u16,
-        text: String,
+        chars: String,
         modifiers: u8,
         action: KeyAction,
     },
@@ -29,7 +29,7 @@ pub struct ElementInfo {
     pub role: String,
     pub name: String,
     pub app: String,
-    pub fallback: Option<(i32, i32)>,
+    pub fallback_coords: Option<(i32, i32)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
