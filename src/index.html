@@ -64,10 +64,27 @@
               <span class="pulse" aria-hidden="true"></span>
               Ready to record
             </div>
-            <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0;">
+            <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap;">
               <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
               <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
               <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()" disabled>Replay</button>
+              <button class="btn btn--ghost btn--small" id="cancelBtn" onclick="cancelReplay()" disabled>Cancel</button>
+              <button class="btn btn--ghost btn--small" id="pauseBtn" onclick="pauseReplay()" disabled>Pause</button>
+              <button class="btn btn--ghost btn--small" id="resumeBtn" onclick="resumeReplay()" disabled>Resume</button>
+            </div>
+            <div class="workflow-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
+              <button class="btn btn--ghost btn--small" onclick="saveWorkflow()">Save Workflow</button>
+              <button class="btn btn--ghost btn--small" onclick="loadWorkflow()">Load Workflow</button>
+              <button class="btn btn--ghost btn--small" onclick="inspectElementAtCursor()">Inspect Element</button>
+              <select class="btn btn--ghost btn--small" onchange="setSpeed(parseFloat(this.value))" style="cursor: pointer;">
+                <option value="0.5">0.5x Speed</option>
+                <option value="1.0" selected>1.0x Speed</option>
+                <option value="1.5">1.5x Speed</option>
+                <option value="2.0">2.0x Speed</option>
+              </select>
+            </div>
+            <div class="events-timeline" style="max-height: 200px; overflow-y: auto; background: rgba(7, 8, 19, 0.42); border-radius: 12px; padding: 12px; margin-top: 12px;">
+              <p style="color: var(--muted); font-size: 0.85rem; margin: 0;">Events will appear here...</p>
             </div>
             <ol class="timeline">
               <li>
