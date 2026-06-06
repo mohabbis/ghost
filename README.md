@@ -132,11 +132,13 @@ All Phase 4 features are now in production on `master`:
 - [x] Enterprise audit logging for compliance
 - [x] Accessibility permission handling (check/request)
 - [x] Real-time event timeline visualization
-- [x] **Smart AI Parrot UI** - interactive marketing site with parrot avatar, typing animation, and proactive notifications
+- [x] **Smart AI Parrot UI** - Interactive parrot avatar with typing animation, clickable to see proactive suggestions
+- [x] **Marketing site** - Shows both macOS and Windows support with app mockup
 - [x] **Phase 4A: Visual Regression** - Visual checkpoints during replay with SSIM comparison, baseline capture, mismatch handling
 - [x] **Phase 4B: Smart Observer Mode** - Watches/learns patterns, proactive suggestions, pattern detection
 - [x] **Phase 4C: Data-Driven Testing** - CSV/JSON/Environment data sources, template resolution
 - [x] **Phase 4D: Geek Mode Insights** - Technical performance metrics, event timing analysis for power users
+- [x] **Phase 5: Execution & Analytics** - Execution history tracking, workflow analytics
 - [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
 - [ ] Keyboard modifier tracking and character mapping
 - [ ] Scroll event phase handling
