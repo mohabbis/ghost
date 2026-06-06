@@ -25,6 +25,7 @@
         <nav class="nav__links" aria-label="Page sections">
           <a href="#how-it-works">How it helps</a>
           <a href="#use-cases">Examples</a>
+          <a href="#demo">Try it</a>
           <a href="#preview">Get access</a>
         </nav>
         <a class="btn btn--small" href="#waitlist">Join waitlist</a>
@@ -205,6 +206,69 @@
           </ul>
         </section>
 
+        <!-- Talk to Ghost — Interactive Demo -->
+        <section id="demo" class="section" aria-labelledby="demo-title">
+          <div class="section__heading reveal">
+            <p class="eyebrow">Try it now</p>
+            <h2 id="demo-title">Talk to your AI parrot.</h2>
+            <p>Describe any repetitive task. Ghost will show you exactly how it would automate it.</p>
+          </div>
+
+          <div class="demo-shell reveal">
+            <!-- Quick-pick suggestions -->
+            <div class="demo-suggestions" role="group" aria-label="Example prompts">
+              <button class="demo-chip" data-prompt="Fill my timesheet every Friday at 5pm">⏰ Weekly timesheet</button>
+              <button class="demo-chip" data-prompt="Open my morning apps in the right order">🌅 Morning launch</button>
+              <button class="demo-chip" data-prompt="Copy my standup notes and post to Slack">💬 Daily standup</button>
+              <button class="demo-chip" data-prompt="Send a weekly summary email to my manager">📧 Weekly summary</button>
+            </div>
+
+            <!-- Input row -->
+            <form class="demo-input-row" id="demo-form" autocomplete="off">
+              <div class="demo-parrot-icon" aria-hidden="true">🦜</div>
+              <input
+                id="demo-input"
+                class="demo-input"
+                type="text"
+                placeholder="What do you want me to automate?"
+                maxlength="200"
+                aria-label="Describe a task to automate"
+              />
+              <button class="btn btn--small demo-submit" type="submit" id="demo-submit">Ask Ghost</button>
+            </form>
+
+            <!-- Response area -->
+            <div class="demo-response" id="demo-response" aria-live="polite" hidden>
+              <!-- Thinking state -->
+              <div class="demo-thinking" id="demo-thinking" hidden>
+                <span class="demo-thinking__dot"></span>
+                <span class="demo-thinking__dot"></span>
+                <span class="demo-thinking__dot"></span>
+                <span>Ghost is planning your workflow…</span>
+              </div>
+
+              <!-- Result -->
+              <div class="demo-result" id="demo-result" hidden>
+                <div class="demo-result__header">
+                  <span class="demo-result__parrot" aria-hidden="true">🦜</span>
+                  <div>
+                    <p class="demo-result__got-it">Got it! Here's your automation plan:</p>
+                    <p class="demo-result__task" id="demo-result-task"></p>
+                  </div>
+                  <div class="demo-badge" id="demo-badge"></div>
+                </div>
+
+                <ol class="demo-steps" id="demo-steps" aria-label="Workflow steps"></ol>
+
+                <div class="demo-result__footer">
+                  <span class="demo-savings" id="demo-savings"></span>
+                  <a class="btn btn--small" href="#waitlist">Automate this with Ghost →</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="preview" class="section cta" aria-labelledby="cta-title">
           <div>
             <p class="eyebrow">Meet your AI parrot</p>
@@ -259,6 +323,155 @@
           modal.style.display = "none";
         }
       }
+    </script>
+
+    <script>
+      // ── Talk to Ghost — Interactive Demo ──────────────────────────
+      const DEMO_PLANS = {
+        timesheet: {
+          keywords: ["timesheet", "hours", "time sheet", "log hours", "friday"],
+          label: "Weekly timesheet automation",
+          badge: { text: "95% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~8 minutes every Friday",
+          steps: [
+            { icon: "🌐", text: "Open Chrome and navigate to your HR portal" },
+            { icon: "🔑", text: "Auto-fill your employee credentials" },
+            { icon: "📋", text: "Detect the timesheet form and enter 40h across the week" },
+            { icon: "✅", text: "Click Submit and wait for confirmation screen" },
+            { icon: "📸", text: "Capture a screenshot as proof of submission" },
+          ],
+        },
+        morning: {
+          keywords: ["morning", "apps", "launch", "startup", "open", "start", "daily"],
+          label: "Morning app launcher",
+          badge: { text: "99% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~4 minutes every morning",
+          steps: [
+            { icon: "💻", text: "Launch Chrome and restore your tab session" },
+            { icon: "📧", text: "Open Gmail and filter unread priority emails" },
+            { icon: "📝", text: "Open Notion and navigate to today's page" },
+            { icon: "💻", text: "Launch VS Code and reopen your last workspace" },
+            { icon: "🪟", text: "Arrange windows into your preferred layout" },
+          ],
+        },
+        standup: {
+          keywords: ["standup", "slack", "notes", "stand-up", "daily", "post", "scrum"],
+          label: "Daily standup post",
+          badge: { text: "91% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~6 minutes every morning",
+          steps: [
+            { icon: "📋", text: "Read yesterday's completed tasks from Notion" },
+            { icon: "✍️", text: "Format the standup message (done / doing / blockers)" },
+            { icon: "💬", text: "Open Slack and navigate to #standup channel" },
+            { icon: "📤", text: "Paste and send the formatted message" },
+            { icon: "🔔", text: "Set a reminder for tomorrow's standup" },
+          ],
+        },
+        email: {
+          keywords: ["email", "summary", "weekly", "report", "manager", "send", "recap"],
+          label: "Weekly summary email",
+          badge: { text: "88% reliable", cls: "demo-badge--medium" },
+          savings: "⏱ Saves ~20 minutes every Friday",
+          steps: [
+            { icon: "📊", text: "Gather this week's closed tasks from your tracker" },
+            { icon: "✍️", text: "Draft a summary email with key wins and blockers" },
+            { icon: "📧", text: "Open Gmail and address it to your manager" },
+            { icon: "👁️", text: "Pause for a 10-second review (checkpoint)" },
+            { icon: "📤", text: "Send and archive the draft" },
+          ],
+        },
+      };
+
+      const DEFAULT_PLAN = {
+        label: null,
+        badge: { text: "85% reliable", cls: "demo-badge--medium" },
+        savings: "⏱ Estimated time savings: 5–15 minutes/day",
+        steps: [
+          { icon: "👁️", text: "Ghost watches you perform the task once to learn the steps" },
+          { icon: "🔍", text: "Identifies UI elements and maps out the action sequence" },
+          { icon: "🤖", text: "Builds a replayable workflow with smart wait conditions" },
+          { icon: "🔄", text: "Replays on your schedule with retry logic for reliability" },
+          { icon: "📊", text: "Reports results and flags anything that needs your attention" },
+        ],
+      };
+
+      function matchPlan(prompt) {
+        const lower = prompt.toLowerCase();
+        for (const plan of Object.values(DEMO_PLANS)) {
+          if (plan.keywords.some((kw) => lower.includes(kw))) return plan;
+        }
+        return DEFAULT_PLAN;
+      }
+
+      function runDemo(promptText) {
+        const response = document.getElementById("demo-response");
+        const thinking = document.getElementById("demo-thinking");
+        const result = document.getElementById("demo-result");
+        const taskEl = document.getElementById("demo-result-task");
+        const stepsEl = document.getElementById("demo-steps");
+        const badgeEl = document.getElementById("demo-badge");
+        const savingsEl = document.getElementById("demo-savings");
+        const submitBtn = document.getElementById("demo-submit");
+
+        if (!promptText.trim()) return;
+
+        // Reset state
+        submitBtn.disabled = true;
+        result.hidden = true;
+        stepsEl.innerHTML = "";
+        response.hidden = false;
+        thinking.hidden = false;
+
+        const plan = matchPlan(promptText);
+
+        setTimeout(() => {
+          thinking.hidden = true;
+          result.hidden = false;
+
+          taskEl.textContent = plan.label ?? `"${promptText}"`;
+          badgeEl.textContent = plan.badge.text;
+          badgeEl.className = `demo-badge ${plan.badge.cls}`;
+          savingsEl.textContent = plan.savings;
+
+          plan.steps.forEach((step, i) => {
+            const li = document.createElement("li");
+            li.className = "demo-step";
+            li.style.animationDelay = `${i * 120}ms`;
+            li.innerHTML = `
+              <span class="demo-step__num">${String(i + 1).padStart(2, "0")}</span>
+              <span class="demo-step__icon" aria-hidden="true">${step.icon}</span>
+              <span class="demo-step__text">${step.text}</span>
+            `;
+            stepsEl.appendChild(li);
+          });
+
+          submitBtn.disabled = false;
+        }, 1600);
+      }
+
+      // Form submit
+      document.getElementById("demo-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const input = document.getElementById("demo-input");
+        runDemo(input.value);
+      });
+
+      // Quick-pick chips
+      document.querySelectorAll(".demo-chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const prompt = chip.dataset.prompt;
+          document.getElementById("demo-input").value = prompt;
+          document.querySelectorAll(".demo-chip").forEach((c) => c.classList.remove("is-active"));
+          chip.classList.add("is-active");
+          runDemo(prompt);
+        });
+      });
+
+      // Auto-run first chip on load for instant value
+      window.addEventListener("DOMContentLoaded", () => {
+        const first = document.querySelector(".demo-chip");
+        if (first) first.click();
+      });
     </script>
   </body>
 </html>
