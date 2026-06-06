@@ -62,7 +62,12 @@
             </div>
             <div class="recording-status">
               <span class="pulse" aria-hidden="true"></span>
-              Recording workflow
+              Ready to record
+            </div>
+            <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0;">
+              <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
+              <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
+              <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()" disabled>Replay</button>
             </div>
             <ol class="timeline">
               <li>
