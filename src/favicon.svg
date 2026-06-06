@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+  <defs>
+    <linearGradient id="parrotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8d7bff" />
+      <stop offset="100%" stop-color="#ffb86b" />
+    </linearGradient>
+  </defs>
+  <ellipse cx="50" cy="70" rx="32" ry="22" fill="url(#parrotGrad)" opacity="0.4" />
+  <circle cx="50" cy="45" r="20" fill="url(#parrotGrad)" />
+  <circle cx="42" cy="42" r="3.5" fill="#070813" />
+  <circle cx="58" cy="42" r="3.5" fill="#070813" />
+  <path d="M45 52 Q50 56 55 52" stroke="#070813" stroke-width="2" fill="none" />
+  <polygon points="35,35 30,25 40,28" fill="#ffb86b" />
+</svg>
