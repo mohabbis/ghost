@@ -235,8 +235,7 @@ pub fn validate_coordinates(x: i32, y: i32) -> anyhow::Result<()> {
 /// Rate limiting for API calls
 pub mod rate_limit {
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     pub struct RateLimiter {
         requests: AtomicU64,
@@ -245,20 +244,22 @@ pub mod rate_limit {
         window_duration: Duration,
     }
 
+    fn now_secs() -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    }
+
     impl RateLimiter {
         pub fn new(max_requests: u64, window_duration: Duration) -> Self {
             Self {
                 requests: AtomicU64::new(0),
-                window_start: AtomicU64::new(
-                    Instant::now().duration_since(Instant::UNIX_EPOCH).as_secs()
-                ),
+                window_start: AtomicU64::new(now_secs()),
                 max_requests,
                 window_duration,
             }
         }
 
         pub fn check(&self) -> bool {
-            let now = Instant::now().duration_since(Instant::UNIX_EPOCH).as_secs();
+            let now = now_secs();
             let window_start = self.window_start.load(Ordering::Relaxed);
             
             // Reset window if expired

@@ -29,6 +29,7 @@ threadpool = "1.8"
 base64 = "0.21"
 async-trait = "0.1"
 regex = "1.10"
+dirs = "5"
 
 [features]
 default = []
