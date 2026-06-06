@@ -4,37 +4,160 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost</title>
+    <meta
+      name="description"
+      content="Ghost is a macOS-first AI automation widget that watches repetitive workflows and replays them for you."
+    />
+    <title>Ghost — automate the work you repeat</title>
     <script type="module" src="/main.js" defer></script>
   </head>
 
   <body>
-    <main class="app">
-      <header class="app__header">
-        <h1 class="brand"><span class="brand__glyph">👻</span> Ghost</h1>
-        <p class="tagline">Watches what you do. Replays it for you.</p>
+    <div class="site-shell">
+      <header class="nav" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="Ghost home">
+          <span class="brand__mark" aria-hidden="true">👻</span>
+          <span>Ghost</span>
+        </a>
+        <nav class="nav__links" aria-label="Page sections">
+          <a href="#how-it-works">How it works</a>
+          <a href="#use-cases">Use cases</a>
+          <a href="#preview">Preview</a>
+        </nav>
+        <a class="btn btn--small" href="#waitlist">Join waitlist</a>
       </header>
 
-      <!-- Accessibility permission gate -->
-      <section id="perm-banner" class="banner banner--warn" hidden>
-        <span id="perm-text">Ghost needs Accessibility permission to watch and replay clicks.</span>
-        <button id="perm-grant" class="btn btn--small">Grant Access</button>
-      </section>
+      <main id="top">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero__copy">
+            <p class="eyebrow">Mac automation, trained by example</p>
+            <h1 id="hero-title">Show Ghost once. Let it repeat the workflow forever.</h1>
+            <p class="hero__lede">
+              Ghost watches the clicks, screens, and intent behind repetitive desktop work, then turns
+              those actions into reliable automations you can replay on demand.
+            </p>
+            <div class="hero__actions">
+              <a class="btn" href="#waitlist">Request early access</a>
+              <a class="btn btn--ghost" href="#how-it-works">See how it works</a>
+            </div>
+            <dl class="stats" aria-label="Ghost product highlights">
+              <div>
+                <dt>3 steps</dt>
+                <dd>Observe, understand, replay</dd>
+              </div>
+              <div>
+                <dt>macOS</dt>
+                <dd>Built for native workflows</dd>
+              </div>
+              <div>
+                <dt>0 scripts</dt>
+                <dd>No brittle setup required</dd>
+              </div>
+            </dl>
+          </div>
 
-      <section class="controls">
-        <button id="record-btn" class="btn btn--record" disabled>
-          <span class="dot"></span> Record
-        </button>
-        <button id="replay-btn" class="btn" disabled>Replay</button>
-        <button id="clear-btn" class="btn btn--ghost" disabled>Clear</button>
-      </section>
+          <aside class="hero-card" aria-label="Ghost recording preview">
+            <div class="window-bar" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="recording-status">
+              <span class="pulse" aria-hidden="true"></span>
+              Recording workflow
+            </div>
+            <ol class="timeline">
+              <li>
+                <span class="timeline__step">01</span>
+                <div>
+                  <strong>Detect the target</strong>
+                  <p>Finds the app, element, and context you clicked.</p>
+                </div>
+              </li>
+              <li>
+                <span class="timeline__step">02</span>
+                <div>
+                  <strong>Infer the intent</strong>
+                  <p>Groups repeatable actions into a reusable task.</p>
+                </div>
+              </li>
+              <li>
+                <span class="timeline__step">03</span>
+                <div>
+                  <strong>Replay safely</strong>
+                  <p>Runs the workflow back with review points when needed.</p>
+                </div>
+              </li>
+            </ol>
+          </aside>
+        </section>
 
-      <section class="status">
-        <span id="status-label" class="status__label">Idle</span>
-        <span id="step-count" class="status__count">0 steps</span>
-      </section>
+        <section id="how-it-works" class="section" aria-labelledby="how-title">
+          <div class="section__heading">
+            <p class="eyebrow">How it works</p>
+            <h2 id="how-title">Automation without writing automation.</h2>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">👁️</span>
+              <h3>Observe</h3>
+              <p>Record a normal workflow across native macOS apps while Ghost captures the important actions.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">🧠</span>
+              <h3>Understand</h3>
+              <p>Turn low-level clicks into a higher-level task plan that knows what should happen next.</p>
+            </article>
+            <article class="feature-card">
+              <span class="feature-card__icon" aria-hidden="true">⚡</span>
+              <h3>Replay</h3>
+              <p>Run the workflow again, skip the busywork, and keep control with checkpoints for sensitive steps.</p>
+            </article>
+          </div>
+        </section>
 
-      <ol id="steps" class="steps" aria-live="polite"></ol>
-    </main>
+        <section id="use-cases" class="section split" aria-labelledby="use-title">
+          <div>
+            <p class="eyebrow">Use cases</p>
+            <h2 id="use-title">Built for the chores that live outside your browser.</h2>
+            <p>
+              Ghost is designed for operators, founders, and support teams who repeat the same desktop
+              flows every day but cannot justify a custom integration for each one.
+            </p>
+          </div>
+          <ul class="check-list">
+            <li>Copy customer context between internal tools and native apps.</li>
+            <li>Process invoices, screenshots, forms, and back-office queues.</li>
+            <li>Recreate QA paths without maintaining a brittle script.</li>
+            <li>Delegate repeatable research and admin routines to an AI helper.</li>
+          </ul>
+        </section>
+
+        <section id="preview" class="section cta" aria-labelledby="cta-title">
+          <div>
+            <p class="eyebrow">Private preview</p>
+            <h2 id="cta-title">Bring Ghost into your workflow early.</h2>
+            <p>
+              We are opening a small preview for macOS teams with repetitive workflows that are too custom
+              for off-the-shelf automation.
+            </p>
+          </div>
+          <form id="waitlist" class="waitlist" name="ghost-waitlist" method="post" data-netlify="true">
+            <input type="hidden" name="form-name" value="ghost-waitlist" />
+            <label>
+              <span>Name</span>
+              <input name="name" type="text" autocomplete="name" placeholder="Ada Lovelace" required />
+            </label>
+            <label>
+              <span>Email</span>
+              <input name="email" type="email" autocomplete="email" placeholder="ada@company.com" required />
+            </label>
+            <label>
+              <span>Workflow you want Ghost to automate</span>
+              <textarea name="workflow" rows="4" placeholder="Tell us about the repetitive desktop task..." required></textarea>
+            </label>
+            <button class="btn" type="submit">Get in touch</button>
+          </form>
+        </section>
+      </main>
+    </div>
   </body>
 </html>
