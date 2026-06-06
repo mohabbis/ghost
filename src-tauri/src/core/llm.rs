@@ -284,6 +284,14 @@ impl LLMProvider for LocalFallback {
                     element: Some(element.clone()),
                     timestamp: None,
                     retry_count: None,
+                    semantic_tag: Some(crate::core::events::SemanticTag {
+                        action: "click".to_string(),
+                        target: element.name.clone(),
+                        confidence: 0.8,
+                        ui_element: Some(element.clone()),
+                        ai_generated: false,
+                    }),
+                    self_heal: Some(true),
                 });
             }
         }
@@ -296,6 +304,13 @@ impl LLMProvider for LocalFallback {
                 action: crate::core::events::KeyAction::Down,
                 timestamp: None,
                 retry_count: None,
+                semantic_tag: Some(crate::core::events::SemanticTag {
+                    action: "type".to_string(),
+                    target: "keyboard input".to_string(),
+                    confidence: 0.7,
+                    ui_element: None,
+                    ai_generated: false,
+                }),
             });
         }
 

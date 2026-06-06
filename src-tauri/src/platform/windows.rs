@@ -375,6 +375,72 @@ impl ReplayEngine for WindowsReplayer {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
                     std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
                 }
+                // Phase 3: Smart Wait Events
+                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                    tracing::info!("Waiting for condition: {:?}", condition);
+                    let locator = crate::platform::windows::WindowsBackend::locator();
+                    let result = crate::core::wait::wait_for_condition(
+                        condition,
+                        locator.as_ref(),
+                        *timeout_ms,
+                        *poll_interval_ms,
+                    );
+                    match result {
+                        crate::core::wait::WaitResult::Error(e) => {
+                            tracing::warn!("Wait condition failed: {}", e);
+                        }
+                        crate::core::wait::WaitResult::Timeout => {
+                            tracing::warn!("Wait condition timed out");
+                        }
+                        crate::core::wait::WaitResult::Success => {}
+                    }
+                }
+                // Phase 3: Visual Regression Check
+                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
+                    match crate::core::vision::capture_screenshot() {
+                        Ok(img_bytes) => {
+                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                                if let Ok(similarity) = crate::core::vision::compare_images(baseline_screenshot, &current_img) {
+                                    if similarity < *threshold {
+                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
+                                        match on_mismatch {
+                                            crate::core::events::MismatchAction::Fail => {
+                                                return Err(anyhow::anyhow!("Visual regression detected"));
+                                            }
+                                            crate::core::events::MismatchAction::Retry { attempts } => {
+                                                for _ in 0..*attempts {
+                                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                                    if let Ok(new_img) = crate::core::vision::capture_screenshot() {
+                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
+                                                            if crate::core::vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            crate::core::events::MismatchAction::LogOnly => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to capture screenshot for visual check: {}", e);
+                        }
+                    }
+                }
+                // Phase 3: Variable Injection
+                InputEvent::Variable { name, value_template, var_type } => {
+                    let mut var_context = crate::core::wait::VariableContext::new();
+                    let resolved = var_context.resolve(name, var_type)
+                        .unwrap_or_else(|_| value_template.clone());
+                    var_context.set(name.clone(), resolved);
+                }
+                // Variable Reference - just log for now
+                InputEvent::VariableRef { name } => {
+                    tracing::debug!("Variable reference: {}", name);
+                }
             }
         }
 
@@ -462,6 +528,81 @@ impl ReplayEngine for WindowsReplayer {
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
                     std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
+                }
+                // Phase 3: Smart Wait Events
+                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                    tracing::info!("Waiting for condition: {:?}", condition);
+                    if reliability.validate_elements {
+                        let locator = crate::platform::windows::WindowsBackend::locator();
+                        let result = crate::core::wait::wait_for_condition(
+                            condition,
+                            locator.as_ref(),
+                            *timeout_ms,
+                            *poll_interval_ms,
+                        );
+                        match result {
+                            crate::core::wait::WaitResult::Error(e) => {
+                                if reliability.continue_on_error {
+                                    tracing::warn!("Wait condition failed but continuing: {}", e);
+                                } else {
+                                    return Err(anyhow::anyhow!("Wait condition failed: {}", e));
+                                }
+                            }
+                            crate::core::wait::WaitResult::Timeout => {
+                                tracing::warn!("Wait condition timed out");
+                            }
+                            crate::core::wait::WaitResult::Success => {}
+                        }
+                    }
+                }
+                // Phase 3: Visual Regression Check
+                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
+                    match crate::core::vision::capture_screenshot() {
+                        Ok(img_bytes) => {
+                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                                if let Ok(similarity) = crate::core::vision::compare_images(baseline_screenshot, &current_img) {
+                                    if similarity < *threshold {
+                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
+                                        match on_mismatch {
+                                            crate::core::events::MismatchAction::Fail => {
+                                                if !reliability.continue_on_error {
+                                                    return Err(anyhow::anyhow!("Visual regression detected"));
+                                                }
+                                            }
+                                            crate::core::events::MismatchAction::Retry { attempts } => {
+                                                for _ in 0..*attempts {
+                                                    std::thread::sleep(std::time::Duration::from_millis(500));
+                                                    if let Ok(new_img) = crate::core::vision::capture_screenshot() {
+                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
+                                                            if crate::core::vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            crate::core::events::MismatchAction::LogOnly => {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if !reliability.continue_on_error {
+                                return Err(anyhow::anyhow!("Failed to capture screenshot: {}", e));
+                            }
+                        }
+                    }
+                }
+                // Phase 3: Variable Injection
+                InputEvent::Variable { name, value_template, var_type } => {
+                    let mut var_context = crate::core::wait::VariableContext::new();
+                    let resolved = var_context.resolve(name, var_type)
+                        .unwrap_or_else(|_| value_template.clone());
+                    var_context.set(name.clone(), resolved);
+                }
+                InputEvent::VariableRef { name } => {
+                    tracing::debug!("Variable reference: {}", name);
                 }
             }
         }

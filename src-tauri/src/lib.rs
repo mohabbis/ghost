@@ -46,6 +46,26 @@ pub fn run() {
             commands::cloud_sync_workflows,
             commands::create_workspace,
             commands::get_audit_logs,
+            // Phase 5: Execution & Analytics
+            commands::get_execution_history,
+            commands::get_all_executions,
+            commands::get_workflow_analytics,
+            // Phase 4A: Visual Regression
+            commands::replay_with_visual_check,
+            commands::capture_baseline_screenshot,
+            // Phase 4C: Data Sources
+            commands::create_data_source,
+            commands::load_variables,
+            // Phase 4: Smart Observer Mode
+            commands::start_observer,
+            commands::stop_observer,
+            commands::is_observer_active,
+            commands::set_observer_interval,
+            commands::observe_events,
+            commands::get_proactive_suggestions,
+            commands::get_learned_patterns,
+            commands::get_app_usage_stats,
+            commands::generate_geek_insights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

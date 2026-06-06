@@ -22,6 +22,101 @@ function revealOnScroll() {
 
 window.addEventListener("DOMContentLoaded", revealOnScroll);
 
+// ===== Typing Animation & Proactive Notifications =====
+
+// Proactive observation messages for typing animation
+const proactiveMessages = [
+  "copy-paste that customer info?",
+  "repeat that same workflow?",
+  "open those 5 apps again?",
+  "fill that form every day?",
+  "switch between those windows?",
+  "type that same report?",
+  "process those invoices weekly?",
+  "check those same dashboards?"
+];
+
+let typingIndex = 0;
+let charIndex = 0;
+let isDeleting = false;
+
+function typeWriter() {
+  const typedTextEl = document.getElementById('typed-text');
+  if (!typedTextEl) return;
+  
+  const currentMessage = proactiveMessages[typingIndex];
+  
+  if (isDeleting) {
+    charIndex--;
+  } else {
+    charIndex++;
+  }
+  
+  typedTextEl.textContent = currentMessage.substring(0, charIndex);
+  
+  if (!isDeleting && charIndex === currentMessage.length) {
+    setTimeout(() => { isDeleting = true; }, 1500);
+  } else if (isDeleting && charIndex === 0) {
+    isDeleting = false;
+    typingIndex = (typingIndex + 1) % proactiveMessages.length;
+  }
+  
+  const speed = isDeleting ? 50 : 100;
+  setTimeout(typeWriter, speed);
+}
+
+// Start typing animation
+typeWriter();
+
+// Proactive notifications system
+const proactiveObservations = [
+  { text: "I noticed you copy-pasting between apps...", highlight: "copy-pasting" },
+  { text: "That workflow looks repeatable!", highlight: "repeatable" },
+  { text: "Want me to memorize this pattern?", highlight: "pattern" },
+  { text: "I can automate this for you next time", highlight: "automate" },
+  { text: "This looks like your morning routine...", highlight: "morning routine" },
+  { text: "Recognized. I'll help from now on.", highlight: "help" },
+  { text: "Pro tip: I can do this faster", highlight: "faster" }
+];
+
+let notificationIndex = 0;
+
+function showProactiveNotification() {
+  const notificationsEl = document.getElementById('notifications');
+  if (!notificationsEl) return;
+  
+  const observation = proactiveObservations[notificationIndex];
+  const notification = document.createElement('div');
+  notification.className = 'notification notification--proactive';
+  notification.innerHTML = `
+    <p class="notification__text">
+      🦜 Hey, <span class="notification__highlight">${observation.highlight}</span> ${observation.text.replace(observation.highlight, '')}
+    </p>
+  `;
+  
+  notificationsEl.appendChild(notification);
+  
+  // Remove after animation
+  setTimeout(() => {
+    notification.remove();
+  }, 5000);
+  
+  notificationIndex = (notificationIndex + 1) % proactiveObservations.length;
+}
+
+// Show notifications periodically
+setInterval(showProactiveNotification, 8000);
+
+// Show first notification after page load
+setTimeout(showProactiveNotification, 3000);
+
+function updateInsightText(text) {
+  const insightText = document.getElementById('insight-text');
+  if (insightText) {
+    insightText.textContent = text;
+  }
+}
+
 // Tauri IPC integration for Ghost automation
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
@@ -514,26 +609,78 @@ function addEventToTimeline(event) {
   item.className = "timeline-item";
   
   let description = "";
-  switch (event.type || Object.keys(event)[0]) {
-    case "MouseClick":
-      description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
-      break;
-    case "Key":
-      description = `Key ${event.action === "Down" ? "Down" : "Up"}: Code ${event.code}`;
-      break;
-    case "Scroll":
-      description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
-      break;
-    case "Delay":
-      description = `Delay: ${event.ms}ms`;
-      break;
-    default:
-      description = JSON.stringify(event);
+  if (event.type) {
+    // New format with type field
+    switch (event.type) {
+      case "MouseClick":
+        description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
+        if (event.semantic_tag) {
+          description += ` [AI: ${event.semantic_tag.action} on ${event.semantic_tag.target}]`;
+        }
+        break;
+      case "Key":
+        description = `Key ${event.action === "Down" ? "Down" : "Up"}: ${event.chars || 'Code ' + event.code}`;
+        break;
+      case "Scroll":
+        description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
+        break;
+      case "Delay":
+        description = `Delay: ${event.ms}ms`;
+        break;
+      case "Wait":
+        description = `Wait: ${getConditionDescription(event.condition)}`;
+        break;
+      case "VisualCheck":
+        description = `Visual Check: threshold=${event.threshold}`;
+        break;
+      case "Variable":
+        description = `Variable: ${event.name} = ${event.value_template}`;
+        break;
+      default:
+        description = JSON.stringify(event);
+    }
+  } else {
+    // Legacy format
+    const eventType = Object.keys(event)[0];
+    switch (eventType) {
+      case "MouseClick":
+        description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
+        break;
+      case "Key":
+        description = `Key ${event.action === "Down" ? "Down" : "Up"}: Code ${event.code}`;
+        break;
+      case "Scroll":
+        description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
+        break;
+      case "Delay":
+        description = `Delay: ${event.ms}ms`;
+        break;
+      default:
+        description = JSON.stringify(event);
+    }
   }
   
   item.textContent = description;
   timelineEl.appendChild(item);
   timelineEl.scrollTop = timelineEl.scrollHeight;
+}
+
+function getConditionDescription(condition) {
+  if (!condition) return "Unknown condition";
+  switch (condition.type) {
+    case "ElementVisible":
+      return `ElementVisible: ${condition.selector?.name || "element"}`;
+    case "ElementExists":
+      return `ElementExists: ${condition.selector?.name || "element"}`;
+    case "TextPresent":
+      return `TextPresent: "${condition.text || ""}"`;
+    case "ImageMatches":
+      return `ImageMatches: threshold=${condition.threshold || 0.9}`;
+    case "Custom":
+      return `Custom: ${condition.js_expression || ""}`;
+    default:
+      return JSON.stringify(condition);
+  }
 }
 
 function updateRecordingUI() {
@@ -576,3 +723,285 @@ function updateRecordingUI() {
 
 // Initialize UI state
 updateRecordingUI();
+
+// ===== Smart Observer Mode Functions =====
+
+async function startSmartObserver() {
+  if (!invoke) {
+    alert("Tauri not available - running in static mode");
+    return;
+  }
+
+  try {
+    await invoke("start_observer");
+    alert("Smart Observer started! I'm now learning your patterns...");
+    startObserverUIUpdate();
+  } catch (error) {
+    console.error("Failed to start observer:", error);
+    alert("Failed to start observer: " + error);
+  }
+}
+
+async function stopSmartObserver() {
+  if (!invoke) return;
+
+  try {
+    await invoke("stop_observer");
+    alert("Smart Observer stopped.");
+  } catch (error) {
+    console.error("Failed to stop observer:", error);
+  }
+}
+
+async function checkObserverStatus() {
+  if (!invoke) return;
+
+  try {
+    const active = await invoke("is_observer_active");
+    return active;
+  } catch (error) {
+    console.error("Failed to check observer status:", error);
+    return false;
+  }
+}
+
+async function observeCurrentSession() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded to observe");
+    return;
+  }
+
+  try {
+    const appName = prompt("Which app are you using?", "Unknown App") || "Unknown";
+    const patternsFound = await invoke("observe_events", {
+      events: recordedEvents,
+      app_name: appName
+    });
+    alert(`Found ${patternsFound} learned patterns from ${appName}!`);
+    
+    // Get proactive suggestions
+    const suggestions = await invoke("get_proactive_suggestions");
+    if (suggestions.length > 0) {
+      displaySuggestions(suggestions);
+    }
+  } catch (error) {
+    console.error("Failed to observe events:", error);
+    alert("Failed to observe: " + error);
+  }
+}
+
+async function generateGeekInsights() {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+
+  try {
+    const appName = prompt("Which app are you analyzing?", "Unknown App") || "Unknown";
+    const insights = await invoke("generate_geek_insights", {
+      events: recordedEvents,
+      app_name: appName
+    });
+    displayGeekInsights(insights, appName);
+  } catch (error) {
+    console.error("Failed to generate geek insights:", error);
+    alert("Failed to generate insights: " + error);
+  }
+}
+
+function displaySuggestions(suggestions) {
+  const modal = document.getElementById("analysis-modal");
+  if (!modal) return;
+
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <h3>🤖 Proactive Automation Suggestions</h3>
+    ${suggestions.map((s, i) => `
+      <div style="margin: 12px 0; padding: 12px; background: rgba(139, 123, 255, 0.1); border-radius: 8px; border-left: 3px solid #8d7bff;">
+        <p><strong>${i + 1}. ${s.suggestion}</strong></p>
+        <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${s.suggested_workflow_name}</code></p>
+        <p style="font-size: 0.85rem;">Confidence: ${(s.confidence * 100).toFixed(1)}%</p>
+        <button onclick="createWorkflowFromSuggestion('${s.suggested_workflow_name}', '${s.pattern_id}')" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
+      </div>
+    `).join("")}
+    <button onclick="closeModal('analysis-modal')">Close</button>
+  `;
+
+  modal.style.display = "block";
+}
+
+async function createWorkflowFromSuggestion(name, patternId) {
+  // For now, just save the current events with the suggested name
+  if (recordedEvents.length === 0) return;
+
+  try {
+    await invoke("save_workflow", {
+      name,
+      events: recordedEvents
+    });
+    closeModal("analysis-modal");
+    alert(`Workflow "${name}" created!`);
+  } catch (error) {
+    console.error("Failed to save workflow:", error);
+  }
+}
+
+function displayGeekInsights(insights, appName) {
+  const modal = document.getElementById("analysis-modal");
+  if (!modal) return;
+
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <h3>🔧 Geek Mode: Technical Insights for ${appName}</h3>
+    <div style="margin: 12px 0;">
+      <h4 style="color: #8d7bff;">Performance Metrics</h4>
+      <p>Total Duration: ${insights.performance_metrics.total_duration_ms}ms</p>
+      <p>Avg Delay: ${insights.performance_metrics.avg_delay_ms.toFixed(2)}ms</p>
+      ${insights.performance_metrics.bottleneck_events.length > 0 ? `
+        <p>Bottleneck Events: ${insights.performance_metrics.bottleneck_events.join(", ")}</p>
+      ` : ""}
+    </div>
+    <div style="margin: 12px 0;">
+      <h4 style="color: #8d7bff;">Event Timing Analysis</h4>
+      <table style="width: 100%; font-size: 0.85rem;">
+        <tr style="border-bottom: 1px solid #374151;">
+          <th>Index</th><th>Action</th><th>Delay Before</th>
+        </tr>
+        ${insights.event_timing_analysis.slice(0, 10).map(t => `
+          <tr style="border-bottom: 1px solid #374151;">
+            <td>${t.event_index}</td>
+            <td>${t.estimated_action}</td>
+            <td>${t.delay_before_ms}ms</td>
+          </tr>
+        `).join("")}
+        ${insights.event_timing_analysis.length > 10 ? `<tr><td colspan="3">... and ${insights.event_timing_analysis.length - 10} more</td></tr>` : ""}
+      </table>
+    </div>
+    <button onclick="closeModal('analysis-modal')">Close</button>
+  `;
+
+  modal.style.display = "block";
+}
+
+// ===== Phase 4A: Visual Regression Functions =====
+
+async function replayWithVisualCheck() {
+  if (!invoke) {
+    alert("Tauri not available - running in static mode");
+    return;
+  }
+
+  if (recordedEvents.length === 0) {
+    alert("No events recorded yet");
+    return;
+  }
+
+  try {
+    // For demo, capture a baseline automatically
+    const appName = prompt("App name for baseline:", "default_app");
+    if (appName) {
+      await invoke("capture_baseline_screenshot", { name: appName });
+    }
+
+    const visualChecks = [
+      { event_index: recordedEvents.length - 1, name: "Final State", baseline_screenshot_path: appName ? `${appName}.png` : null, threshold: 0.95 }
+    ];
+
+    const success = await invoke("replay_with_visual_check", {
+      events: recordedEvents,
+      visual_checks: visualChecks
+    });
+
+    if (success) {
+      alert("Replay completed with visual check!");
+    } else {
+      alert("Replay was cancelled");
+    }
+  } catch (error) {
+    console.error("Failed to replay with visual check:", error);
+    alert("Replay failed: " + error);
+  }
+}
+
+async function captureBaseline() {
+  if (!invoke) return;
+
+  const name = prompt("Baseline name:");
+  if (!name) return;
+
+  try {
+    const path = await invoke("capture_baseline_screenshot", { name });
+    alert(`Baseline captured: ${path}`);
+  } catch (error) {
+    console.error("Failed to capture baseline:", error);
+    alert("Capture failed: " + error);
+  }
+}
+
+// ===== Phase 4C: Data Source Functions =====
+
+async function createDataSource() {
+  if (!invoke) return;
+
+  const name = prompt("Data source name:");
+  if (!name) return;
+
+  const type = prompt("Data source type (csv/json/environment):", "environment") || "environment";
+  let path = null;
+
+  if (type === "csv" || type === "json") {
+    path = prompt("Path to data file:");
+  }
+
+  try {
+    const sourcePath = await invoke("create_data_source", {
+      name,
+      source_type: type,
+      path
+    });
+    alert(`Data source created: ${sourcePath}`);
+  } catch (error) {
+    console.error("Failed to create data source:", error);
+    alert("Create failed: " + error);
+  }
+}
+
+async function loadVariablesFromSource() {
+  if (!invoke) return;
+
+  const name = prompt("Data source name:");
+  if (!name) return;
+
+  try {
+    const variables = await invoke("load_variables", { data_source_name: name });
+    alert(`Loaded ${Object.keys(variables).length} variables`);
+    console.log("Variables:", variables);
+    return variables;
+  } catch (error) {
+    console.error("Failed to load variables:", error);
+    alert("Load failed: " + error);
+  }
+}
+
+// Observer UI update loop
+let observerUpdateInterval = null;
+
+function startObserverUIUpdate() {
+  if (observerUpdateInterval) {
+    clearInterval(observerUpdateInterval);
+  }
+
+  observerUpdateInterval = setInterval(async () => {
+    const active = await checkObserverStatus();
+    if (!active) {
+      clearInterval(observerUpdateInterval);
+      observerUpdateInterval = null;
+    }
+  }, 2000);
+}

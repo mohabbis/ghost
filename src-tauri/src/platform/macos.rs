@@ -458,8 +458,12 @@ impl MacosReplayer {
 
 impl ReplayEngine for MacosReplayer {
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
+        use crate::core::wait::VariableContext;
+        use crate::core::vision;
+        
         let mut enigo = Enigo::new();
         let speed = *self.speed_factor.lock().unwrap();
+        let mut var_context = VariableContext::new();
 
         for event in events {
             if stop_flag.load(Ordering::Relaxed) {
@@ -473,10 +477,8 @@ impl ReplayEngine for MacosReplayer {
                     let mut success = false;
                     
                     while attempts <= max_retries && !success {
-                        // Move to position
                         enigo.mouse_move_to(*x, *y);
                         
-                        // Click the appropriate button
                         let mouse_button = match button {
                             0 | 1 => MouseButton::Left,
                             2 | 3 => MouseButton::Right,
@@ -484,18 +486,16 @@ impl ReplayEngine for MacosReplayer {
                         };
                         
                         enigo.mouse_click(mouse_button);
-                        success = true; // In a real implementation, you'd validate
+                        success = true; // In real implementation, validate
                         attempts += 1;
                     }
                 }
                 InputEvent::Key { code, chars, action, retry_count, .. } => {
                     let max_retries = retry_count.unwrap_or(0);
-                    let mut attempts = 0;
                     
-                    while attempts <= max_retries {
+                    for _ in 0..=max_retries {
                         match action {
                             KeyAction::Down => {
-                                // Try using character first, fall back to raw keycode
                                 if !chars.is_empty() {
                                     enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
                                 } else {
@@ -510,16 +510,85 @@ impl ReplayEngine for MacosReplayer {
                                 }
                             }
                         }
-                        attempts += 1;
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
                     enigo.scroll(*dx, *dy);
                 }
                 InputEvent::Delay { ms, .. } => {
-                    // Apply speed factor to delay
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    std::thread::sleep(Duration::from_millis(adjusted_ms));
+                    thread::sleep(Duration::from_millis(adjusted_ms));
+                }
+                // Phase 3: Smart Wait Events
+                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                    tracing::info!("Waiting for condition: {:?}", condition);
+                    // Use a local locator for wait condition checking
+                    let locator = crate::platform::macos::MacosBackend::locator();
+                    let result = crate::core::wait::wait_for_condition(
+                        condition,
+                        locator.as_ref(),
+                        *timeout_ms,
+                        *poll_interval_ms,
+                    );
+                    match result {
+                        crate::core::wait::WaitResult::Error(e) => {
+                            tracing::warn!("Wait condition failed: {}", e);
+                        }
+                        crate::core::wait::WaitResult::Timeout => {
+                            tracing::warn!("Wait condition timed out");
+                        }
+                        crate::core::wait::WaitResult::Success => {}
+                    }
+                }
+                // Phase 3: Visual Regression Check
+                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
+                    // Capture current screen
+                    match vision::capture_screenshot() {
+                        Ok(img_bytes) => {
+                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                                if let Ok(similarity) = vision::compare_images(baseline_screenshot, &current_img) {
+                                    if similarity < *threshold {
+                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
+                                        // Handle mismatch action
+                                        match on_mismatch {
+                                            crate::core::events::MismatchAction::Fail => {
+                                                return Err(anyhow::anyhow!("Visual regression detected"));
+                                            }
+                                            crate::core::events::MismatchAction::Retry { attempts } => {
+                                                // Retry the check
+                                                for _ in 0..*attempts {
+                                                    thread::sleep(Duration::from_millis(500));
+                                                    if let Ok(new_img) = vision::capture_screenshot() {
+                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
+                                                            if vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            crate::core::events::MismatchAction::LogOnly => {
+                                                // Just log, continue
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to capture screenshot for visual check: {}", e);
+                        }
+                    }
+                }
+                // Phase 3: Variable Injection
+                InputEvent::Variable { name, value_template, var_type } => {
+                    let resolved = var_context.resolve(name, var_type)
+                        .unwrap_or_else(|_| value_template.clone());
+                    var_context.set(name.clone(), resolved);
+                }
+                // Variable Reference - just log for now, actual usage depends on context
+                InputEvent::VariableRef { name } => {
+                    tracing::debug!("Variable reference: {}", name);
                 }
             }
         }

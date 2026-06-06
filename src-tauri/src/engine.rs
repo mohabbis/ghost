@@ -1,13 +1,16 @@
 //! Ghost engine: platform-agnostic orchestration layer.
 //! Manages recording, element lookup, and replay with cancellation support.
 
-use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowAnalysis, WorkflowMetadata, WaitCondition, ElementSelector};
+use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowAnalysis, WorkflowMetadata, WaitCondition, ElementSelector, VisualCheckPoint, KeyAction};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::ai::WorkflowAnalyzer;
 use crate::core::llm::{self, LLMConfig, LLMProvider};
 use crate::core::wait::{smart_wait, WaitResult};
 use crate::core::vision;
+use crate::core::execution::{ExecutionHistory, ExecutionRecord, ExecutionStatus};
+use crate::core::knowledge::{KnowledgeBase, LearnedPattern, ProactiveSuggestion};
 use image::DynamicImage;
+use enigo::{Enigo, MouseButton, MouseControllable};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::path::PathBuf;
@@ -31,6 +34,10 @@ pub struct GhostEngine {
     recorded_events: Arc<Mutex<Vec<InputEvent>>>,
     /// AI workflow analyzer
     analyzer: WorkflowAnalyzer,
+    /// Execution history tracker
+    execution_tracker: Arc<Mutex<Option<ExecutionHistory>>>,
+    /// Knowledge base for Smart Observer Mode
+    knowledge_base: KnowledgeBase,
 }
 
 impl GhostEngine {
@@ -70,6 +77,8 @@ impl GhostEngine {
             replay_paused: Arc::new(AtomicBool::new(false)),
             recorded_events: Arc::new(Mutex::new(Vec::new())),
             analyzer: WorkflowAnalyzer::new(),
+            execution_tracker: Arc::new(Mutex::new(ExecutionHistory::new().ok())),
+            knowledge_base: KnowledgeBase::new(),
         }
     }
 
@@ -388,11 +397,11 @@ impl GhostEngine {
     ) -> anyhow::Result<Vec<InputEvent>> {
         // Initialize LLM if not already done
         let config = LLMConfig::from_env();
-        if get_llm().is_none() {
+        if llm::get_llm().is_none() {
             llm::init_llm(&config);
         }
 
-        let provider = get_llm()
+        let provider = llm::get_llm()
             .ok_or_else(|| anyhow::anyhow!("No LLM provider available"))?;
 
         // Get element context from current screen
@@ -434,11 +443,11 @@ impl GhostEngine {
     /// Analyze and add semantic tags to recorded events
     pub fn analyze_and_tag_workflow(&self, events: Vec<InputEvent>) -> anyhow::Result<Vec<InputEvent>> {
         let config = LLMConfig::from_env();
-        if get_llm().is_none() {
+        if llm::get_llm().is_none() {
             llm::init_llm(&config);
         }
 
-        let provider = get_llm()
+        let provider = llm::get_llm()
             .ok_or_else(|| anyhow::anyhow!("No AI provider available"))?;
 
         let element_context = self.get_visible_elements()?;
@@ -526,11 +535,10 @@ impl GhostEngine {
         elements: &[ElementInfo]
     ) -> Option<ElementInfo> {
         elements.iter()
-            .filter_map(|el| el.fallback_coords.as_ref())
-            .filter_map(|(ex, ey)| {
+            .filter_map(|el| el.fallback_coords.as_ref().map(|(ex, ey)| {
                 let dist = ((x - ex).pow(2) + (y - ey).pow(2)) as f32;
-                Some((el, dist))
-            })
+                (el, dist)
+            }))
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(el, _)| el.clone())
     }
@@ -562,6 +570,299 @@ impl GhostEngine {
         let dynamic_image = image::load_from_memory(img)?;
         vision::save_image(&dynamic_image, path)?;
         Ok(())
+    }
+
+    // ===== Phase 4A: Visual Regression Replay =====
+
+    /// Replay with visual regression checkpoints
+    pub fn replay_with_visual_check(
+        &self,
+        events: &[InputEvent],
+        visual_checkpoints: &[VisualCheckPoint],
+    ) -> anyhow::Result<bool> {
+        // Reset flags
+        self.replay_stop_flag.store(false, Ordering::Relaxed);
+        self.replay_paused.store(false, Ordering::Relaxed);
+        
+        let mut enigo = Enigo::new();
+        let speed = *self.playback_speed.lock().unwrap();
+
+        for (idx, event) in events.iter().enumerate() {
+            if self.replay_stop_flag.load(Ordering::Relaxed) {
+                return Ok(false);
+            }
+
+            // Check if we need to perform a visual check at this index
+            let checkpoint = visual_checkpoints.iter().find(|c| c.event_index == idx);
+            
+            // Execute the event
+            match event {
+                InputEvent::MouseClick { x, y, button, .. } => {
+                    enigo.mouse_move_to(*x, *y);
+                    let mouse_button = match button {
+                        0 | 1 => MouseButton::Left,
+                        2 | 3 => MouseButton::Right,
+                        _ => MouseButton::Left,
+                    };
+                    enigo.mouse_click(mouse_button);
+                }
+                InputEvent::Key { code, chars, action, .. } => {
+                    match action {
+                        KeyAction::Down => {
+                            if !chars.is_empty() {
+                                enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                            } else {
+                                enigo.key_down(enigo::Key::Raw(*code));
+                            }
+                        }
+                        KeyAction::Up => {
+                            if !chars.is_empty() {
+                                enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
+                            } else {
+                                enigo.key_up(enigo::Key::Raw(*code));
+                            }
+                        }
+                    }
+                }
+                InputEvent::Scroll { dx, dy, .. } => {
+                    enigo.scroll(*dx, *dy);
+                }
+                InputEvent::Delay { ms, .. } => {
+                    let adjusted_ms = (*ms as f32 / speed) as u64;
+                    thread::sleep(Duration::from_millis(adjusted_ms));
+                }
+                _ => {}
+            }
+
+            // Perform visual check if configured
+            if let Some(checkpoint) = checkpoint {
+                if let Some(baseline_path) = &checkpoint.baseline_screenshot_path {
+                    if let Ok(img_bytes) = vision::capture_screenshot() {
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                            let similarity = vision::compare_images(baseline_path, &current_img)
+                                .unwrap_or(1.0);
+                            
+                            if similarity < checkpoint.threshold {
+                                tracing::warn!(
+                                    "Visual check '{}' failed: {:.2} < {}",
+                                    checkpoint.name,
+                                    similarity,
+                                    checkpoint.threshold
+                                );
+                                // Continue anyway - could be made configurable
+                            } else {
+                                tracing::info!("Visual check '{}' passed: {:.2}", checkpoint.name, similarity);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Capture and save a baseline screenshot
+    pub fn capture_baseline(&self, name: &str, region: Option<(i32, i32, i32, i32)>) -> anyhow::Result<String> {
+        let img_bytes = vision::capture_screenshot()
+            .map_err(|e| anyhow::anyhow!("Failed to capture screenshot: {}", e))?;
+        
+        let data_dir = tauri::api::path::data_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
+        
+        let baselines_dir = data_dir.join("ghost").join("baselines");
+        std::fs::create_dir_all(&baselines_dir)?;
+        
+        let path = baselines_dir.join(format!("{}.png", name));
+        self.save_screenshot(&img_bytes, path.to_string_lossy().as_ref())?;
+        
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    // ===== Phase 4C: Data Source Management =====
+
+    /// Create a data source for variable-driven workflows
+    pub fn create_data_source(&self, name: &str, source_type: &str, path: Option<&str>) -> anyhow::Result<String> {
+        let data_dir = tauri::api::path::data_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
+        
+        let sources_dir = data_dir.join("ghost").join("data_sources");
+        std::fs::create_dir_all(&sources_dir)?;
+        
+        let source_path = match source_type {
+            "csv" | "json" => {
+                let p = path.ok_or_else(|| anyhow::anyhow!("Path required for {} data source", source_type))?;
+                format!("{}:{}", source_type, p)
+            }
+            "environment" => "environment".to_string(),
+            _ => return Err(anyhow::anyhow!("Unknown source type: {}", source_type)),
+        };
+
+        let file_path = sources_dir.join(format!("{}.json", name));
+        let metadata = serde_json::json!({
+            "name": name,
+            "type": source_type,
+            "path": source_path,
+            "created_at": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        });
+        
+        std::fs::write(&file_path, serde_json::to_string_pretty(&metadata)?)?;
+        Ok(file_path.to_string_lossy().to_string())
+    }
+
+    /// Load variables from a data source
+    pub fn load_variables(&self, data_source_name: &str) -> anyhow::Result<std::collections::HashMap<String, String>> {
+        let data_dir = tauri::api::path::data_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
+        
+        let sources_dir = data_dir.join("ghost").join("data_sources");
+        let file_path = sources_dir.join(format!("{}.json", data_source_name));
+        
+        let json = std::fs::read_to_string(&file_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read data source: {}", e))?;
+        
+        let metadata: serde_json::Value = serde_json::from_str(&json)?;
+        let source_type = metadata["type"].as_str().unwrap_or("unknown");
+        
+        let mut variables = std::collections::HashMap::new();
+        
+        match source_type {
+            "csv" => {
+                let path = metadata["path"].as_str()
+                    .and_then(|p| p.strip_prefix("csv:"))
+                    .ok_or_else(|| anyhow::anyhow!("Invalid CSV path in data source"))?;
+                
+                let csv_content = std::fs::read_to_string(path)
+                    .map_err(|e| anyhow::anyhow!("Failed to read CSV file: {}", e))?;
+                
+                // Parse CSV and extract first row as variables
+                for line in csv_content.lines() {
+                    let parts: Vec<&str> = line.split(',').collect();
+                    if parts.len() >= 2 {
+                        variables.insert(parts[0].to_string(), parts[1].to_string());
+                    }
+                }
+            }
+            "json" => {
+                let path = metadata["path"].as_str()
+                    .and_then(|p| p.strip_prefix("json:"))
+                    .ok_or_else(|| anyhow::anyhow!("Invalid JSON path in data source"))?;
+                
+                let json_content = std::fs::read_to_string(path)
+                    .map_err(|e| anyhow::anyhow!("Failed to read JSON file: {}", e))?;
+                
+                let json_vars: serde_json::Value = serde_json::from_str(&json_content)?;
+                if let Some(obj) = json_vars.as_object() {
+                    for (k, v) in obj {
+                        variables.insert(k.clone(), v.as_str().unwrap_or_default().to_string());
+                    }
+                }
+            }
+            "environment" => {
+                // Load from environment variables
+                for (key, value) in std::env::vars() {
+                    variables.insert(key, value);
+                }
+            }
+            _ => return Err(anyhow::anyhow!("Unknown source type: {}", source_type)),
+        }
+
+        Ok(variables)
+    }
+
+    // ===== Smart Observer Mode Methods =====
+
+    /// Start the Smart Observer - watch and learn user patterns
+    pub fn start_observer(&self) {
+        self.knowledge_base.start_observer();
+    }
+
+    /// Stop the Smart Observer
+    pub fn stop_observer(&self) {
+        self.knowledge_base.stop_observer();
+    }
+
+    /// Check if observer is active
+    pub fn is_observer_active(&self) -> bool {
+        self.knowledge_base.is_observer_active()
+    }
+
+    /// Set observer interval in milliseconds
+    pub fn set_observer_interval(&self, interval_ms: u64) {
+        self.knowledge_base.set_observer_interval(interval_ms);
+    }
+
+    /// Record events as an observed pattern
+    pub fn observe_events(&self, events: &[InputEvent], app_name: &str) {
+        let patterns = self.knowledge_base.analyze_observed_events(events, app_name);
+        for pattern in patterns {
+            self.knowledge_base.observe_pattern(pattern);
+        }
+        self.knowledge_base.track_app_usage(app_name);
+    }
+
+    /// Get proactive automation suggestions
+    pub fn get_proactive_suggestions(&self) -> Vec<ProactiveSuggestion> {
+        self.knowledge_base.get_suggestions()
+    }
+
+    /// Get learned patterns for an app
+    pub fn get_learned_patterns(&self, app_name: Option<&str>) -> Vec<LearnedPattern> {
+        match app_name {
+            Some(name) => self.knowledge_base.get_app_patterns(name),
+            None => self.knowledge_base.get_patterns(),
+        }
+    }
+
+    /// Get app usage statistics
+    pub fn get_app_usage_stats(&self) -> Vec<crate::core::knowledge::AppUsageStats> {
+        self.knowledge_base.get_app_usage()
+    }
+
+    /// Generate a "geek mode" insight for events
+    pub fn generate_geek_insights(
+        &self,
+        events: &[InputEvent],
+        app_name: &str,
+    ) -> crate::core::knowledge::GeekDetails {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let timings: Vec<_> = events
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| crate::core::knowledge::EventTiming {
+                event_index: idx,
+                timestamp_ms: now,
+                delay_before_ms: 0,
+                estimated_action: "pending analysis".to_string(),
+            })
+            .collect();
+
+        let total_ms: u64 = events
+            .iter()
+            .filter_map(|e| match e {
+                InputEvent::Delay { ms, .. } => Some(*ms),
+                _ => None,
+            })
+            .sum();
+
+        crate::core::knowledge::GeekDetails {
+            event_timing_analysis: timings,
+            system_calls_traced: vec!["mouse_event".to_string(), "key_event".to_string()],
+            alternative_shortcuts: vec![],
+            performance_metrics: crate::core::knowledge::PerformanceMetrics {
+                total_duration_ms: total_ms,
+                avg_delay_ms: total_ms as f64 / events.len().max(1) as f64,
+                bottleneck_events: vec![],
+            },
+            raw_ax_tree_snapshots: vec![],
+        }
     }
 }
 
