@@ -26,9 +26,9 @@
           <a href="#how-it-works">How it helps</a>
           <a href="#use-cases">Examples</a>
           <a href="#demo">Try it</a>
-          <a href="#preview">Get access</a>
+          <a href="#download">Download</a>
         </nav>
-        <a class="btn btn--small" href="#waitlist">Join waitlist</a>
+        <a class="btn btn--small" href="#download">Download</a>
       </header>
 
       <main id="top">
@@ -43,26 +43,26 @@
             <div class="hero__actions">
               <!-- Mac -->
               <a class="btn btn--download" data-show="mac"
-                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
+                 href="/downloads/Ghost.dmg"
                  aria-label="Download Ghost for macOS">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                 Download for Mac
               </a>
               <!-- Windows -->
               <a class="btn btn--download" data-show="windows"
-                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
+                 href="/downloads/Ghost_Setup.exe"
                  aria-label="Download Ghost for Windows">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
                 Download for Windows
               </a>
               <!-- Mobile / unknown -->
-              <a class="btn" data-show="mobile other" href="#waitlist">Join the waitlist</a>
+              <a class="btn" data-show="mobile other" href="#notify">Get notified</a>
 
               <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
             </div>
-            <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free during beta</p>
-            <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free during beta</p>
-            <p class="download-note" data-show="mobile">Desktop app available now &middot; Mobile app coming soon</p>
+            <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free</p>
+            <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free</p>
+            <p class="download-note" data-show="mobile">Desktop app available now &middot; Mobile coming soon</p>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
                 <dt>🤖 Observant</dt>
@@ -83,7 +83,7 @@
             <div class="window-bar" aria-hidden="true">
               <span></span><span></span><span></span>
             </div>
-            
+
             <!-- AI Parrot Avatar -->
             <div class="parrot-avatar" aria-hidden="true">
               <div class="parrot-face">
@@ -92,7 +92,7 @@
                 <div class="parrot-beak"></div>
               </div>
             </div>
-            
+
             <!-- Smart Insights Panel -->
             <div class="smart-insights" id="smart-insights">
               <div class="insight-bubble" id="insight-bubble">
@@ -100,10 +100,10 @@
                 <span class="insight-text" id="insight-text">Observing your workflow patterns...</span>
               </div>
             </div>
-            
+
             <!-- Dynamic notifications -->
             <div class="notifications" id="notifications"></div>
-            
+
             <div class="recording-status">
               <span class="pulse" aria-hidden="true"></span>
               Ready to learn your patterns
@@ -131,7 +131,7 @@
                 <option value="2.0">2.0x Speed</option>
               </select>
             </div>
-            
+
             <div class="cloud-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;">
               <button class="btn btn--ghost btn--small" onclick="initCloudSync()">Init Cloud</button>
               <button class="btn btn--ghost btn--small" onclick="cloudLogin()">Login</button>
@@ -139,7 +139,7 @@
               <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
               <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
             </div>
-            
+
             <!-- Smart Observer Mode -->
             <div class="observer-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
               <button class="btn btn--ghost btn--small" onclick="startSmartObserver()">Start Observer 🤖</button>
@@ -147,7 +147,7 @@
               <button class="btn btn--ghost btn--small" onclick="observeCurrentSession()">Observe Session</button>
               <button class="btn btn--ghost btn--small" onclick="generateGeekInsights()">Geek Mode 🔧</button>
             </div>
-            
+
             <!-- Phase 4 Features -->
             <div class="phase4-actions" style="display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; border-top: 1px solid #374151; padding-top: 12px;">
               <button class="btn btn--ghost btn--small" onclick="replayWithVisualCheck()">Visual Check 👁️</button>
@@ -281,55 +281,57 @@
 
                 <div class="demo-result__footer">
                   <span class="demo-savings" id="demo-savings"></span>
-                  <a class="btn btn--small" href="#waitlist">Automate this with Ghost →</a>
+                  <a class="btn btn--small" href="#download">Download Ghost to automate this →</a>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section id="preview" class="section cta" aria-labelledby="cta-title">
+        <!-- Download -->
+        <section id="download" class="section cta" aria-labelledby="download-title">
           <div>
             <!-- Mac copy -->
-            <p class="eyebrow" data-show="mac">Download for Mac</p>
-            <h2 class="cta-title" data-show="mac">Get Ghost on your Mac.</h2>
+            <p class="eyebrow" data-show="mac">Available for Mac</p>
+            <h2 id="download-title" data-show="mac">Get Ghost on your Mac.</h2>
             <p data-show="mac">
-              Download the free beta, grant Accessibility access, and Ghost starts learning your patterns in minutes.
-              Apple Silicon and Intel supported.
+              Grant Accessibility access once and Ghost starts learning your patterns in minutes.
+              Runs natively on Apple Silicon and Intel.
             </p>
             <a class="btn btn--download cta-download-btn" data-show="mac"
-               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg">
+               href="/downloads/Ghost.dmg">
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
               Download Ghost.dmg
             </a>
-            <p class="download-note" data-show="mac" style="margin-top:10px">macOS 12+ &middot; Apple Silicon &amp; Intel &middot; Free beta</p>
+            <p class="download-note" data-show="mac" style="margin-top:10px">macOS 12+ &middot; Apple Silicon &amp; Intel &middot; Free</p>
 
             <!-- Windows copy -->
-            <p class="eyebrow" data-show="windows">Download for Windows</p>
-            <h2 class="cta-title" data-show="windows">Get Ghost on your PC.</h2>
+            <p class="eyebrow" data-show="windows">Available for Windows</p>
+            <h2 id="download-title" data-show="windows">Get Ghost on your PC.</h2>
             <p data-show="windows">
-              Download the free beta installer, run it, and Ghost starts learning your patterns right away.
-              Windows 10 and 11 (64-bit) supported.
+              Run the installer and Ghost starts learning your patterns right away.
+              Supports Windows 10 and 11, 64-bit.
             </p>
             <a class="btn btn--download cta-download-btn" data-show="windows"
-               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe">
+               href="/downloads/Ghost_Setup.exe">
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
               Download Ghost Setup.exe
             </a>
-            <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free beta</p>
+            <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free</p>
 
             <!-- Mobile copy -->
             <p class="eyebrow" data-show="mobile other">Your AI parrot, everywhere</p>
-            <h2 class="cta-title" data-show="mobile other">Mobile app coming soon.</h2>
+            <h2 id="download-title" data-show="mobile other">Desktop app available now.</h2>
             <p data-show="mobile other">
-              Ghost is available now on macOS and Windows.
-              The mobile experience is in the works — join the waitlist and you'll be first to know.
+              Ghost runs on macOS and Windows. The mobile app is coming — drop your email and
+              we'll let you know the moment it's ready.
             </p>
           </div>
 
-          <form id="waitlist" class="waitlist" name="ghost-waitlist" method="post" data-netlify="true">
-            <input type="hidden" name="form-name" value="ghost-waitlist" />
-            <input type="hidden" name="platform" id="waitlist-platform" value="unknown" />
+          <!-- Notify form (mobile / unknown) or shown alongside download for desktop -->
+          <form id="notify" class="waitlist" name="ghost-notify" method="post" data-netlify="true">
+            <input type="hidden" name="form-name" value="ghost-notify" />
+            <input type="hidden" name="platform" id="notify-platform" value="unknown" />
             <label>
               <span>Name</span>
               <input name="name" type="text" autocomplete="name" placeholder="Ada Lovelace" required />
@@ -339,15 +341,15 @@
               <input name="email" type="email" autocomplete="email" placeholder="ada@company.com" required />
             </label>
             <label>
-              <span>Workflow you want your AI parrot to learn</span>
-              <textarea name="workflow" rows="4" placeholder="Tell me about the repetitive task you do... (I'll watch and assist!)" required></textarea>
+              <span>What do you want to automate?</span>
+              <textarea name="workflow" rows="3" placeholder="Describe the repetitive task you'd love to eliminate…"></textarea>
             </label>
-            <button class="btn" type="submit">Get in touch</button>
+            <button class="btn" type="submit">Stay in the loop</button>
           </form>
         </section>
       </main>
     </div>
-    
+
     <!-- Analysis Modal -->
     <div id="analysis-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
       <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
@@ -356,7 +358,7 @@
         <button onclick="closeModal('analysis-modal')" style="margin-top: 16px;">Close</button>
       </div>
     </div>
-    
+
     <!-- Audit Logs Modal -->
     <div id="audit-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
       <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 800px; max-height: 80vh; overflow-y: auto;">
@@ -365,7 +367,7 @@
         <button onclick="closeModal('audit-modal')" style="margin-top: 16px;">Close</button>
       </div>
     </div>
-    
+
     <script>
       function closeModal(modalId) {
         const modal = document.getElementById(modalId);
@@ -384,9 +386,8 @@
         else if (/Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua)) platform = "mac";
         else if (/Win32|Win64|Windows|WinCE/i.test(ua)) platform = "windows";
         document.documentElement.dataset.platform = platform;
-        // Stamp the hidden waitlist field so submissions include platform
         document.addEventListener("DOMContentLoaded", () => {
-          const field = document.getElementById("waitlist-platform");
+          const field = document.getElementById("notify-platform");
           if (field) field.value = platform;
         });
       })();
@@ -482,7 +483,6 @@
 
         if (!promptText.trim()) return;
 
-        // Reset state
         submitBtn.disabled = true;
         result.hidden = true;
         stepsEl.innerHTML = "";
@@ -516,14 +516,12 @@
         }, 1600);
       }
 
-      // Form submit
       document.getElementById("demo-form").addEventListener("submit", (e) => {
         e.preventDefault();
         const input = document.getElementById("demo-input");
         runDemo(input.value);
       });
 
-      // Quick-pick chips
       document.querySelectorAll(".demo-chip").forEach((chip) => {
         chip.addEventListener("click", () => {
           const prompt = chip.dataset.prompt;
@@ -534,7 +532,6 @@
         });
       });
 
-      // Auto-run first chip on load for instant value
       window.addEventListener("DOMContentLoaded", () => {
         const first = document.querySelector(".demo-chip");
         if (first) first.click();
