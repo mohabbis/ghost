@@ -505,7 +505,7 @@ pub fn get_workflow_analytics(
             "average_duration_ms": avg_duration,
             "failure_hotspots": hotspots,
             "total_executions": history.get_history(&workflow_name).map(|r| r.len()).unwrap_or(0)
-        })
+        }))
     } else {
         Err("Execution tracker not initialized".to_string())
     }
