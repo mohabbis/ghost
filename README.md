@@ -132,6 +132,10 @@ watch and replay clicks. On first run, click **Grant Access** in the UI.
 - [x] Real-time event timeline visualization
 - [x] Smart AI parrot with proactive observation notifications
 - [x] Typing animation showing "Hey, I noticed you..." patterns
+- [x] **Phase 4A: Visual Regression** - Visual checkpoints during replay with SSIM comparison, baseline capture, mismatch handling
+- [x] **Phase 4B: Smart Observer Mode** - Watches/learns patterns, proactive suggestions, pattern detection
+- [x] **Phase 4C: Data-Driven Testing** - CSV/JSON/Environment data sources, template resolution
+- [x] **Phase 4D: Geek Mode Insights** - Technical performance metrics, event timing analysis for power users
 - [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
 - [ ] Keyboard modifier tracking and character mapping
 - [ ] Scroll event phase handling
