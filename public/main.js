@@ -2,11 +2,19 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 // AI Parrot proactive notifications
 const parrotPatterns = [
-  "Hey, I noticed you...",
-  "...copy that pattern often",
-  "...repeat that workflow",
-  "...could automate this",
-  "...do this daily, right?"
+  "Hey, I noticed you copying that pattern...",
+  "That workflow looks repeatable!",
+  "Want me to memorize this sequence?",
+  "I can do this faster for you next time",
+  "This looks like your daily routine, right?"
+];
+
+// Interactive proactive suggestion examples
+const proactiveExamples = [
+  { icon: "🤖", text: "Hey! I noticed you copy-pasting between apps...", action: "Automate this workflow" },
+  { icon: "🦜", text: "That looks like your morning routine...", action: "Save as 'Morning Setup'" },
+  { icon: "⚡", text: "Geek Mode: 12ms avg delay, bottleneck at step 2", action: "Show insights" },
+  { icon: "🤖", text: "I've seen this 47 times today...", action: "Create automation" }
 ];
 
 let parrotIndex = 0;
@@ -35,6 +43,39 @@ function typeParrotMessage() {
     }, 2000);
   }
 }
+
+// Make parrot interactive - cycle through examples on click
+function initInteractiveParrot() {
+  const parrotContainer = document.querySelector('.ai-parrot-container');
+  if (!parrotContainer) return;
+  
+  let exampleIndex = 0;
+  
+  parrotContainer.addEventListener('click', () => {
+    const msgEl = document.getElementById("parrotMessage");
+    if (!msgEl) return;
+    
+    const example = proactiveExamples[exampleIndex];
+    msgEl.innerHTML = `${example.icon} ${example.text}<br><span style="color: var(--success); font-size: 0.9em; margin-left: 20px; cursor: pointer;">→ ${example.action}</span>`;
+    
+    exampleIndex = (exampleIndex + 1) % proactiveExamples.length;
+    
+    // Reset typing animation after showing example
+    setTimeout(() => {
+      parrotCharIndex = 0;
+      typeParrotMessage();
+    }, 3000);
+  });
+  
+  // Add hover tooltip
+  parrotContainer.title = "Click me! I'm your AI helper 👋";
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  revealOnScroll();
+  setTimeout(typeParrotMessage, 1000);
+  initInteractiveParrot();
+});
 
 function revealOnScroll() {
   if (prefersReducedMotion.matches || !("IntersectionObserver" in window)) return;
@@ -144,10 +185,3 @@ function updateRecordingUI() {
 
 // Initialize UI state
 updateRecordingUI();
-
-// Start parrot typing animation
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(typeParrotMessage, 1000);
-});
-
-console.log("Ghost - AI Parrot Helper initialized");
