@@ -67,12 +67,32 @@ impl VariableContext {
                     .as_millis();
                 Ok(ts.to_string())
             }
-            VarType::FromCSV { path, column: _, row } => {
-                // Note: In a real implementation, this would parse CSV
-                // For now, we'll use a simpler approach
+            VarType::FromCSV { path, column, row } => {
+                let contents = std::fs::read_to_string(path)
+                    .map_err(|e| anyhow::anyhow!("Cannot read CSV '{}': {}", path, e))?;
+                let mut lines = contents.lines();
+                // First line is the header
+                let headers: Vec<&str> = lines
+                    .next()
+                    .unwrap_or("")
+                    .split(',')
+                    .map(|s| s.trim())
+                    .collect();
+                let col_idx = headers
+                    .iter()
+                    .position(|h| h == column)
+                    .unwrap_or(0);
                 let row_idx = row.unwrap_or(0);
-                // Return a placeholder - real implementation would read CSV
-                Ok(format!("csv_data_row_{}_{}", path, row_idx))
+                let data_row = lines
+                    .nth(row_idx)
+                    .ok_or_else(|| anyhow::anyhow!("CSV row {} out of range", row_idx))?;
+                let value = data_row
+                    .split(',')
+                    .nth(col_idx)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                Ok(value)
             }
             VarType::FromEnv { key } => {
                 std::env::var(key).map_err(|e| anyhow::anyhow!("ENV var {} not found: {}", key, e))

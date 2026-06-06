@@ -1,7 +1,8 @@
 //! Ghost engine: platform-agnostic orchestration layer.
 //! Manages recording, element lookup, and replay with cancellation support.
 
-use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowAnalysis, WorkflowMetadata, WaitCondition, ElementSelector, VisualCheckPoint, KeyAction};
+use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowMetadata, WaitCondition, ElementSelector, VisualCheckPoint, KeyAction};
+use crate::core::ai::WorkflowAnalysis;
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::ai::WorkflowAnalyzer;
 use crate::core::llm::{self, LLMConfig, LLMProvider};
@@ -14,6 +15,8 @@ use enigo::{Enigo, MouseButton, MouseControllable};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 
 /// Main engine struct that holds platform-specific backends.
 pub struct GhostEngine {
@@ -165,7 +168,7 @@ impl GhostEngine {
         use std::fs;
         
         // Get the data directory
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let workflows_dir = data_dir.join("ghost").join("workflows");
@@ -182,7 +185,7 @@ impl GhostEngine {
     pub fn load_workflow(&self, name: &str) -> anyhow::Result<Vec<InputEvent>> {
         use std::fs;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
@@ -196,7 +199,7 @@ impl GhostEngine {
     pub fn delete_workflow(&self, name: &str) -> anyhow::Result<()> {
         use std::fs;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
@@ -212,7 +215,7 @@ impl GhostEngine {
     pub fn list_workflows() -> anyhow::Result<Vec<String>> {
         use std::fs;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let workflows_dir = data_dir.join("ghost").join("workflows");
@@ -236,7 +239,7 @@ impl GhostEngine {
     }
 
     /// Analyze the current workflow and return AI-powered insights
-    pub fn analyze_workflow(&self, events: &[InputEvent], name: &str) -> crate::core::events::WorkflowAnalysis {
+    pub fn analyze_workflow(&self, events: &[InputEvent], name: &str) -> WorkflowAnalysis {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -287,7 +290,7 @@ impl GhostEngine {
     pub fn save_workflow_with_metadata(&self, workflow: &Workflow) -> anyhow::Result<PathBuf> {
         use std::fs;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let workflows_dir = data_dir.join("ghost").join("workflows");
@@ -352,7 +355,7 @@ impl GhostEngine {
     pub fn load_workflow_with_metadata(&self, name: &str) -> anyhow::Result<Workflow> {
         use std::fs;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
@@ -667,7 +670,7 @@ impl GhostEngine {
         let img_bytes = vision::capture_screenshot()
             .map_err(|e| anyhow::anyhow!("Failed to capture screenshot: {}", e))?;
         
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let baselines_dir = data_dir.join("ghost").join("baselines");
@@ -683,7 +686,7 @@ impl GhostEngine {
 
     /// Create a data source for variable-driven workflows
     pub fn create_data_source(&self, name: &str, source_type: &str, path: Option<&str>) -> anyhow::Result<String> {
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let sources_dir = data_dir.join("ghost").join("data_sources");
@@ -715,7 +718,7 @@ impl GhostEngine {
 
     /// Load variables from a data source
     pub fn load_variables(&self, data_source_name: &str) -> anyhow::Result<std::collections::HashMap<String, String>> {
-        let data_dir = tauri::api::path::data_dir()
+        let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
         
         let sources_dir = data_dir.join("ghost").join("data_sources");

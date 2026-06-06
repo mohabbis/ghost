@@ -1,7 +1,7 @@
 //! Knowledge Base - Smart AI Parrot Helper/Geek Mode
 //! Stores learned patterns, insights, and provides proactive suggestions.
 
-use crate::core::events::{InputEvent, DetectedPattern, WorkflowAnalysis};
+use crate::core::events::InputEvent;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
