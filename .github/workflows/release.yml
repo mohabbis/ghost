@@ -34,6 +34,7 @@ jobs:
         run: |
           if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
             echo "Apple Developer ID detected → signing + notarizing"
+            echo "SIGNING_MODE=full" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> "$GITHUB_ENV"
@@ -42,19 +43,20 @@ jobs:
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
           else
             echo "No Apple cert configured → ad-hoc signing only"
+            echo "SIGNING_MODE=adhoc" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
           fi
 
       - name: Build universal app
         run: cargo tauri build --target universal-apple-darwin
         env:
-          # Consumed by the Tauri bundler when present; harmless when empty.
-          APPLE_CERTIFICATE: ${{ env.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ env.APPLE_CERTIFICATE_PASSWORD }}
+          # Only pass certificate env vars if we have a certificate
+          APPLE_CERTIFICATE: ${{ env.SIGNING_MODE == 'full' && env.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ env.SIGNING_MODE == 'full' && env.APPLE_CERTIFICATE_PASSWORD || '' }}
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ env.APPLE_ID }}
-          APPLE_PASSWORD: ${{ env.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ env.SIGNING_MODE == 'full' && env.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ env.SIGNING_MODE == 'full' && env.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ env.SIGNING_MODE == 'full' && env.APPLE_TEAM_ID || '' }}
 
       - name: Rename DMG
         run: |
