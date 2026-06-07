@@ -47,7 +47,6 @@ jobs:
 
       - name: Build universal app
         run: cargo tauri build --target universal-apple-darwin
-        working-directory: src-tauri
         env:
           # Consumed by the Tauri bundler when present; harmless when empty.
           APPLE_CERTIFICATE: ${{ env.APPLE_CERTIFICATE }}
@@ -70,6 +69,19 @@ jobs:
           files: Ghost.dmg
           fail_on_unmatched_files: true
 
+      - name: Copy to public/downloads for website
+        run: |
+          mkdir -p public/downloads
+          cp Ghost.dmg public/downloads/Ghost.dmg
+          echo "Copied Ghost.dmg to public/downloads/"
+
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-website-binary
+          path: public/downloads/Ghost.dmg
+          retention-days: 1
+
   # ── Windows EXE ────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
@@ -87,7 +99,6 @@ jobs:
 
       - name: Build app
         run: cargo tauri build
-        working-directory: src-tauri
 
       - name: Rename installer
         shell: pwsh
@@ -111,3 +122,17 @@ jobs:
           generate_release_notes: true
           files: Ghost_Setup.exe
           fail_on_unmatched_files: true
+
+      - name: Copy to public/downloads for website
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path public\downloads
+          Copy-Item Ghost_Setup.exe public\downloads\Ghost_Setup.exe
+          Write-Host "Copied Ghost_Setup.exe to public/downloads/"
+
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-website-binary
+          path: public/downloads/Ghost_Setup.exe
+          retention-days: 1

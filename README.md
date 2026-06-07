@@ -2,8 +2,9 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/mohabbis/ghost?style=flat-square&label=Download&color=8d7bff)](https://github.com/mohabbis/ghost/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/mohabbis/ghost/rust.yml?style=flat-square&label=Build)](https://github.com/mohabbis/ghost/actions/workflows/rust.yml)
-[![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=flat-square&logo=apple)](https://ghost.muharafiq.com/downloads/Ghost.dmg)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://ghost.muharafiq.com/downloads/Ghost_Setup.exe)
+[![Release](https://img.shields.io/github/actions/workflow/status/mohabbis/ghost/release.yml?style=flat-square&label=Release)](https://github.com/mohabbis/ghost/actions/workflows/release.yml)
+[![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=flat-square&logo=apple)](https://github.com/mohabbis/ghost/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 Your **smart AI parrot helper/geek** — an intelligent desktop companion that watches what you do, learns your patterns, and proactively helps with repetitive tasks.
@@ -14,8 +15,8 @@ Like a clever parrot, Ghost observes your behavior silently and pops up with sug
 
 | Platform | Link |
 |---|---|
-| 🍎 macOS (Apple Silicon + Intel) | [**Ghost.dmg**](https://ghost.muharafiq.com/downloads/Ghost.dmg) |
-| 🪟 Windows 10 / 11 (64-bit) | [**Ghost_Setup.exe**](https://ghost.muharafiq.com/downloads/Ghost_Setup.exe) |
+| 🍎 macOS (Apple Silicon + Intel) | [**Ghost.dmg**](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
+| 🪟 Windows 10 / 11 (64-bit) | [**Ghost_Setup.exe**](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
 > [!NOTE]
 > The macOS build is **ad-hoc signed, not notarized**, so Gatekeeper blocks it on first launch
@@ -29,6 +30,23 @@ Like a clever parrot, Ghost observes your behavior silently and pops up with sug
 >
 > This is expected for unsigned apps and does not mean the app is unsafe. Only a notarized build
 > (paid Apple Developer ID) opens with no prompt — see [RELEASING.md](RELEASING.md).
+
+## 📁 Project Structure
+
+```
+ghost/
+├── src/                    # Tauri app frontend (desktop application)
+├── public/                 # Marketing website (ghost.muharafiq.com)
+├── src-tauri/             # Rust backend
+└── .github/workflows/     # CI/CD pipelines
+```
+
+**Important:** Both `src/` and `public/` contain identical HTML/CSS/JS files:
+- `src/` is used by the Tauri desktop app
+- `public/` is deployed to the marketing website
+- Keep both directories synchronized when making UI changes
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ## What is Ghost?
 
@@ -59,24 +77,9 @@ It sits on top of macOS Accessibility (and Windows UIA) to understand your click
 
 ## Deployment
 
-### Vercel (Marketing Site)
+### Marketing Website
 
-The `src/` directory contains a static site that can be deployed to Vercel:
-
-1. Push to GitHub
-2. Import project in Vercel
-3. Set build command: `echo 'Static site - no build required'`
-4. Set output directory: `src`
-
-Or use the included `vercel.json` configuration.
-
-### Netlify (Marketing Site)
-
-Alternatively deploy to Netlify using the included `netlify.toml`:
-
-```bash
-netlify deploy --prod
-```
+The marketing website is hosted at [ghost.muharafiq.com](https://ghost.muharafiq.com) and serves the `public/` directory. Download links automatically point to the latest GitHub Release assets.
 
 ### Tauri Desktop App
 
