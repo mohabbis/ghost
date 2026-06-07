@@ -257,7 +257,7 @@ impl InputRecorder for MacosRecorder {
     }
 
     fn stop(&self) {
-        if let Some(mut state) = self.state.lock().unwrap().take() {
+        if let Some(state) = self.state.lock().unwrap().take() {
             state.is_running.store(false, Ordering::Relaxed);
             if let Some(rl) = state.run_loop {
                 unsafe {
@@ -498,7 +498,7 @@ impl ReplayEngine for MacosReplayer {
                     x,
                     y,
                     button,
-                    element,
+                    element: _,
                     retry_count,
                     ..
                 } => {
@@ -676,7 +676,7 @@ impl ReplayEngine for MacosReplayer {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
 
-        for (idx, event) in events.iter().enumerate() {
+        for (_idx, event) in events.iter().enumerate() {
             if stop_flag.load(Ordering::Relaxed) {
                 return Ok(());
             }

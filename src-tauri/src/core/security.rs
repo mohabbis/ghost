@@ -42,7 +42,7 @@ pub mod audit {
 
     /// Run security audit on codebase
     pub fn run_audit() -> Vec<SecurityFinding> {
-        let mut findings = Vec::new();
+        let findings = Vec::new();
 
         // Check for unsafe practices in file operations
         // This would be expanded to scan actual source files

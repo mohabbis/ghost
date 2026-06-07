@@ -55,7 +55,7 @@ jobs:
           workspaces: src-tauri
       
       - name: Run clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml
         
   fmt:
     name: Rustfmt

@@ -1,8 +1,8 @@
 //! LLM integration for AI-assisted workflow generation.
 //! Provides abstraction over OpenAI, Claude, and local fallback modes.
 
-use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowMetadata};
-use serde::{Deserialize, Serialize};
+use crate::core::events::{ElementInfo, InputEvent};
+
 use std::env;
 use std::sync::OnceLock;
 
@@ -295,8 +295,8 @@ impl LLMProvider for LocalFallback {
         if prompt_lower.contains("click") || prompt_lower.contains("click on") {
             if let Some(element) = element_context.first() {
                 events.push(InputEvent::MouseClick {
-                    x: element.fallback_coords.map(|(x, y)| x).unwrap_or(0),
-                    y: element.fallback_coords.map(|(x, y)| y).unwrap_or(0),
+                    x: element.fallback_coords.map(|(x, _y)| x).unwrap_or(0),
+                    y: element.fallback_coords.map(|(_x, y)| y).unwrap_or(0),
                     button: 0,
                     element: Some(element.clone()),
                     timestamp: None,
@@ -362,7 +362,7 @@ pub fn describe_event(event: &InputEvent) -> String {
         InputEvent::MouseClick {
             x,
             y,
-            button,
+            button: _,
             element,
             ..
         } => {

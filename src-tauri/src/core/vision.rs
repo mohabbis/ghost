@@ -1,7 +1,8 @@
 //! Visual regression testing and image processing.
 //! Uses SSIM (Structural Similarity Index) for comparing screenshots.
 
-use image::{DynamicImage, GenericImageView, ImageBuffer, Luma};
+use base64::Engine;
+use image::{DynamicImage, GenericImageView};
 use std::path::Path;
 
 /// Calculate SSIM (Structural Similarity Index) between two images
@@ -132,12 +133,15 @@ pub fn image_to_base64(img: &DynamicImage) -> String {
     let mut cursor = std::io::Cursor::new(Vec::new());
     img.write_to(&mut cursor, image::ImageFormat::Png)
         .unwrap_or(());
-    base64::encode(cursor.into_inner())
+    base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        cursor.into_inner(),
+    )
 }
 
 /// Decode base64 to image
 pub fn base64_to_image(data: &str) -> anyhow::Result<DynamicImage> {
-    let bytes = base64::decode(data)?;
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)?;
     let img = image::load_from_memory(&bytes)?;
     Ok(img)
 }

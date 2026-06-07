@@ -4,15 +4,14 @@
 use crate::core::ai::WorkflowAnalysis;
 use crate::core::ai::WorkflowAnalyzer;
 use crate::core::events::{
-    ElementInfo, ElementSelector, InputEvent, KeyAction, VisualCheckPoint, WaitCondition, Workflow,
-    WorkflowMetadata,
+    ElementInfo, InputEvent, KeyAction, VisualCheckPoint, WaitCondition, Workflow, WorkflowMetadata,
 };
-use crate::core::execution::{ExecutionHistory, ExecutionRecord, ExecutionStatus};
+use crate::core::execution::ExecutionHistory;
 use crate::core::knowledge::{KnowledgeBase, LearnedPattern, ProactiveSuggestion};
-use crate::core::llm::{self, LLMConfig, LLMProvider};
+use crate::core::llm::{self, LLMConfig};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::vision;
-use crate::core::wait::{smart_wait, WaitResult};
+use crate::core::wait::smart_wait;
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use image::DynamicImage;
 use std::path::PathBuf;
@@ -497,7 +496,8 @@ impl GhostEngine {
             llm::init_llm(&config);
         }
 
-        let provider = llm::get_llm().ok_or_else(|| anyhow::anyhow!("No AI provider available"))?;
+        let _provider =
+            llm::get_llm().ok_or_else(|| anyhow::anyhow!("No AI provider available"))?;
 
         let element_context = self.get_visible_elements()?;
 
@@ -506,7 +506,7 @@ impl GhostEngine {
             // Use the analyzer for simpler heuristic-based tagging
             // LLM-based tagging would involve sending the full event stream
             let metadata = WorkflowMetadata::default();
-            let analysis = self.analyzer.analyze(&events, &metadata);
+            let _analysis = self.analyzer.analyze(&events, &metadata);
 
             // For each event, add semantic context
             let mut result = Vec::new();
@@ -743,7 +743,7 @@ impl GhostEngine {
     pub fn capture_baseline(
         &self,
         name: &str,
-        region: Option<(i32, i32, i32, i32)>,
+        _region: Option<(i32, i32, i32, i32)>,
     ) -> anyhow::Result<String> {
         let img_bytes = vision::capture_screenshot()
             .map_err(|e| anyhow::anyhow!("Failed to capture screenshot: {}", e))?;
@@ -928,7 +928,7 @@ impl GhostEngine {
     pub fn generate_geek_insights(
         &self,
         events: &[InputEvent],
-        app_name: &str,
+        _app_name: &str,
     ) -> crate::core::knowledge::GeekDetails {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

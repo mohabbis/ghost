@@ -363,7 +363,7 @@ impl WorkflowOptimizer {
 
         for event in events {
             if let InputEvent::MouseClick {
-                x, y, timestamp, ..
+                x, y, timestamp: _, ..
             } = &event
             {
                 let pos = (*x, *y);

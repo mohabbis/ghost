@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Retry configuration for a workflow step
 #[derive(Serialize, Deserialize, Clone, Debug)]

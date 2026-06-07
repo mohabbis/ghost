@@ -1,7 +1,7 @@
 //! Smart wait conditions for workflow execution.
 //! Provides polling-based waiting for UI elements, text, or images.
 
-use crate::core::events::{ElementInfo, ElementSelector, InputEvent, VarType, WaitCondition};
+use crate::core::events::{ElementSelector, VarType, WaitCondition};
 use crate::core::traits::ElementLocator;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -32,7 +32,7 @@ impl VariableContext {
     }
 
     /// Resolve a variable using its type definition
-    pub fn resolve(&mut self, name: &str, var_type: &VarType) -> anyhow::Result<String> {
+    pub fn resolve(&mut self, _name: &str, var_type: &VarType) -> anyhow::Result<String> {
         match var_type {
             VarType::RandomEmail => {
                 // Generate a deterministic "random" email for reproducibility
@@ -54,7 +54,7 @@ impl VariableContext {
                     .as_nanos() as usize;
                 let s: String = (0..*length)
                     .map(|i| {
-                        let idx = ((nanos + i * 7) % CHARSET.len());
+                        let idx = (nanos + i * 7) % CHARSET.len();
                         CHARSET[idx] as char
                     })
                     .collect();
@@ -232,7 +232,7 @@ pub fn resolve_selector(
 
             found.ok_or_else(|| anyhow::anyhow!("Element not found: {} {:?}", name, role))
         }
-        ElementSelector::OCR { text, fuzzy } => {
+        ElementSelector::OCR { text: _, fuzzy: _ } => {
             // TODO: Implement OCR-based element location
             Err(anyhow::anyhow!("OCR selector not implemented"))
         }

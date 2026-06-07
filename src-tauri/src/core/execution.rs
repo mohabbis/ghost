@@ -272,7 +272,7 @@ impl Default for ExecutionHistory {
 
 /// Thread-safe execution tracker
 pub mod tracker {
-    use super::{ExecutionHistory, ExecutionRecord, ExecutionStatus};
+    use super::{ExecutionHistory, ExecutionRecord};
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 

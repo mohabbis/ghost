@@ -191,7 +191,9 @@ impl KnowledgeBase {
         let mut i = 0;
         while i < events.len() {
             if let InputEvent::Key {
-                modifiers, chars, ..
+                modifiers,
+                chars: _,
+                ..
             } = &events[i]
             {
                 if *modifiers > 0 && i + 1 < events.len() {

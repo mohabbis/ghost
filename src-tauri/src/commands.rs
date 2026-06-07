@@ -179,7 +179,7 @@ pub fn analyze_workflow(
 #[tauri::command]
 pub fn optimize_workflow(
     events: Vec<InputEvent>,
-    engine: State<GhostEngine>,
+    _engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
     use crate::core::ai::WorkflowOptimizer;
 
@@ -204,9 +204,6 @@ pub fn save_workflow_with_metadata(
     tags: Vec<String>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
-    use crate::core::events::WorkflowMetadata;
-    use std::time::SystemTime;
-
     let workflow = engine.create_workflow_with_details(&name, &events, &description, &tags);
 
     match engine.save_workflow_with_metadata(&workflow) {
@@ -260,7 +257,6 @@ pub fn save_workflow_with_sidecar(
     tags: Vec<String>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
-    use crate::core::events::WorkflowMetadata;
     use std::fs;
     use std::time::SystemTime;
 
