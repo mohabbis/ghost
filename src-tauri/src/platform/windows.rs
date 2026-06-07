@@ -2,7 +2,7 @@
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
-use enigo::{Enigo, MouseButton, MouseControllable};
+use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -89,7 +89,7 @@ impl WindowsBackend {
 
     /// Returns a boxed replay engine for Windows.
     pub fn replayer() -> Box<dyn ReplayEngine> {
-        Box::new(WindowsReplayer)
+        Box::new(WindowsReplayer::new())
     }
 
     /// Check if UI Automation is available
@@ -145,7 +145,7 @@ impl InputRecorder for WindowsRecorder {
                 // Create mouse hook
                 let mouse_hook = SetWindowsHookExA(
                     WH_MOUSE_LL,
-                    Some(mouse_hook_proc),
+                    mouse_hook_proc,
                     h_instance,
                     0,
                 );
@@ -153,7 +153,7 @@ impl InputRecorder for WindowsRecorder {
                 // Create keyboard hook
                 let keyboard_hook = SetWindowsHookExA(
                     WH_KEYBOARD_LL,
-                    Some(keyboard_hook_proc),
+                    keyboard_hook_proc,
                     h_instance,
                     0,
                 );
@@ -193,7 +193,7 @@ impl InputRecorder for WindowsRecorder {
     }
 
     fn stop(&self) {
-        if let Some(mut state) = self.state.lock().unwrap().take() {
+        if let Some(state) = self.state.lock().unwrap().take() {
             state.is_running.store(false, Ordering::Relaxed);
             
             unsafe {
@@ -225,6 +225,10 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
                             y: mouse_struct.pt.y,
                             button,
                             element: None,
+                            timestamp: None,
+                            retry_count: None,
+                            semantic_tag: None,
+                            self_heal: None,
                         };
                         let _ = tx_guard.send(event);
                     }
@@ -235,6 +239,10 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
                             y: mouse_struct.pt.y,
                             button,
                             element: None,
+                            timestamp: None,
+                            retry_count: None,
+                            semantic_tag: None,
+                            self_heal: None,
                         };
                         let _ = tx_guard.send(event);
                     }
@@ -260,6 +268,9 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: 
                             chars: String::new(), // TODO: Get actual character
                             modifiers: 0,         // TODO: Extract modifier state
                             action: KeyAction::Down,
+                            timestamp: None,
+                            retry_count: None,
+                            semantic_tag: None,
                         };
                         let _ = tx_guard.send(event);
                     }
@@ -269,6 +280,9 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: 
                             chars: String::new(),
                             modifiers: 0,
                             action: KeyAction::Up,
+                            timestamp: None,
+                            retry_count: None,
+                            semantic_tag: None,
                         };
                         let _ = tx_guard.send(event);
                     }
@@ -319,7 +333,7 @@ impl WindowsReplayer {
 
 impl ReplayEngine for WindowsReplayer {
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
-        let mut enigo = Enigo::new();
+        let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
 
         for event in events {
@@ -334,13 +348,13 @@ impl ReplayEngine for WindowsReplayer {
                     let mut success = false;
                     
                     while attempts <= max_retries && !success {
-                        enigo.mouse_move_to(*x, *y);
+                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
-                            0 | 1 => MouseButton::Left,
-                            2 | 3 => MouseButton::Right,
-                            _ => MouseButton::Left,
+                            0 | 1 => Button::Left,
+                            2 | 3 => Button::Right,
+                            _ => Button::Left,
                         };
-                        enigo.mouse_click(mouse_button);
+                        enigo.button(mouse_button, Direction::Click)?;
                         success = true;
                         attempts += 1;
                     }
@@ -348,29 +362,31 @@ impl ReplayEngine for WindowsReplayer {
                 InputEvent::Key { code, chars, action, retry_count, .. } => {
                     let max_retries = retry_count.unwrap_or(0);
                     let mut attempts = 0;
-                    
+
                     while attempts <= max_retries {
+                        let key = if !chars.is_empty() {
+                            Key::Unicode(chars.chars().next().unwrap_or(' '))
+                        } else {
+                            Key::Other(*code as u32)
+                        };
                         match action {
                             KeyAction::Down => {
-                                if !chars.is_empty() {
-                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_down(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Press)?;
                             }
                             KeyAction::Up => {
-                                if !chars.is_empty() {
-                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_up(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Release)?;
                             }
                         }
                         attempts += 1;
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
-                    enigo.scroll(*dx, *dy);
+                    if *dx != 0 {
+                        enigo.scroll(*dx, Axis::Horizontal)?;
+                    }
+                    if *dy != 0 {
+                        enigo.scroll(*dy, Axis::Vertical)?;
+                    }
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
@@ -454,7 +470,7 @@ impl ReplayEngine for WindowsReplayer {
         stop_flag: Arc<AtomicBool>,
         reliability: &crate::core::events::ReliabilitySettings
     ) -> anyhow::Result<()> {
-        let mut enigo = Enigo::new();
+        let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
 
         for event in events {
@@ -474,17 +490,17 @@ impl ReplayEngine for WindowsReplayer {
                     let mut success = false;
                     
                     while attempts <= max_retries && !success {
-                        enigo.mouse_move_to(*x, *y);
+                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
-                            0 | 1 => MouseButton::Left,
-                            2 | 3 => MouseButton::Right,
-                            _ => MouseButton::Left,
+                            0 | 1 => Button::Left,
+                            2 | 3 => Button::Right,
+                            _ => Button::Left,
                         };
-                        
-                        enigo.mouse_click(mouse_button);
+
+                        enigo.button(mouse_button, Direction::Click)?;
                         success = true;
                         attempts += 1;
-                        
+
                         // Apply backoff on retry
                         if !success && attempts <= max_retries && reliability.continue_on_error {
                             let backoff = reliability.retry_config.backoff_ms * (reliability.retry_config.backoff_multiplier as u64).pow(attempts - 1);
@@ -494,29 +510,26 @@ impl ReplayEngine for WindowsReplayer {
                 }
                 InputEvent::Key { code, chars, action, retry_count, .. } => {
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    
+
                     for attempt in 0..=max_retries {
                         if stop_flag.load(Ordering::Relaxed) {
                             return Ok(());
                         }
-                        
+
+                        let key = if !chars.is_empty() {
+                            Key::Unicode(chars.chars().next().unwrap_or(' '))
+                        } else {
+                            Key::Other(*code as u32)
+                        };
                         match action {
                             KeyAction::Down => {
-                                if !chars.is_empty() {
-                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_down(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Press)?;
                             }
                             KeyAction::Up => {
-                                if !chars.is_empty() {
-                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_up(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Release)?;
                             }
                         }
-                        
+
                         if attempt < max_retries {
                             let backoff = reliability.retry_config.backoff_ms * (reliability.retry_config.backoff_multiplier as u64);
                             std::thread::sleep(std::time::Duration::from_millis(backoff));
@@ -524,7 +537,12 @@ impl ReplayEngine for WindowsReplayer {
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
-                    enigo.scroll(*dx, *dy);
+                    if *dx != 0 {
+                        enigo.scroll(*dx, Axis::Horizontal)?;
+                    }
+                    if *dy != 0 {
+                        enigo.scroll(*dy, Axis::Vertical)?;
+                    }
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;

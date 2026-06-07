@@ -1,7 +1,8 @@
 //! AI-powered workflow analysis and optimization.
 //! Provides intelligent insights from recorded user workflows.
 
-use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowMetadata};
+use crate::core::events::{InputEvent, WorkflowMetadata};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Pattern detected in workflow
@@ -129,7 +130,7 @@ impl WorkflowAnalyzer {
             patterns.push(DetectedPattern {
                 pattern_type: PatternType::FormFill,
                 description: format!("Form filling detected with {} keystrokes", key_sequences.len()),
-                occurrences: key_sequences,
+                occurrences: key_sequences.clone(),
                 confidence: (key_sequences.len() as f32 / events.len() as f32).min(1.0),
             });
         }
@@ -138,7 +139,7 @@ impl WorkflowAnalyzer {
     }
     
     /// Calculate workflow reliability score
-    fn calculate_reliability(&self, events: &[InputEvent]) -> f32 {
+    pub fn calculate_reliability(&self, events: &[InputEvent]) -> f32 {
         let mut score = 1.0;
         
         // Penalize for missing element info
@@ -167,7 +168,7 @@ impl WorkflowAnalyzer {
     }
     
     /// Calculate how "element-rich" the workflow is
-    fn calculate_element_richness(&self, events: &[InputEvent]) -> f32 {
+    pub fn calculate_element_richness(&self, events: &[InputEvent]) -> f32 {
         let mut element_count = 0usize;
         
         for event in events {
@@ -216,7 +217,7 @@ impl WorkflowAnalyzer {
                 if *ms > 1000 {
                     optimizations.push(OptimizationSuggestion {
                         suggestion_type: "conditional_wait".to_string(),
-                        description: format!("Replace {}ms delay with conditional wait for element state".replace("{}", &ms.to_string())),
+                        description: format!("Replace {ms}ms delay with conditional wait for element state"),
                         impact_score: 0.7,
                         affected_events: vec![idx],
                     });

@@ -2,7 +2,7 @@
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
-use enigo::{Enigo, MouseButton, MouseControllable};
+use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -139,6 +139,9 @@ struct TapState {
     is_running: Arc<AtomicBool>,
 }
 
+unsafe impl Send for TapState {}
+unsafe impl Sync for TapState {}
+
 impl MacosBackend {
     pub fn new() -> Self {
         MacosBackend
@@ -263,15 +266,6 @@ impl InputRecorder for MacosRecorder {
     }
 }
 
-// Callback constants
-const kCGEventTapOptionDefault: u32 = 0;
-
-// External function for getting current run loop
-#[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
-    fn CFRunLoopGetCurrent() -> CFRunLoopRef;
-}
-
 unsafe extern "C" fn cg_event_callback(
     _proxy: CGEventTapId,
     etype: CGEventType,
@@ -292,6 +286,10 @@ unsafe extern "C" fn cg_event_callback(
                 y,
                 button,
                 element: None, // Will be populated by element locator if needed
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: None,
+                self_heal: None,
             }
         }
         kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
@@ -303,6 +301,10 @@ unsafe extern "C" fn cg_event_callback(
                 y,
                 button,
                 element: None,
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: None,
+                self_heal: None,
             }
         }
         kCGKeyDown | kCGKeyUp => {
@@ -317,6 +319,9 @@ unsafe extern "C" fn cg_event_callback(
                 chars: String::new(), // TODO: Get actual characters from event
                 modifiers: 0,         // TODO: Extract modifier flags
                 action,
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: None,
             }
         }
         kCGScrollWheelEvent => {
@@ -326,6 +331,7 @@ unsafe extern "C" fn cg_event_callback(
                 dx,
                 dy,
                 phase: 0, // TODO: Extract scroll phase
+                timestamp: None,
             }
         }
         _ => return event, // Pass through unhandled events
@@ -371,7 +377,7 @@ impl ElementLocator for MacosLocator {
             CFRelease(element as *const c_void);
 
             Ok(Some(ElementInfo {
-                role,
+                role: role.unwrap_or_default(),
                 name,
                 app,
                 fallback_coords: Some((x, y)),
@@ -461,7 +467,7 @@ impl ReplayEngine for MacosReplayer {
         use crate::core::wait::VariableContext;
         use crate::core::vision;
         
-        let mut enigo = Enigo::new();
+        let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
         let mut var_context = VariableContext::new();
 
@@ -477,43 +483,45 @@ impl ReplayEngine for MacosReplayer {
                     let mut success = false;
                     
                     while attempts <= max_retries && !success {
-                        enigo.mouse_move_to(*x, *y);
-                        
+                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
+
                         let mouse_button = match button {
-                            0 | 1 => MouseButton::Left,
-                            2 | 3 => MouseButton::Right,
-                            _ => MouseButton::Left,
+                            0 | 1 => Button::Left,
+                            2 | 3 => Button::Right,
+                            _ => Button::Left,
                         };
-                        
-                        enigo.mouse_click(mouse_button);
+
+                        enigo.button(mouse_button, Direction::Click)?;
                         success = true; // In real implementation, validate
                         attempts += 1;
                     }
                 }
                 InputEvent::Key { code, chars, action, retry_count, .. } => {
                     let max_retries = retry_count.unwrap_or(0);
-                    
+
                     for _ in 0..=max_retries {
+                        let key = if !chars.is_empty() {
+                            Key::Unicode(chars.chars().next().unwrap_or(' '))
+                        } else {
+                            Key::Other(*code as u32)
+                        };
                         match action {
                             KeyAction::Down => {
-                                if !chars.is_empty() {
-                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_down(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Press)?;
                             }
                             KeyAction::Up => {
-                                if !chars.is_empty() {
-                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_up(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Release)?;
                             }
                         }
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
-                    enigo.scroll(*dx, *dy);
+                    if *dx != 0 {
+                        enigo.scroll(*dx, Axis::Horizontal)?;
+                    }
+                    if *dy != 0 {
+                        enigo.scroll(*dy, Axis::Vertical)?;
+                    }
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
@@ -602,7 +610,7 @@ impl ReplayEngine for MacosReplayer {
         stop_flag: Arc<AtomicBool>,
         reliability: &crate::core::events::ReliabilitySettings
     ) -> anyhow::Result<()> {
-        let mut enigo = Enigo::new();
+        let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
 
         for (idx, event) in events.iter().enumerate() {
@@ -622,18 +630,18 @@ impl ReplayEngine for MacosReplayer {
                     let mut success = false;
                     
                     while attempts <= max_retries && !success {
-                        enigo.mouse_move_to(*x, *y);
+                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
-                            0 | 1 => MouseButton::Left,
-                            2 | 3 => MouseButton::Right,
-                            _ => MouseButton::Left,
+                            0 | 1 => Button::Left,
+                            2 | 3 => Button::Right,
+                            _ => Button::Left,
                         };
-                        enigo.mouse_click(mouse_button);
+                        enigo.button(mouse_button, Direction::Click)?;
                         success = true;
                         attempts += 1;
-                        
+
                         if !success && attempts <= max_retries && reliability.continue_on_error {
-                            let backoff = reliability.retry_config.backoff_ms * 
+                            let backoff = reliability.retry_config.backoff_ms *
                                 (reliability.retry_config.backoff_multiplier as u64).pow(attempts - 1);
                             std::thread::sleep(Duration::from_millis(backoff));
                         }
@@ -641,43 +649,46 @@ impl ReplayEngine for MacosReplayer {
                 }
                 InputEvent::Key { code, chars, action, retry_count, .. } => {
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    
+
                     for attempt in 0..=max_retries {
                         if stop_flag.load(Ordering::Relaxed) {
                             return Ok(());
                         }
-                        
+
+                        let key = if !chars.is_empty() {
+                            Key::Unicode(chars.chars().next().unwrap_or(' '))
+                        } else {
+                            Key::Other(*code as u32)
+                        };
                         match action {
                             KeyAction::Down => {
-                                if !chars.is_empty() {
-                                    enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_down(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Press)?;
                             }
                             KeyAction::Up => {
-                                if !chars.is_empty() {
-                                    enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                                } else {
-                                    enigo.key_up(enigo::Key::Raw(*code));
-                                }
+                                enigo.key(key, Direction::Release)?;
                             }
                         }
-                        
+
                         if attempt < max_retries {
-                            let backoff = reliability.retry_config.backoff_ms * 
+                            let backoff = reliability.retry_config.backoff_ms *
                                 (reliability.retry_config.backoff_multiplier as u64);
                             std::thread::sleep(Duration::from_millis(backoff));
                         }
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
-                    enigo.scroll(*dx, *dy);
+                    if *dx != 0 {
+                        enigo.scroll(*dx, Axis::Horizontal)?;
+                    }
+                    if *dy != 0 {
+                        enigo.scroll(*dy, Axis::Vertical)?;
+                    }
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
                     std::thread::sleep(Duration::from_millis(adjusted_ms));
                 }
+                _ => {}
             }
         }
 

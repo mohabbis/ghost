@@ -13,8 +13,8 @@ pub fn calculate_ssim(img1: &DynamicImage, img2: &DynamicImage) -> f32 {
     }
 
     // Convert to grayscale
-    let gray1 = img1.to_luma();
-    let gray2 = img2.to_luma();
+    let gray1 = img1.to_luma8();
+    let gray2 = img2.to_luma8();
 
     // Simple SSIM approximation
     let data1: Vec<f32> = gray1.pixels().map(|p| p[0] as f32 / 255.0).collect();
@@ -63,7 +63,7 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
         if output.status.success() {
             Ok(output.stdout)
         } else {
-            anyhow::Err(anyhow::anyhow!("screencapture failed"))
+            Err(anyhow::anyhow!("screencapture failed"))
         }
     }
     
@@ -97,7 +97,7 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
     
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        anyhow::Err(anyhow::anyhow!("Unsupported platform for screenshot"))
+        Err(anyhow::anyhow!("Unsupported platform for screenshot"))
     }
 }
 
