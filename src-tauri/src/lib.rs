@@ -1,11 +1,11 @@
-pub mod core;
-pub mod config;
-pub mod error;
-pub mod telemetry;
-pub mod performance;
-mod engine;
-mod platform;
 mod commands;
+pub mod config;
+pub mod core;
+mod engine;
+pub mod error;
+pub mod performance;
+mod platform;
+pub mod telemetry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

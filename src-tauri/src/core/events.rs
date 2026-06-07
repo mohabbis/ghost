@@ -59,9 +59,9 @@ impl Default for ReliabilitySettings {
 /// Semantic tag for AI-enhanced understanding
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SemanticTag {
-    pub action: String,               // "click", "type", "wait", "scroll"
-    pub target: String,               // "Submit Button", "Username Field"
-    pub confidence: f32,              // 0.0 - 1.0
+    pub action: String,  // "click", "type", "wait", "scroll"
+    pub target: String,  // "Submit Button", "Username Field"
+    pub confidence: f32, // 0.0 - 1.0
     pub ui_element: Option<ElementInfo>,
     pub ai_generated: bool,
 }
@@ -69,9 +69,19 @@ pub struct SemanticTag {
 /// Element selector for smart waiting
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum ElementSelector {
-    Coordinates { x: i32, y: i32 },
-    Semantic { role: String, name: String, app: Option<String> },
-    OCR { text: String, fuzzy: bool },
+    Coordinates {
+        x: i32,
+        y: i32,
+    },
+    Semantic {
+        role: String,
+        name: String,
+        app: Option<String>,
+    },
+    OCR {
+        text: String,
+        fuzzy: bool,
+    },
 }
 
 /// Wait condition types
@@ -88,10 +98,18 @@ pub enum WaitCondition {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum VarType {
     RandomEmail,
-    RandomString { length: usize },
+    RandomString {
+        length: usize,
+    },
     Timestamp,
-    FromCSV { path: String, column: String, row: Option<usize> },
-    FromEnv { key: String },
+    FromCSV {
+        path: String,
+        column: String,
+        row: Option<usize>,
+    },
+    FromEnv {
+        key: String,
+    },
 }
 
 /// Mismatch action for visual checks

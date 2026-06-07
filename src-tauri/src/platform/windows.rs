@@ -5,8 +5,8 @@ use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Win32 types
@@ -35,7 +35,12 @@ type HOOKPROC = unsafe extern "system" fn(code: i32, wParam: WPARAM, lParam: LPA
 // External Win32 functions
 #[link(name = "user32")]
 extern "system" {
-    fn SetWindowsHookExA(idHook: i32, lpfn: HOOKPROC, hmod: *mut c_void, dwThreadId: DWORD) -> HHOOK;
+    fn SetWindowsHookExA(
+        idHook: i32,
+        lpfn: HOOKPROC,
+        hmod: *mut c_void,
+        dwThreadId: DWORD,
+    ) -> HHOOK;
     fn UnhookWindowsHookEx(hhk: HHOOK) -> bool;
     fn CallNextHookEx(hhk: HHOOK, nCode: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
     fn GetModuleHandleA(lpModuleName: *const u8) -> *mut c_void;
@@ -132,7 +137,7 @@ impl InputRecorder for WindowsRecorder {
     fn start(&self, tx: mpsc::Sender<InputEvent>) -> anyhow::Result<()> {
         let state_clone = self.state.clone();
         let is_running = Arc::new(AtomicBool::new(true));
-        
+
         // Wrap tx in Arc<Mutex<>> for sharing between hooks
         let tx_arc = Arc::new(Mutex::new(tx));
         let tx_mouse = tx_arc.clone();
@@ -143,20 +148,11 @@ impl InputRecorder for WindowsRecorder {
                 let h_instance = GetModuleHandleA(std::ptr::null());
 
                 // Create mouse hook
-                let mouse_hook = SetWindowsHookExA(
-                    WH_MOUSE_LL,
-                    mouse_hook_proc,
-                    h_instance,
-                    0,
-                );
+                let mouse_hook = SetWindowsHookExA(WH_MOUSE_LL, mouse_hook_proc, h_instance, 0);
 
                 // Create keyboard hook
-                let keyboard_hook = SetWindowsHookExA(
-                    WH_KEYBOARD_LL,
-                    keyboard_hook_proc,
-                    h_instance,
-                    0,
-                );
+                let keyboard_hook =
+                    SetWindowsHookExA(WH_KEYBOARD_LL, keyboard_hook_proc, h_instance, 0);
 
                 if mouse_hook == 0 || keyboard_hook == 0 {
                     eprintln!("Failed to create Windows hooks");
@@ -195,7 +191,7 @@ impl InputRecorder for WindowsRecorder {
     fn stop(&self) {
         if let Some(state) = self.state.lock().unwrap().take() {
             state.is_running.store(false, Ordering::Relaxed);
-            
+
             unsafe {
                 if let Some(hook) = state.mouse_hook {
                     UnhookWindowsHookEx(hook);
@@ -216,10 +212,14 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
         if let Some(tx_arc) = &GLOBAL_TX {
             if let Ok(tx_guard) = tx_arc.lock() {
                 let mouse_struct = &*(lParam as *const MSLLHOOKSTRUCT);
-                
+
                 match wParam as u32 {
                     WM_LBUTTONDOWN | WM_LBUTTONUP => {
-                        let button = if wParam as u32 == WM_LBUTTONDOWN { 0 } else { 1 };
+                        let button = if wParam as u32 == WM_LBUTTONDOWN {
+                            0
+                        } else {
+                            1
+                        };
                         let event = InputEvent::MouseClick {
                             x: mouse_struct.pt.x,
                             y: mouse_struct.pt.y,
@@ -233,7 +233,11 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
                         let _ = tx_guard.send(event);
                     }
                     WM_RBUTTONDOWN | WM_RBUTTONUP => {
-                        let button = if wParam as u32 == WM_RBUTTONDOWN { 2 } else { 3 };
+                        let button = if wParam as u32 == WM_RBUTTONDOWN {
+                            2
+                        } else {
+                            3
+                        };
                         let event = InputEvent::MouseClick {
                             x: mouse_struct.pt.x,
                             y: mouse_struct.pt.y,
@@ -251,7 +255,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
             }
         }
     }
-    
+
     CallNextHookEx(0, code, wParam, lParam)
 }
 
@@ -260,7 +264,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: 
         if let Some(tx_arc) = &GLOBAL_TX {
             if let Ok(tx_guard) = tx_arc.lock() {
                 let kbd_struct = &*(lParam as *const KBDLLHOOKSTRUCT);
-                
+
                 match wParam as u32 {
                     WM_KEYDOWN => {
                         let event = InputEvent::Key {
@@ -291,7 +295,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: 
             }
         }
     }
-    
+
     CallNextHookEx(0, code, wParam, lParam)
 }
 
@@ -303,7 +307,7 @@ impl ElementLocator for WindowsLocator {
         // TODO: Implement proper UIA element lookup
         // This requires COM initialization and IUIAutomation interface
         // For now, return a stub with coordinates
-        
+
         Ok(Some(ElementInfo {
             role: String::from("UIA Element"),
             name: String::from("TODO: UIA Name"),
@@ -324,7 +328,7 @@ impl WindowsReplayer {
             speed_factor: Arc::new(Mutex::new(1.0)),
         }
     }
-    
+
     /// Set playback speed factor (1.0 = normal, 2.0 = 2x speed, etc.)
     fn set_speed(&self, factor: f32) {
         *self.speed_factor.lock().unwrap() = factor.max(0.1);
@@ -342,11 +346,18 @@ impl ReplayEngine for WindowsReplayer {
             }
 
             match event {
-                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                InputEvent::MouseClick {
+                    x,
+                    y,
+                    button,
+                    element,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(0);
                     let mut attempts = 0;
                     let mut success = false;
-                    
+
                     while attempts <= max_retries && !success {
                         enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
@@ -359,7 +370,13 @@ impl ReplayEngine for WindowsReplayer {
                         attempts += 1;
                     }
                 }
-                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                InputEvent::Key {
+                    code,
+                    chars,
+                    action,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(0);
                     let mut attempts = 0;
 
@@ -393,7 +410,11 @@ impl ReplayEngine for WindowsReplayer {
                     std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
                 }
                 // Phase 3: Smart Wait Events
-                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                InputEvent::Wait {
+                    condition,
+                    timeout_ms,
+                    poll_interval_ms,
+                } => {
                     tracing::info!("Waiting for condition: {:?}", condition);
                     let locator = crate::platform::windows::WindowsBackend::locator();
                     let result = crate::core::wait::wait_for_condition(
@@ -413,44 +434,72 @@ impl ReplayEngine for WindowsReplayer {
                     }
                 }
                 // Phase 3: Visual Regression Check
-                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
-                    match crate::core::vision::capture_screenshot() {
-                        Ok(img_bytes) => {
-                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                                if let Ok(similarity) = crate::core::vision::compare_images(baseline_screenshot, &current_img) {
-                                    if similarity < *threshold {
-                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
-                                        match on_mismatch {
-                                            crate::core::events::MismatchAction::Fail => {
-                                                return Err(anyhow::anyhow!("Visual regression detected"));
-                                            }
-                                            crate::core::events::MismatchAction::Retry { attempts } => {
-                                                for _ in 0..*attempts {
-                                                    std::thread::sleep(std::time::Duration::from_millis(500));
-                                                    if let Ok(new_img) = crate::core::vision::capture_screenshot() {
-                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
-                                                            if crate::core::vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
-                                                                break;
-                                                            }
+                InputEvent::VisualCheck {
+                    baseline_screenshot,
+                    threshold,
+                    on_mismatch,
+                } => match crate::core::vision::capture_screenshot() {
+                    Ok(img_bytes) => {
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                            if let Ok(similarity) = crate::core::vision::compare_images(
+                                baseline_screenshot,
+                                &current_img,
+                            ) {
+                                if similarity < *threshold {
+                                    tracing::warn!(
+                                        "Visual mismatch detected: {:.2} < {}",
+                                        similarity,
+                                        threshold
+                                    );
+                                    match on_mismatch {
+                                        crate::core::events::MismatchAction::Fail => {
+                                            return Err(anyhow::anyhow!(
+                                                "Visual regression detected"
+                                            ));
+                                        }
+                                        crate::core::events::MismatchAction::Retry { attempts } => {
+                                            for _ in 0..*attempts {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(500),
+                                                );
+                                                if let Ok(new_img) =
+                                                    crate::core::vision::capture_screenshot()
+                                                {
+                                                    if let Ok(new_img) =
+                                                        image::load_from_memory(&new_img)
+                                                    {
+                                                        if crate::core::vision::compare_images(
+                                                            baseline_screenshot,
+                                                            &new_img,
+                                                        )
+                                                        .unwrap_or(1.0)
+                                                            >= *threshold
+                                                        {
+                                                            break;
                                                         }
                                                     }
                                                 }
                                             }
-                                            crate::core::events::MismatchAction::LogOnly => {}
                                         }
+                                        crate::core::events::MismatchAction::LogOnly => {}
                                     }
                                 }
                             }
                         }
-                        Err(e) => {
-                            tracing::error!("Failed to capture screenshot for visual check: {}", e);
-                        }
                     }
-                }
+                    Err(e) => {
+                        tracing::error!("Failed to capture screenshot for visual check: {}", e);
+                    }
+                },
                 // Phase 3: Variable Injection
-                InputEvent::Variable { name, value_template, var_type } => {
+                InputEvent::Variable {
+                    name,
+                    value_template,
+                    var_type,
+                } => {
                     let mut var_context = crate::core::wait::VariableContext::new();
-                    let resolved = var_context.resolve(name, var_type)
+                    let resolved = var_context
+                        .resolve(name, var_type)
                         .unwrap_or_else(|_| value_template.clone());
                     var_context.set(name.clone(), resolved);
                 }
@@ -463,12 +512,12 @@ impl ReplayEngine for WindowsReplayer {
 
         Ok(())
     }
-    
+
     fn execute_with_reliability(
-        &self, 
-        events: &[InputEvent], 
+        &self,
+        events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
-        reliability: &crate::core::events::ReliabilitySettings
+        reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
@@ -479,16 +528,23 @@ impl ReplayEngine for WindowsReplayer {
             }
 
             match event {
-                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                InputEvent::MouseClick {
+                    x,
+                    y,
+                    button,
+                    element,
+                    retry_count,
+                    ..
+                } => {
                     // Validate element if configured
                     if reliability.validate_elements && element.is_none() {
                         // Element validation could be added here
                     }
-                    
+
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
                     let mut attempts = 0;
                     let mut success = false;
-                    
+
                     while attempts <= max_retries && !success {
                         enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
@@ -503,12 +559,20 @@ impl ReplayEngine for WindowsReplayer {
 
                         // Apply backoff on retry
                         if !success && attempts <= max_retries && reliability.continue_on_error {
-                            let backoff = reliability.retry_config.backoff_ms * (reliability.retry_config.backoff_multiplier as u64).pow(attempts - 1);
+                            let backoff = reliability.retry_config.backoff_ms
+                                * (reliability.retry_config.backoff_multiplier as u64)
+                                    .pow(attempts - 1);
                             std::thread::sleep(std::time::Duration::from_millis(backoff));
                         }
                     }
                 }
-                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                InputEvent::Key {
+                    code,
+                    chars,
+                    action,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
 
                     for attempt in 0..=max_retries {
@@ -531,7 +595,8 @@ impl ReplayEngine for WindowsReplayer {
                         }
 
                         if attempt < max_retries {
-                            let backoff = reliability.retry_config.backoff_ms * (reliability.retry_config.backoff_multiplier as u64);
+                            let backoff = reliability.retry_config.backoff_ms
+                                * (reliability.retry_config.backoff_multiplier as u64);
                             std::thread::sleep(std::time::Duration::from_millis(backoff));
                         }
                     }
@@ -549,7 +614,11 @@ impl ReplayEngine for WindowsReplayer {
                     std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
                 }
                 // Phase 3: Smart Wait Events
-                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                InputEvent::Wait {
+                    condition,
+                    timeout_ms,
+                    poll_interval_ms,
+                } => {
                     tracing::info!("Waiting for condition: {:?}", condition);
                     if reliability.validate_elements {
                         let locator = crate::platform::windows::WindowsBackend::locator();
@@ -575,48 +644,76 @@ impl ReplayEngine for WindowsReplayer {
                     }
                 }
                 // Phase 3: Visual Regression Check
-                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
-                    match crate::core::vision::capture_screenshot() {
-                        Ok(img_bytes) => {
-                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                                if let Ok(similarity) = crate::core::vision::compare_images(baseline_screenshot, &current_img) {
-                                    if similarity < *threshold {
-                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
-                                        match on_mismatch {
-                                            crate::core::events::MismatchAction::Fail => {
-                                                if !reliability.continue_on_error {
-                                                    return Err(anyhow::anyhow!("Visual regression detected"));
-                                                }
+                InputEvent::VisualCheck {
+                    baseline_screenshot,
+                    threshold,
+                    on_mismatch,
+                } => match crate::core::vision::capture_screenshot() {
+                    Ok(img_bytes) => {
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                            if let Ok(similarity) = crate::core::vision::compare_images(
+                                baseline_screenshot,
+                                &current_img,
+                            ) {
+                                if similarity < *threshold {
+                                    tracing::warn!(
+                                        "Visual mismatch detected: {:.2} < {}",
+                                        similarity,
+                                        threshold
+                                    );
+                                    match on_mismatch {
+                                        crate::core::events::MismatchAction::Fail => {
+                                            if !reliability.continue_on_error {
+                                                return Err(anyhow::anyhow!(
+                                                    "Visual regression detected"
+                                                ));
                                             }
-                                            crate::core::events::MismatchAction::Retry { attempts } => {
-                                                for _ in 0..*attempts {
-                                                    std::thread::sleep(std::time::Duration::from_millis(500));
-                                                    if let Ok(new_img) = crate::core::vision::capture_screenshot() {
-                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
-                                                            if crate::core::vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
-                                                                break;
-                                                            }
+                                        }
+                                        crate::core::events::MismatchAction::Retry { attempts } => {
+                                            for _ in 0..*attempts {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(500),
+                                                );
+                                                if let Ok(new_img) =
+                                                    crate::core::vision::capture_screenshot()
+                                                {
+                                                    if let Ok(new_img) =
+                                                        image::load_from_memory(&new_img)
+                                                    {
+                                                        if crate::core::vision::compare_images(
+                                                            baseline_screenshot,
+                                                            &new_img,
+                                                        )
+                                                        .unwrap_or(1.0)
+                                                            >= *threshold
+                                                        {
+                                                            break;
                                                         }
                                                     }
                                                 }
                                             }
-                                            crate::core::events::MismatchAction::LogOnly => {}
                                         }
+                                        crate::core::events::MismatchAction::LogOnly => {}
                                     }
                                 }
                             }
                         }
-                        Err(e) => {
-                            if !reliability.continue_on_error {
-                                return Err(anyhow::anyhow!("Failed to capture screenshot: {}", e));
-                            }
+                    }
+                    Err(e) => {
+                        if !reliability.continue_on_error {
+                            return Err(anyhow::anyhow!("Failed to capture screenshot: {}", e));
                         }
                     }
-                }
+                },
                 // Phase 3: Variable Injection
-                InputEvent::Variable { name, value_template, var_type } => {
+                InputEvent::Variable {
+                    name,
+                    value_template,
+                    var_type,
+                } => {
                     let mut var_context = crate::core::wait::VariableContext::new();
-                    let resolved = var_context.resolve(name, var_type)
+                    let resolved = var_context
+                        .resolve(name, var_type)
                         .unwrap_or_else(|_| value_template.clone());
                     var_context.set(name.clone(), resolved);
                 }

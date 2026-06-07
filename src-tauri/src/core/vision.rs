@@ -7,7 +7,7 @@ use std::path::Path;
 /// Calculate SSIM (Structural Similarity Index) between two images
 pub fn calculate_ssim(img1: &DynamicImage, img2: &DynamicImage) -> f32 {
     let (w, h) = img1.dimensions();
-    
+
     if img2.dimensions() != (w, h) {
         return 0.0;
     }
@@ -29,10 +29,12 @@ pub fn calculate_ssim(img1: &DynamicImage, img2: &DynamicImage) -> f32 {
     let var2: f32 = data2.iter().map(|x| (x - mean2).powi(2)).sum::<f32>() / data2.len() as f32;
 
     // Calculate covariance
-    let cov: f32 = data1.iter()
+    let cov: f32 = data1
+        .iter()
         .zip(data2.iter())
         .map(|(x, y)| (x - mean1) * (y - mean2))
-        .sum::<f32>() / data1.len() as f32;
+        .sum::<f32>()
+        / data1.len() as f32;
 
     // SSIM constants
     let c1 = 0.01_f32.powi(2);
@@ -59,14 +61,14 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
         let output = Command::new("screencapture")
             .args(&["-x", "-t", "png", "-"])
             .output()?;
-        
+
         if output.status.success() {
             Ok(output.stdout)
         } else {
             Err(anyhow::anyhow!("screencapture failed"))
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
@@ -94,7 +96,7 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
             anyhow::bail!("PowerShell screenshot failed")
         }
     }
-    
+
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err(anyhow::anyhow!("Unsupported platform for screenshot"))
@@ -128,7 +130,8 @@ pub fn create_thumbnail(img: &DynamicImage, max_size: u32) -> DynamicImage {
 /// Convert image to base64 for transmission
 pub fn image_to_base64(img: &DynamicImage) -> String {
     let mut cursor = std::io::Cursor::new(Vec::new());
-    img.write_to(&mut cursor, image::ImageFormat::Png).unwrap_or(());
+    img.write_to(&mut cursor, image::ImageFormat::Png)
+        .unwrap_or(());
     base64::encode(cursor.into_inner())
 }
 

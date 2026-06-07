@@ -103,7 +103,11 @@ impl KnowledgeBase {
     }
 
     /// Analyze recorded events and extract patterns
-    pub fn analyze_observed_events(&self, events: &[InputEvent], app_name: &str) -> Vec<LearnedPattern> {
+    pub fn analyze_observed_events(
+        &self,
+        events: &[InputEvent],
+        app_name: &str,
+    ) -> Vec<LearnedPattern> {
         let mut patterns = Vec::new();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -135,14 +139,20 @@ impl KnowledgeBase {
         }
 
         // Count event types
-        let click_count = events.iter().filter(|e| matches!(e, InputEvent::MouseClick { .. })).count();
-        let key_count = events.iter().filter(|e| matches!(e, InputEvent::Key { .. })).count();
+        let click_count = events
+            .iter()
+            .filter(|e| matches!(e, InputEvent::MouseClick { .. }))
+            .count();
+        let key_count = events
+            .iter()
+            .filter(|e| matches!(e, InputEvent::Key { .. }))
+            .count();
         let sequence_length = events.len();
 
         // Only suggest if there's a meaningful pattern
         if click_count + key_count > 2 {
             let confidence = (events.len() as f32 / 10.0).min(1.0);
-            
+
             Some(LearnedPattern {
                 id: format!("seq_{}_{}", app_name, timestamp),
                 app_name: app_name.to_string(),
@@ -180,7 +190,10 @@ impl KnowledgeBase {
         // Look for key combinations (multiple keys without delay)
         let mut i = 0;
         while i < events.len() {
-            if let InputEvent::Key { modifiers, chars, .. } = &events[i] {
+            if let InputEvent::Key {
+                modifiers, chars, ..
+            } = &events[i]
+            {
                 if *modifiers > 0 && i + 1 < events.len() {
                     if let InputEvent::Key { .. } = &events[i + 1] {
                         // Likely a shortcut
@@ -188,7 +201,10 @@ impl KnowledgeBase {
                             id: format!("shortcut_{}_{}", app_name, i),
                             app_name: app_name.to_string(),
                             pattern_type: LearningPatternType::ShortcutDiscovery,
-                            description: format!("Potential keyboard shortcut detected: {} modifier + key", modifiers),
+                            description: format!(
+                                "Potential keyboard shortcut detected: {} modifier + key",
+                                modifiers
+                            ),
                             trigger_conditions: vec!["app_focus".to_string()],
                             suggested_actions: vec![
                                 "Save as keyboard macro".to_string(),
@@ -231,7 +247,7 @@ impl KnowledgeBase {
     /// Get proactive suggestions based on learned patterns
     pub fn get_suggestions(&self) -> Vec<ProactiveSuggestion> {
         let patterns = self.patterns.lock().unwrap();
-        
+
         patterns
             .iter()
             .filter(|p| p.confidence > 0.7 && p.occurrence_count > 1)
@@ -264,12 +280,7 @@ impl KnowledgeBase {
 
     /// Get app usage statistics
     pub fn get_app_usage(&self) -> Vec<AppUsageStats> {
-        self.app_usage
-            .lock()
-            .unwrap()
-            .values()
-            .cloned()
-            .collect()
+        self.app_usage.lock().unwrap().values().cloned().collect()
     }
 }
 

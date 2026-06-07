@@ -28,13 +28,13 @@ pub trait ReplayEngine: Send + Sync {
     /// Execute a sequence of input events.
     /// The stop_flag can be set to true from another thread to cancel replay.
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()>;
-    
+
     /// Execute a sequence of input events with reliability features.
     /// Supports retry logic, checkpoints, and validation.
     fn execute_with_reliability(
-        &self, 
-        events: &[InputEvent], 
+        &self,
+        events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
-        reliability: &ReliabilitySettings
+        reliability: &ReliabilitySettings,
     ) -> anyhow::Result<()>;
 }

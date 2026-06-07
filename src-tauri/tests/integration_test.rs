@@ -1,34 +1,37 @@
 //! Integration tests for Ghost application
 //! Tests the full workflow from recording to replay
 
-use ghost_lib::core::events::{InputEvent, KeyAction};
 use ghost_lib::config::GhostConfig;
-use ghost_lib::error::{GhostError, ErrorKind};
+use ghost_lib::core::events::{InputEvent, KeyAction};
+use ghost_lib::error::{ErrorKind, GhostError};
 
 #[test]
 fn test_config_load_and_save() {
     let config = GhostConfig::default();
     assert!(config.validate().is_ok());
-    
+
     // Test serialization
     let json = serde_json::to_string(&config).unwrap();
     let deserialized: GhostConfig = serde_json::from_str(&json).unwrap();
-    
+
     assert_eq!(config.general.theme, deserialized.general.theme);
-    assert_eq!(config.replay.default_speed, deserialized.replay.default_speed);
+    assert_eq!(
+        config.replay.default_speed,
+        deserialized.replay.default_speed
+    );
 }
 
 #[test]
 fn test_config_validation() {
     let mut config = GhostConfig::default();
-    
+
     // Valid config should pass
     assert!(config.validate().is_ok());
-    
+
     // Invalid speed should fail
     config.replay.default_speed = -1.0;
     assert!(config.validate().is_err());
-    
+
     // Reset and test threshold
     config = GhostConfig::default();
     config.replay.visual_threshold = 1.5;
@@ -48,16 +51,15 @@ fn test_error_creation() {
 fn test_error_code_consistency() {
     let err1 = GhostError::recording_failed("test reason");
     let err2 = GhostError::recording_failed("test reason");
-    
+
     // Same error should generate same code
     assert_eq!(err1.code, err2.code);
 }
 
 #[test]
 fn test_error_display() {
-    let err = GhostError::replay_failed("UI changed")
-        .with_suggestion("Try re-recording");
-    
+    let err = GhostError::replay_failed("UI changed").with_suggestion("Try re-recording");
+
     let display = format!("{}", err);
     assert!(display.contains("Failed to replay workflow"));
     assert!(display.contains("UI changed"));
@@ -75,10 +77,10 @@ fn test_input_event_serialization() {
         semantic_tag: None,
         self_heal: Some(true),
     };
-    
+
     let json = serde_json::to_string(&event).unwrap();
     let deserialized: InputEvent = serde_json::from_str(&json).unwrap();
-    
+
     match deserialized {
         InputEvent::MouseClick { x, y, button, .. } => {
             assert_eq!(x, 100);
@@ -100,10 +102,10 @@ fn test_key_event_serialization() {
         retry_count: None,
         semantic_tag: None,
     };
-    
+
     let json = serde_json::to_string(&event).unwrap();
     let deserialized: InputEvent = serde_json::from_str(&json).unwrap();
-    
+
     match deserialized {
         InputEvent::Key { code, chars, .. } => {
             assert_eq!(code, 65);
@@ -140,20 +142,20 @@ fn test_workflow_event_sequence() {
             semantic_tag: None,
         },
     ];
-    
+
     assert_eq!(events.len(), 3);
-    
+
     // Test serialization of sequence
     let json = serde_json::to_string(&events).unwrap();
     let deserialized: Vec<InputEvent> = serde_json::from_str(&json).unwrap();
-    
+
     assert_eq!(deserialized.len(), 3);
 }
 
 #[test]
 fn test_privacy_settings() {
     let config = GhostConfig::default();
-    
+
     // Default should have privacy-friendly settings
     assert!(config.privacy.anonymize_logs);
     assert!(config.privacy.mask_passwords);
@@ -163,7 +165,7 @@ fn test_privacy_settings() {
 #[test]
 fn test_performance_settings() {
     let config = GhostConfig::default();
-    
+
     assert!(config.performance.cache_enabled);
     assert!(config.performance.event_buffer_size > 0);
     assert!(config.performance.thread_pool_size > 0);
@@ -172,7 +174,7 @@ fn test_performance_settings() {
 #[test]
 fn test_ai_settings() {
     let config = GhostConfig::default();
-    
+
     assert!(config.ai.enabled);
     assert!(config.ai.auto_optimize);
     assert!(config.ai.proactive_suggestions);
@@ -181,7 +183,7 @@ fn test_ai_settings() {
 #[cfg(test)]
 mod workflow_tests {
     use super::*;
-    
+
     #[test]
     fn test_empty_workflow() {
         let events: Vec<InputEvent> = vec![];
@@ -189,7 +191,7 @@ mod workflow_tests {
         let deserialized: Vec<InputEvent> = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.len(), 0);
     }
-    
+
     #[test]
     fn test_complex_workflow() {
         let events = vec![
@@ -232,9 +234,9 @@ mod workflow_tests {
                 timestamp: Some(1200),
             },
         ];
-        
+
         assert_eq!(events.len(), 5);
-        
+
         // Verify serialization round-trip
         let json = serde_json::to_string(&events).unwrap();
         let deserialized: Vec<InputEvent> = serde_json::from_str(&json).unwrap();

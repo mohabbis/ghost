@@ -1,7 +1,7 @@
 //! Ghost Tauri commands - platform-agnostic IPC handlers.
 
-use crate::engine::GhostEngine;
 use crate::core::events::InputEvent;
+use crate::engine::GhostEngine;
 use std::sync::mpsc;
 use tauri::{AppHandle, Emitter, Manager, State};
 /// Spawns a thread to bridge native events → Tauri IPC.
@@ -90,13 +90,21 @@ pub fn get_playback_speed(engine: State<GhostEngine>) -> f32 {
 
 /// Inspect the UI element at the given screen coordinates.
 #[tauri::command]
-pub fn inspect_element(x: i32, y: i32, engine: State<GhostEngine>) -> Result<Option<crate::core::events::ElementInfo>, String> {
+pub fn inspect_element(
+    x: i32,
+    y: i32,
+    engine: State<GhostEngine>,
+) -> Result<Option<crate::core::events::ElementInfo>, String> {
     engine.inspect_element(x, y).map_err(|e| e.to_string())
 }
 
 /// Save a workflow to disk.
 #[tauri::command]
-pub fn save_workflow(name: String, events: Vec<InputEvent>, engine: State<GhostEngine>) -> Result<String, String> {
+pub fn save_workflow(
+    name: String,
+    events: Vec<InputEvent>,
+    engine: State<GhostEngine>,
+) -> Result<String, String> {
     match engine.save_workflow(&name, &events) {
         Ok(path) => Ok(path.to_string_lossy().to_string()),
         Err(e) => Err(e.to_string()),
@@ -159,15 +167,22 @@ pub fn request_accessibility() -> bool {
 
 /// Analyze a workflow and return AI-powered insights
 #[tauri::command]
-pub fn analyze_workflow(name: String, events: Vec<InputEvent>, engine: State<GhostEngine>) -> crate::core::ai::WorkflowAnalysis {
+pub fn analyze_workflow(
+    name: String,
+    events: Vec<InputEvent>,
+    engine: State<GhostEngine>,
+) -> crate::core::ai::WorkflowAnalysis {
     engine.analyze_workflow(&events, &name)
 }
 
 /// Generate an optimized version of a workflow
 #[tauri::command]
-pub fn optimize_workflow(events: Vec<InputEvent>, engine: State<GhostEngine>) -> Result<Vec<InputEvent>, String> {
+pub fn optimize_workflow(
+    events: Vec<InputEvent>,
+    engine: State<GhostEngine>,
+) -> Result<Vec<InputEvent>, String> {
     use crate::core::ai::WorkflowOptimizer;
-    
+
     let optimizer = WorkflowOptimizer::new();
     optimizer.optimize(&events).map_err(|e| e.to_string())
 }
@@ -175,23 +190,25 @@ pub fn optimize_workflow(events: Vec<InputEvent>, engine: State<GhostEngine>) ->
 /// Generate a workflow name suggestion
 #[tauri::command]
 pub fn suggest_workflow_name(events: Vec<InputEvent>, engine: State<GhostEngine>) -> String {
-    engine.generate_workflow_name(&events).unwrap_or_else(|_| "Workflow".to_string())
+    engine
+        .generate_workflow_name(&events)
+        .unwrap_or_else(|_| "Workflow".to_string())
 }
 
 /// Save a workflow with full metadata
 #[tauri::command]
 pub fn save_workflow_with_metadata(
-    name: String, 
-    events: Vec<InputEvent>, 
+    name: String,
+    events: Vec<InputEvent>,
     description: String,
     tags: Vec<String>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<String, String> {
     use crate::core::events::WorkflowMetadata;
     use std::time::SystemTime;
-    
+
     let workflow = engine.create_workflow_with_details(&name, &events, &description, &tags);
-    
+
     match engine.save_workflow_with_metadata(&workflow) {
         Ok(path) => Ok(path.to_string_lossy().to_string()),
         Err(e) => Err(e.to_string()),
@@ -200,8 +217,13 @@ pub fn save_workflow_with_metadata(
 
 /// Load a workflow with full metadata
 #[tauri::command]
-pub fn load_workflow_with_metadata(name: String, engine: State<GhostEngine>) -> Result<crate::core::events::Workflow, String> {
-    engine.load_workflow_with_metadata(&name).map_err(|e| e.to_string())
+pub fn load_workflow_with_metadata(
+    name: String,
+    engine: State<GhostEngine>,
+) -> Result<crate::core::events::Workflow, String> {
+    engine
+        .load_workflow_with_metadata(&name)
+        .map_err(|e| e.to_string())
 }
 
 // ===== Phase 3: AI-Assisted Workflow Generation Commands =====
@@ -211,9 +233,10 @@ pub fn load_workflow_with_metadata(name: String, engine: State<GhostEngine>) -> 
 pub fn generate_workflow_from_prompt(
     prompt: String,
     screenshot: Option<Vec<u8>>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
-    engine.generate_workflow_from_prompt(prompt, screenshot)
+    engine
+        .generate_workflow_from_prompt(prompt, screenshot)
         .map_err(|e| e.to_string())
 }
 
@@ -221,9 +244,10 @@ pub fn generate_workflow_from_prompt(
 #[tauri::command]
 pub fn analyze_and_tag_workflow(
     events: Vec<InputEvent>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
-    engine.analyze_and_tag_workflow(events)
+    engine
+        .analyze_and_tag_workflow(events)
         .map_err(|e| e.to_string())
 }
 
@@ -234,13 +258,15 @@ pub fn save_workflow_with_sidecar(
     events: Vec<InputEvent>,
     description: String,
     tags: Vec<String>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<String, String> {
     use crate::core::events::WorkflowMetadata;
     use std::fs;
     use std::time::SystemTime;
 
-    let tagged_events = engine.analyze_and_tag_workflow(events.clone()).map_err(|e| e.to_string())?;
+    let tagged_events = engine
+        .analyze_and_tag_workflow(events.clone())
+        .map_err(|e| e.to_string())?;
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
@@ -248,15 +274,19 @@ pub fn save_workflow_with_sidecar(
 
     // Save main workflow file
     let workflow = engine.create_workflow_with_details(&name, &tagged_events, &description, &tags);
-    engine.save_workflow_with_metadata(&workflow)
+    engine
+        .save_workflow_with_metadata(&workflow)
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| e.to_string())?;
 
     // Save sidecar metadata file
-    let data_dir = dirs::data_dir()
-        .ok_or_else(|| "Could not determine data directory".to_string())?;
-    let meta_path = data_dir.join("ghost").join("workflows").join(format!("{}.meta.json", name));
-    
+    let data_dir =
+        dirs::data_dir().ok_or_else(|| "Could not determine data directory".to_string())?;
+    let meta_path = data_dir
+        .join("ghost")
+        .join("workflows")
+        .join(format!("{}.meta.json", name));
+
     let meta = serde_json::json!({
         "workflow_name": name,
         "description": description,
@@ -278,8 +308,11 @@ pub fn save_workflow_with_sidecar(
             .collect::<Vec<_>>()
     });
 
-    fs::write(&meta_path, serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(name)
 }
@@ -341,12 +374,12 @@ pub fn load_variables(
 /// Execute a workflow with reliability features
 #[tauri::command]
 pub fn replay_with_reliability(
-    events: Vec<InputEvent>, 
+    events: Vec<InputEvent>,
     max_attempts: Option<u32>,
     backoff_ms: Option<u64>,
     backoff_multiplier: Option<f32>,
     checkpoints: Option<Vec<crate::core::events::Checkpoint>>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<(), String> {
     let reliability = crate::core::events::ReliabilitySettings {
         retry_config: crate::core::events::RetryConfig {
@@ -357,14 +390,15 @@ pub fn replay_with_reliability(
         checkpoints: checkpoints.unwrap_or_default(),
         ..Default::default()
     };
-    
-    engine.replay_with_reliability(&events, &reliability)
+
+    engine
+        .replay_with_reliability(&events, &reliability)
         .map_err(|e| e.to_string())
 }
 
 // ===== Cloud Sync Commands =====
 
-use crate::core::cloud::{CloudConfig, CloudSyncManager, Workspace, AuditLog};
+use crate::core::cloud::{AuditLog, CloudConfig, CloudSyncManager, Workspace};
 use std::sync::Mutex;
 
 /// Cloud sync state - managed by Tauri
@@ -387,14 +421,20 @@ impl CloudState {
 }
 
 #[tauri::command]
-pub fn init_cloud_sync(config: CloudConfig, state: tauri::State<'_, CloudState>) -> Result<bool, String> {
+pub fn init_cloud_sync(
+    config: CloudConfig,
+    state: tauri::State<'_, CloudState>,
+) -> Result<bool, String> {
     let manager = CloudSyncManager::new(config);
     *state.manager.lock().unwrap() = Some(manager);
     Ok(true)
 }
 
 #[tauri::command]
-pub fn cloud_authenticate(token: String, state: tauri::State<'_, CloudState>) -> Result<bool, String> {
+pub fn cloud_authenticate(
+    token: String,
+    state: tauri::State<'_, CloudState>,
+) -> Result<bool, String> {
     let mut manager_lock = state.manager.lock().unwrap();
     if let Some(manager) = manager_lock.as_mut() {
         manager.authenticate(token).map_err(|e| e.to_string())
@@ -408,7 +448,7 @@ pub fn cloud_sync_workflows(
     name: Option<String>,
     events: Vec<InputEvent>,
     description: Option<String>,
-    state: tauri::State<'_, CloudState>
+    state: tauri::State<'_, CloudState>,
 ) -> Result<Vec<String>, String> {
     let manager_lock = state.manager.lock().unwrap();
     if let Some(manager) = manager_lock.as_ref() {
@@ -436,14 +476,20 @@ pub fn cloud_sync_workflows(
             },
             reliability: None,
         };
-        manager.sync_workflows(&[workflow]).map_err(|e| e.to_string())
+        manager
+            .sync_workflows(&[workflow])
+            .map_err(|e| e.to_string())
     } else {
         Err("Cloud sync not initialized".to_string())
     }
 }
 
 #[tauri::command]
-pub fn create_workspace(name: String, owner_id: String, state: tauri::State<'_, CloudState>) -> Result<Workspace, String> {
+pub fn create_workspace(
+    name: String,
+    owner_id: String,
+    state: tauri::State<'_, CloudState>,
+) -> Result<Workspace, String> {
     let mut manager_lock = state.manager.lock().unwrap();
     if let Some(manager) = manager_lock.as_mut() {
         Ok(manager.create_workspace(name, owner_id))
@@ -453,7 +499,10 @@ pub fn create_workspace(name: String, owner_id: String, state: tauri::State<'_, 
 }
 
 #[tauri::command]
-pub fn get_audit_logs(limit: Option<usize>, state: tauri::State<'_, CloudState>) -> Result<Vec<AuditLog>, String> {
+pub fn get_audit_logs(
+    limit: Option<usize>,
+    state: tauri::State<'_, CloudState>,
+) -> Result<Vec<AuditLog>, String> {
     let manager_lock = state.manager.lock().unwrap();
     if let Some(manager) = manager_lock.as_ref() {
         Ok(manager.get_audit_logs(limit).into_iter().cloned().collect())
@@ -468,11 +517,13 @@ pub fn get_audit_logs(limit: Option<usize>, state: tauri::State<'_, CloudState>)
 #[tauri::command]
 pub fn get_execution_history(
     workflow_name: String,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
     let tracker = engine.get_execution_tracker();
     match tracker.as_ref().and_then(|guard| guard.as_ref()) {
-        Some(history) => history.get_history(&workflow_name).map_err(|e| e.to_string()),
+        Some(history) => history
+            .get_history(&workflow_name)
+            .map_err(|e| e.to_string()),
         None => Ok(Vec::new()),
     }
 }
@@ -481,7 +532,7 @@ pub fn get_execution_history(
 #[tauri::command]
 pub fn get_all_executions(
     limit: Option<usize>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
     let tracker = engine.get_execution_tracker();
     match tracker.as_ref().and_then(|guard| guard.as_ref()) {
@@ -494,14 +545,16 @@ pub fn get_all_executions(
 #[tauri::command]
 pub fn get_workflow_analytics(
     workflow_name: String,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<serde_json::Value, String> {
     let tracker = engine.get_execution_tracker();
     if let Some(history) = tracker.as_ref().and_then(|guard| guard.as_ref()) {
         let success_rate = history.get_success_rate(&workflow_name).unwrap_or(1.0);
         let avg_duration = history.get_avg_duration(&workflow_name).unwrap_or(0);
-        let hotspots = history.get_failure_hotspots(&workflow_name).unwrap_or_default();
-        
+        let hotspots = history
+            .get_failure_hotspots(&workflow_name)
+            .unwrap_or_default();
+
         Ok(serde_json::json!({
             "workflow_name": workflow_name,
             "success_rate": success_rate,
@@ -548,7 +601,7 @@ pub fn set_observer_interval(interval_ms: u64, engine: State<GhostEngine>) -> Re
 pub fn observe_events(
     events: Vec<InputEvent>,
     app_name: String,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Result<u32, String> {
     engine.observe_events(&events, &app_name);
     let patterns = engine.get_learned_patterns(Some(&app_name));
@@ -557,7 +610,9 @@ pub fn observe_events(
 
 /// Get proactive automation suggestions
 #[tauri::command]
-pub fn get_proactive_suggestions(engine: State<GhostEngine>) -> Vec<crate::core::knowledge::ProactiveSuggestion> {
+pub fn get_proactive_suggestions(
+    engine: State<GhostEngine>,
+) -> Vec<crate::core::knowledge::ProactiveSuggestion> {
     engine.get_proactive_suggestions()
 }
 
@@ -565,14 +620,16 @@ pub fn get_proactive_suggestions(engine: State<GhostEngine>) -> Vec<crate::core:
 #[tauri::command]
 pub fn get_learned_patterns(
     app_name: Option<String>,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> Vec<crate::core::knowledge::LearnedPattern> {
     engine.get_learned_patterns(app_name.as_deref())
 }
 
 /// Get app usage statistics
 #[tauri::command]
-pub fn get_app_usage_stats(engine: State<GhostEngine>) -> Vec<crate::core::knowledge::AppUsageStats> {
+pub fn get_app_usage_stats(
+    engine: State<GhostEngine>,
+) -> Vec<crate::core::knowledge::AppUsageStats> {
     engine.get_app_usage_stats()
 }
 
@@ -581,7 +638,7 @@ pub fn get_app_usage_stats(engine: State<GhostEngine>) -> Vec<crate::core::knowl
 pub fn generate_geek_insights(
     events: Vec<InputEvent>,
     app_name: String,
-    engine: State<GhostEngine>
+    engine: State<GhostEngine>,
 ) -> crate::core::knowledge::GeekDetails {
     engine.generate_geek_insights(&events, &app_name)
 }

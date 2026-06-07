@@ -1,20 +1,23 @@
 //! Ghost engine: platform-agnostic orchestration layer.
 //! Manages recording, element lookup, and replay with cancellation support.
 
-use crate::core::events::{ElementInfo, InputEvent, Workflow, WorkflowMetadata, WaitCondition, ElementSelector, VisualCheckPoint, KeyAction};
 use crate::core::ai::WorkflowAnalysis;
-use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::ai::WorkflowAnalyzer;
-use crate::core::llm::{self, LLMConfig, LLMProvider};
-use crate::core::wait::{smart_wait, WaitResult};
-use crate::core::vision;
+use crate::core::events::{
+    ElementInfo, ElementSelector, InputEvent, KeyAction, VisualCheckPoint, WaitCondition, Workflow,
+    WorkflowMetadata,
+};
 use crate::core::execution::{ExecutionHistory, ExecutionRecord, ExecutionStatus};
 use crate::core::knowledge::{KnowledgeBase, LearnedPattern, ProactiveSuggestion};
-use image::DynamicImage;
+use crate::core::llm::{self, LLMConfig, LLMProvider};
+use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
+use crate::core::vision;
+use crate::core::wait::{smart_wait, WaitResult};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
+use image::DynamicImage;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
@@ -89,7 +92,7 @@ impl GhostEngine {
     pub fn start_recording(&self, tx: mpsc::Sender<InputEvent>) -> anyhow::Result<()> {
         // Clear previous recorded events
         *self.recorded_events.lock().unwrap() = Vec::new();
-        
+
         // Store the sender and receiver for later use
         let (tx_clone, rx) = mpsc::channel();
         *self.tx.lock().unwrap() = Some(tx_clone);
@@ -154,7 +157,11 @@ impl GhostEngine {
     }
 
     /// Get the element info at the given screen coordinates.
-    pub fn inspect_element(&self, x: i32, y: i32) -> anyhow::Result<Option<crate::core::events::ElementInfo>> {
+    pub fn inspect_element(
+        &self,
+        x: i32,
+        y: i32,
+    ) -> anyhow::Result<Option<crate::core::events::ElementInfo>> {
         self.locator.inspect_at(x, y)
     }
 
@@ -166,64 +173,70 @@ impl GhostEngine {
     /// Save workflow to a JSON file in the app's data directory.
     pub fn save_workflow(&self, name: &str, events: &[InputEvent]) -> anyhow::Result<PathBuf> {
         use std::fs;
-        
+
         // Get the data directory
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let workflows_dir = data_dir.join("ghost").join("workflows");
         fs::create_dir_all(&workflows_dir)?;
-        
+
         let file_path = workflows_dir.join(format!("{}.json", name));
         let json = serde_json::to_string_pretty(events)?;
         fs::write(&file_path, json)?;
-        
+
         Ok(file_path)
     }
 
     /// Load workflow from a JSON file in the app's data directory.
     pub fn load_workflow(&self, name: &str) -> anyhow::Result<Vec<InputEvent>> {
         use std::fs;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
-        let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
+
+        let file_path = data_dir
+            .join("ghost")
+            .join("workflows")
+            .join(format!("{}.json", name));
         let json = fs::read_to_string(&file_path)?;
         let events: Vec<InputEvent> = serde_json::from_str(&json)?;
-        
+
         Ok(events)
     }
 
     /// Delete a workflow from disk.
     pub fn delete_workflow(&self, name: &str) -> anyhow::Result<()> {
         use std::fs;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
-        let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
-        
+
+        let file_path = data_dir
+            .join("ghost")
+            .join("workflows")
+            .join(format!("{}.json", name));
+
         if file_path.exists() {
             fs::remove_file(file_path)?;
         }
-        
+
         Ok(())
     }
 
     /// List all saved workflows.
     pub fn list_workflows() -> anyhow::Result<Vec<String>> {
         use std::fs;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let workflows_dir = data_dir.join("ghost").join("workflows");
-        
+
         if !workflows_dir.exists() {
             return Ok(Vec::new());
         }
-        
+
         let mut workflows = Vec::new();
         for entry in fs::read_dir(workflows_dir)? {
             let entry = entry?;
@@ -234,7 +247,7 @@ impl GhostEngine {
                 }
             }
         }
-        
+
         Ok(workflows)
     }
 
@@ -244,20 +257,27 @@ impl GhostEngine {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let metadata = WorkflowMetadata {
             name: name.to_string(),
             description: String::new(),
             tags: Vec::new(),
             created_at: now,
             updated_at: now,
-            estimated_duration_ms: events.iter().filter_map(|e| {
-                if let InputEvent::Delay { ms, .. } = e { Some(*ms) } else { None }
-            }).sum(),
+            estimated_duration_ms: events
+                .iter()
+                .filter_map(|e| {
+                    if let InputEvent::Delay { ms, .. } = e {
+                        Some(*ms)
+                    } else {
+                        None
+                    }
+                })
+                .sum(),
             reliability_score: 1.0,
             element_confidence: 1.0,
         };
-        
+
         self.analyzer.analyze(events, &metadata)
     }
 
@@ -267,19 +287,29 @@ impl GhostEngine {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         Workflow {
             name: name.to_string(),
             events: events.to_vec(),
             metadata: WorkflowMetadata {
                 name: name.to_string(),
-                description: format!("Automatically generated workflow with {} events", events.len()),
+                description: format!(
+                    "Automatically generated workflow with {} events",
+                    events.len()
+                ),
                 tags: Vec::new(),
                 created_at: now,
                 updated_at: now,
-                estimated_duration_ms: events.iter().filter_map(|e| {
-                    if let InputEvent::Delay { ms, .. } = e { Some(*ms) } else { None }
-                }).sum(),
+                estimated_duration_ms: events
+                    .iter()
+                    .filter_map(|e| {
+                        if let InputEvent::Delay { ms, .. } = e {
+                            Some(*ms)
+                        } else {
+                            None
+                        }
+                    })
+                    .sum(),
                 reliability_score: self.analyzer.calculate_reliability(events),
                 element_confidence: self.analyzer.calculate_element_richness(events),
             },
@@ -290,25 +320,25 @@ impl GhostEngine {
     /// Save a complete workflow with metadata
     pub fn save_workflow_with_metadata(&self, workflow: &Workflow) -> anyhow::Result<PathBuf> {
         use std::fs;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let workflows_dir = data_dir.join("ghost").join("workflows");
         fs::create_dir_all(&workflows_dir)?;
-        
+
         let file_path = workflows_dir.join(format!("{}.json", workflow.name));
         let json = serde_json::to_string_pretty(workflow)?;
         fs::write(&file_path, json)?;
-        
+
         Ok(file_path)
     }
 
     /// Save a workflow with custom description and tags
     pub fn save_workflow_with_details(
-        &self, 
-        name: &str, 
-        events: &[InputEvent], 
+        &self,
+        name: &str,
+        events: &[InputEvent],
         description: &str,
         tags: &[String],
     ) -> anyhow::Result<PathBuf> {
@@ -318,8 +348,8 @@ impl GhostEngine {
 
     /// Create a workflow with custom metadata
     pub fn create_workflow_with_details(
-        &self, 
-        name: &str, 
+        &self,
+        name: &str,
         events: &[InputEvent],
         description: &str,
         tags: &[String],
@@ -328,7 +358,7 @@ impl GhostEngine {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         Workflow {
             name: name.to_string(),
             events: events.to_vec(),
@@ -338,9 +368,16 @@ impl GhostEngine {
                 tags: tags.to_vec(),
                 created_at: now,
                 updated_at: now,
-                estimated_duration_ms: events.iter().filter_map(|e| {
-                    if let InputEvent::Delay { ms, .. } = e { Some(*ms) } else { None }
-                }).sum(),
+                estimated_duration_ms: events
+                    .iter()
+                    .filter_map(|e| {
+                        if let InputEvent::Delay { ms, .. } = e {
+                            Some(*ms)
+                        } else {
+                            None
+                        }
+                    })
+                    .sum(),
                 reliability_score: self.analyzer.calculate_reliability(events),
                 element_confidence: self.analyzer.calculate_element_richness(events),
             },
@@ -356,32 +393,32 @@ impl GhostEngine {
     /// Load a complete workflow with metadata
     pub fn load_workflow_with_metadata(&self, name: &str) -> anyhow::Result<Workflow> {
         use std::fs;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
-        let file_path = data_dir.join("ghost").join("workflows").join(format!("{}.json", name));
+
+        let file_path = data_dir
+            .join("ghost")
+            .join("workflows")
+            .join(format!("{}.json", name));
         let json = fs::read_to_string(&file_path)?;
         let workflow: Workflow = serde_json::from_str(&json)?;
-        
+
         Ok(workflow)
     }
 
     /// Replay a workflow with reliability features
     pub fn replay_with_reliability(
-        &self, 
-        events: &[InputEvent], 
-        reliability: &crate::core::events::ReliabilitySettings
+        &self,
+        events: &[InputEvent],
+        reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         // Reset flags
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
-        
-        self.replayer.execute_with_reliability(
-            events, 
-            self.replay_stop_flag.clone(),
-            reliability
-        )
+
+        self.replayer
+            .execute_with_reliability(events, self.replay_stop_flag.clone(), reliability)
     }
 
     /// Get element info at coordinates for validation
@@ -396,7 +433,7 @@ impl GhostEngine {
 
     /// Generate workflow from natural language prompt using LLM
     pub fn generate_workflow_from_prompt(
-        &self, 
+        &self,
         prompt: String,
         screenshot: Option<Vec<u8>>,
     ) -> anyhow::Result<Vec<InputEvent>> {
@@ -406,8 +443,8 @@ impl GhostEngine {
             llm::init_llm(&config);
         }
 
-        let provider = llm::get_llm()
-            .ok_or_else(|| anyhow::anyhow!("No LLM provider available"))?;
+        let provider =
+            llm::get_llm().ok_or_else(|| anyhow::anyhow!("No LLM provider available"))?;
 
         // Get element context from current screen
         let element_context = self.get_visible_elements()?;
@@ -415,12 +452,14 @@ impl GhostEngine {
         // Call the LLM (async, but we'll block on it for Tauri command)
         let rt = tokio::runtime::Runtime::new()?;
         let events = rt.block_on(async {
-            provider.generate_workflow(
-                &prompt,
-                screenshot.as_deref(),
-                None, // AX tree would be populated here
-                &element_context,
-            ).await
+            provider
+                .generate_workflow(
+                    &prompt,
+                    screenshot.as_deref(),
+                    None, // AX tree would be populated here
+                    &element_context,
+                )
+                .await
         })?;
 
         Ok(events)
@@ -429,13 +468,16 @@ impl GhostEngine {
     /// Get visible elements for context
     fn get_visible_elements(&self) -> anyhow::Result<Vec<ElementInfo>> {
         let mut elements = Vec::new();
-        
+
         // Sample elements at regular intervals
         for y in 0..500 {
             for x in 0..500 {
                 if let Ok(Some(el)) = self.locator.inspect_at(x, y) {
                     // Avoid duplicates
-                    if !elements.iter().any(|e: &ElementInfo| e.name == el.name && e.role == el.role) {
+                    if !elements
+                        .iter()
+                        .any(|e: &ElementInfo| e.name == el.name && e.role == el.role)
+                    {
                         elements.push(el);
                     }
                 }
@@ -446,24 +488,26 @@ impl GhostEngine {
     }
 
     /// Analyze and add semantic tags to recorded events
-    pub fn analyze_and_tag_workflow(&self, events: Vec<InputEvent>) -> anyhow::Result<Vec<InputEvent>> {
+    pub fn analyze_and_tag_workflow(
+        &self,
+        events: Vec<InputEvent>,
+    ) -> anyhow::Result<Vec<InputEvent>> {
         let config = LLMConfig::from_env();
         if llm::get_llm().is_none() {
             llm::init_llm(&config);
         }
 
-        let provider = llm::get_llm()
-            .ok_or_else(|| anyhow::anyhow!("No AI provider available"))?;
+        let provider = llm::get_llm().ok_or_else(|| anyhow::anyhow!("No AI provider available"))?;
 
         let element_context = self.get_visible_elements()?;
-        
+
         let rt = tokio::runtime::Runtime::new()?;
         let tagged_events = rt.block_on(async {
             // Use the analyzer for simpler heuristic-based tagging
             // LLM-based tagging would involve sending the full event stream
             let metadata = WorkflowMetadata::default();
             let analysis = self.analyzer.analyze(&events, &metadata);
-            
+
             // For each event, add semantic context
             let mut result = Vec::new();
             for event in events {
@@ -477,14 +521,17 @@ impl GhostEngine {
     }
 
     /// Add semantic context to an event
-    fn add_semantic_context(
-        &self, 
-        event: &InputEvent, 
-        elements: &[ElementInfo]
-    ) -> InputEvent {
+    fn add_semantic_context(&self, event: &InputEvent, elements: &[ElementInfo]) -> InputEvent {
         match event {
-            InputEvent::MouseClick { x, y, button, element, .. } => {
-                let semantic_tag = element.clone()
+            InputEvent::MouseClick {
+                x,
+                y,
+                button,
+                element,
+                ..
+            } => {
+                let semantic_tag = element
+                    .clone()
                     .or_else(|| self.find_closest_element(*x, *y, elements))
                     .map(|el| crate::core::events::SemanticTag {
                         action: "click".to_string(),
@@ -493,7 +540,7 @@ impl GhostEngine {
                         ui_element: Some(el.clone()),
                         ai_generated: false,
                     });
-                
+
                 InputEvent::MouseClick {
                     x: *x,
                     y: *y,
@@ -505,7 +552,13 @@ impl GhostEngine {
                     self_heal: Some(true),
                 }
             }
-            InputEvent::Key { code, chars, modifiers, action, .. } => {
+            InputEvent::Key {
+                code,
+                chars,
+                modifiers,
+                action,
+                ..
+            } => {
                 let semantic_tag = if !chars.is_empty() {
                     Some(crate::core::events::SemanticTag {
                         action: "type".to_string(),
@@ -517,7 +570,7 @@ impl GhostEngine {
                 } else {
                     None
                 };
-                
+
                 InputEvent::Key {
                     code: *code,
                     chars: chars.clone(),
@@ -534,29 +587,37 @@ impl GhostEngine {
 
     /// Find the closest element to given coordinates
     fn find_closest_element(
-        &self, 
-        x: i32, 
-        y: i32, 
-        elements: &[ElementInfo]
+        &self,
+        x: i32,
+        y: i32,
+        elements: &[ElementInfo],
     ) -> Option<ElementInfo> {
-        elements.iter()
-            .filter_map(|el| el.fallback_coords.as_ref().map(|(ex, ey)| {
-                let dist = ((x - ex).pow(2) + (y - ey).pow(2)) as f32;
-                (el, dist)
-            }))
+        elements
+            .iter()
+            .filter_map(|el| {
+                el.fallback_coords.as_ref().map(|(ex, ey)| {
+                    let dist = ((x - ex).pow(2) + (y - ey).pow(2)) as f32;
+                    (el, dist)
+                })
+            })
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(el, _)| el.clone())
     }
 
     /// Wait for a condition during workflow execution
     pub fn wait_for_condition(
-        &self, 
+        &self,
         condition: &WaitCondition,
         timeout_ms: u64,
         poll_interval_ms: u64,
     ) -> anyhow::Result<()> {
-        smart_wait(condition, self.locator.as_ref(), timeout_ms, poll_interval_ms)
-            .map_err(|e| anyhow::anyhow!("Wait failed: {}", e))
+        smart_wait(
+            condition,
+            self.locator.as_ref(),
+            timeout_ms,
+            poll_interval_ms,
+        )
+        .map_err(|e| anyhow::anyhow!("Wait failed: {}", e))
     }
 
     /// Perform visual regression check
@@ -588,7 +649,7 @@ impl GhostEngine {
         // Reset flags
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
-        
+
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.playback_speed.lock().unwrap();
 
@@ -611,7 +672,12 @@ impl GhostEngine {
                     };
                     enigo.button(mouse_button, Direction::Click)?;
                 }
-                InputEvent::Key { code, chars, action, .. } => {
+                InputEvent::Key {
+                    code,
+                    chars,
+                    action,
+                    ..
+                } => {
                     let key = if !chars.is_empty() {
                         Key::Unicode(chars.chars().next().unwrap_or(' '))
                     } else {
@@ -646,9 +712,9 @@ impl GhostEngine {
                 if let Some(baseline_path) = &checkpoint.baseline_screenshot_path {
                     if let Ok(img_bytes) = vision::capture_screenshot() {
                         if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                            let similarity = vision::compare_images(baseline_path, &current_img)
-                                .unwrap_or(1.0);
-                            
+                            let similarity =
+                                vision::compare_images(baseline_path, &current_img).unwrap_or(1.0);
+
                             if similarity < checkpoint.threshold {
                                 tracing::warn!(
                                     "Visual check '{}' failed: {:.2} < {}",
@@ -658,7 +724,11 @@ impl GhostEngine {
                                 );
                                 // Continue anyway - could be made configurable
                             } else {
-                                tracing::info!("Visual check '{}' passed: {:.2}", checkpoint.name, similarity);
+                                tracing::info!(
+                                    "Visual check '{}' passed: {:.2}",
+                                    checkpoint.name,
+                                    similarity
+                                );
                             }
                         }
                     }
@@ -670,35 +740,46 @@ impl GhostEngine {
     }
 
     /// Capture and save a baseline screenshot
-    pub fn capture_baseline(&self, name: &str, region: Option<(i32, i32, i32, i32)>) -> anyhow::Result<String> {
+    pub fn capture_baseline(
+        &self,
+        name: &str,
+        region: Option<(i32, i32, i32, i32)>,
+    ) -> anyhow::Result<String> {
         let img_bytes = vision::capture_screenshot()
             .map_err(|e| anyhow::anyhow!("Failed to capture screenshot: {}", e))?;
-        
+
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let baselines_dir = data_dir.join("ghost").join("baselines");
         std::fs::create_dir_all(&baselines_dir)?;
-        
+
         let path = baselines_dir.join(format!("{}.png", name));
         self.save_screenshot(&img_bytes, path.to_string_lossy().as_ref())?;
-        
+
         Ok(path.to_string_lossy().to_string())
     }
 
     // ===== Phase 4C: Data Source Management =====
 
     /// Create a data source for variable-driven workflows
-    pub fn create_data_source(&self, name: &str, source_type: &str, path: Option<&str>) -> anyhow::Result<String> {
+    pub fn create_data_source(
+        &self,
+        name: &str,
+        source_type: &str,
+        path: Option<&str>,
+    ) -> anyhow::Result<String> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let sources_dir = data_dir.join("ghost").join("data_sources");
         std::fs::create_dir_all(&sources_dir)?;
-        
+
         let source_path = match source_type {
             "csv" | "json" => {
-                let p = path.ok_or_else(|| anyhow::anyhow!("Path required for {} data source", source_type))?;
+                let p = path.ok_or_else(|| {
+                    anyhow::anyhow!("Path required for {} data source", source_type)
+                })?;
                 format!("{}:{}", source_type, p)
             }
             "environment" => "environment".to_string(),
@@ -715,36 +796,40 @@ impl GhostEngine {
                 .unwrap()
                 .as_secs()
         });
-        
+
         std::fs::write(&file_path, serde_json::to_string_pretty(&metadata)?)?;
         Ok(file_path.to_string_lossy().to_string())
     }
 
     /// Load variables from a data source
-    pub fn load_variables(&self, data_source_name: &str) -> anyhow::Result<std::collections::HashMap<String, String>> {
+    pub fn load_variables(
+        &self,
+        data_source_name: &str,
+    ) -> anyhow::Result<std::collections::HashMap<String, String>> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let sources_dir = data_dir.join("ghost").join("data_sources");
         let file_path = sources_dir.join(format!("{}.json", data_source_name));
-        
+
         let json = std::fs::read_to_string(&file_path)
             .map_err(|e| anyhow::anyhow!("Failed to read data source: {}", e))?;
-        
+
         let metadata: serde_json::Value = serde_json::from_str(&json)?;
         let source_type = metadata["type"].as_str().unwrap_or("unknown");
-        
+
         let mut variables = std::collections::HashMap::new();
-        
+
         match source_type {
             "csv" => {
-                let path = metadata["path"].as_str()
+                let path = metadata["path"]
+                    .as_str()
                     .and_then(|p| p.strip_prefix("csv:"))
                     .ok_or_else(|| anyhow::anyhow!("Invalid CSV path in data source"))?;
-                
+
                 let csv_content = std::fs::read_to_string(path)
                     .map_err(|e| anyhow::anyhow!("Failed to read CSV file: {}", e))?;
-                
+
                 // Parse CSV and extract first row as variables
                 for line in csv_content.lines() {
                     let parts: Vec<&str> = line.split(',').collect();
@@ -754,13 +839,14 @@ impl GhostEngine {
                 }
             }
             "json" => {
-                let path = metadata["path"].as_str()
+                let path = metadata["path"]
+                    .as_str()
                     .and_then(|p| p.strip_prefix("json:"))
                     .ok_or_else(|| anyhow::anyhow!("Invalid JSON path in data source"))?;
-                
+
                 let json_content = std::fs::read_to_string(path)
                     .map_err(|e| anyhow::anyhow!("Failed to read JSON file: {}", e))?;
-                
+
                 let json_vars: serde_json::Value = serde_json::from_str(&json_content)?;
                 if let Some(obj) = json_vars.as_object() {
                     for (k, v) in obj {
@@ -804,7 +890,9 @@ impl GhostEngine {
 
     /// Record events as an observed pattern
     pub fn observe_events(&self, events: &[InputEvent], app_name: &str) {
-        let patterns = self.knowledge_base.analyze_observed_events(events, app_name);
+        let patterns = self
+            .knowledge_base
+            .analyze_observed_events(events, app_name);
         for pattern in patterns {
             self.knowledge_base.observe_pattern(pattern);
         }
@@ -830,7 +918,9 @@ impl GhostEngine {
     }
 
     /// Get execution tracker reference
-    pub fn get_execution_tracker(&self) -> Option<std::sync::MutexGuard<'_, Option<ExecutionHistory>>> {
+    pub fn get_execution_tracker(
+        &self,
+    ) -> Option<std::sync::MutexGuard<'_, Option<ExecutionHistory>>> {
         self.execution_tracker.lock().ok()
     }
 

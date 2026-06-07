@@ -1,8 +1,8 @@
 //! Security module for input validation, path sanitization, and encryption.
 //! Production-hardening for the Ghost automation platform.
 
-use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 /// Maximum allowed path length to prevent buffer overflows
 const MAX_PATH_LENGTH: usize = 4096;
@@ -43,10 +43,10 @@ pub mod audit {
     /// Run security audit on codebase
     pub fn run_audit() -> Vec<SecurityFinding> {
         let mut findings = Vec::new();
-        
+
         // Check for unsafe practices in file operations
         // This would be expanded to scan actual source files
-        
+
         findings
     }
 }
@@ -86,7 +86,7 @@ pub fn sanitize_file_path(path: &str, base_dir: &Path) -> anyhow::Result<PathBuf
     }
 
     let cleaned = path.replace('\\', "/");
-    
+
     // Check for null bytes
     if cleaned.contains('\0') {
         anyhow::bail!("Invalid path: null byte detected");
@@ -94,8 +94,12 @@ pub fn sanitize_file_path(path: &str, base_dir: &Path) -> anyhow::Result<PathBuf
 
     // Normalize and check if within base directory
     let candidate = base_dir.join(&cleaned);
-    let canonical_base = base_dir.canonicalize().unwrap_or_else(|_| base_dir.to_path_buf());
-    let canonical_candidate = candidate.canonicalize().unwrap_or_else(|_| candidate.clone());
+    let canonical_base = base_dir
+        .canonicalize()
+        .unwrap_or_else(|_| base_dir.to_path_buf());
+    let canonical_candidate = candidate
+        .canonicalize()
+        .unwrap_or_else(|_| candidate.clone());
 
     if !canonical_candidate.starts_with(&canonical_base) {
         anyhow::bail!("Path traversal attempt blocked");
@@ -116,10 +120,8 @@ pub fn validate_screenshot(data: &[u8]) -> anyhow::Result<()> {
     }
 
     // Verify PNG/JPEG magic bytes
-    let is_png = data.len() >= 8 && 
-        &data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    let is_jpeg = data.len() >= 2 &&
-        data[0] == 0xFF && data[1] == 0xD8;
+    let is_png = data.len() >= 8 && &data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let is_jpeg = data.len() >= 2 && data[0] == 0xFF && data[1] == 0xD8;
 
     if !is_png && !is_jpeg {
         anyhow::bail!("Invalid image format: expected PNG or JPEG");
@@ -162,7 +164,7 @@ impl SimpleCrypto {
 /// Validate CSV file path and contents
 pub fn validate_csv_path(path: &str) -> anyhow::Result<PathBuf> {
     let path = Path::new(path);
-    
+
     // Must have .csv extension
     if path.extension() != Some(OsStr::new("csv")) {
         anyhow::bail!("File must have .csv extension");
@@ -245,7 +247,10 @@ pub mod rate_limit {
     }
 
     fn now_secs() -> u64 {
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
     }
 
     impl RateLimiter {
@@ -261,7 +266,7 @@ pub mod rate_limit {
         pub fn check(&self) -> bool {
             let now = now_secs();
             let window_start = self.window_start.load(Ordering::Relaxed);
-            
+
             // Reset window if expired
             if now - window_start > self.window_duration.as_secs() {
                 self.window_start.store(now, Ordering::Relaxed);

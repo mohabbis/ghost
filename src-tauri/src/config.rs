@@ -1,9 +1,9 @@
 //! Configuration management for Ghost application
 //! Provides centralized settings with validation and persistence
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GhostConfig {
@@ -164,7 +164,7 @@ impl GhostConfig {
     /// Load configuration from disk or create default
     pub fn load() -> Result<Self> {
         let config_path = Self::config_path()?;
-        
+
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
             let config: GhostConfig = serde_json::from_str(&content)?;
@@ -175,46 +175,46 @@ impl GhostConfig {
             Ok(config)
         }
     }
-    
+
     /// Save configuration to disk
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path()?;
-        
+
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(&config_path, content)?;
-        
+
         Ok(())
     }
-    
+
     /// Get the configuration file path
     fn config_path() -> Result<PathBuf> {
         let data_dir = dirs::config_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
-        
+
         Ok(data_dir.join("ghost").join("config.json"))
     }
-    
+
     /// Validate configuration values
     pub fn validate(&self) -> Result<()> {
         if self.replay.default_speed <= 0.0 || self.replay.default_speed > 10.0 {
             anyhow::bail!("Invalid playback speed: must be between 0.0 and 10.0");
         }
-        
+
         if self.replay.visual_threshold < 0.0 || self.replay.visual_threshold > 1.0 {
             anyhow::bail!("Invalid visual threshold: must be between 0.0 and 1.0");
         }
-        
+
         if self.performance.thread_pool_size == 0 {
             anyhow::bail!("Thread pool size must be at least 1");
         }
-        
+
         Ok(())
     }
-    
+
     /// Reset to default configuration
     pub fn reset() -> Result<Self> {
         let config = Self::default();
@@ -226,20 +226,20 @@ impl GhostConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = GhostConfig::default();
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_invalid_speed() {
         let mut config = GhostConfig::default();
         config.replay.default_speed = -1.0;
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_serialization() {
         let config = GhostConfig::default();

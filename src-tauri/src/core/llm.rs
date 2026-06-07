@@ -57,10 +57,12 @@ impl LLMConfig {
         };
 
         let model = match provider {
-            LLMProviderType::OpenAI => env::var("GHOST_AI_MODEL")
-                .unwrap_or_else(|_| "gpt-4o".to_string()),
-            LLMProviderType::Claude => env::var("GHOST_AI_MODEL")
-                .unwrap_or_else(|_| "claude-sonnet-4-6".to_string()),
+            LLMProviderType::OpenAI => {
+                env::var("GHOST_AI_MODEL").unwrap_or_else(|_| "gpt-4o".to_string())
+            }
+            LLMProviderType::Claude => {
+                env::var("GHOST_AI_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string())
+            }
             LLMProviderType::Local => "local-heuristic".to_string(),
         };
 
@@ -105,7 +107,9 @@ pub struct OpenAIProvider {
 
 impl OpenAIProvider {
     pub fn new(config: &LLMConfig) -> Self {
-        Self { config: config.clone() }
+        Self {
+            config: config.clone(),
+        }
     }
 }
 
@@ -118,7 +122,9 @@ impl LLMProvider for OpenAIProvider {
         ax_tree: Option<&str>,
         element_context: &[ElementInfo],
     ) -> anyhow::Result<Vec<InputEvent>> {
-        let api_key = self.config.api_key()
+        let api_key = self
+            .config
+            .api_key()
             .ok_or_else(|| anyhow::anyhow!("OPENAI_API_KEY not set"))?;
 
         let client = reqwest::Client::new();
@@ -169,7 +175,10 @@ impl LLMProvider for OpenAIProvider {
         // Parse the JSON response
         let parsed: serde_json::Value = serde_json::from_str(content)?;
         let events: Vec<InputEvent> = serde_json::from_value(
-            parsed.get("events").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+            parsed
+                .get("events")
+                .cloned()
+                .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
 
         Ok(events)
@@ -187,7 +196,9 @@ pub struct ClaudeProvider {
 
 impl ClaudeProvider {
     pub fn new(config: &LLMConfig) -> Self {
-        Self { config: config.clone() }
+        Self {
+            config: config.clone(),
+        }
     }
 }
 
@@ -200,7 +211,9 @@ impl LLMProvider for ClaudeProvider {
         ax_tree: Option<&str>,
         element_context: &[ElementInfo],
     ) -> anyhow::Result<Vec<InputEvent>> {
-        let api_key = self.config.api_key()
+        let api_key = self
+            .config
+            .api_key()
             .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))?;
 
         let client = reqwest::Client::new();
@@ -242,7 +255,10 @@ impl LLMProvider for ClaudeProvider {
 
         let parsed: serde_json::Value = serde_json::from_str(content)?;
         let events: Vec<InputEvent> = serde_json::from_value(
-            parsed.get("events").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+            parsed
+                .get("events")
+                .cloned()
+                .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
 
         Ok(events)
@@ -343,14 +359,25 @@ pub fn json_to_events(json: &str) -> anyhow::Result<Vec<InputEvent>> {
 /// Generate a semantic description for an event
 pub fn describe_event(event: &InputEvent) -> String {
     match event {
-        InputEvent::MouseClick { x, y, button, element, .. } => {
+        InputEvent::MouseClick {
+            x,
+            y,
+            button,
+            element,
+            ..
+        } => {
             if let Some(el) = element {
                 format!("Click {} at ({}, {}) on {}", el.role, x, y, el.name)
             } else {
                 format!("Click at ({}, {})", x, y)
             }
         }
-        InputEvent::Key { code, chars, action, .. } => {
+        InputEvent::Key {
+            code,
+            chars,
+            action,
+            ..
+        } => {
             format!("Key {:?} {} ({})", action, chars, code)
         }
         InputEvent::Scroll { dx, dy, .. } => {
@@ -359,13 +386,24 @@ pub fn describe_event(event: &InputEvent) -> String {
         InputEvent::Delay { ms, .. } => {
             format!("Wait {}ms", ms)
         }
-        InputEvent::Wait { condition, timeout_ms, .. } => {
-            format!("Wait for condition (timeout {}ms): {:?}", timeout_ms, condition)
+        InputEvent::Wait {
+            condition,
+            timeout_ms,
+            ..
+        } => {
+            format!(
+                "Wait for condition (timeout {}ms): {:?}",
+                timeout_ms, condition
+            )
         }
         InputEvent::VisualCheck { threshold, .. } => {
             format!("Visual check (threshold {})", threshold)
         }
-        InputEvent::Variable { name, value_template, .. } => {
+        InputEvent::Variable {
+            name,
+            value_template,
+            ..
+        } => {
             format!("Set variable {} = {}", name, value_template)
         }
         InputEvent::VariableRef { name } => {

@@ -121,7 +121,7 @@ impl CloudSyncManager {
             workflows: Vec::new(),
             created_at: now,
         };
-        
+
         self.workspaces.insert(id.clone(), workspace.clone());
         self.log_audit(AuditLog {
             id: Uuid::new_v4().to_string(),
@@ -133,27 +133,35 @@ impl CloudSyncManager {
             details: format!("Created workspace: {}", workspace.name),
             ip_address: None,
         });
-        
+
         workspace
     }
 
     /// Add a member to a workspace
-    pub fn add_member(&mut self, workspace_id: &str, user_id: String, role: MemberRole, requester_id: String) -> Result<(), String> {
-        let workspace = self.workspaces.get_mut(workspace_id)
+    pub fn add_member(
+        &mut self,
+        workspace_id: &str,
+        user_id: String,
+        role: MemberRole,
+        requester_id: String,
+    ) -> Result<(), String> {
+        let workspace = self
+            .workspaces
+            .get_mut(workspace_id)
             .ok_or_else(|| "Workspace not found".to_string())?;
-        
+
         // Check if requester is owner or admin (simplified)
         if workspace.owner_id != requester_id && !workspace.member_ids.contains(&requester_id) {
             return Err("Unauthorized".to_string());
         }
-        
+
         workspace.member_ids.push(user_id.clone());
-        
+
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         self.log_audit(AuditLog {
             id: Uuid::new_v4().to_string(),
             timestamp: now,
@@ -164,7 +172,7 @@ impl CloudSyncManager {
             details: format!("Added member {} with role {:?}", user_id, role),
             ip_address: None,
         });
-        
+
         Ok(())
     }
 

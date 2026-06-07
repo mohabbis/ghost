@@ -67,7 +67,7 @@ impl ExecutionRecord {
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
+                .as_secs(),
         );
         self.duration_ms = Some(duration_ms);
         self.events_processed = events_processed;
@@ -80,7 +80,7 @@ impl ExecutionRecord {
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
+                .as_secs(),
         );
         self.error_message = Some(error.to_string());
         self.failure_screenshot = screenshot_path;
@@ -93,7 +93,7 @@ impl ExecutionRecord {
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
+                .as_secs(),
         );
     }
 }
@@ -108,10 +108,10 @@ impl ExecutionHistory {
     pub fn new() -> anyhow::Result<Self> {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
-        
+
         let logs_dir = data_dir.join("ghost").join("logs");
         fs::create_dir_all(&logs_dir)?;
-        
+
         Ok(Self { logs_dir })
     }
 
@@ -126,7 +126,7 @@ impl ExecutionHistory {
     /// Load all execution history for a workflow
     pub fn get_history(&self, workflow_name: &str) -> anyhow::Result<Vec<ExecutionRecord>> {
         let mut records = Vec::new();
-        
+
         if !self.logs_dir.exists() {
             return Ok(records);
         }
@@ -134,7 +134,7 @@ impl ExecutionHistory {
         for entry in fs::read_dir(&self.logs_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
@@ -155,7 +155,7 @@ impl ExecutionHistory {
     /// Load all execution records
     pub fn get_all_records(&self, limit: Option<usize>) -> anyhow::Result<Vec<ExecutionRecord>> {
         let mut records = Vec::new();
-        
+
         if !self.logs_dir.exists() {
             return Ok(records);
         }
@@ -163,7 +163,7 @@ impl ExecutionHistory {
         for entry in fs::read_dir(&self.logs_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
@@ -187,12 +187,13 @@ impl ExecutionHistory {
     pub fn get_success_rate(&self, workflow_name: &str) -> anyhow::Result<f32> {
         let records = self.get_history(workflow_name)?;
         let total = records.len();
-        
+
         if total == 0 {
             return Ok(1.0);
         }
 
-        let success_count = records.iter()
+        let success_count = records
+            .iter()
             .filter(|r| r.status == ExecutionStatus::Success)
             .count();
 
@@ -202,10 +203,8 @@ impl ExecutionHistory {
     /// Calculate average duration for a workflow
     pub fn get_avg_duration(&self, workflow_name: &str) -> anyhow::Result<u64> {
         let records = self.get_history(workflow_name)?;
-        
-        let durations: Vec<u64> = records.iter()
-            .filter_map(|r| r.duration_ms)
-            .collect();
+
+        let durations: Vec<u64> = records.iter().filter_map(|r| r.duration_ms).collect();
 
         if durations.is_empty() {
             return Ok(0);
@@ -218,7 +217,7 @@ impl ExecutionHistory {
     /// Find failure hotspots
     pub fn get_failure_hotspots(&self, workflow_name: &str) -> anyhow::Result<Vec<String>> {
         let records = self.get_history(workflow_name)?;
-        
+
         let mut hotspots = Vec::new();
         for record in records {
             if let Some(error) = &record.error_message {
@@ -244,7 +243,7 @@ impl ExecutionHistory {
         for entry in fs::read_dir(&self.logs_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
                     if record.start_time < cutoff {

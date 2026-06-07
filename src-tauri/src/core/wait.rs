@@ -45,7 +45,8 @@ impl VariableContext {
                 Ok(email)
             }
             VarType::RandomString { length } => {
-                const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+                const CHARSET: &[u8] =
+                    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
                 use std::time::{SystemTime, UNIX_EPOCH};
                 let nanos = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -78,10 +79,7 @@ impl VariableContext {
                     .split(',')
                     .map(|s| s.trim())
                     .collect();
-                let col_idx = headers
-                    .iter()
-                    .position(|h| h == column)
-                    .unwrap_or(0);
+                let col_idx = headers.iter().position(|h| h == column).unwrap_or(0);
                 let row_idx = row.unwrap_or(0);
                 let data_row = lines
                     .nth(row_idx)
@@ -112,35 +110,24 @@ impl VariableContext {
 }
 
 /// Check if a wait condition is satisfied
-pub fn check_wait_condition(
-    condition: &WaitCondition,
-    locator: &dyn ElementLocator,
-) -> WaitResult {
+pub fn check_wait_condition(condition: &WaitCondition, locator: &dyn ElementLocator) -> WaitResult {
     match condition {
-        WaitCondition::ElementVisible { selector } => {
-            match resolve_selector(selector, locator) {
-                Ok((x, y)) => {
-                    match locator.inspect_at(x, y) {
-                        Ok(Some(_)) => WaitResult::Success,
-                        Ok(None) => WaitResult::Timeout,
-                        Err(e) => WaitResult::Error(e.to_string()),
-                    }
-                }
+        WaitCondition::ElementVisible { selector } => match resolve_selector(selector, locator) {
+            Ok((x, y)) => match locator.inspect_at(x, y) {
+                Ok(Some(_)) => WaitResult::Success,
+                Ok(None) => WaitResult::Timeout,
                 Err(e) => WaitResult::Error(e.to_string()),
-            }
-        }
-        WaitCondition::ElementExists { selector } => {
-            match resolve_selector(selector, locator) {
-                Ok((x, y)) => {
-                    match locator.inspect_at(x, y) {
-                        Ok(Some(_)) => WaitResult::Success,
-                        Ok(None) => WaitResult::Timeout,
-                        Err(e) => WaitResult::Error(e.to_string()),
-                    }
-                }
+            },
+            Err(e) => WaitResult::Error(e.to_string()),
+        },
+        WaitCondition::ElementExists { selector } => match resolve_selector(selector, locator) {
+            Ok((x, y)) => match locator.inspect_at(x, y) {
+                Ok(Some(_)) => WaitResult::Success,
+                Ok(None) => WaitResult::Timeout,
                 Err(e) => WaitResult::Error(e.to_string()),
-            }
-        }
+            },
+            Err(e) => WaitResult::Error(e.to_string()),
+        },
         WaitCondition::TextPresent { text } => {
             // Search for element containing the text via accessibility API
             for y in (0..1000).step_by(50) {
@@ -154,28 +141,27 @@ pub fn check_wait_condition(
             }
             WaitResult::Timeout
         }
-        WaitCondition::ImageMatches { baseline, threshold } => {
+        WaitCondition::ImageMatches {
+            baseline,
+            threshold,
+        } => {
             use crate::core::vision;
-            
+
             // Capture current screen and compare to baseline
             match vision::capture_screenshot() {
-                Ok(img_bytes) => {
-                    match image::load_from_memory(&img_bytes) {
-                        Ok(current_img) => {
-                            match vision::compare_images(baseline, &current_img) {
-                                Ok(similarity) => {
-                                    if similarity >= *threshold {
-                                        WaitResult::Success
-                                    } else {
-                                        WaitResult::Timeout
-                                    }
-                                }
-                                Err(e) => WaitResult::Error(e.to_string()),
+                Ok(img_bytes) => match image::load_from_memory(&img_bytes) {
+                    Ok(current_img) => match vision::compare_images(baseline, &current_img) {
+                        Ok(similarity) => {
+                            if similarity >= *threshold {
+                                WaitResult::Success
+                            } else {
+                                WaitResult::Timeout
                             }
                         }
                         Err(e) => WaitResult::Error(e.to_string()),
-                    }
-                }
+                    },
+                    Err(e) => WaitResult::Error(e.to_string()),
+                },
                 Err(e) => WaitResult::Error(e.to_string()),
             }
         }
@@ -226,7 +212,7 @@ pub fn resolve_selector(
             // This is a simplified implementation - real version would iterate
             // through visible elements and match attributes
             let mut found: Option<(i32, i32)> = None;
-            
+
             // Search common screen positions for matching elements
             for y in 0..1000 {
                 for x in 0..1000 {
@@ -261,12 +247,13 @@ pub fn smart_wait(
     poll_interval_ms: u64,
 ) -> anyhow::Result<()> {
     let result = wait_for_condition(condition, locator, timeout_ms, poll_interval_ms);
-    
+
     match result {
         WaitResult::Success => Ok(()),
-        WaitResult::Timeout => {
-            Err(anyhow::anyhow!("Wait condition timed out after {}ms", timeout_ms))
-        }
+        WaitResult::Timeout => Err(anyhow::anyhow!(
+            "Wait condition timed out after {}ms",
+            timeout_ms
+        )),
         WaitResult::Error(e) => Err(anyhow::anyhow!("Wait error: {}", e)),
     }
 }

@@ -6,8 +6,8 @@ use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Se
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -206,7 +206,7 @@ impl InputRecorder for MacosRecorder {
     fn start(&self, tx: mpsc::Sender<InputEvent>) -> anyhow::Result<()> {
         let state_clone = self.state.clone();
         let is_running = Arc::new(AtomicBool::new(true));
-        
+
         thread::spawn(move || {
             // Event mask for mouse and keyboard events
             let event_mask: u64 = (1 << kCGMouseEventLeftMouseDown)
@@ -229,17 +229,15 @@ impl InputRecorder for MacosRecorder {
                 );
 
                 if tap.is_null() {
-                    eprintln!("Failed to create CGEventTap - Accessibility permissions may be required");
+                    eprintln!(
+                        "Failed to create CGEventTap - Accessibility permissions may be required"
+                    );
                     return;
                 }
 
                 let run_loop_source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
                 let current_run_loop = CFRunLoopGetCurrent();
-                CFRunLoopAddSource(
-                    current_run_loop,
-                    run_loop_source,
-                    kCFRunLoopCommonModes,
-                );
+                CFRunLoopAddSource(current_run_loop, run_loop_source, kCFRunLoopCommonModes);
 
                 // Enable the tap
                 CGEventTapEnable(tap, 1);
@@ -284,7 +282,11 @@ unsafe extern "C" fn cg_event_callback(
             // Get absolute screen coordinates using kCGMouseEventX and kCGMouseEventY
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
-            let button = if etype == kCGMouseEventLeftMouseDown { 0 } else { 1 };
+            let button = if etype == kCGMouseEventLeftMouseDown {
+                0
+            } else {
+                1
+            };
             InputEvent::MouseClick {
                 x,
                 y,
@@ -299,7 +301,11 @@ unsafe extern "C" fn cg_event_callback(
         kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
-            let button = if etype == kCGMouseEventRightMouseDown { 2 } else { 3 };
+            let button = if etype == kCGMouseEventRightMouseDown {
+                2
+            } else {
+                3
+            };
             InputEvent::MouseClick {
                 x,
                 y,
@@ -353,14 +359,10 @@ impl ElementLocator for MacosLocator {
         unsafe {
             // Get system-wide accessibility element
             let system_wide = AXUIElementCreateSystemWide();
-            
+
             let mut element: AXUIElementRef = std::ptr::null_mut();
-            let result = AXUIElementCopyElementAtPosition(
-                system_wide,
-                x as f32,
-                y as f32,
-                &mut element,
-            );
+            let result =
+                AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
 
             if result != kAXErrorSuccess || element.is_null() {
                 return Ok(None);
@@ -368,7 +370,7 @@ impl ElementLocator for MacosLocator {
 
             // Extract role
             let role = get_ax_string_attribute(element, kAXRoleAttribute);
-            
+
             // Extract name/title
             let name = get_ax_string_attribute(element, kAXTitleAttribute)
                 .or_else(|| get_ax_string_attribute(element, kAXValueAttribute))
@@ -397,9 +399,9 @@ unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> O
     if cf_string.is_null() {
         return None;
     }
-    
+
     let mut value: CFTypeRef = std::ptr::null();
-    
+
     if AXUIElementCopyAttributeValue(element, cf_string, &mut value) != kAXErrorSuccess {
         CFRelease(cf_string);
         return None;
@@ -420,8 +422,19 @@ unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> O
         let max_size = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8);
         if max_size > 0 {
             let mut buffer = vec![0u8; (max_size + 1) as usize];
-            if CFStringGetCString(value, buffer.as_mut_ptr() as *mut c_char, max_size + 1, kCFStringEncodingUTF8) != 0 {
-                Some(String::from_utf8_lossy(&buffer[..buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len())]).to_string())
+            if CFStringGetCString(
+                value,
+                buffer.as_mut_ptr() as *mut c_char,
+                max_size + 1,
+                kCFStringEncodingUTF8,
+            ) != 0
+            {
+                Some(
+                    String::from_utf8_lossy(
+                        &buffer[..buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len())],
+                    )
+                    .to_string(),
+                )
             } else {
                 None
             }
@@ -459,7 +472,7 @@ impl MacosReplayer {
             speed_factor: Arc::new(Mutex::new(1.0)),
         }
     }
-    
+
     /// Set playback speed factor (1.0 = normal, 2.0 = 2x speed, etc.)
     fn set_speed(&self, factor: f32) {
         *self.speed_factor.lock().unwrap() = factor.max(0.1);
@@ -468,9 +481,9 @@ impl MacosReplayer {
 
 impl ReplayEngine for MacosReplayer {
     fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
-        use crate::core::wait::VariableContext;
         use crate::core::vision;
-        
+        use crate::core::wait::VariableContext;
+
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
         let mut var_context = VariableContext::new();
@@ -481,11 +494,18 @@ impl ReplayEngine for MacosReplayer {
             }
 
             match event {
-                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                InputEvent::MouseClick {
+                    x,
+                    y,
+                    button,
+                    element,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(0);
                     let mut attempts = 0;
                     let mut success = false;
-                    
+
                     while attempts <= max_retries && !success {
                         enigo.move_mouse(*x, *y, Coordinate::Abs)?;
 
@@ -500,7 +520,13 @@ impl ReplayEngine for MacosReplayer {
                         attempts += 1;
                     }
                 }
-                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                InputEvent::Key {
+                    code,
+                    chars,
+                    action,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(0);
 
                     for _ in 0..=max_retries {
@@ -532,7 +558,11 @@ impl ReplayEngine for MacosReplayer {
                     thread::sleep(Duration::from_millis(adjusted_ms));
                 }
                 // Phase 3: Smart Wait Events
-                InputEvent::Wait { condition, timeout_ms, poll_interval_ms } => {
+                InputEvent::Wait {
+                    condition,
+                    timeout_ms,
+                    poll_interval_ms,
+                } => {
                     tracing::info!("Waiting for condition: {:?}", condition);
                     // Use a local locator for wait condition checking
                     let locator = crate::platform::macos::MacosBackend::locator();
@@ -553,26 +583,50 @@ impl ReplayEngine for MacosReplayer {
                     }
                 }
                 // Phase 3: Visual Regression Check
-                InputEvent::VisualCheck { baseline_screenshot, threshold, on_mismatch } => {
+                InputEvent::VisualCheck {
+                    baseline_screenshot,
+                    threshold,
+                    on_mismatch,
+                } => {
                     // Capture current screen
                     match vision::capture_screenshot() {
                         Ok(img_bytes) => {
                             if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                                if let Ok(similarity) = vision::compare_images(baseline_screenshot, &current_img) {
+                                if let Ok(similarity) =
+                                    vision::compare_images(baseline_screenshot, &current_img)
+                                {
                                     if similarity < *threshold {
-                                        tracing::warn!("Visual mismatch detected: {:.2} < {}", similarity, threshold);
+                                        tracing::warn!(
+                                            "Visual mismatch detected: {:.2} < {}",
+                                            similarity,
+                                            threshold
+                                        );
                                         // Handle mismatch action
                                         match on_mismatch {
                                             crate::core::events::MismatchAction::Fail => {
-                                                return Err(anyhow::anyhow!("Visual regression detected"));
+                                                return Err(anyhow::anyhow!(
+                                                    "Visual regression detected"
+                                                ));
                                             }
-                                            crate::core::events::MismatchAction::Retry { attempts } => {
+                                            crate::core::events::MismatchAction::Retry {
+                                                attempts,
+                                            } => {
                                                 // Retry the check
                                                 for _ in 0..*attempts {
                                                     thread::sleep(Duration::from_millis(500));
-                                                    if let Ok(new_img) = vision::capture_screenshot() {
-                                                        if let Ok(new_img) = image::load_from_memory(&new_img) {
-                                                            if vision::compare_images(baseline_screenshot, &new_img).unwrap_or(1.0) >= *threshold {
+                                                    if let Ok(new_img) =
+                                                        vision::capture_screenshot()
+                                                    {
+                                                        if let Ok(new_img) =
+                                                            image::load_from_memory(&new_img)
+                                                        {
+                                                            if vision::compare_images(
+                                                                baseline_screenshot,
+                                                                &new_img,
+                                                            )
+                                                            .unwrap_or(1.0)
+                                                                >= *threshold
+                                                            {
                                                                 break;
                                                             }
                                                         }
@@ -593,8 +647,13 @@ impl ReplayEngine for MacosReplayer {
                     }
                 }
                 // Phase 3: Variable Injection
-                InputEvent::Variable { name, value_template, var_type } => {
-                    let resolved = var_context.resolve(name, var_type)
+                InputEvent::Variable {
+                    name,
+                    value_template,
+                    var_type,
+                } => {
+                    let resolved = var_context
+                        .resolve(name, var_type)
                         .unwrap_or_else(|_| value_template.clone());
                     var_context.set(name.clone(), resolved);
                 }
@@ -607,12 +666,12 @@ impl ReplayEngine for MacosReplayer {
 
         Ok(())
     }
-    
+
     fn execute_with_reliability(
-        &self, 
-        events: &[InputEvent], 
+        &self,
+        events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
-        reliability: &crate::core::events::ReliabilitySettings
+        reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
@@ -623,16 +682,23 @@ impl ReplayEngine for MacosReplayer {
             }
 
             match event {
-                InputEvent::MouseClick { x, y, button, element, retry_count, .. } => {
+                InputEvent::MouseClick {
+                    x,
+                    y,
+                    button,
+                    element,
+                    retry_count,
+                    ..
+                } => {
                     // Validate element if configured
                     if reliability.validate_elements && element.is_none() {
                         // Could add element inspection here
                     }
-                    
+
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
                     let mut attempts = 0;
                     let mut success = false;
-                    
+
                     while attempts <= max_retries && !success {
                         enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                         let mouse_button = match button {
@@ -645,13 +711,20 @@ impl ReplayEngine for MacosReplayer {
                         attempts += 1;
 
                         if !success && attempts <= max_retries && reliability.continue_on_error {
-                            let backoff = reliability.retry_config.backoff_ms *
-                                (reliability.retry_config.backoff_multiplier as u64).pow(attempts - 1);
+                            let backoff = reliability.retry_config.backoff_ms
+                                * (reliability.retry_config.backoff_multiplier as u64)
+                                    .pow(attempts - 1);
                             std::thread::sleep(Duration::from_millis(backoff));
                         }
                     }
                 }
-                InputEvent::Key { code, chars, action, retry_count, .. } => {
+                InputEvent::Key {
+                    code,
+                    chars,
+                    action,
+                    retry_count,
+                    ..
+                } => {
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
 
                     for attempt in 0..=max_retries {
@@ -674,8 +747,8 @@ impl ReplayEngine for MacosReplayer {
                         }
 
                         if attempt < max_retries {
-                            let backoff = reliability.retry_config.backoff_ms *
-                                (reliability.retry_config.backoff_multiplier as u64);
+                            let backoff = reliability.retry_config.backoff_ms
+                                * (reliability.retry_config.backoff_multiplier as u64);
                             std::thread::sleep(Duration::from_millis(backoff));
                         }
                     }
