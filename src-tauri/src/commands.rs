@@ -3,7 +3,7 @@
 use crate::engine::GhostEngine;
 use crate::core::events::InputEvent;
 use std::sync::mpsc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 /// Spawns a thread to bridge native events → Tauri IPC.
 #[tauri::command]
 pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(), String> {
@@ -12,14 +12,18 @@ pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(),
     // Start the native recorder
     engine.start_recording(tx).map_err(|e| e.to_string())?;
 
-    // Spawn bridge thread: consume from mpsc and emit to frontend
+    // Spawn bridge thread: consume from mpsc and emit to frontend.
+    // `AppHandle` is `Clone + 'static`, so we re-fetch the engine state
+    // inside the thread instead of capturing the borrowed `State`.
+    let app_handle = app.clone();
     std::thread::spawn(move || {
         while let Ok(event) = rx.recv() {
             // Buffer event in engine
+            let engine = app_handle.state::<GhostEngine>();
             engine.buffer_event(event.clone());
-            
+
             // Emit serialized event to frontend
-            if let Err(e) = app.emit("ghost:event", event) {
+            if let Err(e) = app_handle.emit("ghost:event", event) {
                 eprintln!("Failed to emit event: {}", e);
                 break;
             }
@@ -236,7 +240,7 @@ pub fn save_workflow_with_sidecar(
     use std::fs;
     use std::time::SystemTime;
 
-    let tagged_events = engine.analyze_and_tag_workflow(events.clone())?;
+    let tagged_events = engine.analyze_and_tag_workflow(events.clone()).map_err(|e| e.to_string())?;
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
@@ -245,7 +249,8 @@ pub fn save_workflow_with_sidecar(
     // Save main workflow file
     let workflow = engine.create_workflow_with_details(&name, &tagged_events, &description, &tags);
     engine.save_workflow_with_metadata(&workflow)
-        .map(|p| p.to_string_lossy().to_string())?;
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| e.to_string())?;
 
     // Save sidecar metadata file
     let data_dir = dirs::data_dir()
@@ -466,10 +471,9 @@ pub fn get_execution_history(
     engine: State<GhostEngine>
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
     let tracker = engine.get_execution_tracker();
-    if let Some(ref history) = tracker {
-        history.get_history(&workflow_name).map_err(|e| e.to_string())
-    } else {
-        Ok(Vec::new())
+    match tracker.as_ref().and_then(|guard| guard.as_ref()) {
+        Some(history) => history.get_history(&workflow_name).map_err(|e| e.to_string()),
+        None => Ok(Vec::new()),
     }
 }
 
@@ -480,10 +484,9 @@ pub fn get_all_executions(
     engine: State<GhostEngine>
 ) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
     let tracker = engine.get_execution_tracker();
-    if let Some(ref history) = tracker {
-        history.get_all_records(limit).map_err(|e| e.to_string())
-    } else {
-        Ok(Vec::new())
+    match tracker.as_ref().and_then(|guard| guard.as_ref()) {
+        Some(history) => history.get_all_records(limit).map_err(|e| e.to_string()),
+        None => Ok(Vec::new()),
     }
 }
 
@@ -494,7 +497,7 @@ pub fn get_workflow_analytics(
     engine: State<GhostEngine>
 ) -> Result<serde_json::Value, String> {
     let tracker = engine.get_execution_tracker();
-    if let Some(ref history) = tracker {
+    if let Some(history) = tracker.as_ref().and_then(|guard| guard.as_ref()) {
         let success_rate = history.get_success_rate(&workflow_name).unwrap_or(1.0);
         let avg_duration = history.get_avg_duration(&workflow_name).unwrap_or(0);
         let hotspots = history.get_failure_hotspots(&workflow_name).unwrap_or_default();

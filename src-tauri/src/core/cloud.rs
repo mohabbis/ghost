@@ -116,7 +116,7 @@ impl CloudSyncManager {
             id: id.clone(),
             name,
             description: String::new(),
-            owner_id,
+            owner_id: owner_id.clone(),
             member_ids: vec![owner_id.clone()],
             workflows: Vec::new(),
             created_at: now,

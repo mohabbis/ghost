@@ -316,9 +316,9 @@ pub mod tracker {
 
         pub fn complete(&self) -> anyhow::Result<()> {
             let mut inner = self.inner.lock().unwrap();
+            let events_count = inner.events_count;
+            let duration_ms = inner.start_time.elapsed().as_millis() as u64;
             if let Some(ref mut record) = inner.active {
-                let events_count = inner.events_count;
-                let duration_ms = inner.start_time.elapsed().as_millis() as u64;
                 record.complete(events_count, duration_ms);
             }
             if let Some(record) = inner.active.take() {

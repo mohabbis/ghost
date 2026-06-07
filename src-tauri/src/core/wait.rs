@@ -248,7 +248,7 @@ pub fn resolve_selector(
         }
         ElementSelector::OCR { text, fuzzy } => {
             // TODO: Implement OCR-based element location
-            anyhow::Err(anyhow::anyhow!("OCR selector not implemented"))
+            Err(anyhow::anyhow!("OCR selector not implemented"))
         }
     }
 }

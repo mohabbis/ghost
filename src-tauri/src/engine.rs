@@ -11,7 +11,7 @@ use crate::core::vision;
 use crate::core::execution::{ExecutionHistory, ExecutionRecord, ExecutionStatus};
 use crate::core::knowledge::{KnowledgeBase, LearnedPattern, ProactiveSuggestion};
 use image::DynamicImage;
-use enigo::{Enigo, MouseButton, MouseControllable};
+use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::path::PathBuf;
@@ -283,6 +283,7 @@ impl GhostEngine {
                 reliability_score: self.analyzer.calculate_reliability(events),
                 element_confidence: self.analyzer.calculate_element_richness(events),
             },
+            reliability: None,
         }
     }
 
@@ -343,6 +344,7 @@ impl GhostEngine {
                 reliability_score: self.analyzer.calculate_reliability(events),
                 element_confidence: self.analyzer.calculate_element_richness(events),
             },
+            reliability: None,
         }
     }
 
@@ -482,7 +484,7 @@ impl GhostEngine {
     ) -> InputEvent {
         match event {
             InputEvent::MouseClick { x, y, button, element, .. } => {
-                let semantic_tag = element.as_ref()
+                let semantic_tag = element.clone()
                     .or_else(|| self.find_closest_element(*x, *y, elements))
                     .map(|el| crate::core::events::SemanticTag {
                         action: "click".to_string(),
@@ -587,7 +589,7 @@ impl GhostEngine {
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
         
-        let mut enigo = Enigo::new();
+        let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.playback_speed.lock().unwrap();
 
         for (idx, event) in events.iter().enumerate() {
@@ -597,38 +599,40 @@ impl GhostEngine {
 
             // Check if we need to perform a visual check at this index
             let checkpoint = visual_checkpoints.iter().find(|c| c.event_index == idx);
-            
+
             // Execute the event
             match event {
                 InputEvent::MouseClick { x, y, button, .. } => {
-                    enigo.mouse_move_to(*x, *y);
+                    enigo.move_mouse(*x, *y, Coordinate::Abs)?;
                     let mouse_button = match button {
-                        0 | 1 => MouseButton::Left,
-                        2 | 3 => MouseButton::Right,
-                        _ => MouseButton::Left,
+                        0 | 1 => Button::Left,
+                        2 | 3 => Button::Right,
+                        _ => Button::Left,
                     };
-                    enigo.mouse_click(mouse_button);
+                    enigo.button(mouse_button, Direction::Click)?;
                 }
                 InputEvent::Key { code, chars, action, .. } => {
+                    let key = if !chars.is_empty() {
+                        Key::Unicode(chars.chars().next().unwrap_or(' '))
+                    } else {
+                        Key::Other(*code as u32)
+                    };
                     match action {
                         KeyAction::Down => {
-                            if !chars.is_empty() {
-                                enigo.key_down(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                            } else {
-                                enigo.key_down(enigo::Key::Raw(*code));
-                            }
+                            enigo.key(key, Direction::Press)?;
                         }
                         KeyAction::Up => {
-                            if !chars.is_empty() {
-                                enigo.key_up(enigo::Key::Layout(chars.chars().next().unwrap_or(' ')));
-                            } else {
-                                enigo.key_up(enigo::Key::Raw(*code));
-                            }
+                            enigo.key(key, Direction::Release)?;
                         }
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
-                    enigo.scroll(*dx, *dy);
+                    if *dx != 0 {
+                        enigo.scroll(*dx, Axis::Horizontal)?;
+                    }
+                    if *dy != 0 {
+                        enigo.scroll(*dy, Axis::Vertical)?;
+                    }
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
