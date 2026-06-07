@@ -114,7 +114,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           echo "🚀 Deploying to Vercel..."
-          vercel deploy --prod --token=$VERCEL_TOKEN --yes
+          vercel deploy --prod --token="${VERCEL_TOKEN}" --yes
           echo ""
           echo "✅ Deployment complete!"
           echo "🌐 Website: https://ghost.muharafiq.com"
