@@ -9,9 +9,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Ghost is a macOS-first AI automation widget that watches repetitive workflows and replays them for you."
+      content="Ghost is your smart AI parrot helper — an intelligent desktop companion that observes your behavior, learns patterns, and provides proactive help."
     />
-    <title>Ghost — automate the work you repeat</title>
+    <title>Ghost — Your smart AI parrot helper</title>
     <script type="module" src="/main.js" defer></script>
   </head>
 
@@ -23,235 +23,617 @@
           <span>Ghost</span>
         </a>
         <nav class="nav__links" aria-label="Page sections">
-          <a href="#how-it-works">How it works</a>
-          <a href="#use-cases">Use cases</a>
-          <a href="#app-preview">The app</a>
-          <a href="#preview">Preview</a>
+          <a href="#how-it-works">How it helps</a>
+          <a href="#use-cases">Examples</a>
+          <a href="#demo">Try it</a>
+          <a href="#download">Download</a>
         </nav>
-        <a class="btn btn--small" href="#waitlist">Join waitlist</a>
+        <a class="btn btn--small" href="#download">Download</a>
       </header>
 
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero__copy">
-            <p class="eyebrow">Mac & Windows automation, trained by your behavior</p>
-            <h1 id="hero-title">Show Ghost once. Let it repeat the workflow forever.</h1>
+            <p class="eyebrow">Your smart AI parrot helper</p>
+            <h1 id="hero-title">Hey, I noticed you... <span class="typed-text" id="typed-text"></span></h1>
             <p class="hero__lede">
-              Ghost watches your desktop activity, learns repetitive patterns, and offers proactive suggestions. 
-              When you show it a workflow once, it turns those actions into reliable automations you can replay.
+              Ghost is your intelligent desktop companion that watches, learns, and proactively helps with repetitive tasks.
+              Like a clever parrot, it observes your patterns and offers smart suggestions before you even ask.
             </p>
             <div class="hero__actions">
-              <a class="btn" href="#waitlist">Request early access</a>
-              <a class="btn btn--ghost" href="#how-it-works">See how it works</a>
+              <!-- Mac -->
+              <a class="btn btn--download" data-show="mac mobile other"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
+                 aria-label="Download Ghost for macOS">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                Download for Mac
+              </a>
+              <!-- Windows -->
+              <a class="btn btn--download" data-show="windows mobile other"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
+                 aria-label="Download Ghost for Windows">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
+                Download for Windows
+              </a>
+              <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
             </div>
+            <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free</p>
+            <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free</p>
+            <p class="download-note" data-show="mobile other">Desktop app available now for macOS and Windows &middot; Free</p>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
-                <dt>3 steps</dt>
-                <dd>Observe, understand, replay</dd>
+                <dt>🤖 Observant</dt>
+                <dd>Watches your workflows silently</dd>
               </div>
               <div>
-                <dt>macOS <span style="opacity: 0.5;">• Windows</span></dt>
-                <dd>Built for native workflows</dd>
+                <dt>💡 Proactive</dt>
+                <dd>Offers help before you ask</dd>
               </div>
               <div>
-                <dt>0 scripts</dt>
-                <dd>No brittle setup required</dd>
+                <dt>🦜 Learning</dt>
+                <dd>Adapts to your patterns</dd>
               </div>
             </dl>
           </div>
 
-          <aside class="hero-card" aria-label="Ghost recording preview">
-            <div class="ai-parrot-container" aria-label="AI Parrot Assistant">
-              <svg class="ai-parrot" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="parrotGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#8d7bff" />
-                    <stop offset="50%" stop-color="#c8b6ff" />
-                    <stop offset="100%" stop-color="#ffb86b" />
-                  </linearGradient>
-                </defs>
-                <ellipse cx="50" cy="70" rx="35" ry="25" fill="url(#parrotGradient)" opacity="0.3" />
-                <g class="parrot-head">
-                  <circle cx="50" cy="45" r="22" fill="url(#parrotGradient)" />
-                  <circle cx="42" cy="42" r="4" fill="#070813" />
-                  <circle cx="58" cy="42" r="4" fill="#070813" />
-                  <path d="M45 52 Q50 58 55 52" stroke="#070813" stroke-width="2" fill="none" />
-                  <polygon points="32,35 28,25 34,28" fill="#ffb86b" />
-                </g>
-              </svg>
-              <div class="parrot-message" id="parrotMessage">
-                Hey, I noticed you...
-                <span class="typing-cursor">|</span>
-              </div>
-            </div>
+          <aside class="hero-card" aria-label="Ghost AI parrot in action">
             <div class="window-bar" aria-hidden="true">
               <span></span><span></span><span></span>
             </div>
-            <div class="recording-status">
-              <span class="pulse" aria-hidden="true"></span> Ready to record
+
+            <!-- Parrot avatar -->
+            <div class="parrot-avatar" aria-hidden="true">
+              <div class="parrot-face">
+                <div class="parrot-eye"></div>
+                <div class="parrot-eye"></div>
+                <div class="parrot-beak"></div>
+              </div>
             </div>
-            <div class="recording-controls" style="display: flex; gap: 8px; margin: 16px 0;">
-              <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
-              <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
-              <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()" disabled>Replay</button>
+
+            <!-- Speech bubble — updated by sim + real app -->
+            <div class="smart-insights" id="smart-insights">
+              <div class="insight-bubble" id="insight-bubble">
+                <span class="insight-icon">🦜</span>
+                <span class="insight-text" id="insight-text">Watching your screen silently…</span>
+              </div>
             </div>
-            <ol class="timeline">
-              <li>
-                <span class="timeline__step">01</span>
-                <div>
-                  <strong>Detect the target</strong>
-                  <p>Finds the app, element, and context you clicked.</p>
-                </div>
-              </li>
-              <li>
-                <span class="timeline__step">02</span>
-                <div>
-                  <strong>Infer the intent</strong>
-                  <p>Groups repeatable actions into a reusable task.</p>
-                </div>
-              </li>
-              <li>
-                <span class="timeline__step">03</span>
-                <div>
-                  <strong>Replay safely</strong>
-                  <p>Runs the workflow back with review points when needed.</p>
-                </div>
-              </li>
-            </ol>
+
+            <div class="notifications" id="notifications"></div>
+
+            <!-- ── Browser simulation (visible on the website) ── -->
+            <div class="ghost-sim" id="ghost-sim">
+              <div class="sim-status-bar">
+                <span class="pulse" id="sim-pulse" aria-hidden="true"></span>
+                <span class="sim-phase" id="sim-phase">Observing…</span>
+                <span class="sim-progress-wrap"><span class="sim-progress" id="sim-progress"></span></span>
+              </div>
+              <ol class="sim-steps" id="sim-steps" aria-label="Live simulation"></ol>
+              <div class="sim-footer" id="sim-footer" hidden>
+                <span class="demo-savings">✅ Workflow saved · Runs automatically next time</span>
+                <a class="btn btn--small" href="#download">Download Ghost</a>
+              </div>
+            </div>
+
+            <!-- ── Real Tauri app controls (shown only inside the app) ── -->
+            <div class="tauri-only" hidden>
+              <div class="recording-status">
+                <span class="pulse" aria-hidden="true"></span>
+                Ready to learn your patterns
+              </div>
+              <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+                <button class="btn btn--small" id="recordBtn" onclick="startRecording()">Start Recording</button>
+                <button class="btn btn--ghost btn--small" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
+                <button class="btn btn--ghost btn--small" id="replayBtn" onclick="replayWorkflow()">Replay</button>
+                <button class="btn btn--ghost btn--small" id="replayReliableBtn" onclick="replayWithReliability()" disabled>Replay Reliable</button>
+                <button class="btn btn--ghost btn--small" id="cancelBtn" onclick="cancelReplay()" disabled>Cancel</button>
+                <button class="btn btn--ghost btn--small" id="pauseBtn" onclick="pauseReplay()" disabled>Pause</button>
+                <button class="btn btn--ghost btn--small" id="resumeBtn" onclick="resumeReplay()" disabled>Resume</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">
+                <button class="btn btn--ghost btn--small" onclick="saveWorkflow()">Save Workflow</button>
+                <button class="btn btn--ghost btn--small" onclick="saveWorkflowWithMetadata()">Save with AI</button>
+                <button class="btn btn--ghost btn--small" onclick="analyzeWorkflow()">Analyze</button>
+                <button class="btn btn--ghost btn--small" onclick="optimizeWorkflow()">Optimize</button>
+                <button class="btn btn--ghost btn--small" onclick="loadWorkflow()">Load Workflow</button>
+                <button class="btn btn--ghost btn--small" onclick="inspectElementAtCursor()">Inspect Element</button>
+                <select class="btn btn--ghost btn--small" onchange="setSpeed(parseFloat(this.value))" style="cursor:pointer;">
+                  <option value="0.5">0.5x</option>
+                  <option value="1.0" selected>1.0x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2.0">2.0x</option>
+                </select>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;">
+                <button class="btn btn--ghost btn--small" onclick="initCloudSync()">Init Cloud</button>
+                <button class="btn btn--ghost btn--small" onclick="cloudLogin()">Login</button>
+                <button class="btn btn--ghost btn--small" onclick="syncToCloud()">Sync</button>
+                <button class="btn btn--ghost btn--small" onclick="createWorkspace()">New Workspace</button>
+                <button class="btn btn--ghost btn--small" onclick="viewAuditLogs()">Audit Logs</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;border-top:1px solid #374151;padding-top:12px;">
+                <button class="btn btn--ghost btn--small" onclick="startSmartObserver()">Observer 🤖</button>
+                <button class="btn btn--ghost btn--small" onclick="stopSmartObserver()">Stop Observer</button>
+                <button class="btn btn--ghost btn--small" onclick="observeCurrentSession()">Observe Session</button>
+                <button class="btn btn--ghost btn--small" onclick="generateGeekInsights()">Geek Mode 🔧</button>
+              </div>
+              <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;border-top:1px solid #374151;padding-top:12px;">
+                <button class="btn btn--ghost btn--small" onclick="replayWithVisualCheck()">Visual Check 👁️</button>
+                <button class="btn btn--ghost btn--small" onclick="captureBaseline()">Capture Baseline</button>
+                <button class="btn btn--ghost btn--small" onclick="createDataSource()">Data Source 📊</button>
+                <button class="btn btn--ghost btn--small" onclick="loadVariablesFromSource()">Load Variables</button>
+              </div>
+              <div class="events-timeline" style="max-height:200px;overflow-y:auto;background:rgba(7,8,19,.42);border-radius:12px;padding:12px;margin-top:12px;">
+                <p style="color:var(--muted);font-size:.85rem;margin:0;">Events will appear here…</p>
+              </div>
+            </div>
           </aside>
         </section>
 
         <section id="how-it-works" class="section" aria-labelledby="how-title">
           <div class="section__heading">
-            <p class="eyebrow">How it works</p>
-            <h2 id="how-title">Automation without writing automation.</h2>
+            <p class="eyebrow">How it helps</p>
+            <h2 id="how-title">Your AI parrot watches, learns, and assists.</h2>
           </div>
           <div class="feature-grid">
             <article class="feature-card">
               <span class="feature-card__icon" aria-hidden="true">👁️</span>
               <h3>Observe</h3>
-              <p>Record a normal workflow across native macOS apps while Ghost captures the important actions.</p>
+              <p>Your parrot silently watches your desktop activity, learning your unique patterns and workflows.</p>
             </article>
             <article class="feature-card">
-              <span class="feature-card__icon" aria-hidden="true">🧠</span>
-              <h3>Understand</h3>
-              <p>Turn low-level clicks into a higher-level task plan that knows what should happen next.</p>
+              <span class="feature-card__icon" aria-hidden="true">🤖</span>
+              <h3>Learn</h3>
+              <p>It builds understanding of your intent and notices when you repeat the same actions.</p>
             </article>
             <article class="feature-card">
-              <span class="feature-card__icon" aria-hidden="true">⚡</span>
-              <h3>Replay</h3>
-              <p>Run the workflow again, skip the busywork, and keep control with checkpoints for sensitive steps.</p>
+              <span class="feature-card__icon" aria-hidden="true">💡</span>
+              <h3>Assist</h3>
+              <p>Like a helpful geek, it pops up with suggestions: "Hey, I noticed you do this every Tuesday..."</p>
             </article>
           </div>
         </section>
 
         <section id="use-cases" class="section split" aria-labelledby="use-title">
           <div>
-            <p class="eyebrow">Use cases</p>
-            <h2 id="use-title">Built for the chores that live outside your browser.</h2>
+            <p class="eyebrow">Proactive help examples</p>
+            <h2 id="use-title">Your AI parrot notices patterns and offers smart suggestions.</h2>
             <p>
-              Ghost is designed for operators, founders, and support teams who repeat the same desktop
-              flows every day but cannot justify a custom integration for each one.
+              Ghost acts like that geeky friend who's always watching and ready to help. It learns your habits
+              and speaks up when it sees something repetitive.
             </p>
           </div>
           <ul class="check-list">
-            <li>Copy customer context between internal tools and native apps.</li>
-            <li>Process invoices, screenshots, forms, and back-office queues.</li>
-            <li>Recreate QA paths without maintaining a brittle script.</li>
-            <li>Delegate repeatable research and admin routines to an AI helper.</li>
+            <li>🦜 "Hey, I noticed you copy-paste customer info every morning — want me to automate that?"</li>
+            <li>🦜 "Recognized your weekly report pattern — I can have it ready by 9am."</li>
+            <li>🦜 "I see you opening these 5 apps in the same order — let me set up a launcher."</li>
+            <li>🦜 "That form you fill out daily? I can pre-fill it and double-check your work."</li>
           </ul>
         </section>
 
-        <section id="app-preview" class="section cta" aria-labelledby="app-title" style="margin-top: 40px;">
-          <div>
-            <p class="eyebrow">Desktop app</p>
-            <h2 id="app-title">Your AI parrot lives in the menu bar.</h2>
-            <p>
-              Ghost runs quietly in your menu bar (macOS) or system tray (Windows), watching for patterns
-              and offering proactive help when it spots repetitive work. Click the parrot to see examples!
-            </p>
+        <!-- Talk to Ghost — Interactive Demo -->
+        <section id="demo" class="section" aria-labelledby="demo-title">
+          <div class="section__heading reveal">
+            <p class="eyebrow">Try it now</p>
+            <h2 id="demo-title">Talk to your AI parrot.</h2>
+            <p>Describe any repetitive task. Ghost will show you exactly how it would automate it.</p>
           </div>
-          <div style="display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;">
-            <div class="mockup-screen" style="background: #101226; border-radius: 12px; padding: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); flex: 1; min-width: 280px; max-width: 400px;">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                <span class="brand__mark" style="width: 24px; height: 24px; font-size: 12px;">🦜</span>
-                <strong style="color: var(--text); font-size: 14px;">Ghost Helper</strong>
-                <span style="margin-left: auto; color: var(--success); font-size: 11px;">● Observing</span>
-              </div>
-              
-              <div class="suggestion-bubble" style="background: rgba(141, 123, 255, 0.15); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;">
-                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
-                  <span style="color: var(--accent-warm); font-weight: 600;">🤖 Hey!</span> I noticed you copy-pasting between apps...<br>
-                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Automate this workflow</span>
-                </p>
-              </div>
-              
-              <div class="suggestion-bubble" style="background: rgba(255, 184, 107, 0.1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;">
-                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
-                  <span style="color: var(--accent-warm); font-weight: 600;">🦜 Tip:</span> That looks like your morning routine...<br>
-                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Save as "Morning Setup"</span>
-                </p>
-              </div>
-              
-              <div class="suggestion-bubble" style="background: rgba(131, 246, 196, 0.12); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;">
-                <p class="suggestion-text" style="font-size: 13px; margin: 0; color: var(--muted);">
-                  <span style="color: var(--accent-warm); font-weight: 600;">⚡ Geek Mode:</span> 12ms avg delay, bottleneck at step 2<br>
-                  <span style="color: var(--success); cursor: pointer; margin-left: 20px;">→ Show insights</span>
-                </p>
-              </div>
+
+          <div class="demo-shell reveal">
+            <!-- Quick-pick suggestions -->
+            <div class="demo-suggestions" role="group" aria-label="Example prompts">
+              <button class="demo-chip" data-prompt="Fill my timesheet every Friday at 5pm">⏰ Weekly timesheet</button>
+              <button class="demo-chip" data-prompt="Open my morning apps in the right order">🌅 Morning launch</button>
+              <button class="demo-chip" data-prompt="Copy my standup notes and post to Slack">💬 Daily standup</button>
+              <button class="demo-chip" data-prompt="Send a weekly summary email to my manager">📧 Weekly summary</button>
             </div>
-            
-            <div class="platform-support" style="flex: 1; min-width: 280px; max-width: 400px; text-align: left;">
-              <h3 style="font-size: 1.1rem; margin-bottom: 16px;">Coming to your platform</h3>
-              <ul style="list-style: none; padding: 0; margin: 0;">
-                <li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
-                  <span style="font-size: 1.5rem;">🍏</span>
+
+            <!-- Input row -->
+            <form class="demo-input-row" id="demo-form" autocomplete="off">
+              <div class="demo-parrot-icon" aria-hidden="true">🦜</div>
+              <input
+                id="demo-input"
+                class="demo-input"
+                type="text"
+                placeholder="What do you want me to automate?"
+                maxlength="200"
+                aria-label="Describe a task to automate"
+              />
+              <button class="btn btn--small demo-submit" type="submit" id="demo-submit">Ask Ghost</button>
+            </form>
+
+            <!-- Response area -->
+            <div class="demo-response" id="demo-response" aria-live="polite" hidden>
+              <!-- Thinking state -->
+              <div class="demo-thinking" id="demo-thinking" hidden>
+                <span class="demo-thinking__dot"></span>
+                <span class="demo-thinking__dot"></span>
+                <span class="demo-thinking__dot"></span>
+                <span>Ghost is planning your workflow…</span>
+              </div>
+
+              <!-- Result -->
+              <div class="demo-result" id="demo-result" hidden>
+                <div class="demo-result__header">
+                  <span class="demo-result__parrot" aria-hidden="true">🦜</span>
                   <div>
-                    <strong style="color: var(--text);">macOS</strong>
-                    <p style="margin: 0; color: var(--muted); font-size: 0.9rem;">Native CGEventTap, AXUIElement integration</p>
+                    <p class="demo-result__got-it">Got it! Here's your automation plan:</p>
+                    <p class="demo-result__task" id="demo-result-task"></p>
                   </div>
-                  <span style="margin-left: auto; color: var(--success); font-size: 0.8rem;">Available</span>
-                </li>
-                <li style="padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
-                  <span style="font-size: 1.5rem;">🪟</span>
-                  <div>
-                    <strong style="color: var(--text);">Windows</strong>
-                    <p style="margin: 0; color: var(--muted); font-size: 0.9rem;">Win32 Hooks, UI Automation API</p>
-                  </div>
-                  <span style="margin-left: auto; color: var(--accent-warm); font-size: 0.8rem;">Beta</span>
-                </li>
-              </ul>
+                  <div class="demo-badge" id="demo-badge"></div>
+                </div>
+
+                <ol class="demo-steps" id="demo-steps" aria-label="Workflow steps"></ol>
+
+                <div class="demo-result__footer">
+                  <span class="demo-savings" id="demo-savings"></span>
+                  <a class="btn btn--small" href="#download">Download Ghost to automate this →</a>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="preview" class="section cta" aria-labelledby="cta-title">
+        <!-- Download -->
+        <section id="download" class="section cta" aria-labelledby="download-title">
           <div>
-            <p class="eyebrow">Private preview</p>
-            <h2 id="cta-title">Bring Ghost into your workflow early.</h2>
-            <p>
-              We are opening a small preview for macOS teams with repetitive workflows that are too custom
-              for off-the-shelf automation.
+            <!-- Mac copy -->
+            <p class="eyebrow" data-show="mac">Available for Mac</p>
+            <h2 id="download-title" data-show="mac">Get Ghost on your Mac.</h2>
+            <p data-show="mac">
+              Grant Accessibility access once and Ghost starts learning your patterns in minutes.
+              Runs natively on Apple Silicon and Intel.
             </p>
+            <a class="btn btn--download cta-download-btn" data-show="mac"
+               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg">
+              <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+              Download Ghost.dmg
+            </a>
+            <p class="download-note" data-show="mac" style="margin-top:10px">macOS 12+ &middot; Apple Silicon &amp; Intel &middot; Free</p>
+
+            <!-- Windows copy -->
+            <p class="eyebrow" data-show="windows">Available for Windows</p>
+            <h2 id="download-title" data-show="windows">Get Ghost on your PC.</h2>
+            <p data-show="windows">
+              Run the installer and Ghost starts learning your patterns right away.
+              Supports Windows 10 and 11, 64-bit.
+            </p>
+            <a class="btn btn--download cta-download-btn" data-show="windows"
+               href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe">
+              <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
+              Download Ghost Setup.exe
+            </a>
+            <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free</p>
+
+            <!-- Mobile / unknown copy -->
+            <p class="eyebrow" data-show="mobile other">Available for desktop</p>
+            <h2 id="download-title" data-show="mobile other">Choose your Ghost download.</h2>
+            <p data-show="mobile other">
+              Ghost runs on macOS and Windows. Download the installer for the desktop you want to automate.
+            </p>
+            <div class="download-pair" data-show="mobile other">
+              <a class="btn btn--download cta-download-btn"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
+                 aria-label="Download Ghost.dmg for macOS">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                Download for Mac
+              </a>
+              <a class="btn btn--download cta-download-btn"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
+                 aria-label="Download Ghost Setup.exe for Windows">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
+                Download for Windows
+              </a>
+            </div>
+            <p class="download-note" data-show="mobile other" style="margin-top:10px">macOS 12+ or Windows 10 / 11 &middot; Free</p>
           </div>
-          <form id="waitlist" class="waitlist" name="ghost-waitlist" method="post" data-netlify="true">
-            <input type="hidden" name="form-name" value="ghost-waitlist" />
-            <label>
-              <span>Name</span>
-              <input name="name" type="text" autocomplete="name" placeholder="Ada Lovelace" required />
-            </label>
-            <label>
-              <span>Email</span>
-              <input name="email" type="email" autocomplete="email" placeholder="ada@company.com" required />
-            </label>
-            <label>
-              <span>Workflow you want Ghost to automate</span>
-              <textarea name="workflow" rows="4" placeholder="Tell us about the repetitive desktop task..." required></textarea>
-            </label>
-            <button class="btn" type="submit">Get in touch</button>
-          </form>
         </section>
       </main>
     </div>
+
+    <!-- Analysis Modal -->
+    <div id="analysis-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin-top: 0; color: #8d7bff;">Workflow Analysis</h3>
+        <div id="analysis-content"></div>
+        <button onclick="closeModal('analysis-modal')" style="margin-top: 16px;">Close</button>
+      </div>
+    </div>
+
+    <!-- Audit Logs Modal -->
+    <div id="audit-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" style="background: #070813; border-radius: 12px; padding: 24px; max-width: 800px; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin-top: 0; color: #8d7bff;">Audit Logs</h3>
+        <div id="audit-content"></div>
+        <button onclick="closeModal('audit-modal')" style="margin-top: 16px;">Close</button>
+      </div>
+    </div>
+
+    <script>
+      function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+          modal.style.display = "none";
+        }
+      }
+    </script>
+
+    <script>
+      // ── Hero card: show sim in browser, real controls in Tauri ────
+      (function () {
+        const inTauri = !!(window.__TAURI__);
+        if (inTauri) {
+          document.getElementById("ghost-sim").hidden = true;
+          document.querySelectorAll(".tauri-only").forEach(el => el.hidden = false);
+        }
+      })();
+    </script>
+
+    <script>
+      // ── Ghost simulation (browser only) ───────────────────────────
+      const SIM_SCENARIOS = [
+        {
+          phase: "Recording morning routine…",
+          speech: "I see you opening the same 5 apps every morning.",
+          steps: [
+            { icon: "💻", text: "Launch Chrome → restore tab session" },
+            { icon: "📧", text: "Open Gmail → filter priority inbox" },
+            { icon: "📝", text: "Open Notion → navigate to Today page" },
+            { icon: "💻", text: "Open VS Code → reopen last workspace" },
+            { icon: "🪟", text: "Snap windows into your layout" },
+          ],
+          replayPhase: "Replaying at 2×…",
+          replaySpeech: "Running your morning routine. Done in 4 seconds.",
+        },
+        {
+          phase: "Recording timesheet workflow…",
+          speech: "You fill this timesheet every Friday. Let me learn it.",
+          steps: [
+            { icon: "🌐", text: "Open HR portal → navigate to Timesheet" },
+            { icon: "🔑", text: "Auto-fill credentials" },
+            { icon: "📋", text: "Enter 40 h across Mon–Fri" },
+            { icon: "✅", text: "Click Submit → confirm dialog" },
+            { icon: "📸", text: "Capture screenshot as proof" },
+          ],
+          replayPhase: "Replaying workflow…",
+          replaySpeech: "Timesheet submitted! Saved you 8 minutes.",
+        },
+        {
+          phase: "Recording standup post…",
+          speech: "Noticed you post to #standup every morning. On it.",
+          steps: [
+            { icon: "📋", text: "Read yesterday's Notion tasks" },
+            { icon: "✍️", text: "Format standup (done / doing / blockers)" },
+            { icon: "💬", text: "Open Slack → navigate to #standup" },
+            { icon: "📤", text: "Paste and send message" },
+            { icon: "🔔", text: "Set reminder for tomorrow" },
+          ],
+          replayPhase: "Posting to Slack…",
+          replaySpeech: "Standup posted. Saved you 6 minutes.",
+        },
+      ];
+
+      let simIdx = 0;
+
+      function runSim() {
+        const s = SIM_SCENARIOS[simIdx % SIM_SCENARIOS.length];
+        simIdx++;
+
+        const phaseEl   = document.getElementById("sim-phase");
+        const progressEl= document.getElementById("sim-progress");
+        const stepsEl   = document.getElementById("sim-steps");
+        const footerEl  = document.getElementById("sim-footer");
+        const speechEl  = document.getElementById("insight-text");
+        const pulseEl   = document.getElementById("sim-pulse");
+
+        if (!phaseEl) return;
+
+        // Reset
+        stepsEl.innerHTML = "";
+        footerEl.hidden = true;
+        progressEl.style.width = "0%";
+        phaseEl.textContent = s.phase;
+        speechEl.textContent = s.speech;
+        pulseEl.style.background = "var(--success)";
+
+        const total = s.steps.length;
+        let i = 0;
+
+        function addStep() {
+          if (i >= total) {
+            // Replay phase
+            setTimeout(() => {
+              phaseEl.textContent = s.replayPhase;
+              pulseEl.style.background = "var(--accent)";
+              speechEl.textContent = s.replaySpeech;
+              progressEl.style.width = "100%";
+              // Mark steps complete
+              stepsEl.querySelectorAll(".sim-step").forEach(el => el.classList.add("sim-step--done"));
+              setTimeout(() => {
+                footerEl.hidden = false;
+                // Next scenario after pause
+                setTimeout(runSim, 4000);
+              }, 1800);
+            }, 600);
+            return;
+          }
+
+          const step = s.steps[i];
+          const li = document.createElement("li");
+          li.className = "sim-step";
+          li.innerHTML = `<span class="sim-step__icon">${step.icon}</span><span class="sim-step__text">${step.text}</span><span class="sim-step__check">✓</span>`;
+          stepsEl.appendChild(li);
+
+          // Animate in
+          requestAnimationFrame(() => li.classList.add("sim-step--active"));
+
+          progressEl.style.width = `${((i + 1) / total) * 80}%`;
+          i++;
+          setTimeout(addStep, 900);
+        }
+
+        setTimeout(addStep, 500);
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        if (!window.__TAURI__) runSim();
+      });
+    </script>
+
+    <script>
+      // ── Platform detection ────────────────────────────────────────
+      (function () {
+        const ua = navigator.userAgent;
+        let platform = "other";
+        if (/iPhone|iPad|iPod|Android/i.test(ua)) platform = "mobile";
+        else if (/Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua)) platform = "mac";
+        else if (/Win32|Win64|Windows|WinCE/i.test(ua)) platform = "windows";
+        document.documentElement.dataset.platform = platform;
+      })();
+    </script>
+
+    <script>
+      // ── Talk to Ghost — Interactive Demo ──────────────────────────
+      const DEMO_PLANS = {
+        timesheet: {
+          keywords: ["timesheet", "hours", "time sheet", "log hours", "friday"],
+          label: "Weekly timesheet automation",
+          badge: { text: "95% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~8 minutes every Friday",
+          steps: [
+            { icon: "🌐", text: "Open Chrome and navigate to your HR portal" },
+            { icon: "🔑", text: "Auto-fill your employee credentials" },
+            { icon: "📋", text: "Detect the timesheet form and enter 40h across the week" },
+            { icon: "✅", text: "Click Submit and wait for confirmation screen" },
+            { icon: "📸", text: "Capture a screenshot as proof of submission" },
+          ],
+        },
+        morning: {
+          keywords: ["morning", "apps", "launch", "startup", "open", "start", "daily"],
+          label: "Morning app launcher",
+          badge: { text: "99% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~4 minutes every morning",
+          steps: [
+            { icon: "💻", text: "Launch Chrome and restore your tab session" },
+            { icon: "📧", text: "Open Gmail and filter unread priority emails" },
+            { icon: "📝", text: "Open Notion and navigate to today's page" },
+            { icon: "💻", text: "Launch VS Code and reopen your last workspace" },
+            { icon: "🪟", text: "Arrange windows into your preferred layout" },
+          ],
+        },
+        standup: {
+          keywords: ["standup", "slack", "notes", "stand-up", "daily", "post", "scrum"],
+          label: "Daily standup post",
+          badge: { text: "91% reliable", cls: "demo-badge--high" },
+          savings: "⏱ Saves ~6 minutes every morning",
+          steps: [
+            { icon: "📋", text: "Read yesterday's completed tasks from Notion" },
+            { icon: "✍️", text: "Format the standup message (done / doing / blockers)" },
+            { icon: "💬", text: "Open Slack and navigate to #standup channel" },
+            { icon: "📤", text: "Paste and send the formatted message" },
+            { icon: "🔔", text: "Set a reminder for tomorrow's standup" },
+          ],
+        },
+        email: {
+          keywords: ["email", "summary", "weekly", "report", "manager", "send", "recap"],
+          label: "Weekly summary email",
+          badge: { text: "88% reliable", cls: "demo-badge--medium" },
+          savings: "⏱ Saves ~20 minutes every Friday",
+          steps: [
+            { icon: "📊", text: "Gather this week's closed tasks from your tracker" },
+            { icon: "✍️", text: "Draft a summary email with key wins and blockers" },
+            { icon: "📧", text: "Open Gmail and address it to your manager" },
+            { icon: "👁️", text: "Pause for a 10-second review (checkpoint)" },
+            { icon: "📤", text: "Send and archive the draft" },
+          ],
+        },
+      };
+
+      const DEFAULT_PLAN = {
+        label: null,
+        badge: { text: "85% reliable", cls: "demo-badge--medium" },
+        savings: "⏱ Estimated time savings: 5–15 minutes/day",
+        steps: [
+          { icon: "👁️", text: "Ghost watches you perform the task once to learn the steps" },
+          { icon: "🔍", text: "Identifies UI elements and maps out the action sequence" },
+          { icon: "🤖", text: "Builds a replayable workflow with smart wait conditions" },
+          { icon: "🔄", text: "Replays on your schedule with retry logic for reliability" },
+          { icon: "📊", text: "Reports results and flags anything that needs your attention" },
+        ],
+      };
+
+      function matchPlan(prompt) {
+        const lower = prompt.toLowerCase();
+        for (const plan of Object.values(DEMO_PLANS)) {
+          if (plan.keywords.some((kw) => lower.includes(kw))) return plan;
+        }
+        return DEFAULT_PLAN;
+      }
+
+      function runDemo(promptText) {
+        const response = document.getElementById("demo-response");
+        const thinking = document.getElementById("demo-thinking");
+        const result = document.getElementById("demo-result");
+        const taskEl = document.getElementById("demo-result-task");
+        const stepsEl = document.getElementById("demo-steps");
+        const badgeEl = document.getElementById("demo-badge");
+        const savingsEl = document.getElementById("demo-savings");
+        const submitBtn = document.getElementById("demo-submit");
+
+        if (!promptText.trim()) return;
+
+        submitBtn.disabled = true;
+        result.hidden = true;
+        stepsEl.innerHTML = "";
+        response.hidden = false;
+        thinking.hidden = false;
+
+        const plan = matchPlan(promptText);
+
+        setTimeout(() => {
+          thinking.hidden = true;
+          result.hidden = false;
+
+          taskEl.textContent = plan.label ?? `"${promptText}"`;
+          badgeEl.textContent = plan.badge.text;
+          badgeEl.className = `demo-badge ${plan.badge.cls}`;
+          savingsEl.textContent = plan.savings;
+
+          plan.steps.forEach((step, i) => {
+            const li = document.createElement("li");
+            li.className = "demo-step";
+            li.style.animationDelay = `${i * 120}ms`;
+            li.innerHTML = `
+              <span class="demo-step__num">${String(i + 1).padStart(2, "0")}</span>
+              <span class="demo-step__icon" aria-hidden="true">${step.icon}</span>
+              <span class="demo-step__text">${step.text}</span>
+            `;
+            stepsEl.appendChild(li);
+          });
+
+          submitBtn.disabled = false;
+        }, 1600);
+      }
+
+      document.getElementById("demo-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const input = document.getElementById("demo-input");
+        runDemo(input.value);
+      });
+
+      document.querySelectorAll(".demo-chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const prompt = chip.dataset.prompt;
+          document.getElementById("demo-input").value = prompt;
+          document.querySelectorAll(".demo-chip").forEach((c) => c.classList.remove("is-active"));
+          chip.classList.add("is-active");
+          runDemo(prompt);
+        });
+      });
+
+      window.addEventListener("DOMContentLoaded", () => {
+        const first = document.querySelector(".demo-chip");
+        if (first) first.click();
+      });
+    </script>
   </body>
 </html>

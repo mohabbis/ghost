@@ -42,27 +42,24 @@
             </p>
             <div class="hero__actions">
               <!-- Mac -->
-              <a class="btn btn--download" data-show="mac"
+              <a class="btn btn--download" data-show="mac mobile other"
                  href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
                  aria-label="Download Ghost for macOS">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
                 Download for Mac
               </a>
               <!-- Windows -->
-              <a class="btn btn--download" data-show="windows"
+              <a class="btn btn--download" data-show="windows mobile other"
                  href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
                  aria-label="Download Ghost for Windows">
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
                 Download for Windows
               </a>
-              <!-- Mobile / unknown -->
-              <a class="btn" data-show="mobile other" href="#notify">Get notified</a>
-
               <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
             </div>
             <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free</p>
             <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free</p>
-            <p class="download-note" data-show="mobile">Desktop app available now &middot; Mobile coming soon</p>
+            <p class="download-note" data-show="mobile other">Desktop app available now for macOS and Windows &middot; Free</p>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
                 <dt>🤖 Observant</dt>
@@ -307,33 +304,28 @@
             </a>
             <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free</p>
 
-            <!-- Mobile copy -->
-            <p class="eyebrow" data-show="mobile other">Your AI parrot, everywhere</p>
-            <h2 id="download-title" data-show="mobile other">Desktop app available now.</h2>
+            <!-- Mobile / unknown copy -->
+            <p class="eyebrow" data-show="mobile other">Available for desktop</p>
+            <h2 id="download-title" data-show="mobile other">Choose your Ghost download.</h2>
             <p data-show="mobile other">
-              Ghost runs on macOS and Windows. The mobile app is coming — drop your email and
-              we'll let you know the moment it's ready.
+              Ghost runs on macOS and Windows. Download the installer for the desktop you want to automate.
             </p>
+            <div class="download-pair" data-show="mobile other">
+              <a class="btn btn--download cta-download-btn"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
+                 aria-label="Download Ghost.dmg for macOS">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                Download for Mac
+              </a>
+              <a class="btn btn--download cta-download-btn"
+                 href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
+                 aria-label="Download Ghost Setup.exe for Windows">
+                <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
+                Download for Windows
+              </a>
+            </div>
+            <p class="download-note" data-show="mobile other" style="margin-top:10px">macOS 12+ or Windows 10 / 11 &middot; Free</p>
           </div>
-
-          <!-- Notify form (mobile / unknown) or shown alongside download for desktop -->
-          <form id="notify" class="waitlist" name="ghost-notify" method="post" data-netlify="true">
-            <input type="hidden" name="form-name" value="ghost-notify" />
-            <input type="hidden" name="platform" id="notify-platform" value="unknown" />
-            <label>
-              <span>Name</span>
-              <input name="name" type="text" autocomplete="name" placeholder="Ada Lovelace" required />
-            </label>
-            <label>
-              <span>Email</span>
-              <input name="email" type="email" autocomplete="email" placeholder="ada@company.com" required />
-            </label>
-            <label>
-              <span>What do you want to automate?</span>
-              <textarea name="workflow" rows="3" placeholder="Describe the repetitive task you'd love to eliminate…"></textarea>
-            </label>
-            <button class="btn" type="submit">Stay in the loop</button>
-          </form>
         </section>
       </main>
     </div>
@@ -496,10 +488,6 @@
         else if (/Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua)) platform = "mac";
         else if (/Win32|Win64|Windows|WinCE/i.test(ua)) platform = "windows";
         document.documentElement.dataset.platform = platform;
-        document.addEventListener("DOMContentLoaded", () => {
-          const field = document.getElementById("notify-platform");
-          if (field) field.value = platform;
-        });
       })();
     </script>
 

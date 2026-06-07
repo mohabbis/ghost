@@ -1,4 +1,4 @@
-mod core;
+pub mod core;
 mod engine;
 mod platform;
 mod commands;

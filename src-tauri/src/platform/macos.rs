@@ -61,8 +61,6 @@ extern "C" {
         callback: CGEventTapCallBack,
         user_info: *mut c_void,
     ) -> CFMachPortRef;
-    fn CFMachPortGetRunLoopSource(port: CFMachPortRef) -> CFRunLoopSourceRef;
-    fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
     fn CFRunLoopRun();
     fn CFRunLoopStop(rl: CFRunLoopRef);
     fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
@@ -80,7 +78,7 @@ type CGEventTapCallBack = unsafe extern "C" fn(
 type CFStringRef = *const c_void;
 
 // Accessibility external functions
-#[link(name = "HIServices", kind = "framework")]
+#[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
     fn AXUIElementCopyElementAtPosition(
         application: AXUIElementRef,
@@ -95,14 +93,17 @@ extern "C" {
     ) -> AXError;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
     fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
-    fn CFGetTypeID(cf: CFTypeRef) -> usize;
-    fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
-    fn CFRelease(cf: CFTypeRef);
 }
 
 // Core Foundation external functions
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
+    fn CFMachPortCreateRunLoopSource(
+        allocator: CFAllocatorRef,
+        port: CFMachPortRef,
+        order: isize,
+    ) -> CFRunLoopSourceRef;
+    fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
     fn CFRunLoopGetCurrent() -> CFRunLoopRef;
     fn CFStringCreateWithBytes(
         alloc: CFAllocatorRef,
@@ -119,6 +120,9 @@ extern "C" {
         buffer_size: isize,
         encoding: CFStringEncoding,
     ) -> Boolean;
+    fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
+    fn CFGetTypeID(cf: CFTypeRef) -> usize;
+    fn CFRelease(cf: CFTypeRef);
 }
 
 // Constants
@@ -229,7 +233,7 @@ impl InputRecorder for MacosRecorder {
                     return;
                 }
 
-                let run_loop_source = CFMachPortGetRunLoopSource(tap);
+                let run_loop_source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
                 let current_run_loop = CFRunLoopGetCurrent();
                 CFRunLoopAddSource(
                     current_run_loop,
