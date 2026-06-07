@@ -1,4 +1,8 @@
 pub mod core;
+pub mod config;
+pub mod error;
+pub mod telemetry;
+pub mod performance;
 mod engine;
 mod platform;
 mod commands;
