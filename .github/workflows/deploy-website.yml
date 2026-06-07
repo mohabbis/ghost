@@ -1,0 +1,140 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'public/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Vercel (ghost.muharafiq.com)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify public directory
+        run: |
+          if [ ! -d "public" ]; then
+            echo "❌ Error: public/ directory not found"
+            exit 1
+          fi
+          echo "✅ public/ directory found"
+          echo ""
+          echo "📦 Files to deploy:"
+          find public -type f | sort
+          echo ""
+          echo "📊 Total files: $(find public -type f | wc -l)"
+
+      - name: Validate download links
+        run: |
+          echo "🔍 Validating GitHub release download links..."
+          if grep -q "github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg" public/index.html; then
+            echo "✅ macOS download link verified"
+          else
+            echo "⚠️  Warning: macOS download link may need updating"
+          fi
+          if grep -q "github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe" public/index.html; then
+            echo "✅ Windows download link verified"
+          else
+            echo "⚠️  Warning: Windows download link may need updating"
+          fi
+
+      - name: Validate structured data (Google Rich Results)
+        run: |
+          echo "🔍 Validating structured data for Google Rich Results..."
+          echo ""
+          
+          # Check for required schema.org types
+          if grep -q '"@type": "SoftwareApplication"' public/index.html; then
+            echo "✅ SoftwareApplication schema found"
+          else
+            echo "❌ Missing SoftwareApplication schema"
+            exit 1
+          fi
+          
+          if grep -q '"@type": "WebSite"' public/index.html; then
+            echo "✅ WebSite schema found"
+          else
+            echo "⚠️  Warning: WebSite schema missing"
+          fi
+          
+          if grep -q '"@type": "Organization"' public/index.html; then
+            echo "✅ Organization schema found"
+          else
+            echo "⚠️  Warning: Organization schema missing"
+          fi
+          
+          if grep -q '"@type": "FAQPage"' public/index.html; then
+            echo "✅ FAQPage schema found"
+          else
+            echo "⚠️  Warning: FAQPage schema missing"
+          fi
+          
+          if grep -q '"@type": "BreadcrumbList"' public/index.html; then
+            echo "✅ BreadcrumbList schema found"
+          else
+            echo "⚠️  Warning: BreadcrumbList schema missing"
+          fi
+          
+          # Validate JSON-LD syntax
+          echo ""
+          echo "🔍 Extracting and validating JSON-LD blocks..."
+          if grep -Pzo '(?s)<script type="application/ld\+json">.*?</script>' public/index.html > /dev/null 2>&1; then
+            echo "✅ JSON-LD blocks found"
+          else
+            echo "⚠️  Warning: Could not extract JSON-LD blocks"
+          fi
+          
+          echo ""
+          echo "📊 Structured data summary:"
+          echo "  • Test with Google Rich Results: https://search.google.com/test/rich-results"
+          echo "  • Schema validator: https://validator.schema.org/"
+          echo "  • After deployment, test: https://search.google.com/test/rich-results?url=https://ghost.muharafiq.com"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          echo "🚀 Deploying to Vercel..."
+          vercel deploy --prod --token=$VERCEL_TOKEN --yes
+          echo ""
+          echo "✅ Deployment complete!"
+          echo "🌐 Website: https://ghost.muharafiq.com"
+
+      - name: Deployment summary
+        run: |
+          echo ""
+          echo "================================================"
+          echo "✅ Website deployed to ghost.muharafiq.com"
+          echo "================================================"
+          echo ""
+          echo "📦 Deployed $(find public -type f | wc -l) files from public/"
+          echo "🌐 Live at: https://ghost.muharafiq.com"
+          echo "📥 Downloads from: GitHub Releases"
+          echo ""
+          echo "Required secrets (configured in repo settings):"
+          echo "  • VERCEL_TOKEN"
+          echo "  • VERCEL_ORG_ID"
+          echo "  • VERCEL_PROJECT_ID"
+          echo ""
+          echo "================================================"
+
+# Made with Bob
