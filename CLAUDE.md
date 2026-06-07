@@ -236,6 +236,30 @@ cd src-tauri && cargo test
 
 There is no frontend build or lint step — the frontend is static vanilla JS.
 
+## Releases & macOS code signing
+
+Releases are tag-driven. Pushing a `v*` tag fires `.github/workflows/release.yml`,
+which builds `Ghost.dmg` (universal macOS) and `Ghost_Setup.exe` (Windows) and
+attaches them to a GitHub Release. See `RELEASING.md` for the tagging steps.
+
+macOS signing is handled by the `Configure macOS signing` step in that workflow:
+
+- If the `APPLE_CERTIFICATE` secret is **absent**, the app is **ad-hoc signed**
+  (`APPLE_SIGNING_IDENTITY=-`). It runs locally but downloaded copies are still
+  quarantined, so Gatekeeper shows "Apple could not verify…" on first launch.
+- If the Apple Developer secrets are **present** (`APPLE_CERTIFICATE`,
+  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+  `APPLE_PASSWORD`, `APPLE_TEAM_ID`), the Tauri bundler signs with the Developer
+  ID **and notarizes**, so the app opens with no prompt. No YAML change is needed
+  to switch modes — the step auto-detects the secret and exports the env vars the
+  bundler reads.
+
+User-side workaround for an ad-hoc/unsigned download:
+`xattr -dr com.apple.quarantine /Applications/ghost.app`.
+
+Only notarization (paid Apple Developer ID) removes the Gatekeeper dialog —
+there is no free bypass.
+
 ## Data persistence
 
 Workflows and baselines are stored in the platform's data directory:

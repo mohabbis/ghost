@@ -18,7 +18,17 @@ Like a clever parrot, Ghost observes your behavior silently and pops up with sug
 | 🪟 Windows 10 / 11 (64-bit) | [**Ghost_Setup.exe**](https://ghost.muharafiq.com/downloads/Ghost_Setup.exe) |
 
 > [!NOTE]
-> macOS blocks unsigned apps by default. Right-click the `.app` → **Open** → **Open Anyway** to run it the first time.
+> The macOS build is **ad-hoc signed, not notarized**, so Gatekeeper blocks it on first launch
+> ("Apple could not verify…"). On macOS 15 (Sequoia) the old right-click → Open trick no longer
+> clears this dialog. To run it:
+>
+> 1. Drag **ghost** into `Applications`, then in Terminal run:
+>    `xattr -dr com.apple.quarantine /Applications/ghost.app`
+> 2. Or open **System Settings → Privacy & Security**, scroll to the "ghost was blocked" notice,
+>    and click **Open Anyway**.
+>
+> This is expected for unsigned apps and does not mean the app is unsafe. Only a notarized build
+> (paid Apple Developer ID) opens with no prompt — see [RELEASING.md](RELEASING.md).
 
 ## What is Ghost?
 
