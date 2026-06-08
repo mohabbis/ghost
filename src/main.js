@@ -72,6 +72,109 @@ async function requestAccessibility() {
   }
 }
 
+// ===== First-run onboarding =====
+
+const ONBOARDING_KEY = "ghost.onboarding.completed";
+let onboardingStep = 0;
+let permPollTimer = null;
+
+function maybeShowOnboarding() {
+  let done = false;
+  try {
+    done = localStorage.getItem(ONBOARDING_KEY) === "1";
+  } catch (_) {
+    // localStorage unavailable (e.g. static mode) — show onboarding anyway
+  }
+  if (done) return;
+
+  const overlay = document.getElementById("onboarding");
+  if (!overlay) return;
+  overlay.hidden = false;
+  showOnboardingStep(0);
+}
+
+function showOnboardingStep(n) {
+  onboardingStep = n;
+
+  document.querySelectorAll(".onboarding__step").forEach((el) => {
+    el.hidden = Number(el.dataset.step) !== n;
+  });
+  document.querySelectorAll(".onboarding__dot").forEach((dot) => {
+    dot.classList.toggle("is-active", Number(dot.dataset.dot) === n);
+  });
+
+  // The permission step (index 1) needs live status polling.
+  if (n === 1) {
+    refreshOnboardingPermStatus();
+    startPermPolling();
+  } else {
+    stopPermPolling();
+  }
+}
+
+async function refreshOnboardingPermStatus() {
+  if (!invoke) return;
+  let granted = false;
+  try {
+    granted = await invoke("check_accessibility");
+  } catch (error) {
+    console.error("Failed to check accessibility permission:", error);
+    return;
+  }
+
+  const status = document.getElementById("onboardingPermStatus");
+  const text = document.getElementById("onboardingPermStatusText");
+  const next = document.getElementById("onboardingPermNext");
+  const grant = document.getElementById("onboardingGrant");
+  if (!status) return;
+
+  status.dataset.granted = granted ? "true" : "false";
+  if (text) text.textContent = granted ? "✓ Access granted" : "Not granted yet";
+
+  // Once granted, make "Next" the obvious action and de-emphasize "Grant".
+  if (granted) {
+    stopPermPolling();
+    if (next) {
+      next.classList.add("btn--primary");
+      next.classList.remove("btn--ghost");
+    }
+    if (grant) {
+      grant.classList.add("btn--ghost", "btn--small");
+      grant.classList.remove("btn--primary");
+    }
+  }
+}
+
+function startPermPolling() {
+  stopPermPolling();
+  permPollTimer = setInterval(refreshOnboardingPermStatus, 1500);
+}
+
+function stopPermPolling() {
+  if (permPollTimer) {
+    clearInterval(permPollTimer);
+    permPollTimer = null;
+  }
+}
+
+async function onboardingGrant() {
+  await requestAccessibility();
+  refreshOnboardingPermStatus();
+  startPermPolling();
+}
+
+function finishOnboarding() {
+  stopPermPolling();
+  try {
+    localStorage.setItem(ONBOARDING_KEY, "1");
+  } catch (_) {
+    // ignore — onboarding will simply re-show next launch
+  }
+  const overlay = document.getElementById("onboarding");
+  if (overlay) overlay.hidden = true;
+  refreshPermissionBanner();
+}
+
 // ===== Recording & replay =====
 
 async function startRecording() {
@@ -919,6 +1022,15 @@ function wireUpControls() {
 
   bind("perm-grant", requestAccessibility);
 
+  // Onboarding navigation
+  bind("onboardingStart", () => showOnboardingStep(1));
+  bind("onboardingBack", () => showOnboardingStep(0));
+  bind("onboardingGrant", onboardingGrant);
+  bind("onboardingPermNext", () => showOnboardingStep(2));
+  bind("onboardingBack2", () => showOnboardingStep(1));
+  bind("onboardingFinish", finishOnboarding);
+  bind("onboardingSkip", finishOnboarding);
+
   const speedSelect = document.getElementById("speedSelect");
   if (speedSelect) speedSelect.addEventListener("change", (e) => setSpeed(parseFloat(e.target.value)));
 
@@ -943,4 +1055,5 @@ window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
   refreshPermissionBanner();
+  maybeShowOnboarding();
 });
