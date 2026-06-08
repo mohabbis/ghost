@@ -267,8 +267,12 @@ cd src-tauri && cargo check
 cd src-tauri && cargo clippy
 
 # Tests: unit tests live inline (#[cfg(test)]) in config.rs, error.rs,
-# performance.rs, telemetry.rs; integration/e2e tests live in src-tauri/tests/
+# performance.rs, telemetry.rs; integration tests in src-tauri/tests/integration_test.rs
+# (config, error handling, events, workflow ops) and e2e in src-tauri/tests/e2e.rs
 cd src-tauri && cargo test
+
+# Run a single test by name (substring match)
+cd src-tauri && cargo test test_name_substring
 ```
 
 There is no frontend build or lint step — the frontend is static vanilla JS.
