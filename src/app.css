@@ -1,0 +1,205 @@
+/* Dedicated layout for the Ghost desktop app shell (not the marketing site). */
+
+.app-body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.app-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-header__glyph {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.app-header__brand h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.app-header__brand p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.recording-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.banner--warn {
+  background: rgba(255, 184, 107, 0.12);
+  border: 1px solid rgba(255, 184, 107, 0.4);
+  color: var(--accent-warm);
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .app-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  background: var(--bg-soft);
+}
+
+.panel h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.panel__hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--text);
+  border: 1px solid var(--accent);
+}
+
+.speed-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.speed-picker select {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 20px;
+  background: var(--bg-soft);
+  position: sticky;
+  top: 24px;
+}
+
+.sidebar__heading {
+  margin: 6px 0 0;
+  font-size: 0.95rem;
+}
+
+.insight-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(141, 123, 255, 0.12);
+  border: 1px solid rgba(141, 123, 255, 0.3);
+  font-size: 0.9rem;
+}
+
+.insight-icon {
+  font-size: 1.25rem;
+}
+
+.notifications {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.events-timeline {
+  flex: 1;
+  min-height: 160px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: rgba(7, 8, 19, 0.42);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.events-timeline__empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.timeline-item {
+  font-size: 0.8rem;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.timeline-item:last-child {
+  border-bottom: none;
+}

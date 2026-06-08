@@ -1,127 +1,13 @@
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+// Ghost desktop app — Tauri IPC integration, recording controls, workflow
+// management, cloud sync, and Smart Observer. This is the real app UI
+// (not the marketing site — that lives in public/).
 
-function revealOnScroll() {
-  if (prefersReducedMotion.matches || !("IntersectionObserver" in window)) return;
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      });
-    },
-    { threshold: 0.16 },
-  );
-
-  document.querySelectorAll(".section, .hero-card, .feature-card").forEach((element) => {
-    element.classList.add("reveal");
-    observer.observe(element);
-  });
-}
-
-window.addEventListener("DOMContentLoaded", revealOnScroll);
-
-// ===== Typing Animation & Proactive Notifications =====
-
-// Proactive observation messages for typing animation
-const proactiveMessages = [
-  "copy-paste that customer info?",
-  "repeat that same workflow?",
-  "open those 5 apps again?",
-  "fill that form every day?",
-  "switch between those windows?",
-  "type that same report?",
-  "process those invoices weekly?",
-  "check those same dashboards?"
-];
-
-let typingIndex = 0;
-let charIndex = 0;
-let isDeleting = false;
-
-function typeWriter() {
-  const typedTextEl = document.getElementById('typed-text');
-  if (!typedTextEl) return;
-  
-  const currentMessage = proactiveMessages[typingIndex];
-  
-  if (isDeleting) {
-    charIndex--;
-  } else {
-    charIndex++;
-  }
-  
-  typedTextEl.textContent = currentMessage.substring(0, charIndex);
-  
-  if (!isDeleting && charIndex === currentMessage.length) {
-    setTimeout(() => { isDeleting = true; }, 1500);
-  } else if (isDeleting && charIndex === 0) {
-    isDeleting = false;
-    typingIndex = (typingIndex + 1) % proactiveMessages.length;
-  }
-  
-  const speed = isDeleting ? 50 : 100;
-  setTimeout(typeWriter, speed);
-}
-
-// Start typing animation
-typeWriter();
-
-// Proactive notifications system
-const proactiveObservations = [
-  { text: "I noticed you copy-pasting between apps...", highlight: "copy-pasting" },
-  { text: "That workflow looks repeatable!", highlight: "repeatable" },
-  { text: "Want me to memorize this pattern?", highlight: "pattern" },
-  { text: "I can automate this for you next time", highlight: "automate" },
-  { text: "This looks like your morning routine...", highlight: "morning routine" },
-  { text: "Recognized. I'll help from now on.", highlight: "help" },
-  { text: "Pro tip: I can do this faster", highlight: "faster" }
-];
-
-let notificationIndex = 0;
-
-function showProactiveNotification() {
-  const notificationsEl = document.getElementById('notifications');
-  if (!notificationsEl) return;
-  
-  const observation = proactiveObservations[notificationIndex];
-  const notification = document.createElement('div');
-  notification.className = 'notification notification--proactive';
-  const highlighted = observation.text.replace(
-    observation.highlight,
-    `<span class="notification__highlight">${observation.highlight}</span>`
-  );
-  notification.innerHTML = `
-    <p class="notification__text">🦜 ${highlighted}</p>
-  `;
-  
-  notificationsEl.appendChild(notification);
-  
-  // Remove after animation
-  setTimeout(() => {
-    notification.remove();
-  }, 5000);
-  
-  notificationIndex = (notificationIndex + 1) % proactiveObservations.length;
-}
-
-// Show notifications periodically
-setInterval(showProactiveNotification, 8000);
-
-// Show first notification after page load
-setTimeout(showProactiveNotification, 3000);
-
-function updateInsightText(text) {
-  const insightText = document.getElementById('insight-text');
-  if (insightText) {
-    insightText.textContent = text;
-  }
-}
-
-// Tauri IPC integration for Ghost automation
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
+
+function notAvailable() {
+  alert("Tauri not available - running in static mode");
+}
 
 // Recording state
 let isRecording = false;
@@ -142,20 +28,63 @@ if (listen) {
   });
 }
 
-async function startRecording() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
+function showInsight(text) {
+  const el = document.getElementById("insight-text");
+  if (el) el.textContent = text;
+}
+
+function showNotification(text) {
+  const notificationsEl = document.getElementById("notifications");
+  if (!notificationsEl) return;
+
+  const notification = document.createElement("div");
+  notification.className = "notification notification--proactive";
+  notification.innerHTML = `<p class="notification__text">🦜 ${text}</p>`;
+  notificationsEl.appendChild(notification);
+
+  setTimeout(() => notification.remove(), 5000);
+}
+
+// ===== Accessibility permission gate =====
+
+async function refreshPermissionBanner() {
+  if (!invoke) return;
+
+  const banner = document.getElementById("perm-banner");
+  if (!banner) return;
+
+  try {
+    const granted = await invoke("check_accessibility");
+    banner.hidden = granted;
+  } catch (error) {
+    console.error("Failed to check accessibility permission:", error);
   }
-  
+}
+
+async function requestAccessibility() {
+  if (!invoke) return;
+  try {
+    await invoke("request_accessibility");
+  } catch (error) {
+    console.error("Failed to request accessibility permission:", error);
+  } finally {
+    refreshPermissionBanner();
+  }
+}
+
+// ===== Recording & replay =====
+
+async function startRecording() {
+  if (!invoke) return notAvailable();
+
   try {
     await invoke("start_recording");
     isRecording = true;
     recordedEvents = [];
-    // Clear timeline
-    const timelineEl = document.querySelector(".events-timeline");
+    const timelineEl = document.getElementById("events-timeline");
     if (timelineEl) timelineEl.innerHTML = "";
     updateRecordingUI();
+    showInsight("Recording your actions…");
   } catch (error) {
     console.error("Failed to start recording:", error);
     alert("Failed to start recording: " + error);
@@ -163,26 +92,21 @@ async function startRecording() {
 }
 
 async function stopRecording() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
-  
+  if (!invoke) return notAvailable();
+
   try {
     await invoke("stop_recording");
     isRecording = false;
     updateRecordingUI();
+    showInsight(`Captured ${recordedEvents.length} events. Ready to replay or save.`);
   } catch (error) {
     console.error("Failed to stop recording:", error);
   }
 }
 
 async function replayWorkflow() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
-  
+  if (!invoke) return notAvailable();
+
   try {
     isPlaying = true;
     updateRecordingUI();
@@ -197,28 +121,25 @@ async function replayWorkflow() {
 }
 
 async function replayWithReliability() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
-  
+  if (!invoke) return notAvailable();
+
   if (recordedEvents.length === 0) {
     alert("No events recorded yet");
     return;
   }
-  
+
   try {
     const maxAttempts = parseInt(prompt("Max retry attempts (default 3):", "3") || "3");
     const backoffMs = parseInt(prompt("Backoff ms (default 500):", "500") || "500");
     const backoffMult = parseFloat(prompt("Backoff multiplier (default 2.0):", "2.0") || "2.0");
-    
+
     isPlaying = true;
     updateRecordingUI();
     await invoke("replay_with_reliability", {
       events: recordedEvents,
       max_attempts: maxAttempts,
       backoff_ms: backoffMs,
-      backoff_multiplier: backoffMult
+      backoff_multiplier: backoffMult,
     });
     isPlaying = false;
     updateRecordingUI();
@@ -274,46 +195,9 @@ async function setSpeed(factor) {
   }
 }
 
-async function saveWorkflow() {
-  if (!invoke) return;
-  const name = prompt("Enter workflow name:");
-  if (!name) return;
-  
-  try {
-    const path = await invoke("save_workflow", { name, events: recordedEvents });
-    alert(`Workflow saved to: ${path}`);
-  } catch (error) {
-    console.error("Failed to save workflow:", error);
-    alert("Failed to save workflow: " + error);
-  }
-}
-
-async function loadWorkflow() {
-  if (!invoke) return;
-  const name = prompt("Enter workflow name to load:");
-  if (!name) return;
-  
-  try {
-    recordedEvents = await invoke("load_workflow", { name });
-    updateRecordingUI();
-    // Refresh timeline
-    const timelineEl = document.querySelector(".events-timeline");
-    if (timelineEl) {
-      timelineEl.innerHTML = "";
-      recordedEvents.forEach(event => addEventToTimeline(event));
-    }
-    alert(`Workflow "${name}" loaded with ${recordedEvents.length} events`);
-  } catch (error) {
-    console.error("Failed to load workflow:", error);
-    alert("Failed to load workflow: " + error);
-  }
-}
-
 async function inspectElementAtCursor() {
   if (!invoke) return;
-  // This would need mouse tracking - simplified version
   try {
-    // For demo, use center of screen
     const x = window.screen.width / 2;
     const y = window.screen.height / 2;
     const element = await invoke("inspect_element", { x, y });
@@ -327,7 +211,39 @@ async function inspectElementAtCursor() {
   }
 }
 
-// ===== AI-Powered Workflow Functions =====
+// ===== Workflow management =====
+
+async function saveWorkflow() {
+  if (!invoke) return;
+  const name = prompt("Enter workflow name:");
+  if (!name) return;
+
+  try {
+    const path = await invoke("save_workflow", { name, events: recordedEvents });
+    alert(`Workflow saved to: ${path}`);
+  } catch (error) {
+    console.error("Failed to save workflow:", error);
+    alert("Failed to save workflow: " + error);
+  }
+}
+
+async function loadWorkflow() {
+  if (!invoke) return;
+  const name = prompt("Enter workflow name to load:");
+  if (!name) return;
+
+  try {
+    recordedEvents = await invoke("load_workflow", { name });
+    updateRecordingUI();
+    refreshTimeline();
+    alert(`Workflow "${name}" loaded with ${recordedEvents.length} events`);
+  } catch (error) {
+    console.error("Failed to load workflow:", error);
+    alert("Failed to load workflow: " + error);
+  }
+}
+
+// ===== AI-powered workflow functions =====
 
 async function analyzeWorkflow() {
   if (!invoke) return;
@@ -335,7 +251,7 @@ async function analyzeWorkflow() {
     alert("No events recorded yet");
     return;
   }
-  
+
   try {
     const name = prompt("Enter workflow name for analysis:", "MyWorkflow") || "MyWorkflow";
     const analysis = await invoke("analyze_workflow", { name, events: recordedEvents });
@@ -352,7 +268,7 @@ async function optimizeWorkflow() {
     alert("No events recorded yet");
     return;
   }
-  
+
   try {
     const optimized = await invoke("optimize_workflow", { events: recordedEvents });
     const originalCount = recordedEvents.length;
@@ -367,24 +283,23 @@ async function optimizeWorkflow() {
 }
 
 function refreshTimeline() {
-  const timelineEl = document.querySelector(".events-timeline");
+  const timelineEl = document.getElementById("events-timeline");
   if (timelineEl) {
     timelineEl.innerHTML = "";
-    recordedEvents.forEach(event => addEventToTimeline(event));
+    recordedEvents.forEach((event) => addEventToTimeline(event));
   }
 }
 
 async function suggestWorkflowName() {
-  if (!invoke) return;
+  if (!invoke) return prompt("Enter workflow name:");
   if (recordedEvents.length === 0) {
     alert("No events recorded yet");
     return;
   }
-  
+
   try {
     const suggestion = await invoke("suggest_workflow_name", { events: recordedEvents });
-    const name = prompt("Suggested workflow name:", suggestion) || suggestion;
-    return name;
+    return prompt("Suggested workflow name:", suggestion) || suggestion;
   } catch (error) {
     console.error("Failed to suggest name:", error);
     return prompt("Enter workflow name:");
@@ -397,20 +312,20 @@ async function saveWorkflowWithMetadata() {
     alert("No events recorded yet");
     return;
   }
-  
+
   try {
     const name = await suggestWorkflowName();
     if (!name) return;
-    
+
     const description = prompt("Workflow description:", "") || "";
     const tagsInput = prompt("Tags (comma-separated):", "") || "";
-    const tags = tagsInput.split(",").map(t => t.trim()).filter(t => t);
-    
+    const tags = tagsInput.split(",").map((t) => t.trim()).filter((t) => t);
+
     const path = await invoke("save_workflow_with_metadata", {
       name,
       events: recordedEvents,
       description,
-      tags
+      tags,
     });
     alert(`Workflow saved to: ${path}`);
   } catch (error) {
@@ -422,70 +337,65 @@ async function saveWorkflowWithMetadata() {
 function displayAnalysisResults(analysis) {
   const modal = document.getElementById("analysis-modal");
   if (!modal) return;
-  
+
   const content = modal.querySelector(".modal-content");
   if (!content) return;
-  
+
   content.innerHTML = `
     <h3>Workflow Analysis: ${analysis.workflow_name}</h3>
     <p><strong>Total Events:</strong> ${analysis.total_events}</p>
     <p><strong>Estimated Duration:</strong> ${analysis.estimated_duration_ms}ms</p>
     <p><strong>Reliability Score:</strong> ${(analysis.reliability_score * 100).toFixed(1)}%</p>
     <p><strong>Element Richness:</strong> ${(analysis.element_richness * 100).toFixed(1)}%</p>
-    
+
     ${analysis.patterns.length > 0 ? `
     <h4>Detected Patterns</h4>
     <ul>
-      ${analysis.patterns.map(p => `<li>${p.description} (confidence: ${(p.confidence * 100).toFixed(1)}%)</li>`).join("")}
+      ${analysis.patterns.map((p) => `<li>${p.description} (confidence: ${(p.confidence * 100).toFixed(1)}%)</li>`).join("")}
     </ul>
     ` : ""}
-    
+
     ${analysis.suggested_optimizations.length > 0 ? `
     <h4>Suggested Optimizations</h4>
     <ul>
-      ${analysis.suggested_optimizations.map(o => `<li>${o.description}</li>`).join("")}
+      ${analysis.suggested_optimizations.map((o) => `<li>${o.description}</li>`).join("")}
     </ul>
     ` : ""}
-    
-    <button onclick="closeModal('analysis-modal')">Close</button>
+
+    <button data-close-modal="analysis-modal">Close</button>
   `;
-  
-  modal.style.display = "block";
+
+  modal.style.display = "flex";
 }
 
 function closeModal(modalId = "analysis-modal") {
   const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.style.display = "none";
-  }
+  if (modal) modal.style.display = "none";
 }
 
-// ===== Cloud Sync Functions =====
+// ===== Cloud sync =====
 
 let cloudSyncState = {
   isAuthenticated: false,
-  config: null
+  config: null,
 };
 
 async function initCloudSync() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
-  
+  if (!invoke) return notAvailable();
+
   try {
     const apiEndpoint = prompt("API Endpoint:", "https://api.ghost.example.com") || "https://api.ghost.example.com";
     const autoSync = confirm("Enable auto-sync? (OK for yes, Cancel for no)");
-    
+
     await invoke("init_cloud_sync", {
       config: {
         api_endpoint: apiEndpoint,
         auth_token: null,
         auto_sync: autoSync,
-        sync_interval_ms: 30000
-      }
+        sync_interval_ms: 30000,
+      },
     });
-    
+
     cloudSyncState.config = { apiEndpoint, autoSync };
     alert("Cloud sync initialized!");
   } catch (error) {
@@ -496,11 +406,11 @@ async function initCloudSync() {
 
 async function cloudLogin() {
   if (!invoke) return;
-  
+
   try {
     const token = prompt("Enter your auth token:") || "";
     if (!token) return;
-    
+
     const success = await invoke("cloud_authenticate", { token });
     if (success) {
       cloudSyncState.isAuthenticated = true;
@@ -518,7 +428,7 @@ async function syncToCloud() {
     alert("Please authenticate first");
     return;
   }
-  
+
   try {
     const synced = await invoke("cloud_sync_workflows", { events: recordedEvents });
     alert(`Synced ${synced.length} workflows to cloud`);
@@ -534,16 +444,16 @@ async function createWorkspace() {
     alert("Please authenticate first");
     return;
   }
-  
+
   try {
     const name = prompt("Workspace name:") || "";
     if (!name) return;
-    
+
     const workspace = await invoke("create_workspace", {
       name,
-      owner_id: "current_user" // In real app, get from auth
+      owner_id: "current_user",
     });
-    
+
     alert(`Created workspace: ${workspace.name}`);
   } catch (error) {
     console.error("Create workspace failed:", error);
@@ -557,7 +467,7 @@ async function viewAuditLogs() {
     alert("Please authenticate first");
     return;
   }
-  
+
   try {
     const limit = prompt("Number of logs to retrieve:", "50") || "50";
     const logs = await invoke("get_audit_logs", { limit: parseInt(limit) });
@@ -571,10 +481,10 @@ async function viewAuditLogs() {
 function displayAuditLogs(logs) {
   const modal = document.getElementById("audit-modal");
   if (!modal) return;
-  
+
   const content = modal.querySelector(".modal-content");
   if (!content) return;
-  
+
   content.innerHTML = `
     <h3>Audit Logs</h3>
     <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
@@ -587,7 +497,7 @@ function displayAuditLogs(logs) {
         </tr>
       </thead>
       <tbody>
-        ${logs.map(log => `
+        ${logs.map((log) => `
           <tr style="border-bottom: 1px solid #374151;">
             <td style="padding: 8px;">${new Date(log.timestamp * 1000).toLocaleString()}</td>
             <td style="padding: 8px;">${log.user_id}</td>
@@ -597,22 +507,26 @@ function displayAuditLogs(logs) {
         `).join("")}
       </tbody>
     </table>
-    <button onclick="closeModal('audit-modal')" style="margin-top: 16px;">Close</button>
+    <button data-close-modal="audit-modal" style="margin-top: 16px;">Close</button>
   `;
-  
-  modal.style.display = "block";
+
+  modal.style.display = "flex";
 }
 
+// ===== Event timeline =====
+
 function addEventToTimeline(event) {
-  const timelineEl = document.querySelector(".events-timeline");
+  const timelineEl = document.getElementById("events-timeline");
   if (!timelineEl) return;
-  
+
+  const empty = timelineEl.querySelector(".events-timeline__empty");
+  if (empty) empty.remove();
+
   const item = document.createElement("div");
   item.className = "timeline-item";
-  
+
   let description = "";
   if (event.type) {
-    // New format with type field
     switch (event.type) {
       case "MouseClick":
         description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
@@ -621,7 +535,7 @@ function addEventToTimeline(event) {
         }
         break;
       case "Key":
-        description = `Key ${event.action === "Down" ? "Down" : "Up"}: ${event.chars || 'Code ' + event.code}`;
+        description = `Key ${event.action === "Down" ? "Down" : "Up"}: ${event.chars || "Code " + event.code}`;
         break;
       case "Scroll":
         description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
@@ -642,7 +556,6 @@ function addEventToTimeline(event) {
         description = JSON.stringify(event);
     }
   } else {
-    // Legacy format
     const eventType = Object.keys(event)[0];
     switch (eventType) {
       case "MouseClick":
@@ -661,7 +574,7 @@ function addEventToTimeline(event) {
         description = JSON.stringify(event);
     }
   }
-  
+
   item.textContent = description;
   timelineEl.appendChild(item);
   timelineEl.scrollTop = timelineEl.scrollHeight;
@@ -686,7 +599,7 @@ function getConditionDescription(condition) {
 }
 
 function updateRecordingUI() {
-  const statusEl = document.querySelector(".recording-status");
+  const statusEl = document.getElementById("recording-status");
   const recordBtn = document.getElementById("recordBtn");
   const stopBtn = document.getElementById("stopBtn");
   const replayBtn = document.getElementById("replayBtn");
@@ -694,7 +607,7 @@ function updateRecordingUI() {
   const cancelBtn = document.getElementById("cancelBtn");
   const pauseBtn = document.getElementById("pauseBtn");
   const resumeBtn = document.getElementById("resumeBtn");
-  
+
   if (statusEl) {
     if (isRecording) {
       statusEl.innerHTML = '<span class="pulse" aria-hidden="true"></span> Recording workflow...';
@@ -712,8 +625,7 @@ function updateRecordingUI() {
       statusEl.style.color = "#22c55e";
     }
   }
-  
-  // Update button states
+
   if (recordBtn) recordBtn.disabled = isRecording || isPlaying;
   if (stopBtn) stopBtn.disabled = !isRecording;
   if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
@@ -723,20 +635,16 @@ function updateRecordingUI() {
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
 }
 
-// Initialize UI state
-updateRecordingUI();
+// ===== Smart Observer mode =====
 
-// ===== Smart Observer Mode Functions =====
+let observerUpdateInterval = null;
 
 async function startSmartObserver() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
+  if (!invoke) return notAvailable();
 
   try {
     await invoke("start_observer");
-    alert("Smart Observer started! I'm now learning your patterns...");
+    showInsight("Smart Observer started — I'm learning your patterns…");
     startObserverUIUpdate();
   } catch (error) {
     console.error("Failed to start observer:", error);
@@ -749,22 +657,37 @@ async function stopSmartObserver() {
 
   try {
     await invoke("stop_observer");
-    alert("Smart Observer stopped.");
+    showInsight("Smart Observer stopped.");
+    if (observerUpdateInterval) {
+      clearInterval(observerUpdateInterval);
+      observerUpdateInterval = null;
+    }
   } catch (error) {
     console.error("Failed to stop observer:", error);
   }
 }
 
 async function checkObserverStatus() {
-  if (!invoke) return;
+  if (!invoke) return false;
 
   try {
-    const active = await invoke("is_observer_active");
-    return active;
+    return await invoke("is_observer_active");
   } catch (error) {
     console.error("Failed to check observer status:", error);
     return false;
   }
+}
+
+function startObserverUIUpdate() {
+  if (observerUpdateInterval) clearInterval(observerUpdateInterval);
+
+  observerUpdateInterval = setInterval(async () => {
+    const active = await checkObserverStatus();
+    if (!active) {
+      clearInterval(observerUpdateInterval);
+      observerUpdateInterval = null;
+    }
+  }, 2000);
 }
 
 async function observeCurrentSession() {
@@ -776,17 +699,11 @@ async function observeCurrentSession() {
 
   try {
     const appName = prompt("Which app are you using?", "Unknown App") || "Unknown";
-    const patternsFound = await invoke("observe_events", {
-      events: recordedEvents,
-      app_name: appName
-    });
-    alert(`Found ${patternsFound} learned patterns from ${appName}!`);
-    
-    // Get proactive suggestions
+    const patternsFound = await invoke("observe_events", { events: recordedEvents, app_name: appName });
+    showNotification(`Found ${patternsFound} learned patterns from <strong>${appName}</strong>!`);
+
     const suggestions = await invoke("get_proactive_suggestions");
-    if (suggestions.length > 0) {
-      displaySuggestions(suggestions);
-    }
+    if (suggestions.length > 0) displaySuggestions(suggestions);
   } catch (error) {
     console.error("Failed to observe events:", error);
     alert("Failed to observe: " + error);
@@ -802,10 +719,7 @@ async function generateGeekInsights() {
 
   try {
     const appName = prompt("Which app are you analyzing?", "Unknown App") || "Unknown";
-    const insights = await invoke("generate_geek_insights", {
-      events: recordedEvents,
-      app_name: appName
-    });
+    const insights = await invoke("generate_geek_insights", { events: recordedEvents, app_name: appName });
     displayGeekInsights(insights, appName);
   } catch (error) {
     console.error("Failed to generate geek insights:", error);
@@ -827,24 +741,20 @@ function displaySuggestions(suggestions) {
         <p><strong>${i + 1}. ${s.suggestion}</strong></p>
         <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${s.suggested_workflow_name}</code></p>
         <p style="font-size: 0.85rem;">Confidence: ${(s.confidence * 100).toFixed(1)}%</p>
-        <button onclick="createWorkflowFromSuggestion('${s.suggested_workflow_name}', '${s.pattern_id}')" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
+        <button data-create-workflow-from-suggestion="${s.suggested_workflow_name}|${s.pattern_id}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
       </div>
     `).join("")}
-    <button onclick="closeModal('analysis-modal')">Close</button>
+    <button data-close-modal="analysis-modal">Close</button>
   `;
 
-  modal.style.display = "block";
+  modal.style.display = "flex";
 }
 
-async function createWorkflowFromSuggestion(name, patternId) {
-  // For now, just save the current events with the suggested name
+async function createWorkflowFromSuggestion(name) {
   if (recordedEvents.length === 0) return;
 
   try {
-    await invoke("save_workflow", {
-      name,
-      events: recordedEvents
-    });
+    await invoke("save_workflow", { name, events: recordedEvents });
     closeModal("analysis-modal");
     alert(`Workflow "${name}" created!`);
   } catch (error) {
@@ -875,7 +785,7 @@ function displayGeekInsights(insights, appName) {
         <tr style="border-bottom: 1px solid #374151;">
           <th>Index</th><th>Action</th><th>Delay Before</th>
         </tr>
-        ${insights.event_timing_analysis.slice(0, 10).map(t => `
+        ${insights.event_timing_analysis.slice(0, 10).map((t) => `
           <tr style="border-bottom: 1px solid #374151;">
             <td>${t.event_index}</td>
             <td>${t.estimated_action}</td>
@@ -885,46 +795,31 @@ function displayGeekInsights(insights, appName) {
         ${insights.event_timing_analysis.length > 10 ? `<tr><td colspan="3">... and ${insights.event_timing_analysis.length - 10} more</td></tr>` : ""}
       </table>
     </div>
-    <button onclick="closeModal('analysis-modal')">Close</button>
+    <button data-close-modal="analysis-modal">Close</button>
   `;
 
-  modal.style.display = "block";
+  modal.style.display = "flex";
 }
 
-// ===== Phase 4A: Visual Regression Functions =====
+// ===== Visual regression =====
 
 async function replayWithVisualCheck() {
-  if (!invoke) {
-    alert("Tauri not available - running in static mode");
-    return;
-  }
-
+  if (!invoke) return notAvailable();
   if (recordedEvents.length === 0) {
     alert("No events recorded yet");
     return;
   }
 
   try {
-    // For demo, capture a baseline automatically
     const appName = prompt("App name for baseline:", "default_app");
-    if (appName) {
-      await invoke("capture_baseline_screenshot", { name: appName });
-    }
+    if (appName) await invoke("capture_baseline_screenshot", { name: appName });
 
     const visualChecks = [
-      { event_index: recordedEvents.length - 1, name: "Final State", baseline_screenshot_path: appName ? `${appName}.png` : null, threshold: 0.95 }
+      { event_index: recordedEvents.length - 1, name: "Final State", baseline_screenshot_path: appName ? `${appName}.png` : null, threshold: 0.95 },
     ];
 
-    const success = await invoke("replay_with_visual_check", {
-      events: recordedEvents,
-      visual_checks: visualChecks
-    });
-
-    if (success) {
-      alert("Replay completed with visual check!");
-    } else {
-      alert("Replay was cancelled");
-    }
+    const success = await invoke("replay_with_visual_check", { events: recordedEvents, visual_checks: visualChecks });
+    alert(success ? "Replay completed with visual check!" : "Replay was cancelled");
   } catch (error) {
     console.error("Failed to replay with visual check:", error);
     alert("Replay failed: " + error);
@@ -946,7 +841,7 @@ async function captureBaseline() {
   }
 }
 
-// ===== Phase 4C: Data Source Functions =====
+// ===== Data sources =====
 
 async function createDataSource() {
   if (!invoke) return;
@@ -956,17 +851,10 @@ async function createDataSource() {
 
   const type = prompt("Data source type (csv/json/environment):", "environment") || "environment";
   let path = null;
-
-  if (type === "csv" || type === "json") {
-    path = prompt("Path to data file:");
-  }
+  if (type === "csv" || type === "json") path = prompt("Path to data file:");
 
   try {
-    const sourcePath = await invoke("create_data_source", {
-      name,
-      source_type: type,
-      path
-    });
+    const sourcePath = await invoke("create_data_source", { name, source_type: type, path });
     alert(`Data source created: ${sourcePath}`);
   } catch (error) {
     console.error("Failed to create data source:", error);
@@ -984,26 +872,75 @@ async function loadVariablesFromSource() {
     const variables = await invoke("load_variables", { data_source_name: name });
     alert(`Loaded ${Object.keys(variables).length} variables`);
     console.log("Variables:", variables);
-    return variables;
   } catch (error) {
     console.error("Failed to load variables:", error);
     alert("Load failed: " + error);
   }
 }
 
-// Observer UI update loop
-let observerUpdateInterval = null;
+// ===== Wire up the UI =====
 
-function startObserverUIUpdate() {
-  if (observerUpdateInterval) {
-    clearInterval(observerUpdateInterval);
-  }
+function wireUpControls() {
+  const bind = (id, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("click", handler);
+  };
 
-  observerUpdateInterval = setInterval(async () => {
-    const active = await checkObserverStatus();
-    if (!active) {
-      clearInterval(observerUpdateInterval);
-      observerUpdateInterval = null;
+  bind("recordBtn", startRecording);
+  bind("stopBtn", stopRecording);
+  bind("replayBtn", replayWorkflow);
+  bind("replayReliableBtn", replayWithReliability);
+  bind("cancelBtn", cancelReplay);
+  bind("pauseBtn", pauseReplay);
+  bind("resumeBtn", resumeReplay);
+  bind("inspectElementBtn", inspectElementAtCursor);
+
+  bind("saveBtn", saveWorkflow);
+  bind("saveAiBtn", saveWorkflowWithMetadata);
+  bind("loadBtn", loadWorkflow);
+  bind("analyzeBtn", analyzeWorkflow);
+  bind("optimizeBtn", optimizeWorkflow);
+
+  bind("startObserverBtn", startSmartObserver);
+  bind("stopObserverBtn", stopSmartObserver);
+  bind("observeSessionBtn", observeCurrentSession);
+  bind("geekModeBtn", generateGeekInsights);
+
+  bind("initCloudBtn", initCloudSync);
+  bind("cloudLoginBtn", cloudLogin);
+  bind("cloudSyncBtn", syncToCloud);
+  bind("newWorkspaceBtn", createWorkspace);
+  bind("auditLogsBtn", viewAuditLogs);
+
+  bind("visualCheckBtn", replayWithVisualCheck);
+  bind("captureBaselineBtn", captureBaseline);
+  bind("newDataSourceBtn", createDataSource);
+  bind("loadVariablesBtn", loadVariablesFromSource);
+
+  bind("perm-grant", requestAccessibility);
+
+  const speedSelect = document.getElementById("speedSelect");
+  if (speedSelect) speedSelect.addEventListener("change", (e) => setSpeed(parseFloat(e.target.value)));
+
+  // Modal close / dynamically-injected suggestion buttons (event delegation,
+  // since their markup is generated via innerHTML after the fact)
+  document.body.addEventListener("click", (e) => {
+    const closeTarget = e.target.closest("[data-close-modal]");
+    if (closeTarget) {
+      closeModal(closeTarget.dataset.closeModal);
+      return;
     }
-  }, 2000);
+
+    const suggestionTarget = e.target.closest("[data-create-workflow-from-suggestion]");
+    if (suggestionTarget) {
+      const [name] = suggestionTarget.dataset.createWorkflowFromSuggestion.split("|");
+      createWorkflowFromSuggestion(name);
+    }
+  });
 }
+
+window.addEventListener("DOMContentLoaded", () => {
+  wireUpControls();
+  updateRecordingUI();
+  refreshPermissionBanner();
+});
