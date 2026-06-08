@@ -1,10 +1,11 @@
 //! LLM integration for AI-assisted workflow generation.
 //! Provides abstraction over OpenAI, Claude, and local fallback modes.
 
+use crate::config::AISettings;
 use crate::core::events::{ElementInfo, InputEvent};
 
 use std::env;
-use std::sync::OnceLock;
+use std::sync::{Arc, RwLock};
 
 /// LLM provider trait for workflow generation
 #[async_trait::async_trait]
@@ -28,6 +29,8 @@ pub struct LLMConfig {
     pub model: String,
     pub max_tokens: u32,
     pub temperature: f32,
+    /// Optional custom base endpoint (OpenAI-compatible). `None` = provider default.
+    pub endpoint: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -72,6 +75,46 @@ impl LLMConfig {
             model,
             max_tokens: 2048,
             temperature: 0.7,
+            endpoint: None,
+        }
+    }
+
+    /// Build an LLM config from the persisted `AISettings`.
+    ///
+    /// The provider is chosen by `ai.provider` rather than by which key env var
+    /// happens to be set. API keys still come from the environment only (never
+    /// from `config.json`); if the selected remote provider has no key present,
+    /// we fall back to `Local` so generation degrades gracefully instead of
+    /// erroring at call time.
+    pub fn from_ghost_config(ai: &AISettings) -> Self {
+        let requested = match ai.provider.to_lowercase().as_str() {
+            "openai" => LLMProviderType::OpenAI,
+            "anthropic" | "claude" => LLMProviderType::Claude,
+            _ => LLMProviderType::Local,
+        };
+
+        // Downgrade to Local if the matching API key is absent.
+        let provider = match requested {
+            LLMProviderType::OpenAI if env_key_present("OPENAI_API_KEY") => LLMProviderType::OpenAI,
+            LLMProviderType::Claude if env_key_present("ANTHROPIC_API_KEY") => {
+                LLMProviderType::Claude
+            }
+            LLMProviderType::Local => LLMProviderType::Local,
+            _ => LLMProviderType::Local,
+        };
+
+        let model = match provider {
+            LLMProviderType::Local => "local-heuristic".to_string(),
+            _ => ai.model.clone(),
+        };
+
+        LLMConfig {
+            provider,
+            api_key: None,
+            model,
+            max_tokens: 2048,
+            temperature: 0.7,
+            endpoint: ai.api_endpoint.clone(),
         }
     }
 
@@ -84,20 +127,30 @@ impl LLMConfig {
     }
 }
 
-/// Global LLM instance (singleton)
-static LLM_INSTANCE: OnceLock<Box<dyn LLMProvider>> = OnceLock::new();
-
-pub fn init_llm(config: &LLMConfig) {
-    let provider: Box<dyn LLMProvider> = match config.provider {
-        LLMProviderType::OpenAI => Box::new(OpenAIProvider::new(config)),
-        LLMProviderType::Claude => Box::new(ClaudeProvider::new(config)),
-        LLMProviderType::Local => Box::new(LocalFallback::new()),
-    };
-    LLM_INSTANCE.set(provider).ok();
+/// True if the named env var is set and non-empty.
+fn env_key_present(name: &str) -> bool {
+    env::var(name).map(|v| !v.is_empty()).unwrap_or(false)
 }
 
-pub fn get_llm() -> Option<&'static dyn LLMProvider> {
-    LLM_INSTANCE.get().map(|b| b.as_ref())
+/// Global LLM instance. A `RwLock` (not `OnceLock`) so the active provider can
+/// be rebuilt when the user changes the AI settings at runtime.
+static LLM_INSTANCE: RwLock<Option<Arc<dyn LLMProvider>>> = RwLock::new(None);
+
+/// Initialize (or replace) the active LLM provider from `config`.
+pub fn init_llm(config: &LLMConfig) {
+    let provider: Arc<dyn LLMProvider> = match config.provider {
+        LLMProviderType::OpenAI => Arc::new(OpenAIProvider::new(config)),
+        LLMProviderType::Claude => Arc::new(ClaudeProvider::new(config)),
+        LLMProviderType::Local => Arc::new(LocalFallback::new()),
+    };
+    if let Ok(mut guard) = LLM_INSTANCE.write() {
+        *guard = Some(provider);
+    }
+}
+
+/// Get a handle to the active LLM provider, if one has been initialized.
+pub fn get_llm() -> Option<Arc<dyn LLMProvider>> {
+    LLM_INSTANCE.read().ok().and_then(|guard| guard.clone())
 }
 
 /// OpenAI provider implementation
@@ -147,8 +200,14 @@ impl LLMProvider for OpenAIProvider {
             ax_tree.unwrap_or("no context")
         );
 
+        let endpoint = self
+            .config
+            .endpoint
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1/chat/completions");
+
         let response = client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(endpoint)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({
@@ -409,5 +468,56 @@ pub fn describe_event(event: &InputEvent) -> String {
         InputEvent::VariableRef { name } => {
             format!("Ref variable ${}", name)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ai_settings(provider: &str, endpoint: Option<&str>) -> AISettings {
+        AISettings {
+            enabled: true,
+            provider: provider.to_string(),
+            api_endpoint: endpoint.map(|s| s.to_string()),
+            model: "test-model".to_string(),
+            auto_optimize: true,
+            proactive_suggestions: true,
+        }
+    }
+
+    #[test]
+    fn local_provider_maps_to_local() {
+        let cfg = LLMConfig::from_ghost_config(&ai_settings("local", None));
+        assert!(matches!(cfg.provider, LLMProviderType::Local));
+        // Local always uses the heuristic model name, ignoring config.model.
+        assert_eq!(cfg.model, "local-heuristic");
+    }
+
+    #[test]
+    fn unknown_provider_falls_back_to_local() {
+        let cfg = LLMConfig::from_ghost_config(&ai_settings("wat", None));
+        assert!(matches!(cfg.provider, LLMProviderType::Local));
+    }
+
+    #[test]
+    fn remote_provider_without_key_falls_back_to_local() {
+        // In the test environment no API keys are configured, so a requested
+        // remote provider must degrade to Local rather than error later.
+        if !env_key_present("OPENAI_API_KEY") {
+            let cfg = LLMConfig::from_ghost_config(&ai_settings("openai", None));
+            assert!(matches!(cfg.provider, LLMProviderType::Local));
+        }
+        if !env_key_present("ANTHROPIC_API_KEY") {
+            let cfg = LLMConfig::from_ghost_config(&ai_settings("anthropic", None));
+            assert!(matches!(cfg.provider, LLMProviderType::Local));
+        }
+    }
+
+    #[test]
+    fn endpoint_passes_through() {
+        let cfg =
+            LLMConfig::from_ghost_config(&ai_settings("local", Some("https://example.test/v1")));
+        assert_eq!(cfg.endpoint.as_deref(), Some("https://example.test/v1"));
     }
 }

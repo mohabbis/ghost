@@ -59,10 +59,19 @@ pub struct ReplaySettings {
     pub visual_threshold: f32,
     /// Max retry attempts for failed actions
     pub max_retry_attempts: u32,
+    /// Base retry backoff in milliseconds
+    #[serde(default = "default_retry_backoff_ms")]
+    pub retry_backoff_ms: u64,
     /// Retry backoff multiplier
     pub retry_backoff_multiplier: f32,
     /// Enable self-healing (auto-adapt to UI changes)
     pub self_healing: bool,
+}
+
+/// Default base retry backoff (ms); kept as a free fn so older config files
+/// that predate this field still deserialize with a sane value.
+fn default_retry_backoff_ms() -> u64 {
+    500
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +140,7 @@ impl Default for GhostConfig {
                 visual_verification: false,
                 visual_threshold: 0.95,
                 max_retry_attempts: 3,
+                retry_backoff_ms: 500,
                 retry_backoff_multiplier: 1.5,
                 self_healing: true,
             },

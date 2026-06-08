@@ -1,6 +1,7 @@
 //! Ghost engine: platform-agnostic orchestration layer.
 //! Manages recording, element lookup, and replay with cancellation support.
 
+use crate::config::GhostConfig;
 use crate::core::ai::WorkflowAnalysis;
 use crate::core::ai::WorkflowAnalyzer;
 use crate::core::events::{
@@ -43,6 +44,8 @@ pub struct GhostEngine {
     execution_tracker: Arc<Mutex<Option<ExecutionHistory>>>,
     /// Knowledge base for Smart Observer Mode
     knowledge_base: KnowledgeBase,
+    /// Persisted user configuration (source of truth for runtime defaults)
+    config: Arc<Mutex<GhostConfig>>,
 }
 
 impl GhostEngine {
@@ -71,6 +74,12 @@ impl GhostEngine {
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         compile_error!("Unsupported platform: only macOS and Windows are supported");
 
+        // Load persisted config (falling back to defaults) and use it to seed
+        // runtime state: starting playback speed and the active LLM provider.
+        let config = GhostConfig::load().unwrap_or_default();
+        let initial_speed = config.replay.default_speed.max(0.1);
+        llm::init_llm(&LLMConfig::from_ghost_config(&config.ai));
+
         GhostEngine {
             recorder,
             locator,
@@ -78,12 +87,13 @@ impl GhostEngine {
             tx: Mutex::new(None),
             rx: Mutex::new(None),
             replay_stop_flag: Arc::new(AtomicBool::new(false)),
-            playback_speed: Arc::new(Mutex::new(1.0)),
+            playback_speed: Arc::new(Mutex::new(initial_speed)),
             replay_paused: Arc::new(AtomicBool::new(false)),
             recorded_events: Arc::new(Mutex::new(Vec::new())),
             analyzer: WorkflowAnalyzer::new(),
             execution_tracker: Arc::new(Mutex::new(ExecutionHistory::new().ok())),
             knowledge_base: KnowledgeBase::new(),
+            config: Arc::new(Mutex::new(config)),
         }
     }
 
@@ -153,6 +163,35 @@ impl GhostEngine {
     /// Get the current playback speed factor.
     pub fn get_playback_speed(&self) -> f32 {
         *self.playback_speed.lock().unwrap()
+    }
+
+    /// Snapshot the current persisted configuration.
+    pub fn get_config(&self) -> GhostConfig {
+        self.config.lock().unwrap().clone()
+    }
+
+    /// Validate, persist, and apply a new configuration. Re-seeds the live
+    /// playback speed and rebuilds the active LLM provider so changes take
+    /// effect without a restart.
+    pub fn update_config(&self, new_config: GhostConfig) -> anyhow::Result<()> {
+        new_config.validate()?;
+        new_config.save()?;
+
+        *self.playback_speed.lock().unwrap() = new_config.replay.default_speed.max(0.1);
+        llm::init_llm(&LLMConfig::from_ghost_config(&new_config.ai));
+
+        *self.config.lock().unwrap() = new_config;
+        Ok(())
+    }
+
+    /// Build a default retry config from the persisted replay settings.
+    pub fn default_retry_config(&self) -> crate::core::events::RetryConfig {
+        let replay = &self.config.lock().unwrap().replay;
+        crate::core::events::RetryConfig {
+            max_attempts: replay.max_retry_attempts,
+            backoff_ms: replay.retry_backoff_ms,
+            backoff_multiplier: replay.retry_backoff_multiplier,
+        }
     }
 
     /// Get the element info at the given screen coordinates.
@@ -436,10 +475,11 @@ impl GhostEngine {
         prompt: String,
         screenshot: Option<Vec<u8>>,
     ) -> anyhow::Result<Vec<InputEvent>> {
-        // Initialize LLM if not already done
-        let config = LLMConfig::from_env();
+        // Initialize the LLM from the persisted config if not already done
+        // (it normally is, from `new()`/`update_config`).
         if llm::get_llm().is_none() {
-            llm::init_llm(&config);
+            let ai = self.config.lock().unwrap().ai.clone();
+            llm::init_llm(&LLMConfig::from_ghost_config(&ai));
         }
 
         let provider =
@@ -491,9 +531,9 @@ impl GhostEngine {
         &self,
         events: Vec<InputEvent>,
     ) -> anyhow::Result<Vec<InputEvent>> {
-        let config = LLMConfig::from_env();
         if llm::get_llm().is_none() {
-            llm::init_llm(&config);
+            let ai = self.config.lock().unwrap().ai.clone();
+            llm::init_llm(&LLMConfig::from_ghost_config(&ai));
         }
 
         let _provider =

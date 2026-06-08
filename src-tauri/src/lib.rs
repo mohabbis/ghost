@@ -24,6 +24,8 @@ pub fn run() {
             commands::is_replay_running,
             commands::set_playback_speed,
             commands::get_playback_speed,
+            commands::get_config,
+            commands::update_config,
             commands::inspect_element,
             commands::save_workflow,
             commands::load_workflow,
