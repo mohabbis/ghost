@@ -88,10 +88,12 @@ function showProactiveNotification() {
   const observation = proactiveObservations[notificationIndex];
   const notification = document.createElement('div');
   notification.className = 'notification notification--proactive';
+  const highlighted = observation.text.replace(
+    observation.highlight,
+    `<span class="notification__highlight">${observation.highlight}</span>`
+  );
   notification.innerHTML = `
-    <p class="notification__text">
-      🦜 Hey, <span class="notification__highlight">${observation.highlight}</span> ${observation.text.replace(observation.highlight, '')}
-    </p>
+    <p class="notification__text">🦜 ${highlighted}</p>
   `;
   
   notificationsEl.appendChild(notification);
