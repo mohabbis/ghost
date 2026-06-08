@@ -123,11 +123,12 @@ extern "C" {
     fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
     fn CFGetTypeID(cf: CFTypeRef) -> usize;
     fn CFRelease(cf: CFTypeRef);
+
+    static kCFRunLoopCommonModes: CFStringRef;
 }
 
 // Constants
 const kCFStringEncodingUTF8: CFStringEncoding = 0x08000100;
-const kCFRunLoopCommonModes: CFStringRef = std::ptr::null(); // Simplified - would be kCFRunLoopCommonMode in real impl
 const kCGSessionEventTap: CGEventTapId = 0;
 const kCGHeadInsertEventTap: u32 = 0;
 const kCGEventTapOptionDefault: u32 = 0;
@@ -166,23 +167,28 @@ impl MacosBackend {
         Box::new(MacosReplayer::new())
     }
 
-    /// Check if accessibility permissions are granted
+    /// Check if accessibility permissions are granted, without prompting.
     pub fn check_accessibility() -> bool {
-        unsafe {
-            let system_wide = AXUIElementCreateSystemWide();
-            if system_wide.is_null() {
-                return false;
-            }
-            // If we can create a system-wide element, we have access
-            true
-        }
+        unsafe { accessibility_sys::AXIsProcessTrusted() }
     }
 
-    /// Request accessibility permissions (UI)
+    /// Request accessibility permissions, surfacing the system "Ghost would
+    /// like to control this computer" prompt if not already granted.
     pub fn request_accessibility() -> bool {
-        // On macOS, this would typically trigger a system dialog
-        // For now, we check if we already have access
-        Self::check_accessibility()
+        use accessibility_sys::kAXTrustedCheckOptionPrompt;
+        use core_foundation::base::TCFType;
+        use core_foundation::boolean::CFBoolean;
+        use core_foundation::dictionary::CFDictionary;
+        use core_foundation::string::CFString;
+
+        unsafe {
+            let prompt_key = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
+            let options = CFDictionary::from_CFType_pairs(&[(
+                prompt_key.as_CFType(),
+                CFBoolean::true_value().as_CFType(),
+            )]);
+            accessibility_sys::AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef())
+        }
     }
 }
 
