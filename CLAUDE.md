@@ -13,16 +13,20 @@ Five phases are fully implemented: Foundation (record/replay), Workflow Manageme
 Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 
 - **Frontend** (`src/`): plain vanilla HTML/CSS/JS — **no bundler, no npm, no `package.json`**. `tauri.conf.json` sets `frontendDist` to `../src`, so files are served as-is. `withGlobalTauri: true` exposes the Tauri API on `window.__TAURI__`. There is no dev server; the frontend is static.
-- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 69 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
+- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 48 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
 
 ### Backend module tree
 
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 69 commands via generate_handler!
-├── commands.rs          # thin #[tauri::command] IPC surface (~580 lines)
-├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~867 lines)
+├── lib.rs               # Tauri app builder; registers all 48 commands via generate_handler!
+├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
+├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
+├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
+├── error.rs             # GhostError/ErrorKind — structured, user-friendly error type with suggestions
+├── performance.rs       # PerformanceMonitor — operation timers and metrics collection
+├── telemetry.rs         # TelemetryManager — opt-in usage events and UsageStats
 ├── core/
 │   ├── mod.rs           # re-exports
 │   ├── events.rs        # InputEvent enum, ElementInfo, Workflow, WorkflowMetadata structs
@@ -32,14 +36,21 @@ src-tauri/src/
 │   ├── cloud.rs         # CloudSyncManager, Workspace, AuditLog, MemberRole (RBAC)
 │   ├── execution.rs     # ExecutionRecord, ExecutionHistory, ExecutionStatus
 │   ├── knowledge.rs     # KnowledgeBase for Smart Observer Mode; LearnedPattern, ProactiveSuggestion
-│   ├── vision.rs        # SSIM image comparison, screenshot capture
+│   ├── vision.rs        # SSIM image comparison, cross-platform screenshot capture
 │   ├── wait.rs          # Smart wait conditions (ElementVisible, TextPresent, ImageMatches, etc.)
-│   └── security.rs      # (stub; referenced in mod.rs)
+│   └── security.rs      # path sanitization, input validation, rate limiting (audit submodule is a stub)
 └── platform/
     ├── mod.rs           # re-exports platform-specific implementations
     ├── macos.rs         # CGEventTap recording, AXUIElement inspection, enigo replay
     └── windows.rs       # Win32 hooks, UIA (UI Automation), enigo replay
 ```
+
+> **Note:** `config.rs`, `error.rs`, `performance.rs`, and `telemetry.rs` are standalone modules
+> with their own unit tests, but as of now nothing in `engine.rs`/`commands.rs`/`platform/` actually
+> constructs or calls into `GhostConfig`, `GhostError`, `PerformanceMonitor`, or `TelemetryManager` —
+> grep for `use crate::config`/`use crate::error` etc. before assuming they're wired into the live
+> request path. Likewise `core::security`'s validation helpers (`sanitize_workflow_path`,
+> `validate_prompt`, `rate_limit`, …) are not yet called from `commands.rs`.
 
 ### Frontend files
 
@@ -49,6 +60,14 @@ src/
 ├── main.js      # ~1000 lines; all Tauri IPC logic, recording controls, workflow mgmt, cloud sync, Observer mode
 └── styles.css   # dark theme design system (purple/orange palette)
 ```
+
+### Marketing website (`public/`)
+
+`public/` is a near-duplicate of `src/` (`index.html`, `main.js`, `styles.css`, plus `assets/`,
+`downloads/`, favicons) deployed as the static marketing site at ghost.muharafiq.com — **not**
+served by the Tauri app. `src/` and `public/` must be kept in sync by hand when the UI changes;
+see `DEPLOYMENT.md`. Download links on the site point at the latest GitHub Release assets
+(`Ghost.dmg`, `Ghost_Setup.exe`), not the files checked into `public/downloads/`.
 
 ## IPC contract (Rust ↔ JS)
 
@@ -66,7 +85,7 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (69 total, registered in `lib.rs`)
+### Commands (48 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
@@ -230,11 +249,25 @@ cargo tauri build
 cd src-tauri && cargo check
 cd src-tauri && cargo clippy
 
-# Tests (none yet; add with #[cfg(test)] in any module)
+# Tests: unit tests live inline (#[cfg(test)]) in config.rs, error.rs,
+# performance.rs, telemetry.rs; integration/e2e tests live in src-tauri/tests/
 cd src-tauri && cargo test
 ```
 
 There is no frontend build or lint step — the frontend is static vanilla JS.
+
+## CI/CD (`.github/workflows/`)
+
+- **`rust.yml`** — runs on push/PR to `main`/`master`/`develop`: `cargo check`, `cargo test`,
+  `cargo clippy`, `cargo fmt --check`, plus per-platform release builds. Ubuntu jobs need
+  `libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` installed
+  before `cargo` runs (see `CI_FIX_SUMMARY.md` for the history of fixes here — warnings are
+  intentionally allowed, not denied, in check/test/clippy).
+- **`release.yml`** — tag-driven (`v*`), builds and signs the desktop bundles (see below).
+- **`deploy-website.yml`** — triggered by changes under `public/**`; deploys the marketing
+  site to Vercel and validates download links / structured data in `public/index.html`.
+- **`deny.toml`** at the repo root configures `cargo-deny` for license and advisory checks
+  (MIT/Apache-2.0/BSD/ISC allow-listed; (A)GPL denied).
 
 ## Releases & macOS code signing
 
@@ -283,9 +316,11 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 - **Accessibility permission** applies to the running binary path. `cargo tauri dev` changes the binary path on each rebuild, so macOS may re-prompt. A stable `.app` from `cargo tauri build` is more reliable for testing real recording.
 - **Bundle identifier** is `com.muhammadrafiq.ghost`; macOS ties the permission grant to it.
 - **`src-tauri/target/` and `src-tauri/gen/`** are build artifacts — never edit or commit them. `Cargo.lock` IS committed (binary crate convention).
-- **Windows screenshot capture** in `vision.rs` is a stub — SSIM visual regression is macOS-only for now.
-- **Cloud sync** (`cloud.rs`) stores data in-memory only — no real remote API calls are wired yet.
-- **`APP_HANDLE` static mut** in `platform/macos.rs` is accessed with `unsafe` — known footgun; avoid concurrent `start_recording`/`stop_recording` calls.
+- **Windows screenshot capture** in `vision.rs` shells out to PowerShell (`System.Drawing`/`System.Windows.Forms`) to a temp PNG; macOS uses the `screencapture` CLI. Both feed the same SSIM comparison in `replay_with_visual_check`.
+- **Cloud sync** (`cloud.rs`) stores data in-memory only — no real remote API calls are wired yet (`cloud_authenticate`/`cloud_sync_workflows` don't touch `reqwest`).
+- **`config.rs`/`error.rs`/`performance.rs`/`telemetry.rs` are not yet integrated** — they compile, have their own tests, and are exported from `lib.rs`, but `engine.rs`/`commands.rs` don't construct or call them. Don't assume `GhostError`/`GhostConfig` show up in command results just because the types exist.
+- **`src/` and `public/` must stay in sync by hand** — `public/` is a parallel copy of the frontend deployed as the marketing site (see `DEPLOYMENT.md`); editing one without the other causes drift between the app UI and the website.
+- **macOS recording state** in `platform/macos.rs` lives behind `Arc<Mutex<Option<TapState>>>` (with manual `unsafe impl Send/Sync` on the tap types) rather than a global static — still avoid overlapping `start_recording`/`stop_recording` calls since the `CGEventTap` lifecycle is stateful.
 
 ## Frontend conventions
 
@@ -300,14 +335,20 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 
 | Crate | Purpose |
 |---|---|
-| `tauri 2` | Desktop app framework |
+| `tauri 2`, `tauri-plugin-opener` | Desktop app framework + opener plugin |
 | `enigo` | Cross-platform mouse/keyboard synthesis |
 | `tokio` (full) | Async runtime |
 | `serde`, `serde_json` | Serialization for IPC |
-| `core-foundation`, `core-graphics`, `accessibility-sys` | macOS system APIs |
-| `image 0.24`, `ssim 0.1` | Visual regression screenshots |
-| `reqwest` | HTTP client for cloud sync / LLM APIs |
-| `uuid` | Workflow and execution IDs |
+| `core-foundation`, `core-graphics`, `accessibility-sys` | macOS system APIs (macOS-only target deps) |
+| `image 0.24`, `ssim 0.1`, `rusttype` | Visual regression screenshots and image annotation |
+| `reqwest` (json) | HTTP client for cloud sync / LLM APIs |
+| `uuid` (v4) | Workflow and execution IDs |
 | `anyhow` | Error handling |
-| `regex` | Pattern detection in AI module |
-| `tracing`, `tracing-subscriber`, `tracing-chrome` | Structured logging / profiling |
+| `regex` | Pattern detection in AI module, workflow-name validation |
+| `tracing`, `tracing-subscriber`, `tracing-chrome` (optional, `profiling` feature) | Structured logging / profiling |
+| `threadpool` | Background task execution |
+| `base64` | Encoding screenshots / binary payloads for IPC |
+| `async-trait` | Async methods on the `LLMProvider` trait |
+| `dirs` | Cross-platform data/config directory resolution |
+
+`profiling` is the only Cargo feature (enables `tracing-chrome`); `default = []`.
