@@ -288,6 +288,10 @@ unsafe extern "C" fn cg_event_callback(
             // Get absolute screen coordinates using kCGMouseEventX and kCGMouseEventY
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            // PRIVACY: never record interactions with secure text fields (password inputs).
+            if is_secure_field_at(x, y) {
+                return event;
+            }
             let button = if etype == kCGMouseEventLeftMouseDown {
                 0
             } else {
@@ -307,6 +311,10 @@ unsafe extern "C" fn cg_event_callback(
         kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            // PRIVACY: never record interactions with secure text fields (password inputs).
+            if is_secure_field_at(x, y) {
+                return event;
+            }
             let button = if etype == kCGMouseEventRightMouseDown {
                 2
             } else {
@@ -396,6 +404,31 @@ impl ElementLocator for MacosLocator {
             }))
         }
     }
+}
+
+/// Returns true if the UI element at screen point (x, y) is a secure text field
+/// (e.g. a password input). Capture skips these so credentials are never recorded.
+/// AX exposes secure inputs as `AXSecureTextField` (casing has varied historically),
+/// so the match is case-insensitive and substring-based.
+unsafe fn is_secure_field_at(x: i32, y: i32) -> bool {
+    let system_wide = AXUIElementCreateSystemWide();
+    if system_wide.is_null() {
+        return false;
+    }
+
+    let mut element: AXUIElementRef = std::ptr::null_mut();
+    let result = AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
+
+    let secure = if result == kAXErrorSuccess && !element.is_null() {
+        let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
+        CFRelease(element as *const c_void);
+        role.to_ascii_lowercase().contains("securetextfield")
+    } else {
+        false
+    };
+
+    CFRelease(system_wide as *const c_void);
+    secure
 }
 
 /// Helper function to extract string attributes from AXUIElement
