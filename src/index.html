@@ -121,5 +121,71 @@
     <div id="audit-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
       <div class="modal-content" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 700px; max-height: 80vh; overflow-y: auto; color: var(--text);"></div>
     </div>
+
+    <!-- First-run onboarding -->
+    <div id="onboarding" class="onboarding" hidden>
+      <div class="onboarding__card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <button class="onboarding__skip" id="onboardingSkip" type="button">Skip</button>
+
+        <div class="onboarding__dots" aria-hidden="true">
+          <span class="onboarding__dot" data-dot="0"></span>
+          <span class="onboarding__dot" data-dot="1"></span>
+          <span class="onboarding__dot" data-dot="2"></span>
+        </div>
+
+        <!-- Step 1: Welcome -->
+        <section class="onboarding__step" data-step="0">
+          <span class="onboarding__glyph" aria-hidden="true">🦜</span>
+          <h2 id="onboarding-title">Welcome to Ghost</h2>
+          <p class="onboarding__lead">
+            Ghost watches the repetitive things you do on screen, then replays them
+            for you — record a task once, run it forever.
+          </p>
+          <p class="onboarding__privacy">🔒 Ghost never records passwords or secure text fields.</p>
+          <div class="onboarding__actions">
+            <button class="btn btn--primary" id="onboardingStart" type="button">Get started</button>
+          </div>
+        </section>
+
+        <!-- Step 2: Accessibility permission -->
+        <section class="onboarding__step" data-step="1" hidden>
+          <span class="onboarding__glyph" aria-hidden="true">🔑</span>
+          <h2>Grant Accessibility access</h2>
+          <p class="onboarding__lead">
+            To watch and replay clicks and keystrokes, macOS needs you to allow Ghost
+            under <strong>System Settings → Privacy &amp; Security → Accessibility</strong>.
+          </p>
+          <div class="onboarding__status" id="onboardingPermStatus" data-granted="false">
+            <span class="onboarding__status-dot"></span>
+            <span id="onboardingPermStatusText">Not granted yet</span>
+          </div>
+          <p class="onboarding__note">
+            After you flip the switch, you may need to quit and reopen Ghost — macOS
+            applies Accessibility changes when the app launches.
+          </p>
+          <div class="onboarding__actions">
+            <button class="btn btn--ghost btn--small" id="onboardingBack" type="button">Back</button>
+            <button class="btn btn--primary" id="onboardingGrant" type="button">Open Accessibility settings</button>
+            <button class="btn btn--ghost" id="onboardingPermNext" type="button">Next</button>
+          </div>
+        </section>
+
+        <!-- Step 3: Ready -->
+        <section class="onboarding__step" data-step="2" hidden>
+          <span class="onboarding__glyph" aria-hidden="true">✅</span>
+          <h2>You're all set</h2>
+          <p class="onboarding__lead">Three steps to your first automation:</p>
+          <ol class="onboarding__list">
+            <li><strong>Start Recording</strong>, then do your task once.</li>
+            <li>Hit <strong>Stop</strong> when you're done.</li>
+            <li>Press <strong>Replay</strong> — Ghost repeats it for you.</li>
+          </ol>
+          <div class="onboarding__actions">
+            <button class="btn btn--ghost btn--small" id="onboardingBack2" type="button">Back</button>
+            <button class="btn btn--primary" id="onboardingFinish" type="button">Start using Ghost</button>
+          </div>
+        </section>
+      </div>
+    </div>
   </body>
 </html>
