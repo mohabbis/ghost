@@ -56,18 +56,34 @@ src-tauri/src/
 
 ```
 src/
-├── index.html   # full recording/replay/cloud UI (not a marketing page)
-├── main.js      # ~1000 lines; all Tauri IPC logic, recording controls, workflow mgmt, cloud sync, Observer mode
-└── styles.css   # dark theme design system (purple/orange palette)
+├── index.html   # standalone app shell (~125 lines): header, accessibility-permission banner, Recording/Workflows/Observer/Cloud panels, analysis + audit modals
+├── main.js      # ~950 lines; all Tauri IPC logic, recording controls, workflow mgmt, cloud sync, Observer mode
+├── app.css      # app-shell-only layout (.app-shell/.app-grid/.panel/.banner…), built on the CSS custom properties from styles.css
+└── styles.css   # dark theme design system / design tokens (purple/orange palette), shared with the marketing site
 ```
+
+> **Important — `src/` is the APP, `public/` is the marketing SITE; they are NOT interchangeable.**
+> They share `styles.css` and asset files, but `src/index.html` + `src/main.js` are a desktop app
+> shell wired to Tauri IPC, while `public/index.html` + `public/main.js` are the marketing landing
+> page. Earlier these had drifted into byte-identical copies of the marketing site, which made the
+> shipped app render the website instead of the app — don't re-sync them blindly. `app.css` exists
+> only under `src/` (the marketing site has no app shell). When changing shared pieces (`styles.css`,
+> tokens, assets) keep both in sync by hand; when changing app vs. site behavior, edit only the
+> relevant tree.
+
+- Buttons are wired exclusively via `addEventListener` in a `wireUpControls()` pass on
+  `DOMContentLoaded` — **never** inline `onclick="fn()"`, because `<script type="module">` does not
+  expose top-level functions on `window`, so inline handlers throw `ReferenceError`. Dynamically
+  injected markup (modal buttons, suggestion cards) uses `data-*` attributes + event delegation on
+  `document.body` for the same reason.
 
 ### Marketing website (`public/`)
 
-`public/` is a near-duplicate of `src/` (`index.html`, `main.js`, `styles.css`, plus `assets/`,
-`downloads/`, favicons) deployed as the static marketing site at ghost.muharafiq.com — **not**
-served by the Tauri app. `src/` and `public/` must be kept in sync by hand when the UI changes;
-see `DEPLOYMENT.md`. Download links on the site point at the latest GitHub Release assets
-(`Ghost.dmg`, `Ghost_Setup.exe`), not the files checked into `public/downloads/`.
+`public/` is the static marketing site at ghost.muharafiq.com — **not** served by the Tauri app.
+It mirrors `src/`'s shared files (`styles.css`, `assets/`, `downloads/`, favicons) but has its own
+marketing `index.html`/`main.js` (see the warning above). Download links on the site point at the
+latest GitHub Release assets (`Ghost.dmg`, `Ghost_Setup.exe`), not the files checked into
+`public/downloads/`. See `DEPLOYMENT.md`.
 
 ## IPC contract (Rust ↔ JS)
 
@@ -210,7 +226,8 @@ struct ReliabilitySettings {
 - Recording: `CGEventTap` session tap (read-only), catches `LeftMouseDown/Up`, key events, scroll
 - Element lookup: `AXUIElement` system-wide API; extracts role, title, value, app name
 - Replay: `enigo` for mouse movement and click synthesis
-- Accessibility permission: `AXIsProcessTrustedWithOptions`
+- Accessibility permission: `check_accessibility` calls `AXIsProcessTrusted()` (no prompt); `request_accessibility` calls `AXIsProcessTrustedWithOptions` with `kAXTrustedCheckOptionPrompt` to surface the system dialog. Both come from the `accessibility-sys` crate; the option dictionary is built with `core-foundation` safe wrappers.
+- Recording run loop: the event-tap thread adds its `CFRunLoopSource` to the current run loop under `kCFRunLoopCommonModes`, which is the real CoreFoundation symbol pulled in via `extern "C" { static kCFRunLoopCommonModes: CFStringRef; }` — **not** a `std::ptr::null()` placeholder. Passing null here crashes the recorder thread (`EXC_BREAKPOINT` inside `CFRunLoopAddSource`→`CFHash`) within seconds of `start_recording`.
 
 **Windows (`platform/windows.rs`):**
 - Recording: Win32 `SetWindowsHookEx` (WM_MOUSE, WM_KEYBOARD hooks)
