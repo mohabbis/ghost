@@ -1,6 +1,7 @@
 //! Ghost Tauri commands - platform-agnostic IPC handlers.
 
 use crate::core::events::InputEvent;
+use crate::core::security;
 use crate::engine::GhostEngine;
 use std::sync::mpsc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -105,6 +106,7 @@ pub fn save_workflow(
     events: Vec<InputEvent>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
     match engine.save_workflow(&name, &events) {
         Ok(path) => Ok(path.to_string_lossy().to_string()),
         Err(e) => Err(e.to_string()),
@@ -114,12 +116,14 @@ pub fn save_workflow(
 /// Load a workflow from disk.
 #[tauri::command]
 pub fn load_workflow(name: String, engine: State<GhostEngine>) -> Result<Vec<InputEvent>, String> {
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
     engine.load_workflow(&name).map_err(|e| e.to_string())
 }
 
 /// Delete a workflow from disk.
 #[tauri::command]
 pub fn delete_workflow(name: String, engine: State<GhostEngine>) -> Result<(), String> {
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
     engine.delete_workflow(&name).map_err(|e| e.to_string())
 }
 
@@ -204,6 +208,7 @@ pub fn save_workflow_with_metadata(
     tags: Vec<String>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
     let workflow = engine.create_workflow_with_details(&name, &events, &description, &tags);
 
     match engine.save_workflow_with_metadata(&workflow) {
@@ -218,6 +223,7 @@ pub fn load_workflow_with_metadata(
     name: String,
     engine: State<GhostEngine>,
 ) -> Result<crate::core::events::Workflow, String> {
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
     engine
         .load_workflow_with_metadata(&name)
         .map_err(|e| e.to_string())
@@ -232,6 +238,7 @@ pub fn generate_workflow_from_prompt(
     screenshot: Option<Vec<u8>>,
     engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
+    security::validate_prompt(&prompt).map_err(|e| e.to_string())?;
     engine
         .generate_workflow_from_prompt(prompt, screenshot)
         .map_err(|e| e.to_string())
@@ -259,6 +266,8 @@ pub fn save_workflow_with_sidecar(
 ) -> Result<String, String> {
     use std::fs;
     use std::time::SystemTime;
+
+    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
 
     let tagged_events = engine
         .analyze_and_tag_workflow(events.clone())
