@@ -288,8 +288,11 @@ unsafe extern "C" fn cg_event_callback(
             // Get absolute screen coordinates using kCGMouseEventX and kCGMouseEventY
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            // Resolve the element under the cursor once: used both for the privacy
+            // check and to tag the event so replay can re-resolve it later.
+            let element = ax_info_at(x, y);
             // PRIVACY: never record interactions with secure text fields (password inputs).
-            if is_secure_field_at(x, y) {
+            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
             }
             let button = if etype == kCGMouseEventLeftMouseDown {
@@ -301,7 +304,7 @@ unsafe extern "C" fn cg_event_callback(
                 x,
                 y,
                 button,
-                element: None, // Will be populated by element locator if needed
+                element,
                 timestamp: None,
                 retry_count: None,
                 semantic_tag: None,
@@ -311,8 +314,9 @@ unsafe extern "C" fn cg_event_callback(
         kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let element = ax_info_at(x, y);
             // PRIVACY: never record interactions with secure text fields (password inputs).
-            if is_secure_field_at(x, y) {
+            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
             }
             let button = if etype == kCGMouseEventRightMouseDown {
@@ -324,7 +328,7 @@ unsafe extern "C" fn cg_event_callback(
                 x,
                 y,
                 button,
-                element: None,
+                element,
                 timestamp: None,
                 retry_count: None,
                 semantic_tag: None,
@@ -370,65 +374,112 @@ struct MacosLocator;
 
 impl ElementLocator for MacosLocator {
     fn inspect_at(&self, x: i32, y: i32) -> anyhow::Result<Option<ElementInfo>> {
-        unsafe {
-            // Get system-wide accessibility element
-            let system_wide = AXUIElementCreateSystemWide();
-
-            let mut element: AXUIElementRef = std::ptr::null_mut();
-            let result =
-                AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
-
-            if result != kAXErrorSuccess || element.is_null() {
-                return Ok(None);
-            }
-
-            // Extract role
-            let role = get_ax_string_attribute(element, kAXRoleAttribute);
-
-            // Extract name/title
-            let name = get_ax_string_attribute(element, kAXTitleAttribute)
-                .or_else(|| get_ax_string_attribute(element, kAXValueAttribute))
-                .unwrap_or_default();
-
-            // Extract application
-            let app = get_ax_string_attribute(element, kAXApplicationAttribute)
-                .unwrap_or_else(|| String::from("Unknown"));
-
-            CFRelease(element as *const c_void);
-
-            Ok(Some(ElementInfo {
-                role: role.unwrap_or_default(),
-                name,
-                app,
-                fallback_coords: Some((x, y)),
-            }))
-        }
+        Ok(unsafe { ax_info_at(x, y) })
     }
 }
 
-/// Returns true if the UI element at screen point (x, y) is a secure text field
-/// (e.g. a password input). Capture skips these so credentials are never recorded.
-/// AX exposes secure inputs as `AXSecureTextField` (casing has varied historically),
-/// so the match is case-insensitive and substring-based.
-unsafe fn is_secure_field_at(x: i32, y: i32) -> bool {
+/// Resolve the accessibility element at screen point (x, y) into an `ElementInfo`
+/// (role, name/title, owning app). Returns `None` if nothing is there. Shared by
+/// the recorder (to tag captured clicks), the element inspector, and replay
+/// descriptor re-resolution.
+unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
     let system_wide = AXUIElementCreateSystemWide();
     if system_wide.is_null() {
-        return false;
+        return None;
     }
 
     let mut element: AXUIElementRef = std::ptr::null_mut();
     let result = AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
 
-    let secure = if result == kAXErrorSuccess && !element.is_null() {
-        let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
-        CFRelease(element as *const c_void);
-        role.to_ascii_lowercase().contains("securetextfield")
-    } else {
-        false
-    };
+    if result != kAXErrorSuccess || element.is_null() {
+        CFRelease(system_wide as *const c_void);
+        return None;
+    }
 
+    let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
+    let name = get_ax_string_attribute(element, kAXTitleAttribute)
+        .or_else(|| get_ax_string_attribute(element, kAXValueAttribute))
+        .unwrap_or_default();
+    let app = get_ax_string_attribute(element, kAXApplicationAttribute)
+        .unwrap_or_else(|| String::from("Unknown"));
+
+    CFRelease(element as *const c_void);
     CFRelease(system_wide as *const c_void);
-    secure
+
+    Some(ElementInfo {
+        role,
+        name,
+        app,
+        fallback_coords: Some((x, y)),
+    })
+}
+
+/// AX exposes secure inputs as `AXSecureTextField` (casing has varied
+/// historically), so the match is case-insensitive and substring-based.
+fn is_secure_role(role: &str) -> bool {
+    role.to_ascii_lowercase().contains("securetextfield")
+}
+
+/// Does the live element `found` match the recorded `target` descriptor?
+/// Role must match. If the target carries a name, require it too; otherwise fall
+/// back to role + owning app so we don't match a same-role element in another app.
+fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
+    if target.role.is_empty() || !target.role.eq_ignore_ascii_case(&found.role) {
+        return false;
+    }
+    if !target.name.is_empty() {
+        return target.name.eq_ignore_ascii_case(&found.name);
+    }
+    // No name to disambiguate on — require the same app when we know it.
+    if target.app.is_empty() || target.app == "Unknown" {
+        true
+    } else {
+        target.app.eq_ignore_ascii_case(&found.app)
+    }
+}
+
+/// Re-resolve where to click for a recorded click. Returns the recorded
+/// coordinates if the matching element is still there, otherwise scans a bounded
+/// set of points around them to find where the element moved to, and finally
+/// falls back to the recorded coordinates if no match is found. This is what lets
+/// replay survive a window that moved or a layout that shifted.
+unsafe fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
+    // Fast path: element still at the recorded spot.
+    if let Some(found) = ax_info_at(rx, ry) {
+        if descriptor_matches(target, &found) {
+            return (rx, ry);
+        }
+    }
+
+    // Bounded nearby scan: concentric rings of probe points. Only runs when the
+    // recorded spot no longer matches, so the common case pays nothing extra.
+    const RADII: [i32; 4] = [30, 70, 140, 260];
+    const DIRS: [(i32, i32); 8] = [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ];
+    for r in RADII {
+        for (dx, dy) in DIRS {
+            let (px, py) = (rx + dx * r, ry + dy * r);
+            if px < 0 || py < 0 {
+                continue;
+            }
+            if let Some(found) = ax_info_at(px, py) {
+                if descriptor_matches(target, &found) {
+                    return (px, py);
+                }
+            }
+        }
+    }
+
+    // Give up gracefully — click where it was recorded.
+    (rx, ry)
 }
 
 /// Helper function to extract string attributes from AXUIElement
@@ -537,7 +588,7 @@ impl ReplayEngine for MacosReplayer {
                     x,
                     y,
                     button,
-                    element: _,
+                    element,
                     retry_count,
                     ..
                 } => {
@@ -545,8 +596,16 @@ impl ReplayEngine for MacosReplayer {
                     let mut attempts = 0;
                     let mut success = false;
 
+                    // If the click carries an element descriptor, re-resolve where
+                    // to click so replay survives moved/resized UIs; otherwise use
+                    // the recorded coordinates directly.
+                    let (cx, cy) = match element {
+                        Some(desc) => unsafe { resolve_click_point(desc, *x, *y) },
+                        None => (*x, *y),
+                    };
+
                     while attempts <= max_retries && !success {
-                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
+                        enigo.move_mouse(cx, cy, Coordinate::Abs)?;
 
                         let mouse_button = match button {
                             0 | 1 => Button::Left,
@@ -809,5 +868,69 @@ impl ReplayEngine for MacosReplayer {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::descriptor_matches;
+    use crate::core::events::ElementInfo;
+
+    fn info(role: &str, name: &str, app: &str) -> ElementInfo {
+        ElementInfo {
+            role: role.into(),
+            name: name.into(),
+            app: app.into(),
+            fallback_coords: Some((0, 0)),
+        }
+    }
+
+    #[test]
+    fn matches_same_role_and_name_case_insensitively() {
+        let target = info("AXButton", "Save", "Notes");
+        let found = info("axbutton", "save", "Notes");
+        assert!(descriptor_matches(&target, &found));
+    }
+
+    #[test]
+    fn rejects_different_name() {
+        let target = info("AXButton", "Save", "Notes");
+        let found = info("AXButton", "Cancel", "Notes");
+        assert!(!descriptor_matches(&target, &found));
+    }
+
+    #[test]
+    fn rejects_different_role() {
+        let target = info("AXButton", "Save", "Notes");
+        let found = info("AXTextField", "Save", "Notes");
+        assert!(!descriptor_matches(&target, &found));
+    }
+
+    #[test]
+    fn nameless_target_falls_back_to_role_plus_app() {
+        let target = info("AXButton", "", "Notes");
+        assert!(descriptor_matches(
+            &target,
+            &info("AXButton", "whatever", "Notes")
+        ));
+        assert!(!descriptor_matches(
+            &target,
+            &info("AXButton", "whatever", "Safari")
+        ));
+    }
+
+    #[test]
+    fn nameless_target_unknown_app_matches_on_role_only() {
+        let target = info("AXButton", "", "Unknown");
+        assert!(descriptor_matches(
+            &target,
+            &info("AXButton", "x", "AnyApp")
+        ));
+    }
+
+    #[test]
+    fn empty_target_role_never_matches() {
+        let target = info("", "Save", "Notes");
+        assert!(!descriptor_matches(&target, &info("", "Save", "Notes")));
     }
 }
