@@ -32,11 +32,11 @@ jobs:
       # but users still need to clear quarantine — see RELEASING.md).
       - name: Configure macOS signing
         run: |
-          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+          if [ -n "${{ secrets.BUILD_CERTIFICATE_BASE64 }}" ]; then
             echo "Apple Developer ID detected → signing + notarizing"
             echo "SIGNING_MODE=full" >> "$GITHUB_ENV"
-            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> "$GITHUB_ENV"
-            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE=${{ secrets.BUILD_CERTIFICATE_BASE64 }}" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.P12_PASSWORD }}" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> "$GITHUB_ENV"
             echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
             echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
@@ -49,14 +49,13 @@ jobs:
 
       - name: Build universal app
         run: cargo tauri build --target universal-apple-darwin
-        env:
-          # Only pass certificate env vars if we have a certificate
-          APPLE_CERTIFICATE: ${{ env.SIGNING_MODE == 'full' && env.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ env.SIGNING_MODE == 'full' && env.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ env.SIGNING_MODE == 'full' && env.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ env.SIGNING_MODE == 'full' && env.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ env.SIGNING_MODE == 'full' && env.APPLE_TEAM_ID || '' }}
+        # Cert/notarization vars are NOT redeclared here — "Configure macOS
+        # signing" already exported exactly the right ones to $GITHUB_ENV.
+        # Re-declaring them with a `|| ''` fallback would set them to empty
+        # strings in ad-hoc mode, and Tauri's bundler treats a present-but-
+        # empty APPLE_CERTIFICATE as "import this cert", which fails with
+        # `SecKeychainItemImport: ... not valid`. Leaving them unset in
+        # ad-hoc mode is what makes the bundler skip cert import entirely.
 
       - name: Rename DMG
         run: |

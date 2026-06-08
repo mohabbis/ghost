@@ -46,8 +46,8 @@ whether Apple Developer secrets are configured:
 Requires a paid Apple Developer account ($99/yr). Set these in
 **GitHub → Settings → Secrets and variables → Actions**:
 
-- `APPLE_CERTIFICATE` — base64 of your Developer ID Application `.p12`
-- `APPLE_CERTIFICATE_PASSWORD` — password for that `.p12`
+- `BUILD_CERTIFICATE_BASE64` — base64 of your Developer ID Application `.p12`
+- `P12_PASSWORD` — password for that `.p12`
 - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Your Name (TEAMID)`
 - `APPLE_ID` — your Apple ID email
 - `APPLE_PASSWORD` — an app-specific password (not your Apple ID password)
