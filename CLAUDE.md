@@ -13,14 +13,14 @@ Five phases are fully implemented: Foundation (record/replay), Workflow Manageme
 Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 
 - **Frontend** (`src/`): plain vanilla HTML/CSS/JS — **no bundler, no npm, no `package.json`**. `tauri.conf.json` sets `frontendDist` to `../src`, so files are served as-is. `withGlobalTauri: true` exposes the Tauri API on `window.__TAURI__`. There is no dev server; the frontend is static.
-- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 48 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
+- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 57 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
 
 ### Backend module tree
 
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 56 commands via generate_handler!
+├── lib.rs               # Tauri app builder; registers all 57 commands via generate_handler!
 ├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
 ├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
 ├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
@@ -105,7 +105,7 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (56 total, registered in `lib.rs`)
+### Commands (57 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
@@ -138,6 +138,7 @@ Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 - `set_playback_speed(speed: f64)`
 - `get_playback_speed` → `f64`
 - `inspect_element(x, y)` → `ElementInfo`
+- `inspect_element_at_cursor` → `{ x, y, element }` (reads live cursor position via enigo)
 
 **Workflow Management**
 - `save_workflow(name, events)`

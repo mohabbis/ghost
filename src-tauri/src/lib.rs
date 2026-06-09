@@ -30,6 +30,7 @@ pub fn run() {
             commands::export_telemetry,
             commands::get_performance_summary,
             commands::inspect_element,
+            commands::inspect_element_at_cursor,
             commands::save_workflow,
             commands::load_workflow,
             commands::delete_workflow,

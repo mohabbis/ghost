@@ -151,6 +151,24 @@ pub fn inspect_element(
     engine.inspect_element(x, y).map_err(|e| e.to_string())
 }
 
+/// Result of inspecting the element under the mouse cursor.
+#[derive(serde::Serialize)]
+pub struct CursorInspection {
+    pub x: i32,
+    pub y: i32,
+    pub element: Option<crate::core::events::ElementInfo>,
+}
+
+/// Inspect the UI element under the current mouse cursor position.
+#[tauri::command]
+pub fn inspect_element_at_cursor(engine: State<GhostEngine>) -> Result<CursorInspection, String> {
+    use enigo::{Enigo, Mouse, Settings};
+    let enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    let (x, y) = enigo.location().map_err(|e| e.to_string())?;
+    let element = engine.inspect_element(x, y).map_err(|e| e.to_string())?;
+    Ok(CursorInspection { x, y, element })
+}
+
 /// Save a workflow to disk.
 #[tauri::command]
 pub fn save_workflow(

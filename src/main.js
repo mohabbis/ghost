@@ -6,7 +6,7 @@ const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
 
 function notAvailable() {
-  alert("Tauri not available - running in static mode");
+  toastError("Tauri not available — running in static mode");
 }
 
 // Recording state
@@ -33,16 +33,95 @@ function showInsight(text) {
   if (el) el.textContent = text;
 }
 
-function showNotification(text) {
+function showNotification(text, kind = "info") {
   const notificationsEl = document.getElementById("notifications");
   if (!notificationsEl) return;
 
   const notification = document.createElement("div");
   notification.className = "notification notification--proactive";
-  notification.innerHTML = `<p class="notification__text">🦜 ${text}</p>`;
+  if (kind === "error") {
+    notification.style.borderColor = "#ef4444";
+    notification.style.background = "rgba(239, 68, 68, 0.12)";
+  }
+  const icon = kind === "error" ? "⚠️" : "🦜";
+  notification.innerHTML = `<p class="notification__text">${icon} ${escapeHtml(text)}</p>`;
   notificationsEl.appendChild(notification);
 
-  setTimeout(() => notification.remove(), 5000);
+  setTimeout(() => notification.remove(), kind === "error" ? 8000 : 5000);
+}
+
+const toastError = (text) => showNotification(text, "error");
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value ?? "");
+  return div.innerHTML;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ===== In-app dialogs (replace browser prompt()/alert(), which look
+// terrible inside a desktop app) =====
+
+function ghostPrompt(message, defaultValue = "", placeholder = "") {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("input-modal");
+    const content = modal?.querySelector(".modal-content");
+    if (!content) return resolve(window.prompt(message, defaultValue)); // fallback
+
+    content.innerHTML = `
+      <h3 style="margin-top:0">${escapeHtml(message)}</h3>
+      <input type="text" data-dialog-input placeholder="${escapeHtml(placeholder)}"
+             style="width:100%;margin:8px 0 16px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.95rem;">
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn--ghost btn--small" data-dialog-cancel>Cancel</button>
+        <button class="btn btn--primary btn--small" data-dialog-ok>OK</button>
+      </div>`;
+    modal.style.display = "flex";
+
+    const input = content.querySelector("[data-dialog-input]");
+    input.value = defaultValue ?? "";
+    const done = (val) => {
+      modal.style.display = "none";
+      resolve(val);
+    };
+    content.querySelector("[data-dialog-ok]").addEventListener("click", () => done(input.value));
+    content.querySelector("[data-dialog-cancel]").addEventListener("click", () => done(null));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") done(input.value);
+      if (e.key === "Escape") done(null);
+    });
+    input.focus();
+    input.select();
+  });
+}
+
+function ghostPick(message, options) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("input-modal");
+    const content = modal?.querySelector(".modal-content");
+    if (!content) return resolve(window.prompt(message));
+
+    content.innerHTML = `
+      <h3 style="margin-top:0">${escapeHtml(message)}</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;margin:8px 0 16px;max-height:50vh;overflow-y:auto;">
+        ${options.length === 0 ? '<p style="color:var(--muted)">Nothing here yet.</p>' : ""}
+        ${options.map((o) => `<button class="btn btn--ghost" data-dialog-option="${escapeHtml(o)}" style="justify-content:flex-start;text-align:left;">${escapeHtml(o)}</button>`).join("")}
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="btn btn--ghost btn--small" data-dialog-cancel>Cancel</button>
+      </div>`;
+    modal.style.display = "flex";
+
+    const done = (val) => {
+      modal.style.display = "none";
+      resolve(val);
+    };
+    content.querySelectorAll("[data-dialog-option]").forEach((btn) =>
+      btn.addEventListener("click", () => done(btn.dataset.dialogOption)),
+    );
+    content.querySelector("[data-dialog-cancel]").addEventListener("click", () => done(null));
+  });
 }
 
 // ===== Accessibility permission gate =====
@@ -221,7 +300,8 @@ async function startRecording() {
     showInsight("Recording your actions…");
   } catch (error) {
     console.error("Failed to start recording:", error);
-    alert("Failed to start recording: " + error);
+    toastError("Could not start recording: " + error);
+    showInsight("Recording blocked — check permissions above.");
   }
 }
 
@@ -258,22 +338,22 @@ async function replayWithReliability() {
   if (!invoke) return notAvailable();
 
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
   try {
-    const maxAttempts = parseInt(prompt("Max retry attempts (default 3):", "3") || "3");
-    const backoffMs = parseInt(prompt("Backoff ms (default 500):", "500") || "500");
-    const backoffMult = parseFloat(prompt("Backoff multiplier (default 2.0):", "2.0") || "2.0");
+    // Retry behavior comes from Settings (replay.*) — no popups.
+    const config = await invoke("get_config");
+    const replay = config?.replay ?? {};
 
     isPlaying = true;
     updateRecordingUI();
     await invoke("replay_with_reliability", {
       events: recordedEvents,
-      max_attempts: maxAttempts,
-      backoff_ms: backoffMs,
-      backoff_multiplier: backoffMult,
+      max_attempts: replay.max_retry_attempts ?? 3,
+      backoff_ms: replay.retry_backoff_ms ?? 500,
+      backoff_multiplier: replay.retry_backoff_multiplier ?? 2.0,
     });
     isPlaying = false;
     updateRecordingUI();
@@ -281,7 +361,7 @@ async function replayWithReliability() {
     console.error("Failed to replay with reliability:", error);
     isPlaying = false;
     updateRecordingUI();
-    alert("Replay failed: " + error);
+    toastError("Replay failed: " + error);
   }
 }
 
@@ -330,18 +410,27 @@ async function setSpeed(factor) {
 }
 
 async function inspectElementAtCursor() {
-  if (!invoke) return;
+  if (!invoke) return notAvailable();
+
+  // Give the user time to hover the element they care about.
+  for (let i = 3; i > 0; i--) {
+    showInsight(`Hover over any element — inspecting in ${i}…`);
+    await sleep(1000);
+  }
+
   try {
-    const x = window.screen.width / 2;
-    const y = window.screen.height / 2;
-    const element = await invoke("inspect_element", { x, y });
+    const { x, y, element } = await invoke("inspect_element_at_cursor");
     if (element) {
-      alert(`Element found:\nRole: ${element.role}\nName: ${element.name}\nApp: ${element.app}`);
+      const name = element.name ? ` "${element.name}"` : "";
+      const app = element.app && element.app !== "Unknown" ? ` in ${element.app}` : "";
+      showInsight(`(${x}, ${y}) → ${element.role || "element"}${name}${app}`);
+      showNotification(`${element.role || "element"}${name}${app}`);
     } else {
-      alert("No element found at cursor position");
+      showInsight(`No accessible element at (${x}, ${y}).`);
     }
   } catch (error) {
     console.error("Failed to inspect element:", error);
+    toastError("Inspect failed: " + error);
   }
 }
 
@@ -349,31 +438,37 @@ async function inspectElementAtCursor() {
 
 async function saveWorkflow() {
   if (!invoke) return;
-  const name = prompt("Enter workflow name:");
+  if (recordedEvents.length === 0) {
+    toastError("No events recorded yet");
+    return;
+  }
+  const name = await ghostPrompt("Name this workflow", "", "e.g. Friday timesheet");
   if (!name) return;
 
   try {
-    const path = await invoke("save_workflow", { name, events: recordedEvents });
-    alert(`Workflow saved to: ${path}`);
+    await invoke("save_workflow", { name, events: recordedEvents });
+    showNotification(`Workflow "${name}" saved.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
-    alert("Failed to save workflow: " + error);
+    toastError("Failed to save workflow: " + error);
   }
 }
 
 async function loadWorkflow() {
   if (!invoke) return;
-  const name = prompt("Enter workflow name to load:");
-  if (!name) return;
 
   try {
+    const names = await invoke("list_workflows");
+    const name = await ghostPick("Load a workflow", names);
+    if (!name) return;
+
     recordedEvents = await invoke("load_workflow", { name });
     updateRecordingUI();
     refreshTimeline();
-    alert(`Workflow "${name}" loaded with ${recordedEvents.length} events`);
+    showNotification(`Loaded "${name}" — ${recordedEvents.length} events.`);
   } catch (error) {
     console.error("Failed to load workflow:", error);
-    alert("Failed to load workflow: " + error);
+    toastError("Failed to load workflow: " + error);
   }
 }
 
@@ -382,24 +477,23 @@ async function loadWorkflow() {
 async function analyzeWorkflow() {
   if (!invoke) return;
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
   try {
-    const name = prompt("Enter workflow name for analysis:", "MyWorkflow") || "MyWorkflow";
-    const analysis = await invoke("analyze_workflow", { name, events: recordedEvents });
+    const analysis = await invoke("analyze_workflow", { name: "Current recording", events: recordedEvents });
     displayAnalysisResults(analysis);
   } catch (error) {
     console.error("Failed to analyze workflow:", error);
-    alert("Failed to analyze workflow: " + error);
+    toastError("Failed to analyze workflow: " + error);
   }
 }
 
 async function optimizeWorkflow() {
   if (!invoke) return;
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
@@ -409,10 +503,10 @@ async function optimizeWorkflow() {
     recordedEvents = optimized;
     updateRecordingUI();
     refreshTimeline();
-    alert(`Optimized workflow: ${originalCount} events → ${optimized.length} events`);
+    showNotification(`Optimized: ${originalCount} events → ${optimized.length} events.`);
   } catch (error) {
     console.error("Failed to optimize workflow:", error);
-    alert("Failed to optimize workflow: " + error);
+    toastError("Failed to optimize workflow: " + error);
   }
 }
 
@@ -425,25 +519,25 @@ function refreshTimeline() {
 }
 
 async function suggestWorkflowName() {
-  if (!invoke) return prompt("Enter workflow name:");
+  if (!invoke) return ghostPrompt("Name this workflow");
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
   try {
     const suggestion = await invoke("suggest_workflow_name", { events: recordedEvents });
-    return prompt("Suggested workflow name:", suggestion) || suggestion;
+    return (await ghostPrompt("Workflow name (AI suggested)", suggestion)) || suggestion;
   } catch (error) {
     console.error("Failed to suggest name:", error);
-    return prompt("Enter workflow name:");
+    return ghostPrompt("Name this workflow");
   }
 }
 
 async function saveWorkflowWithMetadata() {
   if (!invoke) return;
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
@@ -451,20 +545,20 @@ async function saveWorkflowWithMetadata() {
     const name = await suggestWorkflowName();
     if (!name) return;
 
-    const description = prompt("Workflow description:", "") || "";
-    const tagsInput = prompt("Tags (comma-separated):", "") || "";
+    const description = (await ghostPrompt("Short description (optional)", "")) ?? "";
+    const tagsInput = (await ghostPrompt("Tags, comma-separated (optional)", "")) ?? "";
     const tags = tagsInput.split(",").map((t) => t.trim()).filter((t) => t);
 
-    const path = await invoke("save_workflow_with_metadata", {
+    await invoke("save_workflow_with_metadata", {
       name,
       events: recordedEvents,
       description,
       tags,
     });
-    alert(`Workflow saved to: ${path}`);
+    showNotification(`Workflow "${name}" saved with metadata.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
-    alert("Failed to save workflow: " + error);
+    toastError("Failed to save workflow: " + error);
   }
 }
 
@@ -524,7 +618,7 @@ async function openSettings() {
     settingsConfig = await invoke("get_config");
   } catch (error) {
     console.error("Failed to load config:", error);
-    alert("Could not load settings.");
+    toastError("Could not load settings.");
     return;
   }
 
@@ -623,7 +717,7 @@ async function saveSettings() {
     showNotification("Settings saved.");
   } catch (error) {
     console.error("Failed to save config:", error);
-    alert(`Could not save settings: ${error}`);
+    toastError(`Could not save settings: ${error}`);
   }
 }
 
@@ -648,66 +742,76 @@ async function syncSpeedFromConfig() {
 // are not exposed — re-add a panel here only once a real, opt-in backend
 // exists and the privacy messaging is updated to match.)
 
+// InputEvent serializes as an externally-tagged enum: {"MouseClick": {x, y, …}}.
+// Normalize to (type, data) before rendering — reading event.x directly is a bug.
+function normalizeEvent(event) {
+  if (event.type) return { type: event.type, data: event };
+  const type = Object.keys(event)[0];
+  return { type, data: event[type] ?? {} };
+}
+
+function describeEvent(event) {
+  const { type, data } = normalizeEvent(event);
+
+  switch (type) {
+    case "MouseClick": {
+      // button: 0=left down, 1=left up, 2=right down, 3=right up.
+      // Only show downs — ups are replay detail, not user intent.
+      if (data.button === 1 || data.button === 3) return null;
+      const kind = data.button === 2 ? "Right-clicked" : "Clicked";
+      const el = data.element;
+      let description;
+      if (el && (el.name || el.role)) {
+        const role = (el.role_description || el.role || "element").replace(/^AX/, "");
+        const name = el.name ? ` "${el.name}"` : "";
+        const app = el.app && el.app !== "Unknown" ? ` in ${el.app}` : "";
+        description = `${kind} ${role}${name}${app}`;
+      } else {
+        description = `${kind} at (${data.x}, ${data.y})`;
+      }
+      if (data.semantic_tag) {
+        description += ` [AI: ${data.semantic_tag.action} on ${data.semantic_tag.target}]`;
+      }
+      return description;
+    }
+    case "Key": {
+      if (data.action !== "Down") return null; // hide key-ups
+      const mods = [];
+      if (data.modifiers & 0x08) mods.push("⌘");
+      if (data.modifiers & 0x02) mods.push("⌃");
+      if (data.modifiers & 0x04) mods.push("⌥");
+      if (data.modifiers & 0x01) mods.push("⇧");
+      const prefix = mods.length ? mods.join("") + " + " : "";
+      if (data.chars && data.chars.trim()) return `Typed ${prefix}"${data.chars}"`;
+      return `Pressed ${prefix}key ${data.code}`;
+    }
+    case "Scroll":
+      return `Scrolled (${data.dx}, ${data.dy})`;
+    case "Delay":
+      return `Waited ${data.ms}ms`;
+    case "Wait":
+      return `Wait: ${getConditionDescription(data.condition)}`;
+    case "VisualCheck":
+      return `Visual check (threshold ${data.threshold})`;
+    case "Variable":
+      return `Variable: ${data.name} = ${data.value_template}`;
+    default:
+      return JSON.stringify(event);
+  }
+}
+
 function addEventToTimeline(event) {
   const timelineEl = document.getElementById("events-timeline");
   if (!timelineEl) return;
+
+  const description = describeEvent(event);
+  if (description === null) return; // filtered (mouse-up / key-up noise)
 
   const empty = timelineEl.querySelector(".events-timeline__empty");
   if (empty) empty.remove();
 
   const item = document.createElement("div");
   item.className = "timeline-item";
-
-  let description = "";
-  if (event.type) {
-    switch (event.type) {
-      case "MouseClick":
-        description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
-        if (event.semantic_tag) {
-          description += ` [AI: ${event.semantic_tag.action} on ${event.semantic_tag.target}]`;
-        }
-        break;
-      case "Key":
-        description = `Key ${event.action === "Down" ? "Down" : "Up"}: ${event.chars || "Code " + event.code}`;
-        break;
-      case "Scroll":
-        description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
-        break;
-      case "Delay":
-        description = `Delay: ${event.ms}ms`;
-        break;
-      case "Wait":
-        description = `Wait: ${getConditionDescription(event.condition)}`;
-        break;
-      case "VisualCheck":
-        description = `Visual Check: threshold=${event.threshold}`;
-        break;
-      case "Variable":
-        description = `Variable: ${event.name} = ${event.value_template}`;
-        break;
-      default:
-        description = JSON.stringify(event);
-    }
-  } else {
-    const eventType = Object.keys(event)[0];
-    switch (eventType) {
-      case "MouseClick":
-        description = `Click at (${event.x}, ${event.y}) - Button ${event.button}`;
-        break;
-      case "Key":
-        description = `Key ${event.action === "Down" ? "Down" : "Up"}: Code ${event.code}`;
-        break;
-      case "Scroll":
-        description = `Scroll: dx=${event.dx}, dy=${event.dy}`;
-        break;
-      case "Delay":
-        description = `Delay: ${event.ms}ms`;
-        break;
-      default:
-        description = JSON.stringify(event);
-    }
-  }
-
   item.textContent = description;
   timelineEl.appendChild(item);
   timelineEl.scrollTop = timelineEl.scrollHeight;
@@ -781,7 +885,7 @@ async function startSmartObserver() {
     startObserverUIUpdate();
   } catch (error) {
     console.error("Failed to start observer:", error);
-    alert("Failed to start observer: " + error);
+    toastError("Failed to start observer: " + error);
   }
 }
 
@@ -826,12 +930,12 @@ function startObserverUIUpdate() {
 async function observeCurrentSession() {
   if (!invoke) return;
   if (recordedEvents.length === 0) {
-    alert("No events recorded to observe");
+    toastError("No events recorded to observe");
     return;
   }
 
   try {
-    const appName = prompt("Which app are you using?", "Unknown App") || "Unknown";
+    const appName = (await ghostPrompt("Which app were you using?", "Unknown App")) || "Unknown";
     const patternsFound = await invoke("observe_events", { events: recordedEvents, app_name: appName });
     showNotification(`Found ${patternsFound} learned patterns from <strong>${appName}</strong>!`);
 
@@ -839,24 +943,24 @@ async function observeCurrentSession() {
     if (suggestions.length > 0) displaySuggestions(suggestions);
   } catch (error) {
     console.error("Failed to observe events:", error);
-    alert("Failed to observe: " + error);
+    toastError("Failed to observe: " + error);
   }
 }
 
 async function generateGeekInsights() {
   if (!invoke) return;
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
   try {
-    const appName = prompt("Which app are you analyzing?", "Unknown App") || "Unknown";
+    const appName = (await ghostPrompt("Which app are you analyzing?", "Unknown App")) || "Unknown";
     const insights = await invoke("generate_geek_insights", { events: recordedEvents, app_name: appName });
     displayGeekInsights(insights, appName);
   } catch (error) {
     console.error("Failed to generate geek insights:", error);
-    alert("Failed to generate insights: " + error);
+    toastError("Failed to generate insights: " + error);
   }
 }
 
@@ -889,7 +993,7 @@ async function createWorkflowFromSuggestion(name) {
   try {
     await invoke("save_workflow", { name, events: recordedEvents });
     closeModal("analysis-modal");
-    alert(`Workflow "${name}" created!`);
+    showNotification(`Workflow "${name}" created.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
   }
@@ -939,12 +1043,12 @@ function displayGeekInsights(insights, appName) {
 async function replayWithVisualCheck() {
   if (!invoke) return notAvailable();
   if (recordedEvents.length === 0) {
-    alert("No events recorded yet");
+    toastError("No events recorded yet");
     return;
   }
 
   try {
-    const appName = prompt("App name for baseline:", "default_app");
+    const appName = await ghostPrompt("Baseline name", "default_app");
     if (appName) await invoke("capture_baseline_screenshot", { name: appName });
 
     const visualChecks = [
@@ -952,25 +1056,25 @@ async function replayWithVisualCheck() {
     ];
 
     const success = await invoke("replay_with_visual_check", { events: recordedEvents, visual_checks: visualChecks });
-    alert(success ? "Replay completed with visual check!" : "Replay was cancelled");
+    showNotification(success ? "Replay completed with visual check." : "Replay was cancelled.");
   } catch (error) {
     console.error("Failed to replay with visual check:", error);
-    alert("Replay failed: " + error);
+    toastError("Replay failed: " + error);
   }
 }
 
 async function captureBaseline() {
   if (!invoke) return;
 
-  const name = prompt("Baseline name:");
+  const name = await ghostPrompt("Baseline name");
   if (!name) return;
 
   try {
-    const path = await invoke("capture_baseline_screenshot", { name });
-    alert(`Baseline captured: ${path}`);
+    await invoke("capture_baseline_screenshot", { name });
+    showNotification(`Baseline "${name}" captured.`);
   } catch (error) {
     console.error("Failed to capture baseline:", error);
-    alert("Capture failed: " + error);
+    toastError("Capture failed: " + error);
   }
 }
 
@@ -979,35 +1083,35 @@ async function captureBaseline() {
 async function createDataSource() {
   if (!invoke) return;
 
-  const name = prompt("Data source name:");
+  const name = await ghostPrompt("Data source name");
   if (!name) return;
 
-  const type = prompt("Data source type (csv/json/environment):", "environment") || "environment";
+  const type = (await ghostPick("Data source type", ["environment", "csv", "json"])) || "environment";
   let path = null;
-  if (type === "csv" || type === "json") path = prompt("Path to data file:");
+  if (type === "csv" || type === "json") path = await ghostPrompt("Path to data file");
 
   try {
-    const sourcePath = await invoke("create_data_source", { name, source_type: type, path });
-    alert(`Data source created: ${sourcePath}`);
+    await invoke("create_data_source", { name, source_type: type, path });
+    showNotification(`Data source "${name}" created.`);
   } catch (error) {
     console.error("Failed to create data source:", error);
-    alert("Create failed: " + error);
+    toastError("Create failed: " + error);
   }
 }
 
 async function loadVariablesFromSource() {
   if (!invoke) return;
 
-  const name = prompt("Data source name:");
+  const name = await ghostPrompt("Data source name");
   if (!name) return;
 
   try {
     const variables = await invoke("load_variables", { data_source_name: name });
-    alert(`Loaded ${Object.keys(variables).length} variables`);
+    showNotification(`Loaded ${Object.keys(variables).length} variables.`);
     console.log("Variables:", variables);
   } catch (error) {
     console.error("Failed to load variables:", error);
-    alert("Load failed: " + error);
+    toastError("Load failed: " + error);
   }
 }
 
