@@ -366,8 +366,8 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 - No framework, no build step. DOM manipulation via `document.querySelector` and `addEventListener`.
 - All Tauri calls go through `window.__TAURI__.core.invoke(...)` and `window.__TAURI__.event.listen(...)`.
 - Global JS state: `isRecording`, `recordedEvents[]`, `isPlaying`, `isPaused`, `playbackSpeed`.
-- UI is organized into collapsible sections in `index.html`: Recording, Workflow Management, AI Analysis, Cloud Sync, Smart Observer, Phase 4 (visual/data), Event Timeline.
-- Modals `#analysis-modal` and `#audit-modal` display workflow analysis and audit log results.
+- UI is organized into collapsible sections in `index.html`: Recording, Workflow Management, AI Analysis, Smart Observer, Phase 4 (visual/data), Event Timeline. The Cloud Sync panel was intentionally REMOVED from the UI (Ghost is marketed as local-only; the `cloud.rs` backend stubs remain but are not exposed). Don't re-add it without a real opt-in backend + updated privacy messaging.
+- Modal `#analysis-modal` displays workflow analysis results.
 - CSS design tokens: accent purple `#8d7bff`, warm orange `#ffb86b`, success mint `#83f6c4`, dark bg `#070813`.
 
 ## Key dependencies (Cargo.toml)

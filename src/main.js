@@ -1,5 +1,5 @@
 // Ghost desktop app — Tauri IPC integration, recording controls, workflow
-// management, cloud sync, and Smart Observer. This is the real app UI
+// management, and Smart Observer. This is the real app UI
 // (not the marketing site — that lives in public/).
 
 const { invoke } = window.__TAURI__?.core || {};
@@ -643,147 +643,10 @@ async function syncSpeedFromConfig() {
   }
 }
 
-// ===== Cloud sync =====
-
-let cloudSyncState = {
-  isAuthenticated: false,
-  config: null,
-};
-
-async function initCloudSync() {
-  if (!invoke) return notAvailable();
-
-  try {
-    const apiEndpoint = prompt("API Endpoint:", "https://api.ghost.example.com") || "https://api.ghost.example.com";
-    const autoSync = confirm("Enable auto-sync? (OK for yes, Cancel for no)");
-
-    await invoke("init_cloud_sync", {
-      config: {
-        api_endpoint: apiEndpoint,
-        auth_token: null,
-        auto_sync: autoSync,
-        sync_interval_ms: 30000,
-      },
-    });
-
-    cloudSyncState.config = { apiEndpoint, autoSync };
-    alert("Cloud sync initialized!");
-  } catch (error) {
-    console.error("Failed to init cloud sync:", error);
-    alert("Failed to initialize cloud sync: " + error);
-  }
-}
-
-async function cloudLogin() {
-  if (!invoke) return;
-
-  try {
-    const token = prompt("Enter your auth token:") || "";
-    if (!token) return;
-
-    const success = await invoke("cloud_authenticate", { token });
-    if (success) {
-      cloudSyncState.isAuthenticated = true;
-      alert("Authenticated successfully!");
-    }
-  } catch (error) {
-    console.error("Cloud auth failed:", error);
-    alert("Authentication failed: " + error);
-  }
-}
-
-async function syncToCloud() {
-  if (!invoke) return;
-  if (!cloudSyncState.isAuthenticated) {
-    alert("Please authenticate first");
-    return;
-  }
-
-  try {
-    const synced = await invoke("cloud_sync_workflows", { events: recordedEvents });
-    alert(`Synced ${synced.length} workflows to cloud`);
-  } catch (error) {
-    console.error("Sync failed:", error);
-    alert("Sync failed: " + error);
-  }
-}
-
-async function createWorkspace() {
-  if (!invoke) return;
-  if (!cloudSyncState.isAuthenticated) {
-    alert("Please authenticate first");
-    return;
-  }
-
-  try {
-    const name = prompt("Workspace name:") || "";
-    if (!name) return;
-
-    const workspace = await invoke("create_workspace", {
-      name,
-      owner_id: "current_user",
-    });
-
-    alert(`Created workspace: ${workspace.name}`);
-  } catch (error) {
-    console.error("Create workspace failed:", error);
-    alert("Failed to create workspace: " + error);
-  }
-}
-
-async function viewAuditLogs() {
-  if (!invoke) return;
-  if (!cloudSyncState.isAuthenticated) {
-    alert("Please authenticate first");
-    return;
-  }
-
-  try {
-    const limit = prompt("Number of logs to retrieve:", "50") || "50";
-    const logs = await invoke("get_audit_logs", { limit: parseInt(limit) });
-    displayAuditLogs(logs);
-  } catch (error) {
-    console.error("Failed to get audit logs:", error);
-    alert("Failed to get audit logs: " + error);
-  }
-}
-
-function displayAuditLogs(logs) {
-  const modal = document.getElementById("audit-modal");
-  if (!modal) return;
-
-  const content = modal.querySelector(".modal-content");
-  if (!content) return;
-
-  content.innerHTML = `
-    <h3>Audit Logs</h3>
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-      <thead>
-        <tr style="border-bottom: 1px solid #374151;">
-          <th style="text-align: left; padding: 8px;">Timestamp</th>
-          <th style="text-align: left; padding: 8px;">User</th>
-          <th style="text-align: left; padding: 8px;">Action</th>
-          <th style="text-align: left; padding: 8px;">Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${logs.map((log) => `
-          <tr style="border-bottom: 1px solid #374151;">
-            <td style="padding: 8px;">${new Date(log.timestamp * 1000).toLocaleString()}</td>
-            <td style="padding: 8px;">${log.user_id}</td>
-            <td style="padding: 8px;">${log.action}</td>
-            <td style="padding: 8px;">${log.details}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-    <button data-close-modal="audit-modal" style="margin-top: 16px;">Close</button>
-  `;
-
-  modal.style.display = "flex";
-}
-
 // ===== Event timeline =====
+// (Cloud sync UI removed: Ghost is local-only. The backend stubs remain but
+// are not exposed — re-add a panel here only once a real, opt-in backend
+// exists and the privacy messaging is updated to match.)
 
 function addEventToTimeline(event) {
   const timelineEl = document.getElementById("events-timeline");
@@ -1175,12 +1038,6 @@ function wireUpControls() {
   bind("stopObserverBtn", stopSmartObserver);
   bind("observeSessionBtn", observeCurrentSession);
   bind("geekModeBtn", generateGeekInsights);
-
-  bind("initCloudBtn", initCloudSync);
-  bind("cloudLoginBtn", cloudLogin);
-  bind("cloudSyncBtn", syncToCloud);
-  bind("newWorkspaceBtn", createWorkspace);
-  bind("auditLogsBtn", viewAuditLogs);
 
   bind("visualCheckBtn", replayWithVisualCheck);
   bind("captureBaselineBtn", captureBaseline);
