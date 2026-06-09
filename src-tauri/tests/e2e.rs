@@ -67,6 +67,7 @@ mod e2e_tests {
                     name: "Submit".to_string(),
                     app: "TestApp".to_string(),
                     fallback_coords: Some((100, 200)),
+                    ..Default::default()
                 }),
                 timestamp: None,
                 retry_count: None,
