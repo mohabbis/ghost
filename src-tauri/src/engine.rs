@@ -13,13 +13,15 @@ use crate::core::llm::{self, LLMConfig};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::vision;
 use crate::core::wait::smart_wait;
+use crate::performance::{PerformanceMonitor, PerformanceSummary};
+use crate::telemetry::{TelemetryManager, UsageStats};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use image::DynamicImage;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Main engine struct that holds platform-specific backends.
 pub struct GhostEngine {
@@ -46,6 +48,12 @@ pub struct GhostEngine {
     knowledge_base: KnowledgeBase,
     /// Persisted user configuration (source of truth for runtime defaults)
     config: Arc<Mutex<GhostConfig>>,
+    /// Opt-in usage telemetry (gated by config.privacy.telemetry_enabled)
+    telemetry: Arc<TelemetryManager>,
+    /// Opt-in performance monitor (gated by config.performance.profiling_enabled)
+    perf: Arc<PerformanceMonitor>,
+    /// Wall-clock start of the active recording session, for duration telemetry
+    recording_start: Arc<Mutex<Option<Instant>>>,
 }
 
 impl GhostEngine {
@@ -80,6 +88,13 @@ impl GhostEngine {
         let initial_speed = config.replay.default_speed.max(0.1);
         llm::init_llm(&LLMConfig::from_ghost_config(&config.ai));
 
+        // Observability is opt-in: both honor the persisted privacy/performance
+        // flags and no-op until enabled, so default runs collect nothing.
+        let telemetry = Arc::new(TelemetryManager::new(config.privacy.telemetry_enabled));
+        let perf = Arc::new(PerformanceMonitor::new(
+            config.performance.profiling_enabled,
+        ));
+
         GhostEngine {
             recorder,
             locator,
@@ -94,6 +109,9 @@ impl GhostEngine {
             execution_tracker: Arc::new(Mutex::new(ExecutionHistory::new().ok())),
             knowledge_base: KnowledgeBase::new(),
             config: Arc::new(Mutex::new(config)),
+            telemetry,
+            perf,
+            recording_start: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -107,6 +125,9 @@ impl GhostEngine {
         *self.tx.lock().unwrap() = Some(tx_clone);
         *self.rx.lock().unwrap() = Some(rx);
 
+        // Mark the session start so stop_recording can report its duration.
+        *self.recording_start.lock().unwrap() = Some(Instant::now());
+
         self.recorder.start(tx)
     }
 
@@ -115,6 +136,13 @@ impl GhostEngine {
         self.recorder.stop();
         *self.tx.lock().unwrap() = None;
         *self.rx.lock().unwrap() = None;
+
+        // Report the completed recording to telemetry (no-op unless opted in).
+        if let Some(started) = self.recording_start.lock().unwrap().take() {
+            let event_count = self.recorded_events.lock().unwrap().len();
+            self.telemetry
+                .track_workflow_recorded(event_count, started.elapsed().as_secs());
+        }
     }
 
     /// Add an event to the recorded events buffer (called from the bridge thread)
@@ -132,7 +160,19 @@ impl GhostEngine {
         // Reset the stop flag and pause state before starting
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
-        self.replayer.execute(events, self.replay_stop_flag.clone())
+
+        // Time and record the replay (both no-op unless the user opted in).
+        let started = Instant::now();
+        self.perf.start_timer("replay");
+        let result = self.replayer.execute(events, self.replay_stop_flag.clone());
+        self.perf.stop_timer("replay");
+        self.telemetry.track_workflow_replayed(
+            events.len(),
+            started.elapsed().as_secs(),
+            result.is_ok(),
+        );
+
+        result
     }
 
     /// Cancel an ongoing replay immediately.
@@ -180,8 +220,34 @@ impl GhostEngine {
         *self.playback_speed.lock().unwrap() = new_config.replay.default_speed.max(0.1);
         llm::init_llm(&LLMConfig::from_ghost_config(&new_config.ai));
 
+        // Honor opt-in toggles live, mirroring the playback-speed/LLM re-seed above.
+        self.telemetry
+            .set_enabled(new_config.privacy.telemetry_enabled);
+        self.perf
+            .set_enabled(new_config.performance.profiling_enabled);
+
         *self.config.lock().unwrap() = new_config;
         Ok(())
+    }
+
+    /// Snapshot the collected usage telemetry statistics.
+    pub fn get_telemetry_stats(&self) -> UsageStats {
+        self.telemetry.get_stats()
+    }
+
+    /// Export all collected telemetry (session id, stats, events) as JSON.
+    pub fn export_telemetry(&self) -> anyhow::Result<String> {
+        Ok(self.telemetry.export_json()?)
+    }
+
+    /// Summarize recorded performance metrics by operation.
+    pub fn get_performance_summary(&self) -> PerformanceSummary {
+        self.perf.get_summary()
+    }
+
+    /// Record a feature-usage event (no-op unless telemetry is enabled).
+    pub fn track_feature(&self, feature: &str) {
+        self.telemetry.track_feature_used(feature);
     }
 
     /// Build a default retry config from the persisted replay settings.
@@ -1011,5 +1077,38 @@ impl GhostEngine {
 impl Default for GhostEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn telemetry_off_by_default_collects_nothing() {
+        let engine = GhostEngine::new();
+        // A fresh engine inherits the persisted privacy flag (false by default),
+        // so feature tracking must be a no-op until explicitly opted in.
+        engine.track_feature("analyze_workflow");
+        let stats = engine.get_telemetry_stats();
+        assert!(stats.feature_usage.is_empty());
+    }
+
+    #[test]
+    fn enabling_telemetry_records_feature_usage() {
+        let engine = GhostEngine::new();
+        engine.telemetry.set_enabled(true);
+
+        engine.track_feature("analyze_workflow");
+        engine.track_feature("analyze_workflow");
+        engine.track_feature("optimize_workflow");
+
+        let stats = engine.get_telemetry_stats();
+        assert_eq!(stats.feature_usage.get("analyze_workflow"), Some(&2));
+        assert_eq!(stats.feature_usage.get("optimize_workflow"), Some(&1));
+
+        // Export should round-trip the collected data as JSON.
+        let json = engine.export_telemetry().expect("export should succeed");
+        assert!(json.contains("analyze_workflow"));
     }
 }
