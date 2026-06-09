@@ -20,9 +20,12 @@
             <p>Watches, learns, and replays your repetitive workflows.</p>
           </div>
         </div>
-        <div class="recording-status" id="recording-status">
-          <span class="pulse" aria-hidden="true" style="display:none"></span>
-          Ready to record
+        <div class="app-header__actions">
+          <div class="recording-status" id="recording-status">
+            <span class="pulse" aria-hidden="true" style="display:none"></span>
+            Ready to record
+          </div>
+          <button class="btn btn--ghost btn--small" id="settingsBtn" type="button">⚙️ Settings</button>
         </div>
       </header>
 
@@ -120,6 +123,9 @@
     </div>
     <div id="audit-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
       <div class="modal-content" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 700px; max-height: 80vh; overflow-y: auto; color: var(--text);"></div>
+    </div>
+    <div id="settings-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 520px; max-height: 80vh; overflow-y: auto; color: var(--text);"></div>
     </div>
 
     <!-- First-run onboarding -->

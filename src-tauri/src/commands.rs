@@ -89,6 +89,21 @@ pub fn get_playback_speed(engine: State<GhostEngine>) -> f32 {
     engine.get_playback_speed()
 }
 
+/// Get the current persisted configuration.
+#[tauri::command]
+pub fn get_config(engine: State<GhostEngine>) -> crate::config::GhostConfig {
+    engine.get_config()
+}
+
+/// Validate, persist, and apply a new configuration.
+#[tauri::command]
+pub fn update_config(
+    config: crate::config::GhostConfig,
+    engine: State<GhostEngine>,
+) -> Result<(), String> {
+    engine.update_config(config).map_err(|e| e.to_string())
+}
+
 /// Inspect the UI element at the given screen coordinates.
 #[tauri::command]
 pub fn inspect_element(
@@ -386,11 +401,13 @@ pub fn replay_with_reliability(
     checkpoints: Option<Vec<crate::core::events::Checkpoint>>,
     engine: State<GhostEngine>,
 ) -> Result<(), String> {
+    // Per-call args override the persisted config defaults.
+    let defaults = engine.default_retry_config();
     let reliability = crate::core::events::ReliabilitySettings {
         retry_config: crate::core::events::RetryConfig {
-            max_attempts: max_attempts.unwrap_or(3),
-            backoff_ms: backoff_ms.unwrap_or(500),
-            backoff_multiplier: backoff_multiplier.unwrap_or(2.0),
+            max_attempts: max_attempts.unwrap_or(defaults.max_attempts),
+            backoff_ms: backoff_ms.unwrap_or(defaults.backoff_ms),
+            backoff_multiplier: backoff_multiplier.unwrap_or(defaults.backoff_multiplier),
         },
         checkpoints: checkpoints.unwrap_or_default(),
         ..Default::default()

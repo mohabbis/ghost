@@ -45,6 +45,12 @@
   font-size: 0.9rem;
 }
 
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .recording-status {
   display: inline-flex;
   align-items: center;

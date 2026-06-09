@@ -476,6 +476,142 @@ function closeModal(modalId = "analysis-modal") {
   if (modal) modal.style.display = "none";
 }
 
+// ===== Settings =====
+
+// Cache the full config so we can send a complete GhostConfig back to the
+// backend (update_config deserializes the whole struct, not a partial patch).
+let settingsConfig = null;
+
+function escapeAttr(value) {
+  return String(value ?? "").replace(/"/g, "&quot;");
+}
+
+async function openSettings() {
+  if (!invoke) return notAvailable();
+
+  try {
+    settingsConfig = await invoke("get_config");
+  } catch (error) {
+    console.error("Failed to load config:", error);
+    alert("Could not load settings.");
+    return;
+  }
+
+  const modal = document.getElementById("settings-modal");
+  if (!modal) return;
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+
+  const { replay, ai } = settingsConfig;
+  const providers = ["local", "openai", "anthropic"];
+  const fieldStyle =
+    "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
+
+  content.innerHTML = `
+    <h3>⚙️ Settings</h3>
+
+    <h4 style="color: #8d7bff; margin-bottom: 4px;">Replay</h4>
+    <label>Default speed (0.1–10)
+      <input id="cfg-default-speed" type="number" step="0.1" min="0.1" max="10"
+             value="${escapeAttr(replay.default_speed)}" style="${fieldStyle}">
+    </label>
+    <label>Max retry attempts
+      <input id="cfg-max-retry" type="number" step="1" min="0"
+             value="${escapeAttr(replay.max_retry_attempts)}" style="${fieldStyle}">
+    </label>
+    <label>Retry backoff (ms)
+      <input id="cfg-backoff-ms" type="number" step="50" min="0"
+             value="${escapeAttr(replay.retry_backoff_ms)}" style="${fieldStyle}">
+    </label>
+    <label>Retry backoff multiplier
+      <input id="cfg-backoff-mult" type="number" step="0.1" min="1"
+             value="${escapeAttr(replay.retry_backoff_multiplier)}" style="${fieldStyle}">
+    </label>
+
+    <h4 style="color: #8d7bff; margin: 12px 0 4px;">AI</h4>
+    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+      <input id="cfg-ai-enabled" type="checkbox" ${ai.enabled ? "checked" : ""}>
+      AI features enabled
+    </label>
+    <label>Provider
+      <select id="cfg-ai-provider" style="${fieldStyle}">
+        ${providers
+          .map(
+            (p) =>
+              `<option value="${p}" ${p === ai.provider ? "selected" : ""}>${p}</option>`,
+          )
+          .join("")}
+      </select>
+    </label>
+    <label>Model
+      <input id="cfg-ai-model" type="text" value="${escapeAttr(ai.model)}" style="${fieldStyle}">
+    </label>
+    <label>API endpoint (optional)
+      <input id="cfg-ai-endpoint" type="text" placeholder="provider default"
+             value="${escapeAttr(ai.api_endpoint ?? "")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 4px 0 12px;">API keys come from environment variables (OPENAI_API_KEY / ANTHROPIC_API_KEY), never stored here.</p>
+
+    <div style="display: flex; gap: 8px; margin-top: 8px;">
+      <button class="btn btn--primary btn--small" data-save-config>Save</button>
+      <button class="btn btn--ghost btn--small" data-close-modal="settings-modal">Cancel</button>
+    </div>
+  `;
+
+  modal.style.display = "flex";
+}
+
+async function saveSettings() {
+  if (!invoke || !settingsConfig) return;
+
+  const num = (id, fallback) => {
+    const v = parseFloat(document.getElementById(id)?.value);
+    return Number.isFinite(v) ? v : fallback;
+  };
+
+  // Merge edits into the cached full config so the backend receives a
+  // complete, valid GhostConfig.
+  settingsConfig.replay.default_speed = num("cfg-default-speed", settingsConfig.replay.default_speed);
+  settingsConfig.replay.max_retry_attempts = Math.round(num("cfg-max-retry", settingsConfig.replay.max_retry_attempts));
+  settingsConfig.replay.retry_backoff_ms = Math.round(num("cfg-backoff-ms", settingsConfig.replay.retry_backoff_ms));
+  settingsConfig.replay.retry_backoff_multiplier = num("cfg-backoff-mult", settingsConfig.replay.retry_backoff_multiplier);
+
+  settingsConfig.ai.enabled = !!document.getElementById("cfg-ai-enabled")?.checked;
+  settingsConfig.ai.provider = document.getElementById("cfg-ai-provider")?.value || settingsConfig.ai.provider;
+  settingsConfig.ai.model = document.getElementById("cfg-ai-model")?.value || settingsConfig.ai.model;
+  const endpoint = document.getElementById("cfg-ai-endpoint")?.value?.trim();
+  settingsConfig.ai.api_endpoint = endpoint ? endpoint : null;
+
+  try {
+    await invoke("update_config", { config: settingsConfig });
+    // Reflect the new default speed in the picker and live state.
+    playbackSpeed = settingsConfig.replay.default_speed;
+    const speedSelect = document.getElementById("speedSelect");
+    if (speedSelect) speedSelect.value = String(playbackSpeed);
+    closeModal("settings-modal");
+    showNotification("Settings saved.");
+  } catch (error) {
+    console.error("Failed to save config:", error);
+    alert(`Could not save settings: ${error}`);
+  }
+}
+
+// On startup, reflect the persisted default speed in the picker.
+async function syncSpeedFromConfig() {
+  if (!invoke) return;
+  try {
+    const config = await invoke("get_config");
+    const speed = config?.replay?.default_speed;
+    if (typeof speed === "number") {
+      playbackSpeed = speed;
+      const speedSelect = document.getElementById("speedSelect");
+      if (speedSelect) speedSelect.value = String(speed);
+    }
+  } catch (error) {
+    console.error("Failed to sync speed from config:", error);
+  }
+}
+
 // ===== Cloud sync =====
 
 let cloudSyncState = {
@@ -1021,6 +1157,7 @@ function wireUpControls() {
   bind("loadVariablesBtn", loadVariablesFromSource);
 
   bind("perm-grant", requestAccessibility);
+  bind("settingsBtn", openSettings);
 
   // Onboarding navigation
   bind("onboardingStart", () => showOnboardingStep(1));
@@ -1047,6 +1184,12 @@ function wireUpControls() {
     if (suggestionTarget) {
       const [name] = suggestionTarget.dataset.createWorkflowFromSuggestion.split("|");
       createWorkflowFromSuggestion(name);
+      return;
+    }
+
+    const saveConfigTarget = e.target.closest("[data-save-config]");
+    if (saveConfigTarget) {
+      saveSettings();
     }
   });
 }
@@ -1056,4 +1199,5 @@ window.addEventListener("DOMContentLoaded", () => {
   updateRecordingUI();
   refreshPermissionBanner();
   maybeShowOnboarding();
+  syncSpeedFromConfig();
 });
