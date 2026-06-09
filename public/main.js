@@ -1,7 +1,21 @@
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function revealOnScroll() {
-  if (prefersReducedMotion.matches || !("IntersectionObserver" in window)) return;
+  // Collect both the elements we animate by convention AND anything with a
+  // hard-coded `reveal` class in the markup. Every `.reveal` element starts
+  // at opacity 0, so each one MUST be observed (or force-shown) — otherwise
+  // it stays invisible and leaves a blank gap in the page.
+  const targets = new Set(document.querySelectorAll(".reveal"));
+  document.querySelectorAll(".section, .hero-card, .feature-card").forEach((element) => {
+    element.classList.add("reveal");
+    targets.add(element);
+  });
+
+  // Reduced motion / no IntersectionObserver: show everything immediately.
+  if (prefersReducedMotion.matches || !("IntersectionObserver" in window)) {
+    targets.forEach((element) => element.classList.add("is-visible"));
+    return;
+  }
 
   const observer = new IntersectionObserver(
     (entries) => {
@@ -11,13 +25,11 @@ function revealOnScroll() {
         observer.unobserve(entry.target);
       });
     },
-    { threshold: 0.16 },
+    // Low threshold + early rootMargin so tall sections still trigger.
+    { threshold: 0.05, rootMargin: "0px 0px -10% 0px" },
   );
 
-  document.querySelectorAll(".section, .hero-card, .feature-card").forEach((element) => {
-    element.classList.add("reveal");
-    observer.observe(element);
-  });
+  targets.forEach((element) => observer.observe(element));
 }
 
 window.addEventListener("DOMContentLoaded", revealOnScroll);

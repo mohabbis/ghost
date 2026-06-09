@@ -154,6 +154,14 @@
             "@type": "Answer",
             "text": "Yes, Ghost is completely free to download and use. There are no subscription fees or hidden costs."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my data private?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Ghost stores everything locally on your computer — recordings, workflows, and learned patterns never leave your device. There are no Ghost servers collecting your data, no accounts, and no telemetry by default. Ghost also never records passwords or secure text fields."
+          }
         }
       ]
     }
@@ -211,6 +219,7 @@
         <nav class="nav__links" aria-label="Page sections">
           <a href="#how-it-works">How it helps</a>
           <a href="#use-cases">Examples</a>
+          <a href="#privacy">Privacy</a>
           <a href="#demo">Try it</a>
           <a href="#download">Download</a>
         </nav>
@@ -243,9 +252,9 @@
               </a>
               <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
             </div>
-            <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free</p>
-            <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free</p>
-            <p class="download-note" data-show="mobile other">Desktop app available now for macOS and Windows &middot; Free</p>
+            <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free &middot; 🔒 All data stays on your device</p>
+            <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free &middot; 🔒 All data stays on your device</p>
+            <p class="download-note" data-show="mobile other">Desktop app available now for macOS and Windows &middot; Free &middot; 🔒 All data stays on your device</p>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
                 <dt>🤖 Observant</dt>
@@ -396,6 +405,25 @@
           </ul>
         </section>
 
+        <!-- Privacy -->
+        <section id="privacy" class="section split" aria-labelledby="privacy-title">
+          <div>
+            <p class="eyebrow">Privacy first</p>
+            <h2 id="privacy-title">Everything stays on your device.</h2>
+            <p>
+              Ghost works for you, not on you. All data it captures — recordings, workflows,
+              and learned patterns — is stored <strong>only on your computer</strong>.
+              No accounts, no Ghost servers, nothing uploaded.
+            </p>
+          </div>
+          <ul class="check-list">
+            <li>🔒 Recordings and workflows are saved locally on your machine — never uploaded.</li>
+            <li>🚫 No account, no sign-up, no tracking, and no telemetry unless you opt in.</li>
+            <li>🙈 Passwords and secure text fields are never recorded, by design.</li>
+            <li>🗑️ Delete a workflow and it's gone — the data only ever existed on your device.</li>
+          </ul>
+        </section>
+
         <!-- Talk to Ghost — Interactive Demo -->
         <section id="demo" class="section" aria-labelledby="demo-title">
           <div class="section__heading reveal">
@@ -474,7 +502,7 @@
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
               Download Ghost.dmg
             </a>
-            <p class="download-note" data-show="mac" style="margin-top:10px">macOS 12+ &middot; Apple Silicon &amp; Intel &middot; Free</p>
+            <p class="download-note" data-show="mac" style="margin-top:10px">macOS 12+ &middot; Apple Silicon &amp; Intel &middot; Free &middot; 🔒 Your data never leaves your Mac</p>
 
             <!-- Windows copy -->
             <p class="eyebrow" data-show="windows">Available for Windows</p>
@@ -488,7 +516,7 @@
               <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
               Download Ghost_Setup.exe
             </a>
-            <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free</p>
+            <p class="download-note" data-show="windows" style="margin-top:10px">Windows 10 / 11 &middot; 64-bit &middot; Free &middot; 🔒 Your data never leaves your PC</p>
 
             <!-- Mobile / unknown copy -->
             <p class="eyebrow" data-show="mobile other">Available for desktop</p>
@@ -510,7 +538,7 @@
                 Download for Windows
               </a>
             </div>
-            <p class="download-note" data-show="mobile other" style="margin-top:10px">macOS 12+ or Windows 10 / 11 &middot; Free</p>
+            <p class="download-note" data-show="mobile other" style="margin-top:10px">macOS 12+ or Windows 10 / 11 &middot; Free &middot; 🔒 Your data never leaves your device</p>
           </div>
         </section>
       </main>

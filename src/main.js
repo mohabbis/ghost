@@ -47,6 +47,17 @@ function showNotification(text) {
 
 // ===== Accessibility permission gate =====
 
+// Recording needs BOTH macOS permissions: Accessibility (clicks) and
+// Input Monitoring (keystrokes). Missing either means the event tap only
+// receives scroll events.
+async function checkPermissions() {
+  const [accessibility, inputMonitoring] = await Promise.all([
+    invoke("check_accessibility"),
+    invoke("check_input_monitoring").catch(() => true), // older backends
+  ]);
+  return { accessibility, inputMonitoring };
+}
+
 async function refreshPermissionBanner() {
   if (!invoke) return;
 
@@ -54,19 +65,38 @@ async function refreshPermissionBanner() {
   if (!banner) return;
 
   try {
-    const granted = await invoke("check_accessibility");
-    banner.hidden = granted;
+    const { accessibility, inputMonitoring } = await checkPermissions();
+    banner.hidden = accessibility && inputMonitoring;
+
+    const text = document.getElementById("perm-text");
+    if (text && !banner.hidden) {
+      const missing = [];
+      if (!accessibility) missing.push("Accessibility");
+      if (!inputMonitoring) missing.push("Input Monitoring");
+      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes.`;
+    }
   } catch (error) {
-    console.error("Failed to check accessibility permission:", error);
+    console.error("Failed to check permissions:", error);
   }
 }
 
 async function requestAccessibility() {
   if (!invoke) return;
   try {
-    await invoke("request_accessibility");
+    const { accessibility, inputMonitoring } = await checkPermissions();
+    // macOS shows each permission prompt only once per app; afterwards the
+    // backend opens the matching System Settings pane instead.
+    if (!accessibility) await invoke("request_accessibility");
+    if (!inputMonitoring) await invoke("request_input_monitoring").catch(() => {});
+
+    const after = await checkPermissions();
+    if (!after.accessibility || !after.inputMonitoring) {
+      showNotification(
+        "Enable Ghost in System Settings → Privacy & Security (Accessibility + Input Monitoring), then quit and reopen Ghost.",
+      );
+    }
   } catch (error) {
-    console.error("Failed to request accessibility permission:", error);
+    console.error("Failed to request permissions:", error);
   } finally {
     refreshPermissionBanner();
   }
@@ -116,9 +146,10 @@ async function refreshOnboardingPermStatus() {
   if (!invoke) return;
   let granted = false;
   try {
-    granted = await invoke("check_accessibility");
+    const { accessibility, inputMonitoring } = await checkPermissions();
+    granted = accessibility && inputMonitoring;
   } catch (error) {
-    console.error("Failed to check accessibility permission:", error);
+    console.error("Failed to check permissions:", error);
     return;
   }
 

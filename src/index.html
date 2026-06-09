@@ -31,7 +31,7 @@
 
       <!-- Accessibility permission gate -->
       <section id="perm-banner" class="banner banner--warn" hidden>
-        <span id="perm-text">Ghost needs Accessibility permission to watch and replay your actions.</span>
+        <span id="perm-text">Ghost needs Accessibility and Input Monitoring permission to watch and replay your actions.</span>
         <button id="perm-grant" class="btn btn--small">Grant Access</button>
       </section>
 
@@ -156,10 +156,11 @@
         <!-- Step 2: Accessibility permission -->
         <section class="onboarding__step" data-step="1" hidden>
           <span class="onboarding__glyph" aria-hidden="true">🔑</span>
-          <h2>Grant Accessibility access</h2>
+          <h2>Grant recording permissions</h2>
           <p class="onboarding__lead">
             To watch and replay clicks and keystrokes, macOS needs you to allow Ghost
-            under <strong>System Settings → Privacy &amp; Security → Accessibility</strong>.
+            under <strong>System Settings → Privacy &amp; Security</strong> in both
+            <strong>Accessibility</strong> and <strong>Input Monitoring</strong>.
           </p>
           <div class="onboarding__status" id="onboardingPermStatus" data-granted="false">
             <span class="onboarding__status-dot"></span>

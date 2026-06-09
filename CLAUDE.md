@@ -20,7 +20,7 @@ Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 54 commands via generate_handler!
+├── lib.rs               # Tauri app builder; registers all 56 commands via generate_handler!
 ├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
 ├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
 ├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
@@ -105,13 +105,18 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (54 total, registered in `lib.rs`)
+### Commands (56 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
-**Accessibility**
+**Permissions**
 - `check_accessibility` → `bool`
-- `request_accessibility` → `bool`
+- `request_accessibility` → `bool` — prompts once; afterwards opens the System Settings Accessibility pane
+- `check_input_monitoring` → `bool` (macOS Input Monitoring — required for keystroke capture)
+- `request_input_monitoring` → `bool` — prompts once; afterwards opens the Input Monitoring pane
+
+> `start_recording` returns `Err` on macOS unless BOTH permissions are granted — without them
+> the event tap only receives scroll events (clicks/keys are silently filtered by the OS).
 
 **Config & Observability**
 - `get_config` → `GhostConfig`
@@ -237,7 +242,9 @@ struct ReliabilitySettings {
 - Recording: `CGEventTap` session tap (read-only), catches `LeftMouseDown/Up`, key events, scroll
 - Element lookup: `AXUIElement` system-wide API; extracts role, title, value, app name
 - Replay: `enigo` for mouse movement and click synthesis
-- Accessibility permission: `check_accessibility` calls `AXIsProcessTrusted()` (no prompt); `request_accessibility` calls `AXIsProcessTrustedWithOptions` with `kAXTrustedCheckOptionPrompt` to surface the system dialog. Both come from the `accessibility-sys` crate; the option dictionary is built with `core-foundation` safe wrappers.
+- Accessibility permission: `check_accessibility` calls `AXIsProcessTrusted()` (no prompt); `request_accessibility` calls `AXIsProcessTrustedWithOptions` with `kAXTrustedCheckOptionPrompt` to surface the system dialog. Both come from the `accessibility-sys` crate; the option dictionary is built with `core-foundation` safe wrappers. macOS shows that prompt only ONCE per app — when still untrusted afterwards, `request_accessibility` opens the System Settings Accessibility pane via `open x-apple.systempreferences:…`.
+- Input Monitoring permission: keystroke capture through a listen-only event tap additionally requires Input Monitoring (TCC `ListenEvent`, macOS 10.15+). `check_input_monitoring`/`request_input_monitoring` wrap IOKit's `IOHIDCheckAccess`/`IOHIDRequestAccess` (linked via `#[link(name = "IOKit")]`). Without it the tap delivers scrolls but no keys.
+- Mouse coordinates come from `CGEventGetLocation(event)` (a `CGPoint`), NOT from `CGEventGetIntegerValueField` — there are no X/Y integer fields. Field IDs that matter: keycode = 9, scroll deltas = 11/12, scroll phase = 99, momentum phase = 123. Wrong field IDs fail silently with garbage values.
 - Recording run loop: the event-tap thread adds its `CFRunLoopSource` to the current run loop under `kCFRunLoopCommonModes`, which is the real CoreFoundation symbol pulled in via `extern "C" { static kCFRunLoopCommonModes: CFStringRef; }` — **not** a `std::ptr::null()` placeholder. Passing null here crashes the recorder thread (`EXC_BREAKPOINT` inside `CFRunLoopAddSource`→`CFHash`) within seconds of `start_recording`.
 
 **Windows (`platform/windows.rs`):**

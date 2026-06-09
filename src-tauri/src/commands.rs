@@ -8,6 +8,23 @@ use tauri::{AppHandle, Emitter, Manager, State};
 /// Spawns a thread to bridge native events → Tauri IPC.
 #[tauri::command]
 pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(), String> {
+    // Without these permissions macOS silently filters clicks/keystrokes out
+    // of the event tap (only scrolls arrive). Fail loudly instead.
+    #[cfg(target_os = "macos")]
+    {
+        use crate::platform::macos::MacosBackend;
+        if !MacosBackend::check_accessibility() {
+            return Err(
+                "Accessibility permission is not granted. Open System Settings → Privacy & Security → Accessibility, enable Ghost, then restart the app.".into(),
+            );
+        }
+        if !MacosBackend::check_input_monitoring() {
+            return Err(
+                "Input Monitoring permission is not granted (needed to capture keystrokes). Open System Settings → Privacy & Security → Input Monitoring, enable Ghost, then restart the app.".into(),
+            );
+        }
+    }
+
     let (tx, rx) = mpsc::channel::<InputEvent>();
 
     // Start the native recorder
@@ -195,6 +212,34 @@ pub fn request_accessibility() -> bool {
     {
         use crate::platform::macos::MacosBackend;
         MacosBackend::request_accessibility()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Check Input Monitoring permission (macOS; needed for keystroke capture).
+#[tauri::command]
+pub fn check_input_monitoring() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::platform::macos::MacosBackend;
+        MacosBackend::check_input_monitoring()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Request Input Monitoring permission (macOS).
+#[tauri::command]
+pub fn request_input_monitoring() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::platform::macos::MacosBackend;
+        MacosBackend::request_input_monitoring()
     }
     #[cfg(not(target_os = "macos"))]
     {

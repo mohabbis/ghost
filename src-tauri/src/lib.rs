@@ -37,6 +37,8 @@ pub fn run() {
             commands::get_recorded_events,
             commands::check_accessibility,
             commands::request_accessibility,
+            commands::check_input_monitoring,
+            commands::request_input_monitoring,
             // AI-powered commands (Phase 1 & 3)
             commands::analyze_workflow,
             commands::optimize_workflow,

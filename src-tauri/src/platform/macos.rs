@@ -34,14 +34,22 @@ const kCGKeyDown: CGEventType = 10;
 const kCGKeyUp: CGEventType = 11;
 const kCGScrollWheelEvent: CGEventType = 22;
 
-// CGEventField constants
-const kCGMouseEventX: u32 = 0;
-const kCGMouseEventY: u32 = 1;
-const kCGKeyboardEventKeycode: u32 = 0;
-const kCGScrollWheelEventDeltaAxis1: u32 = 1;
-const kCGScrollWheelEventDeltaAxis2: u32 = 2;
+// CGEventField constants (CGEventTypes.h — do NOT guess these; wrong fields
+// silently return garbage). Mouse coordinates are not integer fields at all:
+// they come from CGEventGetLocation().
+const kCGKeyboardEventKeycode: u32 = 9;
+const kCGScrollWheelEventDeltaAxis1: u32 = 11;
+const kCGScrollWheelEventDeltaAxis2: u32 = 12;
 const kCGScrollWheelEventScrollPhase: u32 = 99;
 const kCGScrollWheelEventMomentumPhase: u32 = 123;
+
+/// CGPoint for CGEventGetLocation.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CGPoint {
+    x: f64,
+    y: f64,
+}
 
 // CGEventFlags modifier mask constants
 const kCGEventFlagMaskCapsLock: u64 = 0x0001_0000;
@@ -73,6 +81,7 @@ extern "C" {
     fn CFRunLoopRun();
     fn CFRunLoopStop(rl: CFRunLoopRef);
     fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+    fn CGEventGetLocation(event: CGEventRef) -> CGPoint;
     fn CGEventGetFlags(event: CGEventRef) -> u64;
     fn CGEventKeyboardGetUnicodeString(
         event: CGEventRef,
@@ -142,6 +151,19 @@ extern "C" {
     static kCFRunLoopCommonModes: CFStringRef;
 }
 
+// IOKit HID access (Input Monitoring permission — required for keyboard
+// capture via event taps since macOS 10.15, separate from Accessibility).
+#[link(name = "IOKit", kind = "framework")]
+extern "C" {
+    /// Returns kIOHIDAccessTypeGranted (0), Denied (1), or Unknown (2).
+    fn IOHIDCheckAccess(request_type: u32) -> u32;
+    /// Prompts the user (once) and returns true if access is granted.
+    fn IOHIDRequestAccess(request_type: u32) -> bool;
+}
+
+const kIOHIDRequestTypeListenEvent: u32 = 1;
+const kIOHIDAccessTypeGranted: u32 = 0;
+
 const kCFStringEncodingUTF8: CFStringEncoding = 0x08000100;
 const kCGSessionEventTap: CGEventTapId = 0;
 const kCGHeadInsertEventTap: u32 = 0;
@@ -184,6 +206,11 @@ impl MacosBackend {
 
     /// Request accessibility permissions, surfacing the system "Ghost would
     /// like to control this computer" prompt if not already granted.
+    ///
+    /// macOS only shows that prompt ONCE per app — every later call silently
+    /// returns false. So when we're still untrusted after the call, open
+    /// System Settings → Privacy & Security → Accessibility directly so the
+    /// button always visibly does something.
     pub fn request_accessibility() -> bool {
         use accessibility_sys::kAXTrustedCheckOptionPrompt;
         use core_foundation::base::TCFType;
@@ -191,13 +218,45 @@ impl MacosBackend {
         use core_foundation::dictionary::CFDictionary;
         use core_foundation::string::CFString;
 
-        unsafe {
+        let trusted = unsafe {
             let prompt_key = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
             let options = CFDictionary::from_CFType_pairs(&[(
                 prompt_key.as_CFType(),
                 CFBoolean::true_value().as_CFType(),
             )]);
             accessibility_sys::AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef())
+        };
+
+        if !trusted {
+            Self::open_privacy_pane("Privacy_Accessibility");
+        }
+        trusted
+    }
+
+    /// Check Input Monitoring permission (needed to capture keystrokes).
+    pub fn check_input_monitoring() -> bool {
+        unsafe { IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted }
+    }
+
+    /// Request Input Monitoring permission; prompts once, then falls back to
+    /// opening the System Settings pane (same one-shot prompt behavior as
+    /// Accessibility).
+    pub fn request_input_monitoring() -> bool {
+        let granted = unsafe { IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) };
+        if !granted {
+            Self::open_privacy_pane("Privacy_ListenEvent");
+        }
+        granted
+    }
+
+    /// Open System Settings → Privacy & Security at the given anchor.
+    fn open_privacy_pane(anchor: &str) {
+        let url = format!(
+            "x-apple.systempreferences:com.apple.preference.security?{}",
+            anchor
+        );
+        if let Err(e) = std::process::Command::new("open").arg(&url).spawn() {
+            eprintln!("Failed to open System Settings ({}): {}", anchor, e);
         }
     }
 }
@@ -329,8 +388,8 @@ unsafe extern "C" fn cg_event_callback(
     let input_event = match etype {
         // Mouse down: perform AX element lookup while we have the coordinates
         kCGMouseEventLeftMouseDown => {
-            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
-            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let loc = CGEventGetLocation(event);
+            let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
@@ -347,8 +406,8 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGMouseEventLeftMouseUp => {
-            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
-            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let loc = CGEventGetLocation(event);
+            let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
@@ -365,8 +424,8 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGMouseEventRightMouseDown => {
-            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
-            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let loc = CGEventGetLocation(event);
+            let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
@@ -383,8 +442,8 @@ unsafe extern "C" fn cg_event_callback(
             }
         }
         kCGMouseEventRightMouseUp => {
-            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
-            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let loc = CGEventGetLocation(event);
+            let (x, y) = (loc.x as i32, loc.y as i32);
             InputEvent::MouseClick {
                 x,
                 y,
