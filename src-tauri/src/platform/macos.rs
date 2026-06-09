@@ -937,6 +937,7 @@ mod tests {
             name: name.into(),
             app: app.into(),
             fallback_coords: Some((0, 0)),
+            ..Default::default()
         }
     }
 
