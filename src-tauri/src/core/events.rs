@@ -216,6 +216,14 @@ pub struct ElementInfo {
     pub name: String,
     pub app: String,
     pub fallback_coords: Option<(i32, i32)>,
+    /// Current element value (text field content, checkbox state, etc.)
+    pub value: Option<String>,
+    /// AXDescription / accessible description for unlabelled elements
+    pub description: Option<String>,
+    /// AXIdentifier / automation identifier — stable across runs
+    pub identifier: Option<String>,
+    /// Human-readable role description (e.g. "push button", "text field")
+    pub role_description: Option<String>,
 }
 
 /// Keyboard action state for key events.

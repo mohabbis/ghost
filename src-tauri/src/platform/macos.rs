@@ -18,10 +18,8 @@ type CFRunLoopSourceRef = *mut c_void;
 type CGEventRef = *mut c_void;
 type CGEventTapId = u32;
 type CGEventType = u32;
-type CGKeyCode = u16;
 type AXUIElementRef = *mut c_void;
 type AXError = i32;
-type AXValueRef = *mut c_void;
 type CFTypeRef = *const c_void;
 type CFAllocatorRef = *const c_void;
 type CFStringEncoding = u32;
@@ -42,13 +40,24 @@ const kCGMouseEventY: u32 = 1;
 const kCGKeyboardEventKeycode: u32 = 0;
 const kCGScrollWheelEventDeltaAxis1: u32 = 1;
 const kCGScrollWheelEventDeltaAxis2: u32 = 2;
+const kCGScrollWheelEventScrollPhase: u32 = 99;
+const kCGScrollWheelEventMomentumPhase: u32 = 123;
+
+// CGEventFlags modifier mask constants
+const kCGEventFlagMaskCapsLock: u64 = 0x0001_0000;
+const kCGEventFlagMaskShift: u64 = 0x0002_0000;
+const kCGEventFlagMaskControl: u64 = 0x0004_0000;
+const kCGEventFlagMaskAlternate: u64 = 0x0008_0000;
+const kCGEventFlagMaskCommand: u64 = 0x0010_0000;
 
 // AX constants
 const kAXErrorSuccess: AXError = 0;
 const kAXRoleAttribute: &str = "AXRole";
 const kAXTitleAttribute: &str = "AXTitle";
 const kAXValueAttribute: &str = "AXValue";
-const kAXApplicationAttribute: &str = "AXApplication";
+const kAXDescriptionAttribute: &str = "AXDescription";
+const kAXIdentifierAttribute: &str = "AXIdentifier";
+const kAXRoleDescriptionAttribute: &str = "AXRoleDescription";
 
 // External C functions (Core Graphics)
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -64,10 +73,16 @@ extern "C" {
     fn CFRunLoopRun();
     fn CFRunLoopStop(rl: CFRunLoopRef);
     fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
+    fn CGEventGetFlags(event: CGEventRef) -> u64;
+    fn CGEventKeyboardGetUnicodeString(
+        event: CGEventRef,
+        max_string_length: usize,
+        actual_string_length: *mut usize,
+        unicode_string: *mut u16,
+    );
     fn CGEventTapEnable(tap: CFMachPortRef, enable: Boolean);
 }
 
-// We need to define the callback type properly
 type CGEventTapCallBack = unsafe extern "C" fn(
     proxy: CGEventTapId,
     etype: CGEventType,
@@ -92,6 +107,7 @@ extern "C" {
         value: *mut CFTypeRef,
     ) -> AXError;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+    fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
 }
 
@@ -121,23 +137,20 @@ extern "C" {
         encoding: CFStringEncoding,
     ) -> Boolean;
     fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
-    fn CFGetTypeID(cf: CFTypeRef) -> usize;
     fn CFRelease(cf: CFTypeRef);
 
     static kCFRunLoopCommonModes: CFStringRef;
 }
 
-// Constants
 const kCFStringEncodingUTF8: CFStringEncoding = 0x08000100;
 const kCGSessionEventTap: CGEventTapId = 0;
 const kCGHeadInsertEventTap: u32 = 0;
-const kCGEventTapOptionDefault: u32 = 0;
-const kAXUIElementInvalid: AXUIElementRef = std::ptr::null_mut();
+// Listen-only tap: does not block or filter events, safe for slow callbacks
+const kCGEventTapOptionListenOnly: u32 = 1;
 
 /// macOS-specific backend providing recorder, locator, and replayer implementations.
 pub struct MacosBackend;
 
-// Thread-local storage for the run loop reference
 struct TapState {
     run_loop: Option<CFRunLoopRef>,
     tap_port: Option<CFMachPortRef>,
@@ -152,17 +165,14 @@ impl MacosBackend {
         MacosBackend
     }
 
-    /// Returns a boxed input recorder for macOS.
     pub fn recorder() -> Box<dyn InputRecorder> {
         Box::new(MacosRecorder::new())
     }
 
-    /// Returns a boxed element locator for macOS.
     pub fn locator() -> Box<dyn ElementLocator> {
         Box::new(MacosLocator)
     }
 
-    /// Returns a boxed replay engine for macOS.
     pub fn replayer() -> Box<dyn ReplayEngine> {
         Box::new(MacosReplayer::new())
     }
@@ -214,7 +224,6 @@ impl InputRecorder for MacosRecorder {
         let is_running = Arc::new(AtomicBool::new(true));
 
         thread::spawn(move || {
-            // Event mask for mouse and keyboard events
             let event_mask: u64 = (1 << kCGMouseEventLeftMouseDown)
                 | (1 << kCGMouseEventLeftMouseUp)
                 | (1 << kCGMouseEventRightMouseDown)
@@ -224,11 +233,10 @@ impl InputRecorder for MacosRecorder {
                 | (1 << kCGScrollWheelEvent);
 
             unsafe {
-                // Create the event tap with correct signature
                 let tap = CGEventTapCreate(
                     kCGSessionEventTap,
                     kCGHeadInsertEventTap,
-                    kCGEventTapOptionDefault,
+                    kCGEventTapOptionListenOnly,
                     event_mask,
                     cg_event_callback,
                     Box::into_raw(Box::new(tx)) as *mut c_void,
@@ -245,7 +253,6 @@ impl InputRecorder for MacosRecorder {
                 let current_run_loop = CFRunLoopGetCurrent();
                 CFRunLoopAddSource(current_run_loop, run_loop_source, kCFRunLoopCommonModes);
 
-                // Enable the tap
                 CGEventTapEnable(tap, 1);
 
                 *state_clone.lock().unwrap() = Some(TapState {
@@ -254,7 +261,6 @@ impl InputRecorder for MacosRecorder {
                     is_running: is_running.clone(),
                 });
 
-                // Run the run loop
                 CFRunLoopRun();
             }
         });
@@ -274,36 +280,65 @@ impl InputRecorder for MacosRecorder {
     }
 }
 
+// ── Helpers called from the event tap callback ────────────────────────────────
+
+/// Pack CGEventFlags into a compact u8 modifier bitmask.
+/// Bit layout: 0=Shift 1=Control 2=Alt/Option 3=Command 4=CapsLock
+unsafe fn extract_modifiers(flags: u64) -> u8 {
+    let mut m: u8 = 0;
+    if flags & kCGEventFlagMaskShift != 0 {
+        m |= 0x01;
+    }
+    if flags & kCGEventFlagMaskControl != 0 {
+        m |= 0x02;
+    }
+    if flags & kCGEventFlagMaskAlternate != 0 {
+        m |= 0x04;
+    }
+    if flags & kCGEventFlagMaskCommand != 0 {
+        m |= 0x08;
+    }
+    if flags & kCGEventFlagMaskCapsLock != 0 {
+        m |= 0x10;
+    }
+    m
+}
+
+/// Extract the Unicode string produced by a keyboard event.
+unsafe fn extract_key_chars(event: CGEventRef) -> String {
+    let mut actual_len: usize = 0;
+    let mut buf = [0u16; 8];
+    CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
+    if actual_len > 0 {
+        String::from_utf16_lossy(&buf[..actual_len])
+    } else {
+        String::new()
+    }
+}
+
+// ── CGEventTap callback ───────────────────────────────────────────────────────
+
 unsafe extern "C" fn cg_event_callback(
     _proxy: CGEventTapId,
     etype: CGEventType,
     event: CGEventRef,
     user_info: *mut c_void,
 ) -> CGEventRef {
-    let tx_ptr = user_info as *mut mpsc::Sender<InputEvent>;
-    let tx = &*tx_ptr;
+    let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
 
     let input_event = match etype {
-        kCGMouseEventLeftMouseDown | kCGMouseEventLeftMouseUp => {
-            // Get absolute screen coordinates using kCGMouseEventX and kCGMouseEventY
+        // Mouse down: perform AX element lookup while we have the coordinates
+        kCGMouseEventLeftMouseDown => {
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
-            // Resolve the element under the cursor once: used both for the privacy
-            // check and to tag the event so replay can re-resolve it later.
             let element = ax_info_at(x, y);
-            // PRIVACY: never record interactions with secure text fields (password inputs).
             if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
             }
-            let button = if etype == kCGMouseEventLeftMouseDown {
-                0
-            } else {
-                1
-            };
             InputEvent::MouseClick {
                 x,
                 y,
-                button,
+                button: 0,
                 element,
                 timestamp: None,
                 retry_count: None,
@@ -311,24 +346,50 @@ unsafe extern "C" fn cg_event_callback(
                 self_heal: None,
             }
         }
-        kCGMouseEventRightMouseDown | kCGMouseEventRightMouseUp => {
+        kCGMouseEventLeftMouseUp => {
             let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
             let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
             let element = ax_info_at(x, y);
-            // PRIVACY: never record interactions with secure text fields (password inputs).
             if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
                 return event;
             }
-            let button = if etype == kCGMouseEventRightMouseDown {
-                2
-            } else {
-                3
-            };
             InputEvent::MouseClick {
                 x,
                 y,
-                button,
+                button: 1,
+                element: None,
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: None,
+                self_heal: None,
+            }
+        }
+        kCGMouseEventRightMouseDown => {
+            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
+            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            let element = ax_info_at(x, y);
+            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
+                return event;
+            }
+            InputEvent::MouseClick {
+                x,
+                y,
+                button: 2,
                 element,
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: None,
+                self_heal: None,
+            }
+        }
+        kCGMouseEventRightMouseUp => {
+            let x = CGEventGetIntegerValueField(event, kCGMouseEventX) as i32;
+            let y = CGEventGetIntegerValueField(event, kCGMouseEventY) as i32;
+            InputEvent::MouseClick {
+                x,
+                y,
+                button: 3,
+                element: None,
                 timestamp: None,
                 retry_count: None,
                 semantic_tag: None,
@@ -337,6 +398,14 @@ unsafe extern "C" fn cg_event_callback(
         }
         kCGKeyDown | kCGKeyUp => {
             let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
+            let flags = CGEventGetFlags(event);
+            let modifiers = extract_modifiers(flags);
+            // Only extract characters on key-down; up events carry the same string redundantly
+            let chars = if etype == kCGKeyDown {
+                extract_key_chars(event)
+            } else {
+                String::new()
+            };
             let action = if etype == kCGKeyDown {
                 KeyAction::Down
             } else {
@@ -344,8 +413,8 @@ unsafe extern "C" fn cg_event_callback(
             };
             InputEvent::Key {
                 code,
-                chars: String::new(), // TODO: Get actual characters from event
-                modifiers: 0,         // TODO: Extract modifier flags
+                chars,
+                modifiers,
                 action,
                 timestamp: None,
                 retry_count: None,
@@ -355,19 +424,33 @@ unsafe extern "C" fn cg_event_callback(
         kCGScrollWheelEvent => {
             let dx = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2) as i32;
             let dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1) as i32;
+            // kCGScrollWheelEventScrollPhase: 0=none 1=began 2=changed 4=ended 128=mayBegin
+            // kCGScrollWheelEventMomentumPhase: 0=none 1=begin 2=continue 3=end
+            let scroll_phase =
+                CGEventGetIntegerValueField(event, kCGScrollWheelEventScrollPhase) as u8;
+            let momentum_phase =
+                CGEventGetIntegerValueField(event, kCGScrollWheelEventMomentumPhase) as u8;
+            // Prefer gesture phase; fall back to momentum phase for coasting scrolls
+            let phase = if scroll_phase != 0 {
+                scroll_phase
+            } else {
+                momentum_phase
+            };
             InputEvent::Scroll {
                 dx,
                 dy,
-                phase: 0, // TODO: Extract scroll phase
+                phase,
                 timestamp: None,
             }
         }
-        _ => return event, // Pass through unhandled events
+        _ => return event,
     };
 
     let _ = tx.send(input_event);
     event
 }
+
+// ── AX string attribute helper ────────────────────────────────────────────────
 
 /// macOS element locator using AXUIElement / Accessibility API.
 struct MacosLocator;
@@ -378,9 +461,8 @@ impl ElementLocator for MacosLocator {
     }
 }
 
-/// Resolve the accessibility element at screen point (x, y) into an `ElementInfo`
-/// (role, name/title, owning app). Returns `None` if nothing is there. Shared by
-/// the recorder (to tag captured clicks), the element inspector, and replay
+/// Resolve the accessibility element at screen point (x, y) into an `ElementInfo`.
+/// Shared by the recorder (to tag captured clicks), the element inspector, and replay
 /// descriptor re-resolution.
 unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
     let system_wide = AXUIElementCreateSystemWide();
@@ -397,11 +479,34 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
     }
 
     let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
-    let name = get_ax_string_attribute(element, kAXTitleAttribute)
-        .or_else(|| get_ax_string_attribute(element, kAXValueAttribute))
+    let title = get_ax_string_attribute(element, kAXTitleAttribute);
+    let description = get_ax_string_attribute(element, kAXDescriptionAttribute);
+    let value = get_ax_string_attribute(element, kAXValueAttribute);
+    let identifier = get_ax_string_attribute(element, kAXIdentifierAttribute);
+    let role_description = get_ax_string_attribute(element, kAXRoleDescriptionAttribute);
+    let name = title
+        .clone()
+        .or_else(|| description.clone())
+        .or_else(|| value.clone())
         .unwrap_or_default();
-    let app = get_ax_string_attribute(element, kAXApplicationAttribute)
-        .unwrap_or_else(|| String::from("Unknown"));
+
+    // Resolve app name via PID → AXUIElementCreateApplication → AXTitle
+    let app = {
+        let mut pid: i32 = 0;
+        if AXUIElementGetPid(element, &mut pid) == kAXErrorSuccess && pid > 0 {
+            let app_elem = AXUIElementCreateApplication(pid);
+            if !app_elem.is_null() {
+                let n = get_ax_string_attribute(app_elem, kAXTitleAttribute)
+                    .unwrap_or_else(|| String::from("Unknown"));
+                CFRelease(app_elem as *const c_void);
+                n
+            } else {
+                String::from("Unknown")
+            }
+        } else {
+            String::from("Unknown")
+        }
+    };
 
     CFRelease(element as *const c_void);
     CFRelease(system_wide as *const c_void);
@@ -411,6 +516,10 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
         name,
         app,
         fallback_coords: Some((x, y)),
+        value,
+        description,
+        identifier,
+        role_description,
     })
 }
 
@@ -421,8 +530,6 @@ fn is_secure_role(role: &str) -> bool {
 }
 
 /// Does the live element `found` match the recorded `target` descriptor?
-/// Role must match. If the target carries a name, require it too; otherwise fall
-/// back to role + owning app so we don't match a same-role element in another app.
 fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
     if target.role.is_empty() || !target.role.eq_ignore_ascii_case(&found.role) {
         return false;
@@ -430,7 +537,6 @@ fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
     if !target.name.is_empty() {
         return target.name.eq_ignore_ascii_case(&found.name);
     }
-    // No name to disambiguate on — require the same app when we know it.
     if target.app.is_empty() || target.app == "Unknown" {
         true
     } else {
@@ -438,21 +544,15 @@ fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
     }
 }
 
-/// Re-resolve where to click for a recorded click. Returns the recorded
-/// coordinates if the matching element is still there, otherwise scans a bounded
-/// set of points around them to find where the element moved to, and finally
-/// falls back to the recorded coordinates if no match is found. This is what lets
-/// replay survive a window that moved or a layout that shifted.
+/// Re-resolve where to click for a recorded click. Scans nearby points when
+/// the element has moved, letting replay survive shifted/resized UIs.
 unsafe fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
-    // Fast path: element still at the recorded spot.
     if let Some(found) = ax_info_at(rx, ry) {
         if descriptor_matches(target, &found) {
             return (rx, ry);
         }
     }
 
-    // Bounded nearby scan: concentric rings of probe points. Only runs when the
-    // recorded spot no longer matches, so the common case pays nothing extra.
     const RADII: [i32; 4] = [30, 70, 140, 260];
     const DIRS: [(i32, i32); 8] = [
         (1, 0),
@@ -478,36 +578,30 @@ unsafe fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i
         }
     }
 
-    // Give up gracefully — click where it was recorded.
     (rx, ry)
 }
 
-/// Helper function to extract string attributes from AXUIElement
 unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> Option<String> {
-    // Create CFString from Rust string
     let cf_string = str_to_cfstring(attribute);
     if cf_string.is_null() {
         return None;
     }
 
     let mut value: CFTypeRef = std::ptr::null();
-
     if AXUIElementCopyAttributeValue(element, cf_string, &mut value) != kAXErrorSuccess {
         CFRelease(cf_string);
         return None;
     }
+    CFRelease(cf_string);
 
     if value.is_null() {
-        CFRelease(cf_string);
         return None;
     }
 
-    // Try to get as CFString using CFStringGetCStringPtr
     let c_str = CFStringGetCStringPtr(value, kCFStringEncodingUTF8);
     let result = if !c_str.is_null() {
         Some(CStr::from_ptr(c_str).to_string_lossy().into_owned())
     } else {
-        // Fallback: try CFStringGetCString
         let len = CFStringGetLength(value);
         let max_size = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8);
         if max_size > 0 {
@@ -534,24 +628,25 @@ unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> O
     };
 
     CFRelease(value);
-    CFRelease(cf_string);
     result
 }
 
-/// Convert a Rust string to CFStringRef
 fn str_to_cfstring(s: &str) -> CFStringRef {
     unsafe {
         CFStringCreateWithBytes(
-            std::ptr::null(), // Use default allocator
+            std::ptr::null(),
             s.as_ptr(),
             s.len() as isize,
             kCFStringEncodingUTF8,
-            0, // is_external_representation = false
+            0,
         )
     }
 }
 
-/// macOS replay engine using enigo.
+// ── Element locator ───────────────────────────────────────────────────────────
+
+// ── Replay engine ─────────────────────────────────────────────────────────────
+
 struct MacosReplayer {
     speed_factor: Arc<Mutex<f32>>,
 }
@@ -563,7 +658,6 @@ impl MacosReplayer {
         }
     }
 
-    /// Set playback speed factor (1.0 = normal, 2.0 = 2x speed, etc.)
     fn set_speed(&self, factor: f32) {
         *self.speed_factor.lock().unwrap() = factor.max(0.1);
     }
@@ -606,15 +700,13 @@ impl ReplayEngine for MacosReplayer {
 
                     while attempts <= max_retries && !success {
                         enigo.move_mouse(cx, cy, Coordinate::Abs)?;
-
                         let mouse_button = match button {
                             0 | 1 => Button::Left,
                             2 | 3 => Button::Right,
                             _ => Button::Left,
                         };
-
                         enigo.button(mouse_button, Direction::Click)?;
-                        success = true; // In real implementation, validate
+                        success = true;
                         attempts += 1;
                     }
                 }
@@ -626,7 +718,6 @@ impl ReplayEngine for MacosReplayer {
                     ..
                 } => {
                     let max_retries = retry_count.unwrap_or(0);
-
                     for _ in 0..=max_retries {
                         let key = if !chars.is_empty() {
                             Key::Unicode(chars.chars().next().unwrap_or(' '))
@@ -634,12 +725,8 @@ impl ReplayEngine for MacosReplayer {
                             Key::Other(*code as u32)
                         };
                         match action {
-                            KeyAction::Down => {
-                                enigo.key(key, Direction::Press)?;
-                            }
-                            KeyAction::Up => {
-                                enigo.key(key, Direction::Release)?;
-                            }
+                            KeyAction::Down => enigo.key(key, Direction::Press)?,
+                            KeyAction::Up => enigo.key(key, Direction::Release)?,
                         }
                     }
                 }
@@ -655,14 +742,12 @@ impl ReplayEngine for MacosReplayer {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
                     thread::sleep(Duration::from_millis(adjusted_ms));
                 }
-                // Phase 3: Smart Wait Events
                 InputEvent::Wait {
                     condition,
                     timeout_ms,
                     poll_interval_ms,
                 } => {
                     tracing::info!("Waiting for condition: {:?}", condition);
-                    // Use a local locator for wait condition checking
                     let locator = crate::platform::macos::MacosBackend::locator();
                     let result = crate::core::wait::wait_for_condition(
                         condition,
@@ -680,71 +765,54 @@ impl ReplayEngine for MacosReplayer {
                         crate::core::wait::WaitResult::Success => {}
                     }
                 }
-                // Phase 3: Visual Regression Check
                 InputEvent::VisualCheck {
                     baseline_screenshot,
                     threshold,
                     on_mismatch,
-                } => {
-                    // Capture current screen
-                    match vision::capture_screenshot() {
-                        Ok(img_bytes) => {
-                            if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                                if let Ok(similarity) =
-                                    vision::compare_images(baseline_screenshot, &current_img)
-                                {
-                                    if similarity < *threshold {
-                                        tracing::warn!(
-                                            "Visual mismatch detected: {:.2} < {}",
-                                            similarity,
-                                            threshold
-                                        );
-                                        // Handle mismatch action
-                                        match on_mismatch {
-                                            crate::core::events::MismatchAction::Fail => {
-                                                return Err(anyhow::anyhow!(
-                                                    "Visual regression detected"
-                                                ));
-                                            }
-                                            crate::core::events::MismatchAction::Retry {
-                                                attempts,
-                                            } => {
-                                                // Retry the check
-                                                for _ in 0..*attempts {
-                                                    thread::sleep(Duration::from_millis(500));
-                                                    if let Ok(new_img) =
-                                                        vision::capture_screenshot()
-                                                    {
-                                                        if let Ok(new_img) =
-                                                            image::load_from_memory(&new_img)
+                } => match vision::capture_screenshot() {
+                    Ok(img_bytes) => {
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
+                            if let Ok(similarity) =
+                                vision::compare_images(baseline_screenshot, &current_img)
+                            {
+                                if similarity < *threshold {
+                                    tracing::warn!(
+                                        "Visual mismatch: {:.2} < {}",
+                                        similarity,
+                                        threshold
+                                    );
+                                    match on_mismatch {
+                                        crate::core::events::MismatchAction::Fail => {
+                                            return Err(anyhow::anyhow!(
+                                                "Visual regression detected"
+                                            ));
+                                        }
+                                        crate::core::events::MismatchAction::Retry { attempts } => {
+                                            for _ in 0..*attempts {
+                                                thread::sleep(Duration::from_millis(500));
+                                                if let Ok(b) = vision::capture_screenshot() {
+                                                    if let Ok(img) = image::load_from_memory(&b) {
+                                                        if vision::compare_images(
+                                                            baseline_screenshot,
+                                                            &img,
+                                                        )
+                                                        .unwrap_or(1.0)
+                                                            >= *threshold
                                                         {
-                                                            if vision::compare_images(
-                                                                baseline_screenshot,
-                                                                &new_img,
-                                                            )
-                                                            .unwrap_or(1.0)
-                                                                >= *threshold
-                                                            {
-                                                                break;
-                                                            }
+                                                            break;
                                                         }
                                                     }
                                                 }
                                             }
-                                            crate::core::events::MismatchAction::LogOnly => {
-                                                // Just log, continue
-                                            }
                                         }
+                                        crate::core::events::MismatchAction::LogOnly => {}
                                     }
                                 }
                             }
                         }
-                        Err(e) => {
-                            tracing::error!("Failed to capture screenshot for visual check: {}", e);
-                        }
                     }
-                }
-                // Phase 3: Variable Injection
+                    Err(e) => tracing::error!("Screenshot failed: {}", e),
+                },
                 InputEvent::Variable {
                     name,
                     value_template,
@@ -755,7 +823,6 @@ impl ReplayEngine for MacosReplayer {
                         .unwrap_or_else(|_| value_template.clone());
                     var_context.set(name.clone(), resolved);
                 }
-                // Variable Reference - just log for now, actual usage depends on context
                 InputEvent::VariableRef { name } => {
                     tracing::debug!("Variable reference: {}", name);
                 }
@@ -774,7 +841,7 @@ impl ReplayEngine for MacosReplayer {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = *self.speed_factor.lock().unwrap();
 
-        for (_idx, event) in events.iter().enumerate() {
+        for event in events {
             if stop_flag.load(Ordering::Relaxed) {
                 return Ok(());
             }
@@ -784,15 +851,9 @@ impl ReplayEngine for MacosReplayer {
                     x,
                     y,
                     button,
-                    element,
                     retry_count,
                     ..
                 } => {
-                    // Validate element if configured
-                    if reliability.validate_elements && element.is_none() {
-                        // Could add element inspection here
-                    }
-
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
                     let mut attempts = 0;
                     let mut success = false;
@@ -824,30 +885,24 @@ impl ReplayEngine for MacosReplayer {
                     ..
                 } => {
                     let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-
                     for attempt in 0..=max_retries {
                         if stop_flag.load(Ordering::Relaxed) {
                             return Ok(());
                         }
-
                         let key = if !chars.is_empty() {
                             Key::Unicode(chars.chars().next().unwrap_or(' '))
                         } else {
                             Key::Other(*code as u32)
                         };
                         match action {
-                            KeyAction::Down => {
-                                enigo.key(key, Direction::Press)?;
-                            }
-                            KeyAction::Up => {
-                                enigo.key(key, Direction::Release)?;
-                            }
+                            KeyAction::Down => enigo.key(key, Direction::Press)?,
+                            KeyAction::Up => enigo.key(key, Direction::Release)?,
                         }
-
                         if attempt < max_retries {
-                            let backoff = reliability.retry_config.backoff_ms
-                                * (reliability.retry_config.backoff_multiplier as u64);
-                            std::thread::sleep(Duration::from_millis(backoff));
+                            std::thread::sleep(Duration::from_millis(
+                                reliability.retry_config.backoff_ms
+                                    * reliability.retry_config.backoff_multiplier as u64,
+                            ));
                         }
                     }
                 }

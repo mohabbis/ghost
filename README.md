@@ -166,10 +166,10 @@ All Phase 4 features are now in production on `master`:
 - [x] **Phase 4C: Data-Driven Testing** - CSV/JSON/Environment data sources, template resolution
 - [x] **Phase 4D: Geek Mode Insights** - Technical performance metrics, event timing analysis for power users
 - [x] **Phase 5: Execution & Analytics** - Execution history tracking, workflow analytics
-- [ ] Capture *what* was clicked (AX element role/title) with full attribute extraction
-- [ ] Keyboard modifier tracking and character mapping
-- [ ] Scroll event phase handling
-- [ ] Cross-platform desktop deployment
+- [x] Capture *what* was clicked (AX element role/title) with full attribute extraction
+- [x] Keyboard modifier tracking and character mapping
+- [x] Scroll event phase handling
+- [x] Cross-platform desktop deployment
 
 ## API Reference
 
