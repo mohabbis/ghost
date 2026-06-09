@@ -104,6 +104,26 @@ pub fn update_config(
     engine.update_config(config).map_err(|e| e.to_string())
 }
 
+/// Get the collected usage telemetry statistics (empty unless opted in).
+#[tauri::command]
+pub fn get_telemetry_stats(engine: State<GhostEngine>) -> crate::telemetry::UsageStats {
+    engine.get_telemetry_stats()
+}
+
+/// Export all collected telemetry as a JSON string.
+#[tauri::command]
+pub fn export_telemetry(engine: State<GhostEngine>) -> Result<String, String> {
+    engine.export_telemetry().map_err(|e| e.to_string())
+}
+
+/// Get a summary of recorded performance metrics (empty unless profiling is on).
+#[tauri::command]
+pub fn get_performance_summary(
+    engine: State<GhostEngine>,
+) -> crate::performance::PerformanceSummary {
+    engine.get_performance_summary()
+}
+
 /// Inspect the UI element at the given screen coordinates.
 #[tauri::command]
 pub fn inspect_element(
@@ -191,6 +211,7 @@ pub fn analyze_workflow(
     events: Vec<InputEvent>,
     engine: State<GhostEngine>,
 ) -> crate::core::ai::WorkflowAnalysis {
+    engine.track_feature("analyze_workflow");
     engine.analyze_workflow(&events, &name)
 }
 
@@ -198,10 +219,11 @@ pub fn analyze_workflow(
 #[tauri::command]
 pub fn optimize_workflow(
     events: Vec<InputEvent>,
-    _engine: State<GhostEngine>,
+    engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
     use crate::core::ai::WorkflowOptimizer;
 
+    engine.track_feature("optimize_workflow");
     let optimizer = WorkflowOptimizer::new();
     optimizer.optimize(&events).map_err(|e| e.to_string())
 }

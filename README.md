@@ -170,6 +170,7 @@ All Phase 4 features are now in production on `master`:
 - [x] Keyboard modifier tracking and character mapping
 - [x] Scroll event phase handling
 - [x] Cross-platform desktop deployment
+- [x] **Phase 6.1: Observability wiring** - Opt-in usage telemetry and performance monitoring, gated by privacy/performance config flags (`get_telemetry_stats`, `export_telemetry`, `get_performance_summary`)
 
 ## API Reference
 
@@ -236,3 +237,17 @@ All Phase 4 features are now in production on `master`:
 | `check_accessibility` | Check platform permissions | None |
 | `request_accessibility` | Prompt for permission dialog | None |
 | `inspect_element` | Get UI element info at coords | `x: i32`, `y: i32`, `engine: State<GhostEngine>` |
+
+### Configuration & Observability Commands
+
+| Command | Description | Parameters |
+|---------|-------------|------------|
+| `get_config` | Snapshot the persisted configuration | `engine: State<GhostEngine>` |
+| `update_config` | Validate, persist, and live-apply config | `config: GhostConfig`, `engine: State<GhostEngine>` |
+| `get_telemetry_stats` | Usage stats (empty unless opted in) | `engine: State<GhostEngine>` |
+| `export_telemetry` | Export telemetry as JSON | `engine: State<GhostEngine>` |
+| `get_performance_summary` | Per-operation timing summary | `engine: State<GhostEngine>` |
+
+> Telemetry and performance monitoring are **opt-in** and disabled by default. They activate only
+> when `privacy.telemetry_enabled` / `performance.profiling_enabled` are set in config, and collect
+> nothing otherwise.

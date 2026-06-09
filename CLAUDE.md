@@ -20,7 +20,7 @@ Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 48 commands via generate_handler!
+├── lib.rs               # Tauri app builder; registers all 54 commands via generate_handler!
 ├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
 ├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
 ├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
@@ -45,12 +45,16 @@ src-tauri/src/
     └── windows.rs       # Win32 hooks, UIA (UI Automation), enigo replay
 ```
 
-> **Note:** `config.rs`, `error.rs`, `performance.rs`, and `telemetry.rs` are standalone modules
-> with their own unit tests, but as of now nothing in `engine.rs`/`commands.rs`/`platform/` actually
-> constructs or calls into `GhostConfig`, `GhostError`, `PerformanceMonitor`, or `TelemetryManager` —
-> grep for `use crate::config`/`use crate::error` etc. before assuming they're wired into the live
-> request path. Likewise `core::security`'s validation helpers (`sanitize_workflow_path`,
-> `validate_prompt`, `rate_limit`, …) are not yet called from `commands.rs`.
+> **Note:** `config.rs`, `performance.rs`, and `telemetry.rs` are now wired into the live path:
+> `GhostEngine` constructs `GhostConfig` (drives playback speed + LLM provider), a
+> `TelemetryManager` (gated by `config.privacy.telemetry_enabled`), and a `PerformanceMonitor`
+> (gated by `config.performance.profiling_enabled`). Recording/replay call into telemetry +
+> perf, and `get_telemetry_stats`/`export_telemetry`/`get_performance_summary` expose them over
+> IPC. `core::security`'s `sanitize_workflow_path` + `validate_prompt` are also called from
+> `commands.rs`. Still standalone: **`error.rs`** (`GhostError`/`ErrorKind` are not yet returned
+> from commands — they still hand back `String`/`anyhow`), plus `core::security`'s `SimpleCrypto`,
+> `rate_limit`, `validate_screenshot/csv/coordinates`, and the `audit` submodule stub. Grep for
+> `use crate::error` before assuming structured errors reach command results.
 
 ### Frontend files
 
@@ -101,13 +105,20 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (48 total, registered in `lib.rs`)
+### Commands (54 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
 **Accessibility**
 - `check_accessibility` → `bool`
 - `request_accessibility` → `bool`
+
+**Config & Observability**
+- `get_config` → `GhostConfig`
+- `update_config(config)` — validates, persists, and live-applies (speed, LLM, telemetry/perf toggles)
+- `get_telemetry_stats` → `UsageStats` (empty unless `privacy.telemetry_enabled`)
+- `export_telemetry` → `String` (JSON: session id + stats + events)
+- `get_performance_summary` → `PerformanceSummary` (empty unless `performance.profiling_enabled`)
 
 **Recording & Playback**
 - `start_recording`
@@ -339,7 +350,7 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 - **`src-tauri/target/` and `src-tauri/gen/`** are build artifacts — never edit or commit them. `Cargo.lock` IS committed (binary crate convention).
 - **Windows screenshot capture** in `vision.rs` shells out to PowerShell (`System.Drawing`/`System.Windows.Forms`) to a temp PNG; macOS uses the `screencapture` CLI. Both feed the same SSIM comparison in `replay_with_visual_check`.
 - **Cloud sync** (`cloud.rs`) stores data in-memory only — no real remote API calls are wired yet (`cloud_authenticate`/`cloud_sync_workflows` don't touch `reqwest`).
-- **`config.rs`/`error.rs`/`performance.rs`/`telemetry.rs` are not yet integrated** — they compile, have their own tests, and are exported from `lib.rs`, but `engine.rs`/`commands.rs` don't construct or call them. Don't assume `GhostError`/`GhostConfig` show up in command results just because the types exist.
+- **`error.rs` is not yet integrated** — it compiles, has its own tests, and is exported from `lib.rs`, but `engine.rs`/`commands.rs` still return `String`/`anyhow` rather than `GhostError`. (`config.rs`/`performance.rs`/`telemetry.rs` ARE now wired — see the note under the backend module tree above.) Don't assume `GhostError` shows up in command results just because the type exists.
 - **`src/` and `public/` must stay in sync by hand** — `public/` is a parallel copy of the frontend deployed as the marketing site (see `DEPLOYMENT.md`); editing one without the other causes drift between the app UI and the website.
 - **macOS recording state** in `platform/macos.rs` lives behind `Arc<Mutex<Option<TapState>>>` (with manual `unsafe impl Send/Sync` on the tap types) rather than a global static — still avoid overlapping `start_recording`/`stop_recording` calls since the `CGEventTap` lifecycle is stateful.
 

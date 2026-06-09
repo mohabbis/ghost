@@ -1,11 +1,12 @@
 //! Performance monitoring and optimization utilities
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Performance metrics for operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceMetrics {
     /// Operation name
     pub operation: String,
@@ -173,7 +174,7 @@ impl PerformanceMonitor {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationStats {
     pub operation: String,
     pub count: u64,
@@ -183,7 +184,7 @@ pub struct OperationStats {
     pub avg_ms: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceSummary {
     pub operations: Vec<OperationStats>,
 }
