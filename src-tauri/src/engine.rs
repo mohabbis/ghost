@@ -1,6 +1,7 @@
 //! Ghost engine: platform-agnostic orchestration layer.
 //! Manages recording, element lookup, and replay with cancellation support.
 
+use crate::auth::AuthManager;
 use crate::config::GhostConfig;
 use crate::core::ai::WorkflowAnalysis;
 use crate::core::ai::WorkflowAnalyzer;
@@ -54,6 +55,8 @@ pub struct GhostEngine {
     perf: Arc<PerformanceMonitor>,
     /// Wall-clock start of the active recording session, for duration telemetry
     recording_start: Arc<Mutex<Option<Instant>>>,
+    /// Local login + at-rest encryption for workflow data
+    auth: Arc<AuthManager>,
 }
 
 impl GhostEngine {
@@ -112,7 +115,13 @@ impl GhostEngine {
             telemetry,
             perf,
             recording_start: Arc::new(Mutex::new(None)),
+            auth: Arc::new(AuthManager::new()),
         }
+    }
+
+    /// Access the local auth manager (login + workflow encryption).
+    pub fn auth(&self) -> Arc<AuthManager> {
+        Arc::clone(&self.auth)
     }
 
     /// Start recording input events. Events will be sent through the provided channel.
@@ -287,7 +296,8 @@ impl GhostEngine {
 
         let file_path = workflows_dir.join(format!("{}.json", name));
         let json = serde_json::to_string_pretty(events)?;
-        fs::write(&file_path, json)?;
+        // Encrypted at rest when a local password is configured (auth.rs).
+        fs::write(&file_path, self.auth.protect(&json)?)?;
 
         Ok(file_path)
     }
@@ -303,7 +313,8 @@ impl GhostEngine {
             .join("ghost")
             .join("workflows")
             .join(format!("{}.json", name));
-        let json = fs::read_to_string(&file_path)?;
+        // Transparently decrypts envelopes; pre-password plaintext loads as-is.
+        let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
         let events: Vec<InputEvent> = serde_json::from_str(&json)?;
 
         Ok(events)
@@ -433,7 +444,7 @@ impl GhostEngine {
 
         let file_path = workflows_dir.join(format!("{}.json", workflow.name));
         let json = serde_json::to_string_pretty(workflow)?;
-        fs::write(&file_path, json)?;
+        fs::write(&file_path, self.auth.protect(&json)?)?;
 
         Ok(file_path)
     }
@@ -505,7 +516,7 @@ impl GhostEngine {
             .join("ghost")
             .join("workflows")
             .join(format!("{}.json", name));
-        let json = fs::read_to_string(&file_path)?;
+        let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
         let workflow: Workflow = serde_json::from_str(&json)?;
 
         Ok(workflow)

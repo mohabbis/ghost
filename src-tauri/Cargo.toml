@@ -30,6 +30,8 @@ base64 = "0.21"
 async-trait = "0.1"
 regex = "1.10"
 dirs = "5"
+argon2 = "0.5"
+aes-gcm = "0.10"
 
 [features]
 default = []

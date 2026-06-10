@@ -13,20 +13,22 @@ Five phases are fully implemented: Foundation (record/replay), Workflow Manageme
 Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 
 - **Frontend** (`src/`): plain vanilla HTML/CSS/JS — **no bundler, no npm, no `package.json`**. `tauri.conf.json` sets `frontendDist` to `../src`, so files are served as-is. `withGlobalTauri: true` exposes the Tauri API on `window.__TAURI__`. There is no dev server; the frontend is static.
-- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 57 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
+- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 61 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
 
 ### Backend module tree
 
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 57 commands via generate_handler!
+├── lib.rs               # Tauri app builder; registers all 61 commands via generate_handler!
 ├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
 ├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
 ├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
 ├── error.rs             # GhostError/ErrorKind — structured, user-friendly error type with suggestions
 ├── performance.rs       # PerformanceMonitor — operation timers and metrics collection
 ├── telemetry.rs         # TelemetryManager — opt-in usage events and UsageStats
+├── auth.rs              # AuthManager — local password (Argon2id) + AES-256-GCM workflow encryption
+
 ├── core/
 │   ├── mod.rs           # re-exports
 │   ├── events.rs        # InputEvent enum, ElementInfo, Workflow, WorkflowMetadata structs
@@ -105,7 +107,7 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (57 total, registered in `lib.rs`)
+### Commands (61 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
@@ -117,6 +119,13 @@ Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
 > `start_recording` returns `Err` on macOS unless BOTH permissions are granted — without them
 > the event tap only receives scroll events (clicks/keys are silently filtered by the OS).
+
+**Local login (auth.rs — local-only, no server)**
+- `auth_status` → `{ configured: bool, unlocked: bool }`
+- `auth_setup(password)` — creates the local password (min 8 chars); generates a random DEK, wraps it with an Argon2id-derived key (AES-256-GCM), stores `auth.json` in the ghost data dir; leaves the app unlocked
+- `auth_unlock(password)` → `bool` — `false` means wrong password (GCM tag check fails); `Err` only for I/O/corruption
+- `auth_lock` — drops the in-memory key
+- Once configured, workflow saves are encrypted envelopes (`{"ghost_encrypted":1,"nonce":…,"data":…}`) written to the same `<name>.json` paths; loads transparently decrypt envelopes AND still read pre-password plaintext files. Save/load fail with "Ghost is locked" while locked. There is deliberately NO password recovery.
 
 **Config & Observability**
 - `get_config` → `GhostConfig`
@@ -369,6 +378,12 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 - Global JS state: `isRecording`, `recordedEvents[]`, `isPlaying`, `isPaused`, `playbackSpeed`.
 - UI is organized into collapsible sections in `index.html`: Recording, Workflow Management, AI Analysis, Smart Observer, Phase 4 (visual/data), Event Timeline. The Cloud Sync panel was intentionally REMOVED from the UI (Ghost is marketed as local-only; the `cloud.rs` backend stubs remain but are not exposed). Don't re-add it without a real opt-in backend + updated privacy messaging.
 - Modal `#analysis-modal` displays workflow analysis results.
+- First-run walkthrough (`#onboarding`, 5 steps): welcome → "how Ghost helps" demo →
+  permissions → optional password ("Secure your data") → ready. Every step is skippable
+  (top-right Skip + per-step ignore buttons); completion is persisted in
+  `localStorage["ghost.onboarding.completed"]`. The lock screen (`#lock-screen`) shows on
+  launch instead when `auth_status` reports configured-but-locked; a 🔒 Lock header button
+  appears once a password is configured.
 - CSS design tokens: accent purple `#8d7bff`, warm orange `#ffb86b`, success mint `#83f6c4`, dark bg `#070813`.
 
 ## Key dependencies (Cargo.toml)
@@ -388,6 +403,7 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 | `tracing`, `tracing-subscriber`, `tracing-chrome` (optional, `profiling` feature) | Structured logging / profiling |
 | `threadpool` | Background task execution |
 | `base64` | Encoding screenshots / binary payloads for IPC |
+| `argon2`, `aes-gcm` | Local login: password key derivation + at-rest workflow encryption (auth.rs) |
 | `async-trait` | Async methods on the `LLMProvider` trait |
 | `dirs` | Cross-platform data/config directory resolution |
 

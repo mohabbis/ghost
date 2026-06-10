@@ -1,3 +1,4 @@
+pub mod auth;
 mod commands;
 pub mod config;
 pub mod core;
@@ -40,6 +41,11 @@ pub fn run() {
             commands::request_accessibility,
             commands::check_input_monitoring,
             commands::request_input_monitoring,
+            // Local login: password + at-rest workflow encryption
+            commands::auth_status,
+            commands::auth_setup,
+            commands::auth_unlock,
+            commands::auth_lock,
             // AI-powered commands (Phase 1 & 3)
             commands::analyze_workflow,
             commands::optimize_workflow,

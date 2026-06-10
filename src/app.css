@@ -357,3 +357,83 @@
   gap: 8px;
   margin-top: 18px;
 }
+
+/* ===== "How Ghost helps" walkthrough step ===== */
+
+.onboarding__flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 16px;
+}
+
+.flow-step {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(141, 123, 255, 0.07);
+  font-size: 0.8rem;
+}
+
+.flow-step__icon {
+  display: block;
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+}
+
+.flow-step strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.flow-step p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.flow-arrow {
+  align-self: center;
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+.onboarding__demo-timeline {
+  text-align: left;
+  margin: 0 0 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.onboarding__demo-timeline .timeline-item {
+  font-size: 0.78rem;
+}
+
+/* ===== Lock screen & password setup ===== */
+
+.auth-input {
+  width: 100%;
+  margin: 6px 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.auth-error {
+  color: #ef4444;
+}
