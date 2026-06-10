@@ -35,7 +35,13 @@ pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(),
     // inside the thread instead of capturing the borrowed `State`.
     let app_handle = app.clone();
     std::thread::spawn(move || {
-        while let Ok(event) = rx.recv() {
+        while let Ok(mut event) = rx.recv() {
+            // Stamp arrival time (epoch ms) so replay can reproduce the
+            // recorded rhythm between events.
+            if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                event.set_timestamp(now.as_millis() as u64);
+            }
+
             // Buffer event in engine
             let engine = app_handle.state::<GhostEngine>();
             engine.buffer_event(event.clone());

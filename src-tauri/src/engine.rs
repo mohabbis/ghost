@@ -21,8 +21,24 @@ use image::DynamicImage;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
+
+/// RAII guard marking a replay as active for its lifetime (drop-safe, so the
+/// flag clears even if the replay errors or panics).
+struct ReplayActiveGuard(Arc<AtomicBool>);
+
+impl ReplayActiveGuard {
+    fn new(flag: Arc<AtomicBool>) -> Self {
+        flag.store(true, Ordering::Relaxed);
+        ReplayActiveGuard(flag)
+    }
+}
+
+impl Drop for ReplayActiveGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Relaxed);
+    }
+}
 
 /// Main engine struct that holds platform-specific backends.
 pub struct GhostEngine {
@@ -35,6 +51,8 @@ pub struct GhostEngine {
     rx: Mutex<Option<mpsc::Receiver<InputEvent>>>,
     /// Atomic flag for instant replay cancellation
     replay_stop_flag: Arc<AtomicBool>,
+    /// True only while a replay is actually executing
+    replay_active: Arc<AtomicBool>,
     /// Playback speed factor (1.0 = normal)
     playback_speed: Arc<Mutex<f32>>,
     /// Pause state for replay
@@ -105,6 +123,7 @@ impl GhostEngine {
             tx: Mutex::new(None),
             rx: Mutex::new(None),
             replay_stop_flag: Arc::new(AtomicBool::new(false)),
+            replay_active: Arc::new(AtomicBool::new(false)),
             playback_speed: Arc::new(Mutex::new(initial_speed)),
             replay_paused: Arc::new(AtomicBool::new(false)),
             recorded_events: Arc::new(Mutex::new(Vec::new())),
@@ -173,7 +192,14 @@ impl GhostEngine {
         // Time and record the replay (both no-op unless the user opted in).
         let started = Instant::now();
         self.perf.start_timer("replay");
-        let result = self.replayer.execute(events, self.replay_stop_flag.clone());
+        let _active = ReplayActiveGuard::new(self.replay_active.clone());
+        let result = self.replayer.execute(
+            events,
+            self.replay_stop_flag.clone(),
+            self.replay_paused.clone(),
+            self.get_playback_speed(),
+        );
+        drop(_active);
         self.perf.stop_timer("replay");
         self.telemetry.track_workflow_replayed(
             events.len(),
@@ -532,8 +558,14 @@ impl GhostEngine {
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
 
-        self.replayer
-            .execute_with_reliability(events, self.replay_stop_flag.clone(), reliability)
+        let _active = ReplayActiveGuard::new(self.replay_active.clone());
+        self.replayer.execute_with_reliability(
+            events,
+            self.replay_stop_flag.clone(),
+            self.replay_paused.clone(),
+            self.get_playback_speed(),
+            reliability,
+        )
     }
 
     /// Get element info at coordinates for validation
@@ -543,7 +575,7 @@ impl GhostEngine {
 
     /// Check if replay is currently running
     pub fn is_replay_running(&self) -> bool {
-        !self.replay_stop_flag.load(Ordering::Relaxed)
+        self.replay_active.load(Ordering::Relaxed)
     }
 
     /// Generate workflow from natural language prompt using LLM
@@ -585,9 +617,12 @@ impl GhostEngine {
     fn get_visible_elements(&self) -> anyhow::Result<Vec<ElementInfo>> {
         let mut elements = Vec::new();
 
-        // Sample elements at regular intervals
-        for y in 0..500 {
-            for x in 0..500 {
+        // Probe a coarse grid — elements are tens of pixels wide, so a 48px
+        // stride captures them with ~700 lookups instead of the 250k a
+        // per-pixel scan would take (minutes of AX traffic per call).
+        const STRIDE: usize = 48;
+        for y in (0..1080).step_by(STRIDE) {
+            for x in (0..1600).step_by(STRIDE) {
                 if let Ok(Some(el)) = self.locator.inspect_at(x, y) {
                     // Avoid duplicates
                     if !elements
@@ -637,7 +672,8 @@ impl GhostEngine {
         Ok(tagged_events)
     }
 
-    /// Add semantic context to an event
+    /// Add semantic context to an event. Preserves the recorded timestamp —
+    /// replay pacing depends on it surviving the tagging pass.
     fn add_semantic_context(&self, event: &InputEvent, elements: &[ElementInfo]) -> InputEvent {
         match event {
             InputEvent::MouseClick {
@@ -645,6 +681,7 @@ impl GhostEngine {
                 y,
                 button,
                 element,
+                timestamp,
                 ..
             } => {
                 let semantic_tag = element
@@ -663,7 +700,7 @@ impl GhostEngine {
                     y: *y,
                     button: *button,
                     element: element.clone(),
-                    timestamp: None,
+                    timestamp: *timestamp,
                     retry_count: None,
                     semantic_tag,
                     self_heal: Some(true),
@@ -674,6 +711,7 @@ impl GhostEngine {
                 chars,
                 modifiers,
                 action,
+                timestamp,
                 ..
             } => {
                 let semantic_tag = if !chars.is_empty() {
@@ -693,7 +731,7 @@ impl GhostEngine {
                     chars: chars.clone(),
                     modifiers: *modifiers,
                     action: action.clone(),
-                    timestamp: None,
+                    timestamp: *timestamp,
                     retry_count: None,
                     semantic_tag,
                 }
@@ -767,12 +805,31 @@ impl GhostEngine {
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
 
+        use crate::core::replay_support::{check_continue, interruptible_sleep, pacing_gap_ms};
+
+        let _active = ReplayActiveGuard::new(self.replay_active.clone());
         let mut enigo = Enigo::new(&Settings::default())?;
-        let speed = *self.playback_speed.lock().unwrap();
+        let speed = (*self.playback_speed.lock().unwrap()).max(0.1);
+        let mut prev_ts: Option<u64> = None;
 
         for (idx, event) in events.iter().enumerate() {
-            if self.replay_stop_flag.load(Ordering::Relaxed) {
+            if !check_continue(&self.replay_stop_flag, &self.replay_paused) {
                 return Ok(false);
+            }
+
+            // Reproduce the recorded rhythm between events.
+            let gap = pacing_gap_ms(prev_ts, event.timestamp());
+            if gap > 0
+                && !interruptible_sleep(
+                    (gap as f32 / speed) as u64,
+                    &self.replay_stop_flag,
+                    &self.replay_paused,
+                )
+            {
+                return Ok(false);
+            }
+            if let Some(ts) = event.timestamp() {
+                prev_ts = Some(ts);
             }
 
             // Check if we need to perform a visual check at this index
@@ -781,13 +838,17 @@ impl GhostEngine {
             // Execute the event
             match event {
                 InputEvent::MouseClick { x, y, button, .. } => {
-                    enigo.move_mouse(*x, *y, Coordinate::Abs)?;
-                    let mouse_button = match button {
-                        0 | 1 => Button::Left,
-                        2 | 3 => Button::Right,
-                        _ => Button::Left,
+                    // Mirror recorded press/release (0/2 = down, 1/3 = up) so
+                    // clicks don't double-fire and drags survive.
+                    let (mouse_button, direction) = match button {
+                        0 => (Button::Left, Direction::Press),
+                        1 => (Button::Left, Direction::Release),
+                        2 => (Button::Right, Direction::Press),
+                        3 => (Button::Right, Direction::Release),
+                        _ => (Button::Left, Direction::Click),
                     };
-                    enigo.button(mouse_button, Direction::Click)?;
+                    enigo.move_mouse(*x, *y, Coordinate::Abs)?;
+                    enigo.button(mouse_button, direction)?;
                 }
                 InputEvent::Key {
                     code,
@@ -819,7 +880,13 @@ impl GhostEngine {
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    thread::sleep(Duration::from_millis(adjusted_ms));
+                    if !interruptible_sleep(
+                        adjusted_ms,
+                        &self.replay_stop_flag,
+                        &self.replay_paused,
+                    ) {
+                        return Ok(false);
+                    }
                 }
                 _ => {}
             }

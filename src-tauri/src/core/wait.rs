@@ -208,25 +208,26 @@ pub fn resolve_selector(
     match selector {
         ElementSelector::Coordinates { x, y } => Ok((*x, *y)),
         ElementSelector::Semantic { role, name, app } => {
-            // Search for element matching role/name
-            // This is a simplified implementation - real version would iterate
-            // through visible elements and match attributes
+            // Probe a coarse grid: UI elements are tens of pixels wide, so a
+            // 48px stride finds them with ~900 lookups instead of the 1M a
+            // per-pixel scan would need (which took minutes per poll).
+            const STRIDE: i32 = 48;
+            const MAX_X: i32 = 1920;
+            const MAX_Y: i32 = 1080;
+
             let mut found: Option<(i32, i32)> = None;
 
-            // Search common screen positions for matching elements
-            for y in 0..1000 {
-                for x in 0..1000 {
+            'scan: for y in (0..MAX_Y).step_by(STRIDE as usize) {
+                for x in (0..MAX_X).step_by(STRIDE as usize) {
                     if let Ok(Some(el)) = locator.inspect_at(x, y) {
-                        if el.role == *role && el.name.contains(name) {
-                            if app.as_ref().map_or(true, |a| &el.app == a) {
-                                found = Some((x, y));
-                                break;
-                            }
+                        if el.role == *role
+                            && el.name.contains(name)
+                            && app.as_ref().map_or(true, |a| &el.app == a)
+                        {
+                            found = Some((x, y));
+                            break 'scan;
                         }
                     }
-                }
-                if found.is_some() {
-                    break;
                 }
             }
 

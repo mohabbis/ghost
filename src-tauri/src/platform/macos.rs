@@ -1,6 +1,7 @@
 //! macOS backend implementation using CGEventTap, AXUIElement, and enigo.
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
+use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
@@ -196,7 +197,7 @@ impl MacosBackend {
     }
 
     pub fn replayer() -> Box<dyn ReplayEngine> {
-        Box::new(MacosReplayer::new())
+        Box::new(MacosReplayer)
     }
 
     /// Check if accessibility permissions are granted, without prompting.
@@ -588,56 +589,17 @@ fn is_secure_role(role: &str) -> bool {
     role.to_ascii_lowercase().contains("securetextfield")
 }
 
-/// Does the live element `found` match the recorded `target` descriptor?
-fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
-    if target.role.is_empty() || !target.role.eq_ignore_ascii_case(&found.role) {
-        return false;
-    }
-    if !target.name.is_empty() {
-        return target.name.eq_ignore_ascii_case(&found.name);
-    }
-    if target.app.is_empty() || target.app == "Unknown" {
-        true
-    } else {
-        target.app.eq_ignore_ascii_case(&found.app)
-    }
+/// Re-resolve where to click for a recorded click. Scans nearby points when
+/// the element has moved (shared spiral in core::replay_support); `None`
+/// means no matching element exists anywhere near the recorded point.
+fn try_resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> Option<(i32, i32)> {
+    replay_support::try_resolve_click_point(target, rx, ry, |x, y| unsafe { ax_info_at(x, y) })
 }
 
-/// Re-resolve where to click for a recorded click. Scans nearby points when
-/// the element has moved, letting replay survive shifted/resized UIs.
-unsafe fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
-    if let Some(found) = ax_info_at(rx, ry) {
-        if descriptor_matches(target, &found) {
-            return (rx, ry);
-        }
-    }
-
-    const RADII: [i32; 4] = [30, 70, 140, 260];
-    const DIRS: [(i32, i32); 8] = [
-        (1, 0),
-        (-1, 0),
-        (0, 1),
-        (0, -1),
-        (1, 1),
-        (1, -1),
-        (-1, 1),
-        (-1, -1),
-    ];
-    for r in RADII {
-        for (dx, dy) in DIRS {
-            let (px, py) = (rx + dx * r, ry + dy * r);
-            if px < 0 || py < 0 {
-                continue;
-            }
-            if let Some(found) = ax_info_at(px, py) {
-                if descriptor_matches(target, &found) {
-                    return (px, py);
-                }
-            }
-        }
-    }
-
-    (rx, ry)
+/// Like `try_resolve_click_point`, but falls back to the recorded coordinates
+/// so plain replay always proceeds.
+fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
+    try_resolve_click_point(target, rx, ry).unwrap_or((rx, ry))
 }
 
 unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> Option<String> {
@@ -706,34 +668,52 @@ fn str_to_cfstring(s: &str) -> CFStringRef {
 
 // ── Replay engine ─────────────────────────────────────────────────────────────
 
-struct MacosReplayer {
-    speed_factor: Arc<Mutex<f32>>,
-}
+struct MacosReplayer;
 
-impl MacosReplayer {
-    fn new() -> Self {
-        MacosReplayer {
-            speed_factor: Arc::new(Mutex::new(1.0)),
-        }
-    }
-
-    fn set_speed(&self, factor: f32) {
-        *self.speed_factor.lock().unwrap() = factor.max(0.1);
+/// Map a recorded button code to the synthesized button + direction.
+/// Recordings capture mouse-down (0/2) and mouse-up (1/3) as separate
+/// events; replay mirrors press/release so single clicks don't double-fire
+/// and drags / double-clicks survive faithfully.
+fn click_action(button: u8) -> (Button, Direction) {
+    match button {
+        0 => (Button::Left, Direction::Press),
+        1 => (Button::Left, Direction::Release),
+        2 => (Button::Right, Direction::Press),
+        3 => (Button::Right, Direction::Release),
+        _ => (Button::Left, Direction::Click),
     }
 }
 
 impl ReplayEngine for MacosReplayer {
-    fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn execute(
+        &self,
+        events: &[InputEvent],
+        stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
+    ) -> anyhow::Result<()> {
         use crate::core::vision;
         use crate::core::wait::VariableContext;
 
         let mut enigo = Enigo::new(&Settings::default())?;
-        let speed = *self.speed_factor.lock().unwrap();
+        let speed = speed.max(0.1);
         let mut var_context = VariableContext::new();
+        let mut prev_ts: Option<u64> = None;
 
         for event in events {
-            if stop_flag.load(Ordering::Relaxed) {
+            if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
+            }
+
+            // Reproduce the recorded rhythm between events (recordings made
+            // before timestamps existed simply run back-to-back).
+            let gap = pacing_gap_ms(prev_ts, event.timestamp());
+            if gap > 0 && !interruptible_sleep((gap as f32 / speed) as u64, &stop_flag, &pause_flag)
+            {
+                return Ok(());
+            }
+            if let Some(ts) = event.timestamp() {
+                prev_ts = Some(ts);
             }
 
             match event {
@@ -742,51 +722,35 @@ impl ReplayEngine for MacosReplayer {
                     y,
                     button,
                     element,
-                    retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(0);
-                    let mut attempts = 0;
-                    let mut success = false;
+                    let (mouse_button, direction) = click_action(*button);
 
-                    // If the click carries an element descriptor, re-resolve where
-                    // to click so replay survives moved/resized UIs; otherwise use
-                    // the recorded coordinates directly.
-                    let (cx, cy) = match element {
-                        Some(desc) => unsafe { resolve_click_point(desc, *x, *y) },
-                        None => (*x, *y),
+                    // Re-resolve press targets whose element moved; releases
+                    // stay at recorded coordinates so drags end where the
+                    // user ended them.
+                    let (cx, cy) = match (element, &direction) {
+                        (Some(desc), Direction::Press) => resolve_click_point(desc, *x, *y),
+                        _ => (*x, *y),
                     };
 
-                    while attempts <= max_retries && !success {
-                        enigo.move_mouse(cx, cy, Coordinate::Abs)?;
-                        let mouse_button = match button {
-                            0 | 1 => Button::Left,
-                            2 | 3 => Button::Right,
-                            _ => Button::Left,
-                        };
-                        enigo.button(mouse_button, Direction::Click)?;
-                        success = true;
-                        attempts += 1;
-                    }
+                    enigo.move_mouse(cx, cy, Coordinate::Abs)?;
+                    enigo.button(mouse_button, direction)?;
                 }
                 InputEvent::Key {
                     code,
                     chars,
                     action,
-                    retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(0);
-                    for _ in 0..=max_retries {
-                        let key = if !chars.is_empty() {
-                            Key::Unicode(chars.chars().next().unwrap_or(' '))
-                        } else {
-                            Key::Other(*code as u32)
-                        };
-                        match action {
-                            KeyAction::Down => enigo.key(key, Direction::Press)?,
-                            KeyAction::Up => enigo.key(key, Direction::Release)?,
-                        }
+                    let key = if !chars.is_empty() {
+                        Key::Unicode(chars.chars().next().unwrap_or(' '))
+                    } else {
+                        Key::Other(*code as u32)
+                    };
+                    match action {
+                        KeyAction::Down => enigo.key(key, Direction::Press)?,
+                        KeyAction::Up => enigo.key(key, Direction::Release)?,
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
@@ -799,7 +763,9 @@ impl ReplayEngine for MacosReplayer {
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    thread::sleep(Duration::from_millis(adjusted_ms));
+                    if !interruptible_sleep(adjusted_ms, &stop_flag, &pause_flag) {
+                        return Ok(());
+                    }
                 }
                 InputEvent::Wait {
                     condition,
@@ -895,14 +861,26 @@ impl ReplayEngine for MacosReplayer {
         &self,
         events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
         reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
-        let speed = *self.speed_factor.lock().unwrap();
+        let speed = speed.max(0.1);
+        let mut prev_ts: Option<u64> = None;
 
         for event in events {
-            if stop_flag.load(Ordering::Relaxed) {
+            if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
+            }
+
+            let gap = pacing_gap_ms(prev_ts, event.timestamp());
+            if gap > 0 && !interruptible_sleep((gap as f32 / speed) as u64, &stop_flag, &pause_flag)
+            {
+                return Ok(());
+            }
+            if let Some(ts) = event.timestamp() {
+                prev_ts = Some(ts);
             }
 
             match event {
@@ -910,59 +888,78 @@ impl ReplayEngine for MacosReplayer {
                     x,
                     y,
                     button,
+                    element,
                     retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    let mut attempts = 0;
-                    let mut success = false;
+                    let (mouse_button, direction) = click_action(*button);
 
-                    while attempts <= max_retries && !success {
-                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
-                        let mouse_button = match button {
-                            0 | 1 => Button::Left,
-                            2 | 3 => Button::Right,
-                            _ => Button::Left,
-                        };
-                        enigo.button(mouse_button, Direction::Click)?;
-                        success = true;
-                        attempts += 1;
-
-                        if !success && attempts <= max_retries && reliability.continue_on_error {
-                            let backoff = reliability.retry_config.backoff_ms
-                                * (reliability.retry_config.backoff_multiplier as u64)
-                                    .pow(attempts - 1);
-                            std::thread::sleep(Duration::from_millis(backoff));
+                    // Reliability means retrying the element *lookup* with
+                    // backoff, so replay waits out slow-loading UIs instead of
+                    // blind-clicking stale coordinates.
+                    let (cx, cy) = match (element, &direction) {
+                        (Some(desc), Direction::Press) => {
+                            let max_attempts = retry_count
+                                .unwrap_or(reliability.retry_config.max_attempts)
+                                .max(1);
+                            let mut resolved = None;
+                            for attempt in 0..max_attempts {
+                                resolved = try_resolve_click_point(desc, *x, *y);
+                                if resolved.is_some() {
+                                    break;
+                                }
+                                if attempt + 1 < max_attempts {
+                                    let backoff = (reliability.retry_config.backoff_ms as f32
+                                        * reliability
+                                            .retry_config
+                                            .backoff_multiplier
+                                            .max(1.0)
+                                            .powi(attempt as i32))
+                                        as u64;
+                                    if !interruptible_sleep(backoff, &stop_flag, &pause_flag) {
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            match resolved {
+                                Some(point) => point,
+                                None if reliability.continue_on_error => {
+                                    tracing::warn!(
+                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
+                                        desc.name,
+                                        max_attempts
+                                    );
+                                    (*x, *y)
+                                }
+                                None => {
+                                    return Err(anyhow::anyhow!(
+                                        "Element \"{}\" not found after {} attempts",
+                                        desc.name,
+                                        max_attempts
+                                    ))
+                                }
+                            }
                         }
-                    }
+                        _ => (*x, *y),
+                    };
+
+                    enigo.move_mouse(cx, cy, Coordinate::Abs)?;
+                    enigo.button(mouse_button, direction)?;
                 }
                 InputEvent::Key {
                     code,
                     chars,
                     action,
-                    retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    for attempt in 0..=max_retries {
-                        if stop_flag.load(Ordering::Relaxed) {
-                            return Ok(());
-                        }
-                        let key = if !chars.is_empty() {
-                            Key::Unicode(chars.chars().next().unwrap_or(' '))
-                        } else {
-                            Key::Other(*code as u32)
-                        };
-                        match action {
-                            KeyAction::Down => enigo.key(key, Direction::Press)?,
-                            KeyAction::Up => enigo.key(key, Direction::Release)?,
-                        }
-                        if attempt < max_retries {
-                            std::thread::sleep(Duration::from_millis(
-                                reliability.retry_config.backoff_ms
-                                    * reliability.retry_config.backoff_multiplier as u64,
-                            ));
-                        }
+                    let key = if !chars.is_empty() {
+                        Key::Unicode(chars.chars().next().unwrap_or(' '))
+                    } else {
+                        Key::Other(*code as u32)
+                    };
+                    match action {
+                        KeyAction::Down => enigo.key(key, Direction::Press)?,
+                        KeyAction::Up => enigo.key(key, Direction::Release)?,
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
@@ -975,77 +972,14 @@ impl ReplayEngine for MacosReplayer {
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    std::thread::sleep(Duration::from_millis(adjusted_ms));
+                    if !interruptible_sleep(adjusted_ms, &stop_flag, &pause_flag) {
+                        return Ok(());
+                    }
                 }
                 _ => {}
             }
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::descriptor_matches;
-    use crate::core::events::ElementInfo;
-
-    fn info(role: &str, name: &str, app: &str) -> ElementInfo {
-        ElementInfo {
-            role: role.into(),
-            name: name.into(),
-            app: app.into(),
-            fallback_coords: Some((0, 0)),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn matches_same_role_and_name_case_insensitively() {
-        let target = info("AXButton", "Save", "Notes");
-        let found = info("axbutton", "save", "Notes");
-        assert!(descriptor_matches(&target, &found));
-    }
-
-    #[test]
-    fn rejects_different_name() {
-        let target = info("AXButton", "Save", "Notes");
-        let found = info("AXButton", "Cancel", "Notes");
-        assert!(!descriptor_matches(&target, &found));
-    }
-
-    #[test]
-    fn rejects_different_role() {
-        let target = info("AXButton", "Save", "Notes");
-        let found = info("AXTextField", "Save", "Notes");
-        assert!(!descriptor_matches(&target, &found));
-    }
-
-    #[test]
-    fn nameless_target_falls_back_to_role_plus_app() {
-        let target = info("AXButton", "", "Notes");
-        assert!(descriptor_matches(
-            &target,
-            &info("AXButton", "whatever", "Notes")
-        ));
-        assert!(!descriptor_matches(
-            &target,
-            &info("AXButton", "whatever", "Safari")
-        ));
-    }
-
-    #[test]
-    fn nameless_target_unknown_app_matches_on_role_only() {
-        let target = info("AXButton", "", "Unknown");
-        assert!(descriptor_matches(
-            &target,
-            &info("AXButton", "x", "AnyApp")
-        ));
-    }
-
-    #[test]
-    fn empty_target_role_never_matches() {
-        let target = info("", "Save", "Notes");
-        assert!(!descriptor_matches(&target, &info("", "Save", "Notes")));
     }
 }

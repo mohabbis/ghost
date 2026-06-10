@@ -13,14 +13,14 @@ Five phases are fully implemented: Foundation (record/replay), Workflow Manageme
 Tauri 2 desktop app. Two halves talk over Tauri's IPC bridge:
 
 - **Frontend** (`src/`): plain vanilla HTML/CSS/JS — **no bundler, no npm, no `package.json`**. `tauri.conf.json` sets `frontendDist` to `../src`, so files are served as-is. `withGlobalTauri: true` exposes the Tauri API on `window.__TAURI__`. There is no dev server; the frontend is static.
-- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 61 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
+- **Backend** (`src-tauri/`): Rust. `lib.rs` registers all 60 Tauri command handlers. The real logic lives in `engine.rs` (GhostEngine orchestrator) and the `core/` + `platform/` module trees.
 
 ### Backend module tree
 
 ```
 src-tauri/src/
 ├── main.rs              # entry point; calls ghost_lib::run()
-├── lib.rs               # Tauri app builder; registers all 61 commands via generate_handler!
+├── lib.rs               # Tauri app builder; registers all 60 commands via generate_handler!
 ├── commands.rs          # thin #[tauri::command] IPC surface (~640 lines)
 ├── engine.rs            # GhostEngine — orchestrates recording, replay, workflow mgmt (~975 lines)
 ├── config.rs            # GhostConfig — general/recording/replay/AI/privacy/performance settings + validation
@@ -33,6 +33,7 @@ src-tauri/src/
 │   ├── mod.rs           # re-exports
 │   ├── events.rs        # InputEvent enum, ElementInfo, Workflow, WorkflowMetadata structs
 │   ├── traits.rs        # InputRecorder, ElementLocator, ReplayEngine traits (platform-agnostic)
+│   ├── replay_support.rs # pause/cancel control flow, timestamp pacing, descriptor_matches + self-heal spiral (shared by both platforms)
 │   ├── ai.rs            # WorkflowAnalyzer: pattern detection, optimization suggestions, naming
 │   ├── llm.rs           # LLMProvider trait; OpenAI, Claude, Local fallback implementations
 │   ├── cloud.rs         # CloudSyncManager, Workspace, AuditLog, MemberRole (RBAC)
@@ -91,6 +92,34 @@ marketing `index.html`/`main.js` (see the warning above). Download links on the 
 latest GitHub Release assets (`Ghost.dmg`, `Ghost_Setup.exe`), not the files checked into
 `public/downloads/`. See `DEPLOYMENT.md`.
 
+### Replay semantics (core invariants — do not regress these)
+
+- **Clicks are press/release pairs.** Recorders emit mouse-down (`button` 0/2) and mouse-up (1/3)
+  as separate `MouseClick` events; replay mirrors them as `Direction::Press`/`Release` (see
+  `click_action()` in both platform files). Synthesizing a full `Click` per event double-fires
+  every click and breaks drags/double-clicks — that bug shipped once already.
+- **Timestamps drive pacing.** The recording bridge thread in `commands.rs` stamps every event
+  with epoch-ms arrival time (`InputEvent::set_timestamp`). Replay sleeps the recorded gap
+  between events (`pacing_gap_ms`, capped at 10s, divided by speed). Old recordings without
+  timestamps replay back-to-back. Anything that rebuilds events (e.g. `add_semantic_context`)
+  MUST preserve `timestamp`.
+- **Pause/cancel are enforced in the loops.** All four replay loops (both platforms × plain/
+  reliability, plus `replay_with_visual_check` in engine.rs) gate each event on
+  `check_continue(stop, paused)` and sleep via `interruptible_sleep` — never bare
+  `thread::sleep` for delays.
+- **Speed is passed through the trait** (`execute(..., speed)`), sourced from
+  `engine.playback_speed`. The replayers hold no speed state of their own (they used to, and it
+  was never updated — the speed picker silently did nothing).
+- **Self-healing clicks work on both platforms** via `replay_support::try_resolve_click_point`
+  with a platform lookup closure. Reliability replay retries the element *lookup* with backoff
+  (waits out slow UIs); plain replay falls back to recorded coordinates immediately.
+- **`is_replay_running`** reflects a real `replay_active` flag (RAII guard), not the stop flag.
+- **Optimizer:** `WorkflowOptimizer` merges consecutive delays and drops only *exact* duplicate
+  events (same payload + timestamp). Never "debounce" same-position clicks — that destroys
+  double-clicks and unbalances press/release pairs.
+- Element scans (`wait.rs::resolve_selector`, `engine.rs::get_visible_elements`) probe a 48px
+  grid, NOT per-pixel — per-pixel AX scans take minutes.
+
 ## IPC contract (Rust ↔ JS)
 
 ### Tauri events (async, backend → frontend)
@@ -107,7 +136,7 @@ await listen("ghost:event", (event) => {
 });
 ```
 
-### Commands (61 total, registered in `lib.rs`)
+### Commands (60 total, registered in `lib.rs`)
 
 Call from JS with `window.__TAURI__.core.invoke("command_name", { ...args })`.
 
@@ -295,8 +324,11 @@ cd src-tauri && cargo check
 cd src-tauri && cargo clippy
 
 # Tests: unit tests live inline (#[cfg(test)]) in config.rs, error.rs,
-# performance.rs, telemetry.rs; integration tests in src-tauri/tests/integration_test.rs
-# (config, error handling, events, workflow ops) and e2e in src-tauri/tests/e2e.rs
+# performance.rs, telemetry.rs, auth.rs, engine.rs, core/llm.rs, core/ai.rs,
+# core/replay_support.rs; integration tests in src-tauri/tests/integration_test.rs
+# (config, error handling, events, workflow ops), e2e in src-tauri/tests/e2e.rs,
+# and the IPC drift check in src-tauri/tests/ipc_contract.rs (fails if main.js
+# invokes a command lib.rs doesn't register)
 cd src-tauri && cargo test
 
 # Run a single test by name (substring match)
@@ -378,6 +410,11 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 - Global JS state: `isRecording`, `recordedEvents[]`, `isPlaying`, `isPaused`, `playbackSpeed`.
 - UI is organized into collapsible sections in `index.html`: Recording, Workflow Management, AI Analysis, Smart Observer, Phase 4 (visual/data), Event Timeline. The Cloud Sync panel was intentionally REMOVED from the UI (Ghost is marketed as local-only; the `cloud.rs` backend stubs remain but are not exposed). Don't re-add it without a real opt-in backend + updated privacy messaging.
 - Modal `#analysis-modal` displays workflow analysis results.
+- "Generate with AI ✨" (Workflows panel) calls `generate_workflow_from_prompt`; it warns when
+  the provider is `local` (heuristics) and steers users to Settings for a real provider.
+- Smart Observer auto-learns: while active, `stopRecording()` feeds the captured session to
+  `observe_events` with the dominant `element.app` as the app name (no prompt) and surfaces
+  proactive suggestions. The manual "Observe Session" button remains.
 - First-run walkthrough (`#onboarding`, 5 steps): welcome → "how Ghost helps" demo →
   permissions → optional password ("Secure your data") → ready. Every step is skippable
   (top-right Skip + per-step ignore buttons); completion is persisted in

@@ -232,3 +232,28 @@ pub enum KeyAction {
     Down,
     Up,
 }
+
+impl InputEvent {
+    /// Recorded wall-clock timestamp (epoch ms), when the variant carries one.
+    pub fn timestamp(&self) -> Option<u64> {
+        match self {
+            InputEvent::MouseClick { timestamp, .. }
+            | InputEvent::Key { timestamp, .. }
+            | InputEvent::Scroll { timestamp, .. }
+            | InputEvent::Delay { timestamp, .. } => *timestamp,
+            _ => None,
+        }
+    }
+
+    /// Stamp the event with a wall-clock timestamp (epoch ms). Recording
+    /// stamps events as they arrive so replay can reproduce the rhythm.
+    pub fn set_timestamp(&mut self, ts_ms: u64) {
+        match self {
+            InputEvent::MouseClick { timestamp, .. }
+            | InputEvent::Key { timestamp, .. }
+            | InputEvent::Scroll { timestamp, .. }
+            | InputEvent::Delay { timestamp, .. } => *timestamp = Some(ts_ms),
+            _ => {}
+        }
+    }
+}

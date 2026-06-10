@@ -308,8 +308,8 @@ impl WorkflowOptimizer {
         // Merge consecutive delays
         optimized = self.merge_consecutive_delays(optimized);
 
-        // Remove redundant clicks (same position in short succession)
-        optimized = self.remove_redundant_clicks(optimized);
+        // Drop exact duplicate events (hook re-entry glitches)
+        optimized = self.remove_duplicate_events(optimized);
 
         Ok(optimized)
     }
@@ -353,32 +353,102 @@ impl WorkflowOptimizer {
         result
     }
 
-    /// Remove clicks on the same position within a short time window
-    fn remove_redundant_clicks(&self, events: Vec<InputEvent>) -> Vec<InputEvent> {
-        use std::collections::HashMap;
-
-        let mut result = Vec::new();
-        let mut last_click_pos: HashMap<(i32, i32), std::time::Instant> = HashMap::new();
-        let debounce_ms = 500u64;
+    /// Drop *exact* duplicate consecutive events — same serialized payload,
+    /// including the recorded timestamp. These only occur when an input hook
+    /// fires twice for one physical action. Anything less strict corrupts
+    /// recordings: clicks are stored as separate press/release events, so
+    /// position-based "debouncing" would strip intentional double-clicks and
+    /// unbalance press/release pairs.
+    fn remove_duplicate_events(&self, events: Vec<InputEvent>) -> Vec<InputEvent> {
+        let mut result: Vec<InputEvent> = Vec::with_capacity(events.len());
+        let mut prev_json: Option<String> = None;
 
         for event in events {
-            if let InputEvent::MouseClick {
-                x, y, timestamp: _, ..
-            } = &event
-            {
-                let pos = (*x, *y);
-                if let Some(last) = last_click_pos.get(&pos) {
-                    let elapsed = last.elapsed().as_millis() as u64;
-                    if elapsed < debounce_ms {
-                        // Skip this redundant click
-                        continue;
-                    }
-                }
-                last_click_pos.insert(pos, std::time::Instant::now());
+            let json = serde_json::to_string(&event).unwrap_or_default();
+            if prev_json.as_deref() == Some(json.as_str()) && event.timestamp().is_some() {
+                continue; // identical payload + identical timestamp = hook glitch
             }
+            prev_json = Some(json);
             result.push(event);
         }
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::events::InputEvent;
+
+    fn click(x: i32, y: i32, button: u8, ts: Option<u64>) -> InputEvent {
+        InputEvent::MouseClick {
+            x,
+            y,
+            button,
+            element: None,
+            timestamp: ts,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        }
+    }
+
+    #[test]
+    fn double_click_survives_optimization() {
+        // A real double-click: two press/release pairs at the same point,
+        // 150ms apart. Optimization must not eat any of it.
+        let events = vec![
+            click(100, 100, 0, Some(1_000)),
+            click(100, 100, 1, Some(1_080)),
+            click(100, 100, 0, Some(1_150)),
+            click(100, 100, 1, Some(1_230)),
+        ];
+
+        let optimized = WorkflowOptimizer::new().optimize(&events).unwrap();
+        assert_eq!(optimized.len(), 4, "double-click events must be preserved");
+    }
+
+    #[test]
+    fn exact_hook_duplicates_are_removed() {
+        let events = vec![
+            click(100, 100, 0, Some(1_000)),
+            click(100, 100, 0, Some(1_000)), // identical payload + timestamp
+            click(100, 100, 1, Some(1_080)),
+        ];
+
+        let optimized = WorkflowOptimizer::new().optimize(&events).unwrap();
+        assert_eq!(optimized.len(), 2);
+    }
+
+    #[test]
+    fn untimestamped_repeats_are_kept() {
+        // Without timestamps we can't distinguish a glitch from intent —
+        // keep everything rather than corrupt the workflow.
+        let events = vec![click(5, 5, 0, None), click(5, 5, 0, None)];
+        let optimized = WorkflowOptimizer::new().optimize(&events).unwrap();
+        assert_eq!(optimized.len(), 2);
+    }
+
+    #[test]
+    fn consecutive_delays_merge() {
+        let events = vec![
+            InputEvent::Delay {
+                ms: 200,
+                timestamp: None,
+            },
+            InputEvent::Delay {
+                ms: 300,
+                timestamp: None,
+            },
+            click(10, 10, 0, Some(1_000)),
+        ];
+
+        let optimized = WorkflowOptimizer::new().optimize(&events).unwrap();
+        assert_eq!(optimized.len(), 2);
+        match &optimized[0] {
+            InputEvent::Delay { ms, .. } => assert_eq!(*ms, 500),
+            other => panic!("expected merged delay, got {:?}", other),
+        }
     }
 }

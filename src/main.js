@@ -434,6 +434,52 @@ async function stopRecording() {
   } catch (error) {
     console.error("Failed to stop recording:", error);
   }
+
+  observerLearnFromSession();
+}
+
+// Most frequent app among the recorded elements — used so Smart Observer can
+// file patterns without interrupting the user with a prompt.
+function dominantAppName(events) {
+  const counts = {};
+  for (const ev of events) {
+    const { data } = normalizeEvent(ev);
+    const app = data?.element?.app;
+    if (app && app !== "Unknown") counts[app] = (counts[app] || 0) + 1;
+  }
+  let best = null;
+  let bestCount = 0;
+  for (const [app, count] of Object.entries(counts)) {
+    if (count > bestCount) {
+      best = app;
+      bestCount = count;
+    }
+  }
+  return best || "Unknown App";
+}
+
+// While Smart Observer is active, every finished recording session feeds the
+// knowledge base automatically — no manual "Observe Session" step needed.
+async function observerLearnFromSession() {
+  if (!invoke || recordedEvents.length === 0) return;
+
+  try {
+    if (!(await invoke("is_observer_active"))) return;
+
+    const appName = dominantAppName(recordedEvents);
+    const patternsFound = await invoke("observe_events", {
+      events: recordedEvents,
+      app_name: appName,
+    });
+
+    if (patternsFound > 0) {
+      showInsight(`Observer learned ${patternsFound} pattern(s) from this session.`);
+      const suggestions = await invoke("get_proactive_suggestions");
+      if (suggestions.length > 0) displaySuggestions(suggestions);
+    }
+  } catch (error) {
+    console.error("Observer session learning failed:", error);
+  }
 }
 
 async function replayWorkflow() {
@@ -633,6 +679,44 @@ function refreshTimeline() {
   if (timelineEl) {
     timelineEl.innerHTML = "";
     recordedEvents.forEach((event) => addEventToTimeline(event));
+  }
+}
+
+// Describe a workflow in plain language and let the configured LLM build it.
+// With the "local" provider this falls back to keyword heuristics, so steer
+// users toward a real provider for anything non-trivial.
+async function generateWorkflowFromDescription() {
+  if (!invoke) return notAvailable();
+
+  const prompt = await ghostPrompt(
+    "Describe the workflow to generate",
+    "",
+    "e.g. click the Save button, then press Enter",
+  );
+  if (!prompt) return;
+
+  let providerNote = "";
+  try {
+    const config = await invoke("get_config");
+    if ((config?.ai?.provider ?? "local") === "local") {
+      providerNote =
+        " Heuristic mode: pick the openai/anthropic provider in Settings (with an API key) for real AI generation.";
+    }
+  } catch (_) {
+    // Settings unavailable — generate anyway.
+  }
+
+  try {
+    showInsight("Generating workflow from your description…");
+    const events = await invoke("generate_workflow_from_prompt", { prompt });
+    recordedEvents = events;
+    updateRecordingUI();
+    refreshTimeline();
+    showNotification(`Generated ${events.length} events from your description.${providerNote}`);
+    showInsight("Review the generated steps in the timeline, then Replay or Save.");
+  } catch (error) {
+    console.error("Failed to generate workflow:", error);
+    toastError("Generate failed: " + error);
   }
 }
 
@@ -1255,6 +1339,7 @@ function wireUpControls() {
   bind("loadBtn", loadWorkflow);
   bind("analyzeBtn", analyzeWorkflow);
   bind("optimizeBtn", optimizeWorkflow);
+  bind("generateAiBtn", generateWorkflowFromDescription);
 
   bind("startObserverBtn", startSmartObserver);
   bind("stopObserverBtn", stopSmartObserver);
