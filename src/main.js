@@ -181,9 +181,92 @@ async function requestAccessibility() {
   }
 }
 
+// ===== Local login (lock screen + at-rest encryption) =====
+
+// Mirrors the backend auth_status command. When no password is configured
+// the app behaves exactly as before; `unlocked` only matters if `configured`.
+let authStatus = { configured: false, unlocked: true };
+
+async function refreshAuthStatus() {
+  if (!invoke) return;
+  try {
+    authStatus = await invoke("auth_status");
+  } catch (error) {
+    console.error("Failed to fetch auth status:", error);
+  }
+  const lockBtn = document.getElementById("lockBtn");
+  if (lockBtn) lockBtn.hidden = !authStatus.configured;
+}
+
+function showLockScreen() {
+  const overlay = document.getElementById("lock-screen");
+  if (!overlay) return;
+  overlay.hidden = false;
+  const input = document.getElementById("lockPassword");
+  if (input) {
+    input.value = "";
+    input.focus();
+  }
+}
+
+async function tryUnlock() {
+  if (!invoke) return;
+  const input = document.getElementById("lockPassword");
+  const error = document.getElementById("lockError");
+  const password = input?.value ?? "";
+
+  try {
+    const ok = await invoke("auth_unlock", { password });
+    if (!ok) {
+      if (error) error.hidden = false;
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+      return;
+    }
+  } catch (err) {
+    console.error("Unlock failed:", err);
+    toastError("Unlock failed: " + err);
+    return;
+  }
+
+  if (error) error.hidden = true;
+  const overlay = document.getElementById("lock-screen");
+  if (overlay) overlay.hidden = true;
+  await refreshAuthStatus();
+  showInsight("Unlocked. Your workflows are ready.");
+  maybeShowOnboarding();
+}
+
+async function lockApp() {
+  if (!invoke) return;
+  try {
+    await invoke("auth_lock");
+  } catch (error) {
+    console.error("Failed to lock:", error);
+    return;
+  }
+  await refreshAuthStatus();
+  showLockScreen();
+}
+
+// Decides what greets the user on launch: the lock screen when a password is
+// configured and the app is locked, otherwise the first-run walkthrough.
+async function initAuthGate() {
+  await refreshAuthStatus();
+  if (authStatus.configured && !authStatus.unlocked) {
+    showLockScreen();
+    return;
+  }
+  maybeShowOnboarding();
+}
+
 // ===== First-run onboarding =====
 
 const ONBOARDING_KEY = "ghost.onboarding.completed";
+const ONBOARDING_PERM_STEP = 2; // index of the permissions step (needs polling)
+const ONBOARDING_PASSWORD_STEP = 3;
 let onboardingStep = 0;
 let permPollTimer = null;
 
@@ -212,13 +295,48 @@ function showOnboardingStep(n) {
     dot.classList.toggle("is-active", Number(dot.dataset.dot) === n);
   });
 
-  // The permission step (index 1) needs live status polling.
-  if (n === 1) {
+  // The permission step needs live status polling.
+  if (n === ONBOARDING_PERM_STEP) {
     refreshOnboardingPermStatus();
     startPermPolling();
   } else {
     stopPermPolling();
   }
+
+  // The password step is skipped entirely if a password already exists
+  // (e.g. user re-runs the tour after setting one up).
+  if (n === ONBOARDING_PASSWORD_STEP && authStatus.configured) {
+    showOnboardingStep(n + 1);
+  }
+}
+
+// Validate the password fields and create the local password via the backend.
+async function onboardingSetPassword() {
+  const password = document.getElementById("setupPassword")?.value ?? "";
+  const confirm = document.getElementById("setupPasswordConfirm")?.value ?? "";
+  const errorEl = document.getElementById("setupPasswordError");
+  const fail = (msg) => {
+    if (errorEl) {
+      errorEl.textContent = msg;
+      errorEl.hidden = false;
+    }
+  };
+
+  if (password.length < 8) return fail("Password must be at least 8 characters.");
+  if (password !== confirm) return fail("Passwords don't match.");
+  if (!invoke) return fail("Tauri not available — running in static mode.");
+
+  try {
+    await invoke("auth_setup", { password });
+  } catch (error) {
+    console.error("Failed to set password:", error);
+    return fail("Could not set password: " + error);
+  }
+
+  if (errorEl) errorEl.hidden = true;
+  await refreshAuthStatus();
+  showNotification("Password set — your workflows are now encrypted on this device.");
+  showOnboardingStep(ONBOARDING_PASSWORD_STEP + 1);
 }
 
 async function refreshOnboardingPermStatus() {
@@ -1150,13 +1268,34 @@ function wireUpControls() {
 
   bind("perm-grant", requestAccessibility);
   bind("settingsBtn", openSettings);
+  bind("lockBtn", lockApp);
 
-  // Onboarding navigation
+  // Lock screen
+  bind("unlockBtn", tryUnlock);
+  const lockPassword = document.getElementById("lockPassword");
+  if (lockPassword) {
+    lockPassword.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") tryUnlock();
+    });
+  }
+
+  // Onboarding navigation: welcome → how-it-helps → permissions → password → ready.
+  // Every step offers a way to ignore (skip), accept, or keep going.
+  bind("onboardingIgnore", finishOnboarding);
   bind("onboardingStart", () => showOnboardingStep(1));
   bind("onboardingBack", () => showOnboardingStep(0));
-  bind("onboardingGrant", onboardingGrant);
-  bind("onboardingPermNext", () => showOnboardingStep(2));
+  bind("onboardingDemoNext", () => showOnboardingStep(2));
   bind("onboardingBack2", () => showOnboardingStep(1));
+  bind("onboardingGrant", onboardingGrant);
+  bind("onboardingPermNext", () => showOnboardingStep(3));
+  bind("onboardingBack3", () => showOnboardingStep(2));
+  bind("onboardingSkipPassword", () => showOnboardingStep(4));
+  bind("onboardingSetPassword", onboardingSetPassword);
+  // Once a password exists the password step auto-advances, so route this
+  // Back past it to the permissions step.
+  bind("onboardingBack4", () =>
+    showOnboardingStep(authStatus.configured ? ONBOARDING_PERM_STEP : ONBOARDING_PASSWORD_STEP),
+  );
   bind("onboardingFinish", finishOnboarding);
   bind("onboardingSkip", finishOnboarding);
 
@@ -1190,6 +1329,6 @@ window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
   refreshPermissionBanner();
-  maybeShowOnboarding();
+  initAuthGate(); // lock screen (if password set) or first-run walkthrough
   syncSpeedFromConfig();
 });

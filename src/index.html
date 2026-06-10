@@ -25,6 +25,7 @@
             <span class="pulse" aria-hidden="true" style="display:none"></span>
             Ready to record
           </div>
+          <button class="btn btn--ghost btn--small" id="lockBtn" type="button" hidden>🔒 Lock</button>
           <button class="btn btn--ghost btn--small" id="settingsBtn" type="button">⚙️ Settings</button>
         </div>
       </header>
@@ -121,7 +122,26 @@
       <div class="modal-content" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 520px; max-height: 80vh; overflow-y: auto; color: var(--text);"></div>
     </div>
 
-    <!-- First-run onboarding -->
+    <!-- Lock screen (shown on launch when a local password is configured) -->
+    <div id="lock-screen" class="onboarding" hidden>
+      <div class="onboarding__card" role="dialog" aria-modal="true" aria-labelledby="lock-title">
+        <span class="onboarding__glyph" aria-hidden="true">🔒</span>
+        <h2 id="lock-title">Ghost is locked</h2>
+        <p class="onboarding__lead">Enter your password to unlock your workflows.</p>
+        <input type="password" id="lockPassword" class="auth-input" placeholder="Password"
+               autocomplete="current-password" aria-label="Password" />
+        <p class="onboarding__note auth-error" id="lockError" hidden>Wrong password — try again.</p>
+        <div class="onboarding__actions">
+          <button class="btn btn--primary" id="unlockBtn" type="button">Unlock</button>
+        </div>
+        <p class="onboarding__note">
+          Your workflows are encrypted on this device only. There is no recovery —
+          Ghost never sends your data (or password) anywhere.
+        </p>
+      </div>
+    </div>
+
+    <!-- First-run walkthrough: see how Ghost helps → permissions → secure data → go -->
     <div id="onboarding" class="onboarding" hidden>
       <div class="onboarding__card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
         <button class="onboarding__skip" id="onboardingSkip" type="button">Skip</button>
@@ -130,6 +150,8 @@
           <span class="onboarding__dot" data-dot="0"></span>
           <span class="onboarding__dot" data-dot="1"></span>
           <span class="onboarding__dot" data-dot="2"></span>
+          <span class="onboarding__dot" data-dot="3"></span>
+          <span class="onboarding__dot" data-dot="4"></span>
         </div>
 
         <!-- Step 1: Welcome -->
@@ -142,12 +164,49 @@
           </p>
           <p class="onboarding__privacy">🔒 Ghost never records passwords or secure text fields.</p>
           <div class="onboarding__actions">
-            <button class="btn btn--primary" id="onboardingStart" type="button">Get started</button>
+            <button class="btn btn--ghost" id="onboardingIgnore" type="button">Not now</button>
+            <button class="btn btn--primary" id="onboardingStart" type="button">Show me how it works</button>
           </div>
         </section>
 
-        <!-- Step 2: Accessibility permission -->
+        <!-- Step 2: How Ghost helps (workflow demo) -->
         <section class="onboarding__step" data-step="1" hidden>
+          <span class="onboarding__glyph" aria-hidden="true">✨</span>
+          <h2>How Ghost helps</h2>
+          <div class="onboarding__flow" aria-hidden="false">
+            <div class="flow-step">
+              <span class="flow-step__icon">⏺️</span>
+              <strong>1. Record</strong>
+              <p>Do your task once while Ghost watches.</p>
+            </div>
+            <span class="flow-arrow" aria-hidden="true">→</span>
+            <div class="flow-step">
+              <span class="flow-step__icon">🧠</span>
+              <strong>2. Learn</strong>
+              <p>Ghost understands what you clicked and typed.</p>
+            </div>
+            <span class="flow-arrow" aria-hidden="true">→</span>
+            <div class="flow-step">
+              <span class="flow-step__icon">▶️</span>
+              <strong>3. Replay</strong>
+              <p>One click repeats the whole thing for you.</p>
+            </div>
+          </div>
+          <p class="onboarding__lead">A recorded workflow looks like this:</p>
+          <div class="onboarding__demo-timeline" aria-label="Example recorded workflow">
+            <div class="timeline-item">Clicked button "Export" in Excel</div>
+            <div class="timeline-item">Typed "weekly_report"</div>
+            <div class="timeline-item">Pressed ⌘ + "s"</div>
+            <div class="timeline-item">Clicked button "Send" in Mail</div>
+          </div>
+          <div class="onboarding__actions">
+            <button class="btn btn--ghost btn--small" id="onboardingBack" type="button">Back</button>
+            <button class="btn btn--primary" id="onboardingDemoNext" type="button">Keep going</button>
+          </div>
+        </section>
+
+        <!-- Step 3: Accessibility permission -->
+        <section class="onboarding__step" data-step="2" hidden>
           <span class="onboarding__glyph" aria-hidden="true">🔑</span>
           <h2>Grant recording permissions</h2>
           <p class="onboarding__lead">
@@ -164,14 +223,40 @@
             applies Accessibility changes when the app launches.
           </p>
           <div class="onboarding__actions">
-            <button class="btn btn--ghost btn--small" id="onboardingBack" type="button">Back</button>
+            <button class="btn btn--ghost btn--small" id="onboardingBack2" type="button">Back</button>
             <button class="btn btn--primary" id="onboardingGrant" type="button">Open Accessibility settings</button>
             <button class="btn btn--ghost" id="onboardingPermNext" type="button">Next</button>
           </div>
         </section>
 
-        <!-- Step 3: Ready -->
-        <section class="onboarding__step" data-step="2" hidden>
+        <!-- Step 4: Secure your data (optional local password) -->
+        <section class="onboarding__step" data-step="3" hidden>
+          <span class="onboarding__glyph" aria-hidden="true">🛡️</span>
+          <h2>Secure your data</h2>
+          <p class="onboarding__lead">
+            Optionally protect Ghost with a password. Your recorded workflows are then
+            <strong>encrypted on this device</strong> and Ghost asks for the password
+            on launch.
+          </p>
+          <input type="password" id="setupPassword" class="auth-input"
+                 placeholder="Password (min 8 characters)" autocomplete="new-password"
+                 aria-label="New password" />
+          <input type="password" id="setupPasswordConfirm" class="auth-input"
+                 placeholder="Confirm password" autocomplete="new-password"
+                 aria-label="Confirm new password" />
+          <p class="onboarding__note auth-error" id="setupPasswordError" hidden></p>
+          <p class="onboarding__note">
+            There is no recovery if you forget it — the password never leaves your device.
+          </p>
+          <div class="onboarding__actions">
+            <button class="btn btn--ghost btn--small" id="onboardingBack3" type="button">Back</button>
+            <button class="btn btn--ghost" id="onboardingSkipPassword" type="button">Skip for now</button>
+            <button class="btn btn--primary" id="onboardingSetPassword" type="button">Set password</button>
+          </div>
+        </section>
+
+        <!-- Step 5: Ready -->
+        <section class="onboarding__step" data-step="4" hidden>
           <span class="onboarding__glyph" aria-hidden="true">✅</span>
           <h2>You're all set</h2>
           <p class="onboarding__lead">Three steps to your first automation:</p>
@@ -181,7 +266,7 @@
             <li>Press <strong>Replay</strong> — Ghost repeats it for you.</li>
           </ol>
           <div class="onboarding__actions">
-            <button class="btn btn--ghost btn--small" id="onboardingBack2" type="button">Back</button>
+            <button class="btn btn--ghost btn--small" id="onboardingBack4" type="button">Back</button>
             <button class="btn btn--primary" id="onboardingFinish" type="button">Start using Ghost</button>
           </div>
         </section>
