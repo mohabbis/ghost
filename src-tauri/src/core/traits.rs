@@ -26,8 +26,16 @@ pub trait ElementLocator: Send + Sync {
 /// Trait for replaying recorded input events.
 pub trait ReplayEngine: Send + Sync {
     /// Execute a sequence of input events.
-    /// The stop_flag can be set to true from another thread to cancel replay.
-    fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()>;
+    /// `stop_flag` cancels replay from another thread; `pause_flag` suspends
+    /// it (the loop blocks between events until resumed or cancelled);
+    /// `speed` scales recorded delays/pacing (1.0 = real time, clamped ≥ 0.1).
+    fn execute(
+        &self,
+        events: &[InputEvent],
+        stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
+    ) -> anyhow::Result<()>;
 
     /// Execute a sequence of input events with reliability features.
     /// Supports retry logic, checkpoints, and validation.
@@ -35,6 +43,8 @@ pub trait ReplayEngine: Send + Sync {
         &self,
         events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
         reliability: &ReliabilitySettings,
     ) -> anyhow::Result<()>;
 }

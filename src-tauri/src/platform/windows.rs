@@ -1,6 +1,7 @@
 //! Windows backend implementation using Win32 hooks, UIA, and enigo.
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
+use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
@@ -117,7 +118,7 @@ impl WindowsBackend {
     }
 
     pub fn replayer() -> Box<dyn ReplayEngine> {
-        Box::new(WindowsReplayer::new())
+        Box::new(WindowsReplayer)
     }
 
     pub fn check_accessibility() -> bool {
@@ -439,30 +440,61 @@ impl ElementLocator for WindowsLocator {
 
 // ── Replay engine ─────────────────────────────────────────────────────────────
 
-struct WindowsReplayer {
-    speed_factor: Arc<Mutex<f32>>,
+/// Re-resolve where to click for a recorded click. Scans nearby points when
+/// the element has moved (shared spiral in core::replay_support); `None`
+/// means no matching element exists anywhere near the recorded point.
+fn try_resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> Option<(i32, i32)> {
+    replay_support::try_resolve_click_point(target, rx, ry, |x, y| unsafe { get_element_at(x, y) })
 }
 
-impl WindowsReplayer {
-    fn new() -> Self {
-        WindowsReplayer {
-            speed_factor: Arc::new(Mutex::new(1.0)),
-        }
-    }
+/// Like `try_resolve_click_point`, but falls back to the recorded coordinates
+/// so plain replay always proceeds.
+fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
+    try_resolve_click_point(target, rx, ry).unwrap_or((rx, ry))
+}
 
-    fn set_speed(&self, factor: f32) {
-        *self.speed_factor.lock().unwrap() = factor.max(0.1);
+/// Map a recorded button code to the synthesized button + direction.
+/// Recordings capture mouse-down (0/2) and mouse-up (1/3) as separate
+/// events; replay mirrors press/release so single clicks don't double-fire
+/// and drags / double-clicks survive faithfully.
+fn click_action(button: u8) -> (Button, Direction) {
+    match button {
+        0 => (Button::Left, Direction::Press),
+        1 => (Button::Left, Direction::Release),
+        2 => (Button::Right, Direction::Press),
+        3 => (Button::Right, Direction::Release),
+        _ => (Button::Left, Direction::Click),
     }
 }
+
+struct WindowsReplayer;
 
 impl ReplayEngine for WindowsReplayer {
-    fn execute(&self, events: &[InputEvent], stop_flag: Arc<AtomicBool>) -> anyhow::Result<()> {
+    fn execute(
+        &self,
+        events: &[InputEvent],
+        stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
+    ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
-        let speed = *self.speed_factor.lock().unwrap();
+        let speed = speed.max(0.1);
+        let mut prev_ts: Option<u64> = None;
 
         for event in events {
-            if stop_flag.load(Ordering::Relaxed) {
+            if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
+            }
+
+            // Reproduce the recorded rhythm between events (recordings made
+            // before timestamps existed simply run back-to-back).
+            let gap = pacing_gap_ms(prev_ts, event.timestamp());
+            if gap > 0 && !interruptible_sleep((gap as f32 / speed) as u64, &stop_flag, &pause_flag)
+            {
+                return Ok(());
+            }
+            if let Some(ts) = event.timestamp() {
+                prev_ts = Some(ts);
             }
 
             match event {
@@ -470,44 +502,36 @@ impl ReplayEngine for WindowsReplayer {
                     x,
                     y,
                     button,
-                    retry_count,
+                    element,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(0);
-                    let mut attempts = 0;
-                    let mut success = false;
-                    while attempts <= max_retries && !success {
-                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
-                        let btn = match button {
-                            0 | 1 => Button::Left,
-                            2 | 3 => Button::Right,
-                            _ => Button::Left,
-                        };
-                        enigo.button(btn, Direction::Click)?;
-                        success = true;
-                        attempts += 1;
-                    }
+                    let (mouse_button, direction) = click_action(*button);
+
+                    // Re-resolve press targets whose element moved; releases
+                    // stay at recorded coordinates so drags end where the
+                    // user ended them.
+                    let (cx, cy) = match (element, &direction) {
+                        (Some(desc), Direction::Press) => resolve_click_point(desc, *x, *y),
+                        _ => (*x, *y),
+                    };
+
+                    enigo.move_mouse(cx, cy, Coordinate::Abs)?;
+                    enigo.button(mouse_button, direction)?;
                 }
                 InputEvent::Key {
                     code,
                     chars,
                     action,
-                    retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(0);
-                    let mut attempts = 0;
-                    while attempts <= max_retries {
-                        let key = if !chars.is_empty() {
-                            Key::Unicode(chars.chars().next().unwrap_or(' '))
-                        } else {
-                            Key::Other(*code as u32)
-                        };
-                        match action {
-                            KeyAction::Down => enigo.key(key, Direction::Press)?,
-                            KeyAction::Up => enigo.key(key, Direction::Release)?,
-                        }
-                        attempts += 1;
+                    let key = if !chars.is_empty() {
+                        Key::Unicode(chars.chars().next().unwrap_or(' '))
+                    } else {
+                        Key::Other(*code as u32)
+                    };
+                    match action {
+                        KeyAction::Down => enigo.key(key, Direction::Press)?,
+                        KeyAction::Up => enigo.key(key, Direction::Release)?,
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
@@ -520,7 +544,9 @@ impl ReplayEngine for WindowsReplayer {
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
+                    if !interruptible_sleep(adjusted_ms, &stop_flag, &pause_flag) {
+                        return Ok(());
+                    }
                 }
                 InputEvent::Wait {
                     condition,
@@ -622,14 +648,26 @@ impl ReplayEngine for WindowsReplayer {
         &self,
         events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
+        pause_flag: Arc<AtomicBool>,
+        speed: f32,
         reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
-        let speed = *self.speed_factor.lock().unwrap();
+        let speed = speed.max(0.1);
+        let mut prev_ts: Option<u64> = None;
 
         for event in events {
-            if stop_flag.load(Ordering::Relaxed) {
+            if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
+            }
+
+            let gap = pacing_gap_ms(prev_ts, event.timestamp());
+            if gap > 0 && !interruptible_sleep((gap as f32 / speed) as u64, &stop_flag, &pause_flag)
+            {
+                return Ok(());
+            }
+            if let Some(ts) = event.timestamp() {
+                prev_ts = Some(ts);
             }
 
             match event {
@@ -637,59 +675,78 @@ impl ReplayEngine for WindowsReplayer {
                     x,
                     y,
                     button,
+                    element,
                     retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    let mut attempts = 0;
-                    let mut success = false;
+                    let (mouse_button, direction) = click_action(*button);
 
-                    while attempts <= max_retries && !success {
-                        enigo.move_mouse(*x, *y, Coordinate::Abs)?;
-                        let btn = match button {
-                            0 | 1 => Button::Left,
-                            2 | 3 => Button::Right,
-                            _ => Button::Left,
-                        };
-                        enigo.button(btn, Direction::Click)?;
-                        success = true;
-                        attempts += 1;
-
-                        if !success && attempts <= max_retries && reliability.continue_on_error {
-                            let backoff = reliability.retry_config.backoff_ms
-                                * (reliability.retry_config.backoff_multiplier as u64)
-                                    .pow(attempts - 1);
-                            std::thread::sleep(std::time::Duration::from_millis(backoff));
+                    // Reliability means retrying the element *lookup* with
+                    // backoff, so replay waits out slow-loading UIs instead of
+                    // blind-clicking stale coordinates.
+                    let (cx, cy) = match (element, &direction) {
+                        (Some(desc), Direction::Press) => {
+                            let max_attempts = retry_count
+                                .unwrap_or(reliability.retry_config.max_attempts)
+                                .max(1);
+                            let mut resolved = None;
+                            for attempt in 0..max_attempts {
+                                resolved = try_resolve_click_point(desc, *x, *y);
+                                if resolved.is_some() {
+                                    break;
+                                }
+                                if attempt + 1 < max_attempts {
+                                    let backoff = (reliability.retry_config.backoff_ms as f32
+                                        * reliability
+                                            .retry_config
+                                            .backoff_multiplier
+                                            .max(1.0)
+                                            .powi(attempt as i32))
+                                        as u64;
+                                    if !interruptible_sleep(backoff, &stop_flag, &pause_flag) {
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            match resolved {
+                                Some(point) => point,
+                                None if reliability.continue_on_error => {
+                                    tracing::warn!(
+                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
+                                        desc.name,
+                                        max_attempts
+                                    );
+                                    (*x, *y)
+                                }
+                                None => {
+                                    return Err(anyhow::anyhow!(
+                                        "Element \"{}\" not found after {} attempts",
+                                        desc.name,
+                                        max_attempts
+                                    ))
+                                }
+                            }
                         }
-                    }
+                        _ => (*x, *y),
+                    };
+
+                    enigo.move_mouse(cx, cy, Coordinate::Abs)?;
+                    enigo.button(mouse_button, direction)?;
                 }
                 InputEvent::Key {
                     code,
                     chars,
                     action,
-                    retry_count,
                     ..
                 } => {
-                    let max_retries = retry_count.unwrap_or(reliability.retry_config.max_attempts);
-                    for attempt in 0..=max_retries {
-                        if stop_flag.load(Ordering::Relaxed) {
-                            return Ok(());
-                        }
-                        let key = if !chars.is_empty() {
-                            Key::Unicode(chars.chars().next().unwrap_or(' '))
-                        } else {
-                            Key::Other(*code as u32)
-                        };
-                        match action {
-                            KeyAction::Down => enigo.key(key, Direction::Press)?,
-                            KeyAction::Up => enigo.key(key, Direction::Release)?,
-                        }
-                        if attempt < max_retries {
-                            std::thread::sleep(std::time::Duration::from_millis(
-                                reliability.retry_config.backoff_ms
-                                    * reliability.retry_config.backoff_multiplier as u64,
-                            ));
-                        }
+                    let key = if !chars.is_empty() {
+                        Key::Unicode(chars.chars().next().unwrap_or(' '))
+                    } else {
+                        Key::Other(*code as u32)
+                    };
+                    match action {
+                        KeyAction::Down => enigo.key(key, Direction::Press)?,
+                        KeyAction::Up => enigo.key(key, Direction::Release)?,
                     }
                 }
                 InputEvent::Scroll { dx, dy, .. } => {
@@ -702,7 +759,9 @@ impl ReplayEngine for WindowsReplayer {
                 }
                 InputEvent::Delay { ms, .. } => {
                     let adjusted_ms = (*ms as f32 / speed) as u64;
-                    std::thread::sleep(std::time::Duration::from_millis(adjusted_ms));
+                    if !interruptible_sleep(adjusted_ms, &stop_flag, &pause_flag) {
+                        return Ok(());
+                    }
                 }
                 InputEvent::Wait {
                     condition,
