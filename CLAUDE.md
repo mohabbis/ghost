@@ -43,9 +43,10 @@ src-tauri/src/
 │   ├── wait.rs          # Smart wait conditions (ElementVisible, TextPresent, ImageMatches, etc.)
 │   └── security.rs      # path sanitization, input validation, rate limiting (audit submodule is a stub)
 └── platform/
-    ├── mod.rs           # re-exports platform-specific implementations
+    ├── mod.rs           # per-OS module gating (macos / windows / headless)
     ├── macos.rs         # CGEventTap recording, AXUIElement inspection, enigo replay
-    └── windows.rs       # Win32 hooks, UIA (UI Automation), enigo replay
+    ├── windows.rs       # Win32 hooks, UIA (UI Automation), enigo replay
+    └── headless.rs      # Linux/other fallback: recording errors, locator returns None, enigo replay-only (keeps Linux dev/CI builds + tests working)
 ```
 
 > **Note:** `config.rs`, `performance.rs`, and `telemetry.rs` are now wired into the live path:
@@ -328,7 +329,8 @@ cd src-tauri && cargo clippy
 # core/replay_support.rs; integration tests in src-tauri/tests/integration_test.rs
 # (config, error handling, events, workflow ops), e2e in src-tauri/tests/e2e.rs,
 # and the IPC drift check in src-tauri/tests/ipc_contract.rs (fails if main.js
-# invokes a command lib.rs doesn't register)
+# invokes a command lib.rs doesn't register, OR passes an invoke arg key that
+# doesn't match the camelCased Rust parameter name)
 cd src-tauri && cargo test
 
 # Run a single test by name (substring match)
@@ -340,9 +342,11 @@ There is no frontend build or lint step — the frontend is static vanilla JS.
 ## CI/CD (`.github/workflows/`)
 
 - **`rust.yml`** — runs on push/PR to `main`/`master`/`develop`: `cargo check`, `cargo test`,
-  `cargo clippy`, `cargo fmt --check`, plus per-platform release builds. Ubuntu jobs need
-  `libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` installed
-  before `cargo` runs (see `CI_FIX_SUMMARY.md` for the history of fixes here — warnings are
+  `cargo clippy` on an ubuntu + macos + windows matrix (ubuntu compiles via the headless
+  backend and gives the fastest signal), `cargo fmt --check`, plus mac/windows release
+  builds. Ubuntu jobs need
+  `libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev`
+  installed before `cargo` runs (see `CI_FIX_SUMMARY.md` for the history of fixes here — warnings are
   intentionally allowed, not denied, in check/test/clippy).
 - **`release.yml`** — tag-driven (`v*`), builds and signs the desktop bundles (see below).
 - **`deploy-website.yml`** — triggered by changes under `public/**`; deploys the marketing
@@ -407,6 +411,10 @@ Sidecar files (human-readable) use `.sidecar.txt` suffix.
 
 - No framework, no build step. DOM manipulation via `document.querySelector` and `addEventListener`.
 - All Tauri calls go through `window.__TAURI__.core.invoke(...)` and `window.__TAURI__.event.listen(...)`.
+- **Invoke arg keys must be camelCase.** Tauri 2 matches JS keys against the camelCased Rust
+  parameter names (`source_type` → `sourceType`). A snake_case key fails with "invalid args" for
+  required params, or is **silently dropped** for `Option` params. `tests/ipc_contract.rs`
+  enforces this — run `cargo test ipc_contract` after touching any `invoke(...)` call.
 - Global JS state: `isRecording`, `recordedEvents[]`, `isPlaying`, `isPaused`, `playbackSpeed`.
 - UI is organized into collapsible sections in `index.html`: Recording, Workflow Management, AI Analysis, Smart Observer, Phase 4 (visual/data), Event Timeline. The Cloud Sync panel was intentionally REMOVED from the UI (Ghost is marketed as local-only; the `cloud.rs` backend stubs remain but are not exposed). Don't re-add it without a real opt-in backend + updated privacy messaging.
 - Modal `#analysis-modal` displays workflow analysis results.

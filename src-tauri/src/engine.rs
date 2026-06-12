@@ -101,7 +101,14 @@ impl GhostEngine {
         };
 
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        compile_error!("Unsupported platform: only macOS and Windows are supported");
+        let (recorder, locator, replayer) = {
+            use crate::platform::headless::HeadlessBackend;
+            (
+                HeadlessBackend::recorder(),
+                HeadlessBackend::locator(),
+                HeadlessBackend::replayer(),
+            )
+        };
 
         // Load persisted config (falling back to defaults) and use it to seed
         // runtime state: starting playback speed and the active LLM provider.
