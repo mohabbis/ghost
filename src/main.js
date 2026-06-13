@@ -469,7 +469,7 @@ async function observerLearnFromSession() {
     const appName = dominantAppName(recordedEvents);
     const patternsFound = await invoke("observe_events", {
       events: recordedEvents,
-      app_name: appName,
+      appName: appName,
     });
 
     if (patternsFound > 0) {
@@ -515,9 +515,9 @@ async function replayWithReliability() {
     updateRecordingUI();
     await invoke("replay_with_reliability", {
       events: recordedEvents,
-      max_attempts: replay.max_retry_attempts ?? 3,
-      backoff_ms: replay.retry_backoff_ms ?? 500,
-      backoff_multiplier: replay.retry_backoff_multiplier ?? 2.0,
+      maxAttempts: replay.max_retry_attempts ?? 3,
+      backoffMs: replay.retry_backoff_ms ?? 500,
+      backoffMultiplier: replay.retry_backoff_multiplier ?? 2.0,
     });
     isPlaying = false;
     updateRecordingUI();
@@ -1138,7 +1138,7 @@ async function observeCurrentSession() {
 
   try {
     const appName = (await ghostPrompt("Which app were you using?", "Unknown App")) || "Unknown";
-    const patternsFound = await invoke("observe_events", { events: recordedEvents, app_name: appName });
+    const patternsFound = await invoke("observe_events", { events: recordedEvents, appName: appName });
     showNotification(`Found ${patternsFound} learned patterns from <strong>${appName}</strong>!`);
 
     const suggestions = await invoke("get_proactive_suggestions");
@@ -1158,7 +1158,7 @@ async function generateGeekInsights() {
 
   try {
     const appName = (await ghostPrompt("Which app are you analyzing?", "Unknown App")) || "Unknown";
-    const insights = await invoke("generate_geek_insights", { events: recordedEvents, app_name: appName });
+    const insights = await invoke("generate_geek_insights", { events: recordedEvents, appName: appName });
     displayGeekInsights(insights, appName);
   } catch (error) {
     console.error("Failed to generate geek insights:", error);
@@ -1257,7 +1257,7 @@ async function replayWithVisualCheck() {
       { event_index: recordedEvents.length - 1, name: "Final State", baseline_screenshot_path: appName ? `${appName}.png` : null, threshold: 0.95 },
     ];
 
-    const success = await invoke("replay_with_visual_check", { events: recordedEvents, visual_checks: visualChecks });
+    const success = await invoke("replay_with_visual_check", { events: recordedEvents, visualChecks: visualChecks });
     showNotification(success ? "Replay completed with visual check." : "Replay was cancelled.");
   } catch (error) {
     console.error("Failed to replay with visual check:", error);
@@ -1293,7 +1293,7 @@ async function createDataSource() {
   if (type === "csv" || type === "json") path = await ghostPrompt("Path to data file");
 
   try {
-    await invoke("create_data_source", { name, source_type: type, path });
+    await invoke("create_data_source", { name, sourceType: type, path });
     showNotification(`Data source "${name}" created.`);
   } catch (error) {
     console.error("Failed to create data source:", error);
@@ -1308,7 +1308,7 @@ async function loadVariablesFromSource() {
   if (!name) return;
 
   try {
-    const variables = await invoke("load_variables", { data_source_name: name });
+    const variables = await invoke("load_variables", { dataSourceName: name });
     showNotification(`Loaded ${Object.keys(variables).length} variables.`);
     console.log("Variables:", variables);
   } catch (error) {

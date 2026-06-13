@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Performance metrics for operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +225,7 @@ macro_rules! time_operation {
 mod tests {
     use super::*;
     use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn test_basic_timing() {

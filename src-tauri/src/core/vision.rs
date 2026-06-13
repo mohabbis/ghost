@@ -1,7 +1,6 @@
 //! Visual regression testing and image processing.
 //! Uses SSIM (Structural Similarity Index) for comparing screenshots.
 
-use base64::Engine;
 use image::{DynamicImage, GenericImageView};
 use std::path::Path;
 
