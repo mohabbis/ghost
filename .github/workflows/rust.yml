@@ -2,12 +2,16 @@ name: Rust CI
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   check:
@@ -26,13 +30,11 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Check compilation
-        run: cargo check --manifest-path src-tauri/Cargo.toml --all-features
-        env:
-          RUSTFLAGS: ""
+      - name: Check Rust crate
+        run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets
 
   test:
-    name: Test Suite (${{ matrix.os }})
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -47,10 +49,8 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Run tests
+      - name: Run unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
-        env:
-          RUSTFLAGS: ""
 
   clippy:
     name: Clippy (${{ matrix.os }})
@@ -71,7 +71,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Run clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -A warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
   fmt:
     name: Rustfmt
@@ -86,8 +86,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
-  build-matrix:
-    name: Build (${{ matrix.os }})
+  tauri-compile:
+    name: Tauri compile smoke test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -105,8 +105,5 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      - name: Build Tauri app
-        run: cargo tauri build
-        working-directory: src-tauri
-
-# Made with Bob
+      - name: Compile desktop app without packaging installers
+        run: cargo tauri build --no-bundle
