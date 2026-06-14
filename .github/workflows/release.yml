@@ -4,13 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create GitHub Releases and upload assets
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  # ── macOS DMG (universal: Apple Silicon + Intel) ───────────────────
   build-mac:
+    name: Build macOS DMG
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -26,14 +31,9 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      # Decide how to sign. If an Apple Developer ID cert is configured as a
-      # repo secret, sign + notarize so Gatekeeper opens the app silently.
-      # Otherwise fall back to ad-hoc signing (stops "app is damaged" errors,
-      # but users still need to clear quarantine — see RELEASING.md).
       - name: Configure macOS signing
         run: |
           if [ -n "${{ secrets.BUILD_CERTIFICATE_BASE64 }}" ]; then
-            echo "Apple Developer ID detected → signing + notarizing"
             echo "SIGNING_MODE=full" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE=${{ secrets.BUILD_CERTIFICATE_BASE64 }}" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.P12_PASSWORD }}" >> "$GITHUB_ENV"
@@ -42,26 +42,24 @@ jobs:
             echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
           else
-            echo "No Apple cert configured → ad-hoc signing only"
             echo "SIGNING_MODE=adhoc" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
           fi
 
-      - name: Build universal app
-        run: cargo tauri build --target universal-apple-darwin
-        # Cert/notarization vars are NOT redeclared here — "Configure macOS
-        # signing" already exported exactly the right ones to $GITHUB_ENV.
-        # Re-declaring them with a `|| ''` fallback would set them to empty
-        # strings in ad-hoc mode, and Tauri's bundler treats a present-but-
-        # empty APPLE_CERTIFICATE as "import this cert", which fails with
-        # `SecKeychainItemImport: ... not valid`. Leaving them unset in
-        # ad-hoc mode is what makes the bundler skip cert import entirely.
+      - name: Build universal macOS DMG
+        run: cargo tauri build --target universal-apple-darwin --bundles dmg
 
-      - name: Rename DMG
+      - name: Stage macOS asset
         run: |
-          DMG=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" -print -quit)
+          if [ -z "$DMG" ]; then
+            echo "No DMG found in Tauri bundle output" >&2
+            exit 1
+          fi
           cp "$DMG" Ghost.dmg
-          echo "Built: $DMG → Ghost.dmg"
+          mkdir -p public/downloads
+          cp Ghost.dmg public/downloads/Ghost.dmg
+          echo "Built $DMG -> Ghost.dmg"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
@@ -70,21 +68,15 @@ jobs:
           files: Ghost.dmg
           fail_on_unmatched_files: true
 
-      - name: Copy to public/downloads for website
-        run: |
-          mkdir -p public/downloads
-          cp Ghost.dmg public/downloads/Ghost.dmg
-          echo "Copied Ghost.dmg to public/downloads/"
-
       - name: Upload website artifact
         uses: actions/upload-artifact@v7
         with:
           name: macos-website-binary
           path: public/downloads/Ghost.dmg
-          retention-days: 1
+          retention-days: 7
 
-  # ── Windows EXE ────────────────────────────────────────────────────
   build-windows:
+    name: Build Windows installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -98,24 +90,25 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      - name: Build app
-        run: cargo tauri build
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
 
-      - name: Rename installer
+      - name: Build Windows NSIS installer
+        run: cargo tauri build --bundles nsis
+
+      - name: Stage Windows asset
         shell: pwsh
         run: |
-          $nsis = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          $msi  = Get-ChildItem src-tauri\target\release\bundle\msi\*.msi -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($nsis) {
-            Copy-Item $nsis.FullName Ghost_Setup.exe
-            Write-Host "Built: $($nsis.FullName) -> Ghost_Setup.exe"
-          } elseif ($msi) {
-            Copy-Item $msi.FullName Ghost_Setup.exe
-            Write-Host "Built: $($msi.FullName) -> Ghost_Setup.exe"
-          } else {
-            Write-Error "No installer found in bundle output"
+          $installer = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "No NSIS installer found in src-tauri\target\release\bundle\nsis"
             exit 1
           }
+          Copy-Item $installer.FullName Ghost_Setup.exe
+          New-Item -ItemType Directory -Force -Path public\downloads | Out-Null
+          Copy-Item Ghost_Setup.exe public\downloads\Ghost_Setup.exe
+          Write-Host "Built: $($installer.FullName) -> Ghost_Setup.exe"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
@@ -124,16 +117,9 @@ jobs:
           files: Ghost_Setup.exe
           fail_on_unmatched_files: true
 
-      - name: Copy to public/downloads for website
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path public\downloads
-          Copy-Item Ghost_Setup.exe public\downloads\Ghost_Setup.exe
-          Write-Host "Copied Ghost_Setup.exe to public/downloads/"
-
       - name: Upload website artifact
         uses: actions/upload-artifact@v7
         with:
           name: windows-website-binary
           path: public/downloads/Ghost_Setup.exe
-          retention-days: 1
+          retention-days: 7
