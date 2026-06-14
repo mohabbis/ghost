@@ -97,9 +97,23 @@ pub fn sanitize_file_path(path: &str, base_dir: &Path) -> anyhow::Result<PathBuf
     let canonical_base = base_dir
         .canonicalize()
         .unwrap_or_else(|_| base_dir.to_path_buf());
-    let canonical_candidate = candidate
-        .canonicalize()
-        .unwrap_or_else(|_| candidate.clone());
+
+    // The candidate file often doesn't exist yet (e.g. before a save), so
+    // `candidate.canonicalize()` fails. Fall back to canonicalizing its
+    // parent directory and re-attaching the file name, otherwise a
+    // non-existent path under a symlinked base_dir (e.g. macOS's
+    // /var -> /private/var) would be compared against a fully-resolved
+    // canonical_base and spuriously fail starts_with.
+    let canonical_candidate = match candidate.canonicalize() {
+        Ok(p) => p,
+        Err(_) => match (candidate.parent(), candidate.file_name()) {
+            (Some(parent), Some(name)) => match parent.canonicalize() {
+                Ok(canon_parent) => canon_parent.join(name),
+                Err(_) => candidate.clone(),
+            },
+            _ => candidate.clone(),
+        },
+    };
 
     if !canonical_candidate.starts_with(&canonical_base) {
         anyhow::bail!("Path traversal attempt blocked");
