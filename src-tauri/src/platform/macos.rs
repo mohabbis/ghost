@@ -1,4 +1,5 @@
 //! macOS backend implementation using CGEventTap, AXUIElement, and enigo.
+#![allow(non_upper_case_globals)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
