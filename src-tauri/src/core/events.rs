@@ -246,3 +246,292 @@ impl InputEvent {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn roundtrip(event: &InputEvent) -> InputEvent {
+        let json = serde_json::to_string(event).unwrap();
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn mouse_click_roundtrip() {
+        let event = InputEvent::MouseClick {
+            x: 10,
+            y: 20,
+            button: 0,
+            element: Some(ElementInfo {
+                role: "button".to_string(),
+                name: "Submit".to_string(),
+                app: "App".to_string(),
+                ..Default::default()
+            }),
+            timestamp: Some(1234),
+            retry_count: Some(1),
+            semantic_tag: Some(SemanticTag {
+                action: "click".to_string(),
+                target: "Submit Button".to_string(),
+                confidence: 0.9,
+                ui_element: None,
+                ai_generated: true,
+            }),
+            self_heal: Some(true),
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::MouseClick {
+                x,
+                y,
+                button,
+                element,
+                timestamp,
+                retry_count,
+                semantic_tag,
+                self_heal,
+            } => {
+                assert_eq!(x, 10);
+                assert_eq!(y, 20);
+                assert_eq!(button, 0);
+                assert_eq!(element.unwrap().name, "Submit");
+                assert_eq!(timestamp, Some(1234));
+                assert_eq!(retry_count, Some(1));
+                assert_eq!(semantic_tag.unwrap().action, "click");
+                assert_eq!(self_heal, Some(true));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn key_roundtrip() {
+        let event = InputEvent::Key {
+            code: 13,
+            chars: "a".to_string(),
+            modifiers: 1,
+            action: KeyAction::Down,
+            timestamp: Some(42),
+            retry_count: None,
+            semantic_tag: None,
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::Key {
+                code,
+                chars,
+                modifiers,
+                action,
+                timestamp,
+                ..
+            } => {
+                assert_eq!(code, 13);
+                assert_eq!(chars, "a");
+                assert_eq!(modifiers, 1);
+                assert!(matches!(action, KeyAction::Down));
+                assert_eq!(timestamp, Some(42));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn scroll_roundtrip() {
+        let event = InputEvent::Scroll {
+            dx: 5,
+            dy: -10,
+            phase: 1,
+            timestamp: Some(99),
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::Scroll {
+                dx,
+                dy,
+                phase,
+                timestamp,
+            } => {
+                assert_eq!(dx, 5);
+                assert_eq!(dy, -10);
+                assert_eq!(phase, 1);
+                assert_eq!(timestamp, Some(99));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn delay_roundtrip() {
+        let event = InputEvent::Delay {
+            ms: 500,
+            timestamp: Some(1),
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::Delay { ms, timestamp } => {
+                assert_eq!(ms, 500);
+                assert_eq!(timestamp, Some(1));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn wait_roundtrip() {
+        let event = InputEvent::Wait {
+            condition: WaitCondition::TextPresent {
+                text: "Loading".to_string(),
+            },
+            timeout_ms: 5000,
+            poll_interval_ms: 100,
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::Wait {
+                condition,
+                timeout_ms,
+                poll_interval_ms,
+            } => {
+                assert!(
+                    matches!(condition, WaitCondition::TextPresent { text } if text == "Loading")
+                );
+                assert_eq!(timeout_ms, 5000);
+                assert_eq!(poll_interval_ms, 100);
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn visual_check_roundtrip() {
+        let event = InputEvent::VisualCheck {
+            baseline_screenshot: "baseline.png".to_string(),
+            threshold: 0.95,
+            on_mismatch: MismatchAction::Retry { attempts: 3 },
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::VisualCheck {
+                baseline_screenshot,
+                threshold,
+                on_mismatch,
+            } => {
+                assert_eq!(baseline_screenshot, "baseline.png");
+                assert_eq!(threshold, 0.95);
+                assert!(matches!(on_mismatch, MismatchAction::Retry { attempts: 3 }));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn variable_roundtrip() {
+        let event = InputEvent::Variable {
+            name: "email".to_string(),
+            value_template: "{{email}}".to_string(),
+            var_type: VarType::RandomEmail,
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::Variable {
+                name,
+                value_template,
+                var_type,
+            } => {
+                assert_eq!(name, "email");
+                assert_eq!(value_template, "{{email}}");
+                assert!(matches!(var_type, VarType::RandomEmail));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn variable_ref_roundtrip() {
+        let event = InputEvent::VariableRef {
+            name: "email".to_string(),
+        };
+
+        let restored = roundtrip(&event);
+        match restored {
+            InputEvent::VariableRef { name } => assert_eq!(name, "email"),
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn timestamp_getter_and_setter() {
+        let mut click = InputEvent::MouseClick {
+            x: 0,
+            y: 0,
+            button: 0,
+            element: None,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        };
+        assert_eq!(click.timestamp(), None);
+        click.set_timestamp(777);
+        assert_eq!(click.timestamp(), Some(777));
+
+        // Variants without a timestamp field are unaffected
+        let mut var_ref = InputEvent::VariableRef {
+            name: "x".to_string(),
+        };
+        assert_eq!(var_ref.timestamp(), None);
+        var_ref.set_timestamp(123);
+        assert_eq!(var_ref.timestamp(), None);
+    }
+
+    #[test]
+    fn workflow_default_is_empty() {
+        let workflow = Workflow::default();
+        assert_eq!(workflow.name, "");
+        assert!(workflow.events.is_empty());
+        assert!(workflow.reliability.is_none());
+        assert_eq!(workflow.metadata.name, WorkflowMetadata::default().name);
+    }
+
+    #[test]
+    fn workflow_metadata_default_values() {
+        let metadata = WorkflowMetadata::default();
+        assert_eq!(metadata.name, "");
+        assert_eq!(metadata.description, "");
+        assert!(metadata.tags.is_empty());
+        assert_eq!(metadata.created_at, 0);
+        assert_eq!(metadata.updated_at, 0);
+        assert_eq!(metadata.estimated_duration_ms, 0);
+        assert_eq!(metadata.reliability_score, 0.0);
+        assert_eq!(metadata.element_confidence, 0.0);
+    }
+
+    #[test]
+    fn workflow_roundtrip_with_events() {
+        let workflow = Workflow {
+            name: "My Workflow".to_string(),
+            events: vec![InputEvent::Delay {
+                ms: 100,
+                timestamp: None,
+            }],
+            metadata: WorkflowMetadata {
+                name: "My Workflow".to_string(),
+                ..Default::default()
+            },
+            reliability: Some(ReliabilitySettings::default()),
+        };
+
+        let json = serde_json::to_string(&workflow).unwrap();
+        let restored: Workflow = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.name, "My Workflow");
+        assert_eq!(restored.events.len(), 1);
+        assert!(restored.reliability.is_some());
+    }
+}
