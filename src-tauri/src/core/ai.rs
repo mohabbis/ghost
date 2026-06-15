@@ -45,6 +45,12 @@ pub struct OptimizationSuggestion {
 /// Engine for analyzing workflows and providing AI-powered suggestions
 pub struct WorkflowAnalyzer;
 
+impl Default for WorkflowAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkflowAnalyzer {
     pub fn new() -> Self {
         WorkflowAnalyzer
@@ -295,6 +301,12 @@ pub struct ElementImprovement {
 
 /// Workflow optimizer that applies AI-powered optimizations
 pub struct WorkflowOptimizer;
+
+impl Default for WorkflowOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl WorkflowOptimizer {
     pub fn new() -> Self {

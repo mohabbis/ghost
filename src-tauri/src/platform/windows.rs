@@ -314,9 +314,10 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
 
 // ── Hook callbacks ────────────────────────────────────────────────────────────
 
+#[allow(non_snake_case)]
 unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
-        if let Some(tx_arc) = &GLOBAL_TX {
+        if let Some(tx_arc) = (*(&raw const GLOBAL_TX)).as_ref() {
             if let Ok(tx) = tx_arc.lock() {
                 let ms = &*(lParam as *const MSLLHOOKSTRUCT);
 
@@ -394,9 +395,10 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
     CallNextHookEx(0, code, wParam, lParam)
 }
 
+#[allow(non_snake_case)]
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
-        if let Some(tx_arc) = &GLOBAL_TX {
+        if let Some(tx_arc) = (*(&raw const GLOBAL_TX)).as_ref() {
             if let Ok(tx) = tx_arc.lock() {
                 let kb = &*(lParam as *const KBDLLHOOKSTRUCT);
 

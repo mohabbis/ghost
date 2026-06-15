@@ -3,9 +3,6 @@
 
 #[cfg(test)]
 mod e2e_tests {
-    use std::thread;
-    use std::time::Duration;
-
     /// Test: Record → Save → Load → Replay workflow
     #[tokio::test]
     async fn test_full_workflow_lifecycle() {
@@ -33,7 +30,7 @@ mod e2e_tests {
     /// Test: Wait condition timeout
     #[test]
     fn test_wait_condition_timeout() {
-        let condition = ghost_lib::core::events::WaitCondition::ElementExists {
+        let _condition = ghost_lib::core::events::WaitCondition::ElementExists {
             selector: ghost_lib::core::events::ElementSelector::Coordinates { x: 0, y: 0 },
         };
 
@@ -43,8 +40,6 @@ mod e2e_tests {
     /// Test: Security path sanitization
     #[test]
     fn test_path_sanitization() {
-        let base = std::path::Path::new("/home/user/ghost/workflows");
-
         // Valid name should pass
         assert!(ghost_lib::core::security::sanitize_workflow_path("test-workflow").is_ok());
 

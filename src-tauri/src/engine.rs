@@ -312,6 +312,7 @@ impl GhostEngine {
     }
 
     /// Get a clone of the replay stop flag for external monitoring.
+    #[allow(dead_code)]
     pub fn get_stop_flag(&self) -> Arc<AtomicBool> {
         self.replay_stop_flag.clone()
     }
@@ -430,6 +431,7 @@ impl GhostEngine {
     }
 
     /// Generate a workflow object with metadata
+    #[allow(dead_code)]
     pub fn create_workflow(&self, name: &str, events: &[InputEvent]) -> Workflow {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -483,6 +485,7 @@ impl GhostEngine {
     }
 
     /// Save a workflow with custom description and tags
+    #[allow(dead_code)]
     pub fn save_workflow_with_details(
         &self,
         name: &str,
@@ -576,6 +579,7 @@ impl GhostEngine {
     }
 
     /// Get element info at coordinates for validation
+    #[allow(dead_code)]
     pub fn validate_element_at(&self, x: i32, y: i32) -> anyhow::Result<bool> {
         Ok(self.locator.inspect_at(x, y)?.is_some())
     }
@@ -767,6 +771,7 @@ impl GhostEngine {
     }
 
     /// Wait for a condition during workflow execution
+    #[allow(dead_code)]
     pub fn wait_for_condition(
         &self,
         condition: &WaitCondition,
@@ -783,6 +788,7 @@ impl GhostEngine {
     }
 
     /// Perform visual regression check
+    #[allow(dead_code)]
     pub fn check_visual_regression(
         &self,
         baseline_path: &str,

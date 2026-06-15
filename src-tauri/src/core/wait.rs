@@ -222,7 +222,7 @@ pub fn resolve_selector(
                     if let Ok(Some(el)) = locator.inspect_at(x, y) {
                         if el.role == *role
                             && el.name.contains(name)
-                            && app.as_ref().map_or(true, |a| &el.app == a)
+                            && app.as_ref().is_none_or(|a| &el.app == a)
                         {
                             found = Some((x, y));
                             break 'scan;

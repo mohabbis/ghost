@@ -59,7 +59,7 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
     {
         use std::process::Command;
         let output = Command::new("screencapture")
-            .args(&["-x", "-t", "png", "-"])
+            .args(["-x", "-t", "png", "-"])
             .output()?;
 
         if output.status.success() {

@@ -190,23 +190,12 @@ pub struct WorkflowMetadata {
 }
 
 /// Enhanced workflow with metadata
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Workflow {
     pub name: String,
     pub events: Vec<InputEvent>,
     pub metadata: WorkflowMetadata,
     pub reliability: Option<ReliabilitySettings>,
-}
-
-impl Default for Workflow {
-    fn default() -> Self {
-        Workflow {
-            name: String::new(),
-            events: Vec::new(),
-            metadata: WorkflowMetadata::default(),
-            reliability: None,
-        }
-    }
 }
 
 /// Accessibility element metadata captured during recording.

@@ -147,7 +147,7 @@ impl ExecutionHistory {
         }
 
         // Sort by start time, newest first
-        records.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        records.sort_by_key(|r| std::cmp::Reverse(r.start_time));
 
         Ok(records)
     }
@@ -174,7 +174,7 @@ impl ExecutionHistory {
         }
 
         // Sort by start time, newest first
-        records.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        records.sort_by_key(|r| std::cmp::Reverse(r.start_time));
 
         if let Some(limit) = limit {
             records.truncate(limit);

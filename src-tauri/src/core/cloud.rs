@@ -217,10 +217,14 @@ mod tests {
         let mut mgr = manager();
         mgr.authenticate("token123".to_string()).unwrap();
 
-        let mut wf1 = Workflow::default();
-        wf1.name = "Workflow A".to_string();
-        let mut wf2 = Workflow::default();
-        wf2.name = "Workflow B".to_string();
+        let wf1 = Workflow {
+            name: "Workflow A".to_string(),
+            ..Default::default()
+        };
+        let wf2 = Workflow {
+            name: "Workflow B".to_string(),
+            ..Default::default()
+        };
 
         let synced = mgr.sync_workflows(&[wf1, wf2]).unwrap();
         assert_eq!(

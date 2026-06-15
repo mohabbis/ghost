@@ -42,12 +42,10 @@ pub mod audit {
 
     /// Run security audit on codebase
     pub fn run_audit() -> Vec<SecurityFinding> {
-        let findings = Vec::new();
-
         // Check for unsafe practices in file operations
         // This would be expanded to scan actual source files
 
-        findings
+        Vec::new()
     }
 }
 
@@ -134,7 +132,7 @@ pub fn validate_screenshot(data: &[u8]) -> anyhow::Result<()> {
     }
 
     // Verify PNG/JPEG magic bytes
-    let is_png = data.len() >= 8 && &data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let is_png = data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     let is_jpeg = data.len() >= 2 && data[0] == 0xFF && data[1] == 0xD8;
 
     if !is_png && !is_jpeg {
@@ -242,7 +240,7 @@ pub fn validate_prompt(prompt: &str) -> anyhow::Result<()> {
 /// Validate coordinates are within screen bounds
 pub fn validate_coordinates(x: i32, y: i32) -> anyhow::Result<()> {
     // Assume max screen size of 10000x10000
-    if x < 0 || x > 10000 || y < 0 || y > 10000 {
+    if !(0..=10000).contains(&x) || !(0..=10000).contains(&y) {
         anyhow::bail!("Coordinates out of valid range (0-10000)");
     }
     Ok(())
@@ -329,7 +327,6 @@ pub mod rate_limit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     // -- sanitize_workflow_path --
 
