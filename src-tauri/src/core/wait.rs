@@ -258,3 +258,290 @@ pub fn smart_wait(
         WaitResult::Error(e) => Err(anyhow::anyhow!("Wait error: {}", e)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::events::ElementInfo;
+    use std::collections::HashMap;
+
+    /// A locator stub that returns pre-configured elements at exact coordinates,
+    /// and `None` everywhere else (mirrors the headless backend's behavior).
+    struct MockLocator {
+        elements: HashMap<(i32, i32), ElementInfo>,
+    }
+
+    impl MockLocator {
+        fn empty() -> Self {
+            Self {
+                elements: HashMap::new(),
+            }
+        }
+
+        fn with_element(x: i32, y: i32, element: ElementInfo) -> Self {
+            let mut elements = HashMap::new();
+            elements.insert((x, y), element);
+            Self { elements }
+        }
+    }
+
+    impl ElementLocator for MockLocator {
+        fn inspect_at(&self, x: i32, y: i32) -> anyhow::Result<Option<ElementInfo>> {
+            Ok(self.elements.get(&(x, y)).cloned())
+        }
+    }
+
+    fn sample_element(role: &str, name: &str, app: &str) -> ElementInfo {
+        ElementInfo {
+            role: role.to_string(),
+            name: name.to_string(),
+            app: app.to_string(),
+            ..Default::default()
+        }
+    }
+
+    // --- VariableContext ---
+
+    #[test]
+    fn variable_context_get_set() {
+        let mut ctx = VariableContext::new();
+        assert_eq!(ctx.get("missing"), None);
+
+        ctx.set("name".to_string(), "Ghost".to_string());
+        assert_eq!(ctx.get("name"), Some(&"Ghost".to_string()));
+    }
+
+    #[test]
+    fn resolve_random_email_has_expected_format() {
+        let mut ctx = VariableContext::new();
+        let email = ctx.resolve("e", &VarType::RandomEmail).unwrap();
+        assert!(email.starts_with("user"));
+        assert!(email.ends_with("@example.com"));
+    }
+
+    #[test]
+    fn resolve_random_string_has_requested_length() {
+        let mut ctx = VariableContext::new();
+        let s = ctx
+            .resolve("s", &VarType::RandomString { length: 12 })
+            .unwrap();
+        assert_eq!(s.len(), 12);
+        assert!(s.chars().all(|c| c.is_ascii_alphanumeric()));
+    }
+
+    #[test]
+    fn resolve_timestamp_is_numeric() {
+        let mut ctx = VariableContext::new();
+        let ts = ctx.resolve("t", &VarType::Timestamp).unwrap();
+        assert!(!ts.is_empty());
+        assert!(ts.chars().all(|c| c.is_ascii_digit()));
+    }
+
+    #[test]
+    fn resolve_from_env_returns_value() {
+        let mut ctx = VariableContext::new();
+        std::env::set_var("GHOST_TEST_VAR", "hello");
+        let val = ctx
+            .resolve(
+                "v",
+                &VarType::FromEnv {
+                    key: "GHOST_TEST_VAR".to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(val, "hello");
+        std::env::remove_var("GHOST_TEST_VAR");
+    }
+
+    #[test]
+    fn resolve_from_env_missing_key_errors() {
+        let mut ctx = VariableContext::new();
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromEnv {
+                key: "GHOST_TEST_VAR_DOES_NOT_EXIST".to_string(),
+            },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_from_csv_reads_column_by_header() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("ghost_wait_test_{}.csv", std::process::id()));
+        std::fs::write(
+            &path,
+            "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
+        )
+        .unwrap();
+
+        let mut ctx = VariableContext::new();
+        let value = ctx
+            .resolve(
+                "v",
+                &VarType::FromCSV {
+                    path: path.to_string_lossy().to_string(),
+                    column: "email".to_string(),
+                    row: Some(1),
+                },
+            )
+            .unwrap();
+        assert_eq!(value, "bob@example.com");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn resolve_from_csv_defaults_row_to_zero() {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "ghost_wait_test_default_row_{}.csv",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
+        )
+        .unwrap();
+
+        let mut ctx = VariableContext::new();
+        let value = ctx
+            .resolve(
+                "v",
+                &VarType::FromCSV {
+                    path: path.to_string_lossy().to_string(),
+                    column: "name".to_string(),
+                    row: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(value, "Alice");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    // --- resolve_selector ---
+
+    #[test]
+    fn resolve_selector_coordinates_is_passthrough() {
+        let locator = MockLocator::empty();
+        let selector = ElementSelector::Coordinates { x: 42, y: 99 };
+        let result = resolve_selector(&selector, &locator).unwrap();
+        assert_eq!(result, (42, 99));
+    }
+
+    #[test]
+    fn resolve_selector_semantic_finds_matching_element() {
+        let locator =
+            MockLocator::with_element(48, 0, sample_element("button", "Submit", "TestApp"));
+        let selector = ElementSelector::Semantic {
+            role: "button".to_string(),
+            name: "Submit".to_string(),
+            app: Some("TestApp".to_string()),
+        };
+        let result = resolve_selector(&selector, &locator).unwrap();
+        assert_eq!(result, (48, 0));
+    }
+
+    #[test]
+    fn resolve_selector_semantic_not_found_errors() {
+        let locator = MockLocator::empty();
+        let selector = ElementSelector::Semantic {
+            role: "button".to_string(),
+            name: "Nonexistent".to_string(),
+            app: None,
+        };
+        assert!(resolve_selector(&selector, &locator).is_err());
+    }
+
+    #[test]
+    fn resolve_selector_ocr_not_implemented() {
+        let locator = MockLocator::empty();
+        let selector = ElementSelector::OCR {
+            text: "Hello".to_string(),
+            fuzzy: true,
+        };
+        assert!(resolve_selector(&selector, &locator).is_err());
+    }
+
+    // --- check_wait_condition / wait_for_condition / smart_wait ---
+
+    #[test]
+    fn check_element_visible_success_and_timeout() {
+        let found = MockLocator::with_element(10, 20, sample_element("button", "OK", "App"));
+        let visible = WaitCondition::ElementVisible {
+            selector: ElementSelector::Coordinates { x: 10, y: 20 },
+        };
+        assert!(matches!(
+            check_wait_condition(&visible, &found),
+            WaitResult::Success
+        ));
+
+        let empty = MockLocator::empty();
+        assert!(matches!(
+            check_wait_condition(&visible, &empty),
+            WaitResult::Timeout
+        ));
+    }
+
+    #[test]
+    fn check_text_present_finds_matching_element_name() {
+        let locator =
+            MockLocator::with_element(0, 0, sample_element("label", "Welcome Home", "App"));
+        let condition = WaitCondition::TextPresent {
+            text: "welcome".to_string(),
+        };
+        assert!(matches!(
+            check_wait_condition(&condition, &locator),
+            WaitResult::Success
+        ));
+    }
+
+    #[test]
+    fn check_text_present_not_found_times_out() {
+        let locator = MockLocator::empty();
+        let condition = WaitCondition::TextPresent {
+            text: "nope".to_string(),
+        };
+        assert!(matches!(
+            check_wait_condition(&condition, &locator),
+            WaitResult::Timeout
+        ));
+    }
+
+    #[test]
+    fn check_custom_condition_always_succeeds() {
+        let locator = MockLocator::empty();
+        let condition = WaitCondition::Custom {
+            js_expression: "true".to_string(),
+        };
+        assert!(matches!(
+            check_wait_condition(&condition, &locator),
+            WaitResult::Success
+        ));
+    }
+
+    #[test]
+    fn wait_for_condition_times_out_quickly() {
+        let locator = MockLocator::empty();
+        let condition = WaitCondition::ElementExists {
+            selector: ElementSelector::Coordinates { x: 0, y: 0 },
+        };
+        let result = wait_for_condition(&condition, &locator, 50, 10);
+        assert!(matches!(result, WaitResult::Timeout));
+    }
+
+    #[test]
+    fn smart_wait_ok_and_err_mapping() {
+        let found = MockLocator::with_element(0, 0, sample_element("button", "OK", "App"));
+        let visible = WaitCondition::ElementVisible {
+            selector: ElementSelector::Coordinates { x: 0, y: 0 },
+        };
+        assert!(smart_wait(&visible, &found, 100, 10).is_ok());
+
+        let empty = MockLocator::empty();
+        let err = smart_wait(&visible, &empty, 30, 10);
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("timed out"));
+    }
+}

@@ -306,3 +306,201 @@ impl Default for KnowledgeBase {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::events::KeyAction;
+
+    fn click_event() -> InputEvent {
+        InputEvent::MouseClick {
+            x: 0,
+            y: 0,
+            button: 0,
+            element: None,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        }
+    }
+
+    fn key_event(modifiers: u8, chars: &str) -> InputEvent {
+        InputEvent::Key {
+            code: 0,
+            chars: chars.to_string(),
+            modifiers,
+            action: KeyAction::Down,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+        }
+    }
+
+    #[test]
+    fn observer_state_defaults_and_toggle() {
+        let kb = KnowledgeBase::new();
+        assert!(!kb.is_observer_active());
+
+        kb.start_observer();
+        assert!(kb.is_observer_active());
+
+        kb.stop_observer();
+        assert!(!kb.is_observer_active());
+
+        kb.set_observer_interval(5000);
+        assert_eq!(*kb.observer_interval_ms.lock().unwrap(), 5000);
+    }
+
+    #[test]
+    fn analyze_observed_events_too_short_detects_nothing() {
+        let kb = KnowledgeBase::new();
+        let events = vec![click_event(), click_event()];
+        let patterns = kb.analyze_observed_events(&events, "TestApp");
+        assert!(patterns.is_empty());
+    }
+
+    #[test]
+    fn analyze_observed_events_detects_repetitive_sequence() {
+        let kb = KnowledgeBase::new();
+        let events = vec![click_event(), click_event(), click_event(), click_event()];
+        let patterns = kb.analyze_observed_events(&events, "TestApp");
+
+        let sequence = patterns
+            .iter()
+            .find(|p| matches!(p.pattern_type, LearningPatternType::RepetitiveSequence))
+            .expect("expected a repetitive sequence pattern");
+
+        assert_eq!(sequence.app_name, "TestApp");
+        assert_eq!(sequence.occurrence_count, 1);
+        assert_eq!(sequence.events.len(), events.len());
+        assert!(sequence.confidence > 0.0 && sequence.confidence <= 1.0);
+        assert!(sequence.description.contains("4-event sequence"));
+    }
+
+    #[test]
+    fn analyze_observed_events_detects_shortcut() {
+        let kb = KnowledgeBase::new();
+        // A modifier-key event followed immediately by another key event
+        let events = vec![
+            key_event(1, "c"),
+            key_event(0, "v"),
+            click_event(),
+            click_event(),
+        ];
+        let patterns = kb.analyze_observed_events(&events, "Editor");
+
+        let shortcut = patterns
+            .iter()
+            .find(|p| matches!(p.pattern_type, LearningPatternType::ShortcutDiscovery))
+            .expect("expected a shortcut pattern");
+
+        assert_eq!(shortcut.app_name, "Editor");
+        assert_eq!(shortcut.confidence, 0.75);
+    }
+
+    #[test]
+    fn observe_and_retrieve_patterns() {
+        let kb = KnowledgeBase::new();
+        let pattern = LearnedPattern {
+            id: "p1".to_string(),
+            app_name: "AppA".to_string(),
+            pattern_type: LearningPatternType::RepetitiveSequence,
+            description: "desc".to_string(),
+            trigger_conditions: vec![],
+            suggested_actions: vec![],
+            confidence: 0.9,
+            first_seen: 0,
+            last_seen: 0,
+            occurrence_count: 2,
+            events: vec![],
+            geek_details: None,
+        };
+        kb.observe_pattern(pattern.clone());
+
+        let all = kb.get_patterns();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, "p1");
+
+        let app_a = kb.get_app_patterns("AppA");
+        assert_eq!(app_a.len(), 1);
+
+        let app_b = kb.get_app_patterns("AppB");
+        assert!(app_b.is_empty());
+    }
+
+    #[test]
+    fn get_suggestions_filters_by_confidence_and_occurrence() {
+        let kb = KnowledgeBase::new();
+
+        // High confidence, repeated -> should produce a suggestion
+        kb.observe_pattern(LearnedPattern {
+            id: "strong".to_string(),
+            app_name: "AppA".to_string(),
+            pattern_type: LearningPatternType::RepetitiveSequence,
+            description: "do the thing".to_string(),
+            trigger_conditions: vec![],
+            suggested_actions: vec![],
+            confidence: 0.9,
+            first_seen: 0,
+            last_seen: 0,
+            occurrence_count: 3,
+            events: vec![],
+            geek_details: None,
+        });
+
+        // Low confidence -> filtered out
+        kb.observe_pattern(LearnedPattern {
+            id: "weak_confidence".to_string(),
+            app_name: "AppA".to_string(),
+            pattern_type: LearningPatternType::RepetitiveSequence,
+            description: "maybe".to_string(),
+            trigger_conditions: vec![],
+            suggested_actions: vec![],
+            confidence: 0.5,
+            first_seen: 0,
+            last_seen: 0,
+            occurrence_count: 5,
+            events: vec![],
+            geek_details: None,
+        });
+
+        // Only seen once -> filtered out
+        kb.observe_pattern(LearnedPattern {
+            id: "single_occurrence".to_string(),
+            app_name: "AppA".to_string(),
+            pattern_type: LearningPatternType::RepetitiveSequence,
+            description: "once".to_string(),
+            trigger_conditions: vec![],
+            suggested_actions: vec![],
+            confidence: 0.95,
+            first_seen: 0,
+            last_seen: 0,
+            occurrence_count: 1,
+            events: vec![],
+            geek_details: None,
+        });
+
+        let suggestions = kb.get_suggestions();
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].pattern_id, "strong");
+        assert_eq!(suggestions[0].suggested_workflow_name, "Auto-AppA");
+        assert!(suggestions[0].suggestion.contains("do the thing"));
+    }
+
+    #[test]
+    fn track_app_usage_accumulates_counts() {
+        let kb = KnowledgeBase::new();
+        kb.track_app_usage("AppA");
+        kb.track_app_usage("AppA");
+        kb.track_app_usage("AppB");
+
+        let usage = kb.get_app_usage();
+        let app_a = usage.iter().find(|u| u.app_name == "AppA").unwrap();
+        let app_b = usage.iter().find(|u| u.app_name == "AppB").unwrap();
+
+        assert_eq!(app_a.usage_count, 2);
+        assert_eq!(app_b.usage_count, 1);
+        assert!(app_a.last_used > 0);
+    }
+}

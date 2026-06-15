@@ -349,3 +349,316 @@ pub mod tracker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build an `ExecutionHistory` rooted in a fresh temp directory, isolated
+    /// from the real `dirs::data_dir()` used by `ExecutionHistory::new()`.
+    fn temp_history(name: &str) -> ExecutionHistory {
+        let logs_dir = std::env::temp_dir().join(format!(
+            "ghost_execution_test_{}_{}",
+            name,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&logs_dir);
+        fs::create_dir_all(&logs_dir).unwrap();
+        ExecutionHistory { logs_dir }
+    }
+
+    fn cleanup(history: &ExecutionHistory) {
+        let _ = fs::remove_dir_all(&history.logs_dir);
+    }
+
+    fn record_with(
+        workflow_name: &str,
+        status: ExecutionStatus,
+        start_time: u64,
+        duration_ms: Option<u64>,
+        error_message: Option<&str>,
+    ) -> ExecutionRecord {
+        ExecutionRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            workflow_name: workflow_name.to_string(),
+            status,
+            start_time,
+            end_time: None,
+            duration_ms,
+            events_processed: 0,
+            error_message: error_message.map(|s| s.to_string()),
+            failure_screenshot: None,
+            metadata: ExecutionMetadata::default(),
+        }
+    }
+
+    #[test]
+    fn execution_record_lifecycle() {
+        let mut record = ExecutionRecord::new("wf".to_string());
+        assert_eq!(record.status, ExecutionStatus::Running);
+        assert!(record.end_time.is_none());
+
+        record.complete(5, 1234);
+        assert_eq!(record.status, ExecutionStatus::Success);
+        assert_eq!(record.events_processed, 5);
+        assert_eq!(record.duration_ms, Some(1234));
+        assert!(record.end_time.is_some());
+    }
+
+    #[test]
+    fn execution_record_fail_and_cancel() {
+        let mut record = ExecutionRecord::new("wf".to_string());
+        record.fail("boom", Some("shot.png".to_string()));
+        assert_eq!(record.status, ExecutionStatus::Failed);
+        assert_eq!(record.error_message, Some("boom".to_string()));
+        assert_eq!(record.failure_screenshot, Some("shot.png".to_string()));
+
+        let mut record2 = ExecutionRecord::new("wf".to_string());
+        record2.cancel();
+        assert_eq!(record2.status, ExecutionStatus::Cancelled);
+        assert!(record2.end_time.is_some());
+    }
+
+    #[test]
+    fn save_and_get_history_filters_by_workflow() {
+        let history = temp_history("save_get");
+
+        let r1 = record_with("wf-a", ExecutionStatus::Success, 100, Some(50), None);
+        let r2 = record_with("wf-a", ExecutionStatus::Failed, 200, Some(150), Some("err"));
+        let r3 = record_with("wf-b", ExecutionStatus::Success, 300, Some(100), None);
+
+        history.save(&r1).unwrap();
+        history.save(&r2).unwrap();
+        history.save(&r3).unwrap();
+
+        let wf_a = history.get_history("wf-a").unwrap();
+        assert_eq!(wf_a.len(), 2);
+        // Sorted newest-first by start_time
+        assert_eq!(wf_a[0].start_time, 200);
+        assert_eq!(wf_a[1].start_time, 100);
+
+        let wf_b = history.get_history("wf-b").unwrap();
+        assert_eq!(wf_b.len(), 1);
+
+        let wf_missing = history.get_history("wf-does-not-exist").unwrap();
+        assert!(wf_missing.is_empty());
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn get_all_records_sorted_and_limited() {
+        let history = temp_history("all_records");
+
+        let r1 = record_with("wf-a", ExecutionStatus::Success, 100, Some(50), None);
+        let r2 = record_with("wf-b", ExecutionStatus::Success, 300, Some(100), None);
+        let r3 = record_with("wf-c", ExecutionStatus::Success, 200, Some(75), None);
+
+        history.save(&r1).unwrap();
+        history.save(&r2).unwrap();
+        history.save(&r3).unwrap();
+
+        let all = history.get_all_records(None).unwrap();
+        assert_eq!(all.len(), 3);
+        // Newest first
+        assert_eq!(all[0].start_time, 300);
+        assert_eq!(all[1].start_time, 200);
+        assert_eq!(all[2].start_time, 100);
+
+        let limited = history.get_all_records(Some(2)).unwrap();
+        assert_eq!(limited.len(), 2);
+        assert_eq!(limited[0].start_time, 300);
+        assert_eq!(limited[1].start_time, 200);
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn success_rate_with_no_records_is_one() {
+        let history = temp_history("success_rate_empty");
+        let rate = history.get_success_rate("nonexistent").unwrap();
+        assert_eq!(rate, 1.0);
+        cleanup(&history);
+    }
+
+    #[test]
+    fn success_rate_computed_from_mixed_records() {
+        let history = temp_history("success_rate_mixed");
+
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Success,
+                1,
+                Some(10),
+                None,
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Success,
+                2,
+                Some(20),
+                None,
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Failed,
+                3,
+                Some(30),
+                Some("err"),
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Cancelled,
+                4,
+                None,
+                None,
+            ))
+            .unwrap();
+
+        let rate = history.get_success_rate("wf").unwrap();
+        assert!((rate - 0.5).abs() < f32::EPSILON);
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn avg_duration_ignores_missing_durations() {
+        let history = temp_history("avg_duration");
+
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Success,
+                1,
+                Some(100),
+                None,
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Success,
+                2,
+                Some(200),
+                None,
+            ))
+            .unwrap();
+        // No duration_ms - should be excluded from the average
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Cancelled,
+                3,
+                None,
+                None,
+            ))
+            .unwrap();
+
+        let avg = history.get_avg_duration("wf").unwrap();
+        assert_eq!(avg, 150);
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn avg_duration_with_no_records_is_zero() {
+        let history = temp_history("avg_duration_empty");
+        let avg = history.get_avg_duration("nonexistent").unwrap();
+        assert_eq!(avg, 0);
+        cleanup(&history);
+    }
+
+    #[test]
+    fn failure_hotspots_collected_in_order() {
+        let history = temp_history("failure_hotspots");
+
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Success,
+                1,
+                Some(10),
+                None,
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Failed,
+                2,
+                Some(20),
+                Some("element not found"),
+            ))
+            .unwrap();
+        history
+            .save(&record_with(
+                "wf",
+                ExecutionStatus::Failed,
+                3,
+                Some(30),
+                Some("network timeout"),
+            ))
+            .unwrap();
+
+        let hotspots = history.get_failure_hotspots("wf").unwrap();
+        assert_eq!(hotspots.len(), 2);
+        // Sorted newest-first, so "network timeout" (start_time 3) comes first
+        assert_eq!(hotspots[0], "network timeout");
+        assert_eq!(hotspots[1], "Element error: element not found");
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn cleanup_old_logs_removes_only_old_records() {
+        let history = temp_history("cleanup_logs");
+
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let old_time = now - 30 * 24 * 60 * 60; // 30 days ago
+
+        let old_record = record_with("wf", ExecutionStatus::Success, old_time, Some(10), None);
+        let new_record = record_with("wf", ExecutionStatus::Success, now, Some(20), None);
+
+        history.save(&old_record).unwrap();
+        history.save(&new_record).unwrap();
+
+        // Retain records from the last 7 days
+        history.cleanup_old_logs(7).unwrap();
+
+        let remaining = history.get_history("wf").unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].start_time, now);
+
+        cleanup(&history);
+    }
+
+    #[test]
+    fn execution_tracker_lifecycle_persists_record() {
+        let history = temp_history("tracker");
+        let tracker = tracker::ExecutionTracker::new(ExecutionHistory {
+            logs_dir: history.logs_dir.clone(),
+        });
+
+        tracker.start("tracked-wf".to_string());
+        tracker.increment();
+        tracker.increment();
+        tracker.complete().unwrap();
+
+        let records = history.get_history("tracked-wf").unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].status, ExecutionStatus::Success);
+        assert_eq!(records[0].events_processed, 2);
+
+        cleanup(&history);
+    }
+}

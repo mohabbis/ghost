@@ -144,3 +144,80 @@ pub fn base64_to_image(data: &str) -> anyhow::Result<DynamicImage> {
     let img = image::load_from_memory(&bytes)?;
     Ok(img)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{Rgb, RgbImage};
+
+    fn solid_image(w: u32, h: u32, r: u8, g: u8, b: u8) -> DynamicImage {
+        let img = RgbImage::from_fn(w, h, |_, _| Rgb([r, g, b]));
+        DynamicImage::ImageRgb8(img)
+    }
+
+    fn checkerboard_image(w: u32, h: u32) -> DynamicImage {
+        let img = RgbImage::from_fn(w, h, |x, y| {
+            if (x + y) % 2 == 0 {
+                Rgb([255, 255, 255])
+            } else {
+                Rgb([0, 0, 0])
+            }
+        });
+        DynamicImage::ImageRgb8(img)
+    }
+
+    #[test]
+    fn ssim_identical_images_is_near_one() {
+        let img = checkerboard_image(8, 8);
+        let score = calculate_ssim(&img, &img);
+        assert!(
+            score > 0.99,
+            "expected identical images to have SSIM near 1.0, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn ssim_different_images_is_lower() {
+        let white = solid_image(8, 8, 255, 255, 255);
+        let black = solid_image(8, 8, 0, 0, 0);
+        let same_score = calculate_ssim(&white, &white);
+        let diff_score = calculate_ssim(&white, &black);
+        assert!(diff_score < same_score);
+    }
+
+    #[test]
+    fn ssim_mismatched_dimensions_returns_zero() {
+        let img1 = solid_image(8, 8, 128, 128, 128);
+        let img2 = solid_image(4, 4, 128, 128, 128);
+        assert_eq!(calculate_ssim(&img1, &img2), 0.0);
+    }
+
+    #[test]
+    fn base64_round_trip_preserves_image_dimensions() {
+        let img = checkerboard_image(4, 6);
+        let encoded = image_to_base64(&img);
+        assert!(!encoded.is_empty());
+
+        let decoded = base64_to_image(&encoded).expect("decode should succeed");
+        assert_eq!(decoded.dimensions(), (4, 6));
+    }
+
+    #[test]
+    fn base64_to_image_rejects_garbage_input() {
+        assert!(base64_to_image("not valid base64!!!").is_err());
+        // Valid base64, but not a valid image
+        assert!(base64_to_image("aGVsbG8gd29ybGQ=").is_err());
+    }
+
+    #[test]
+    fn create_thumbnail_fits_within_max_size() {
+        let img = solid_image(200, 100, 10, 20, 30);
+        let thumb = create_thumbnail(&img, 50);
+        let (w, h) = thumb.dimensions();
+        assert!(w <= 50 && h <= 50);
+        // Aspect ratio preserved (2:1)
+        assert_eq!(w, 50);
+        assert_eq!(h, 25);
+    }
+}
