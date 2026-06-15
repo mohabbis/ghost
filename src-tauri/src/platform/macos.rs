@@ -1,4 +1,5 @@
 //! macOS backend implementation using CGEventTap, AXUIElement, and enigo.
+#![allow(non_upper_case_globals)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
@@ -176,6 +177,7 @@ pub struct MacosBackend;
 
 struct TapState {
     run_loop: Option<CFRunLoopRef>,
+    #[allow(dead_code)]
     tap_port: Option<CFMachPortRef>,
     is_running: Arc<AtomicBool>,
 }
@@ -184,6 +186,7 @@ unsafe impl Send for TapState {}
 unsafe impl Sync for TapState {}
 
 impl MacosBackend {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         MacosBackend
     }
@@ -392,7 +395,7 @@ unsafe extern "C" fn cg_event_callback(
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
+            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
                 return event;
             }
             InputEvent::MouseClick {
@@ -410,7 +413,7 @@ unsafe extern "C" fn cg_event_callback(
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
+            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
                 return event;
             }
             InputEvent::MouseClick {
@@ -428,7 +431,7 @@ unsafe extern "C" fn cg_event_callback(
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().map_or(false, |e| is_secure_role(&e.role)) {
+            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
                 return event;
             }
             InputEvent::MouseClick {

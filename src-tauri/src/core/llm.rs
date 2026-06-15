@@ -331,6 +331,12 @@ impl LLMProvider for ClaudeProvider {
 /// Local fallback provider (heuristic-based)
 pub struct LocalFallback;
 
+impl Default for LocalFallback {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LocalFallback {
     pub fn new() -> Self {
         Self
