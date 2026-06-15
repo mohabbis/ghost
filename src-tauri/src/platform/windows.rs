@@ -1,4 +1,5 @@
 //! Windows backend implementation using Win32 hooks, UIA, and enigo.
+#![allow(non_snake_case, clippy::upper_case_acronyms)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
@@ -105,6 +106,7 @@ struct KBDLLHOOKSTRUCT {
 pub struct WindowsBackend;
 
 impl WindowsBackend {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         WindowsBackend
     }
@@ -121,10 +123,12 @@ impl WindowsBackend {
         Box::new(WindowsReplayer)
     }
 
+    #[allow(dead_code)]
     pub fn check_accessibility() -> bool {
         true
     }
 
+    #[allow(dead_code)]
     pub fn request_accessibility() -> bool {
         Self::check_accessibility()
     }
@@ -314,10 +318,10 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
 
 // ── Hook callbacks ────────────────────────────────────────────────────────────
 
-#[allow(non_snake_case)]
 unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
-        if let Some(tx_arc) = (*(&raw const GLOBAL_TX)).as_ref() {
+        let global_tx = &raw const GLOBAL_TX;
+        if let Some(tx_arc) = (*global_tx).as_ref() {
             if let Ok(tx) = tx_arc.lock() {
                 let ms = &*(lParam as *const MSLLHOOKSTRUCT);
 
@@ -395,10 +399,10 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPA
     CallNextHookEx(0, code, wParam, lParam)
 }
 
-#[allow(non_snake_case)]
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
-        if let Some(tx_arc) = (*(&raw const GLOBAL_TX)).as_ref() {
+        let global_tx = &raw const GLOBAL_TX;
+        if let Some(tx_arc) = (*global_tx).as_ref() {
             if let Ok(tx) = tx_arc.lock() {
                 let kb = &*(lParam as *const KBDLLHOOKSTRUCT);
 
@@ -769,28 +773,26 @@ impl ReplayEngine for WindowsReplayer {
                     condition,
                     timeout_ms,
                     poll_interval_ms,
-                } => {
-                    if reliability.validate_elements {
-                        let locator = crate::platform::windows::WindowsBackend::locator();
-                        let result = crate::core::wait::wait_for_condition(
-                            condition,
-                            locator.as_ref(),
-                            *timeout_ms,
-                            *poll_interval_ms,
-                        );
-                        match result {
-                            crate::core::wait::WaitResult::Error(e) => {
-                                if reliability.continue_on_error {
-                                    tracing::warn!("Wait failed (continuing): {}", e);
-                                } else {
-                                    return Err(anyhow::anyhow!("Wait condition failed: {}", e));
-                                }
+                } if reliability.validate_elements => {
+                    let locator = crate::platform::windows::WindowsBackend::locator();
+                    let result = crate::core::wait::wait_for_condition(
+                        condition,
+                        locator.as_ref(),
+                        *timeout_ms,
+                        *poll_interval_ms,
+                    );
+                    match result {
+                        crate::core::wait::WaitResult::Error(e) => {
+                            if reliability.continue_on_error {
+                                tracing::warn!("Wait failed (continuing): {}", e);
+                            } else {
+                                return Err(anyhow::anyhow!("Wait condition failed: {}", e));
                             }
-                            crate::core::wait::WaitResult::Timeout => {
-                                tracing::warn!("Wait condition timed out");
-                            }
-                            crate::core::wait::WaitResult::Success => {}
                         }
+                        crate::core::wait::WaitResult::Timeout => {
+                            tracing::warn!("Wait condition timed out");
+                        }
+                        crate::core::wait::WaitResult::Success => {}
                     }
                 }
                 _ => {}
