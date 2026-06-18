@@ -106,7 +106,7 @@ function ghostPick(message, options) {
       <h3 style="margin-top:0">${escapeHtml(message)}</h3>
       <div style="display:flex;flex-direction:column;gap:6px;margin:8px 0 16px;max-height:50vh;overflow-y:auto;">
         ${options.length === 0 ? '<p style="color:var(--muted)">Nothing here yet.</p>' : ""}
-        ${options.map((o) => `<button class="btn btn--ghost" data-dialog-option="${escapeHtml(o)}" style="justify-content:flex-start;text-align:left;">${escapeHtml(o)}</button>`).join("")}
+        ${options.map((o) => `<button class="btn btn--ghost" data-dialog-option="${escapeAttr(o)}" style="justify-content:flex-start;text-align:left;">${escapeHtml(o)}</button>`).join("")}
       </div>
       <div style="display:flex;justify-content:flex-end;">
         <button class="btn btn--ghost btn--small" data-dialog-cancel>Cancel</button>
@@ -772,7 +772,7 @@ function displayAnalysisResults(analysis) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>Workflow Analysis: ${analysis.workflow_name}</h3>
+    <h3>Workflow Analysis: ${escapeHtml(analysis.workflow_name)}</h3>
     <p><strong>Total Events:</strong> ${analysis.total_events}</p>
     <p><strong>Estimated Duration:</strong> ${analysis.estimated_duration_ms}ms</p>
     <p><strong>Reliability Score:</strong> ${(analysis.reliability_score * 100).toFixed(1)}%</p>
@@ -781,14 +781,14 @@ function displayAnalysisResults(analysis) {
     ${analysis.patterns.length > 0 ? `
     <h4>Detected Patterns</h4>
     <ul>
-      ${analysis.patterns.map((p) => `<li>${p.description} (confidence: ${(p.confidence * 100).toFixed(1)}%)</li>`).join("")}
+      ${analysis.patterns.map((p) => `<li>${escapeHtml(p.description)} (confidence: ${(p.confidence * 100).toFixed(1)}%)</li>`).join("")}
     </ul>
     ` : ""}
 
     ${analysis.suggested_optimizations.length > 0 ? `
     <h4>Suggested Optimizations</h4>
     <ul>
-      ${analysis.suggested_optimizations.map((o) => `<li>${o.description}</li>`).join("")}
+      ${analysis.suggested_optimizations.map((o) => `<li>${escapeHtml(o.description)}</li>`).join("")}
     </ul>
     ` : ""}
 
@@ -810,7 +810,13 @@ function closeModal(modalId = "analysis-modal") {
 let settingsConfig = null;
 
 function escapeAttr(value) {
-  return String(value ?? "").replace(/"/g, "&quot;");
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/[\r\n]/g, "");
 }
 
 async function openSettings() {
@@ -1139,7 +1145,7 @@ async function observeCurrentSession() {
   try {
     const appName = (await ghostPrompt("Which app were you using?", "Unknown App")) || "Unknown";
     const patternsFound = await invoke("observe_events", { events: recordedEvents, appName: appName });
-    showNotification(`Found ${patternsFound} learned patterns from <strong>${appName}</strong>!`);
+    showNotification(`Found ${patternsFound} learned patterns from <strong>${escapeHtml(appName)}</strong>!`);
 
     const suggestions = await invoke("get_proactive_suggestions");
     if (suggestions.length > 0) displaySuggestions(suggestions);
@@ -1177,10 +1183,10 @@ function displaySuggestions(suggestions) {
     <h3>🤖 Proactive Automation Suggestions</h3>
     ${suggestions.map((s, i) => `
       <div style="margin: 12px 0; padding: 12px; background: rgba(139, 123, 255, 0.1); border-radius: 8px; border-left: 3px solid #8d7bff;">
-        <p><strong>${i + 1}. ${s.suggestion}</strong></p>
-        <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${s.suggested_workflow_name}</code></p>
+        <p><strong>${i + 1}. ${escapeHtml(s.suggestion)}</strong></p>
+        <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${escapeHtml(s.suggested_workflow_name)}</code></p>
         <p style="font-size: 0.85rem;">Confidence: ${(s.confidence * 100).toFixed(1)}%</p>
-        <button data-create-workflow-from-suggestion="${s.suggested_workflow_name}|${s.pattern_id}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
+        <button data-create-workflow-from-suggestion="${escapeAttr(s.suggested_workflow_name)}|${escapeAttr(s.pattern_id)}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
       </div>
     `).join("")}
     <button data-close-modal="analysis-modal">Close</button>
@@ -1209,13 +1215,13 @@ function displayGeekInsights(insights, appName) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>🔧 Geek Mode: Technical Insights for ${appName}</h3>
+    <h3>🔧 Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
     <div style="margin: 12px 0;">
       <h4 style="color: #8d7bff;">Performance Metrics</h4>
       <p>Total Duration: ${insights.performance_metrics.total_duration_ms}ms</p>
       <p>Avg Delay: ${insights.performance_metrics.avg_delay_ms.toFixed(2)}ms</p>
       ${insights.performance_metrics.bottleneck_events.length > 0 ? `
-        <p>Bottleneck Events: ${insights.performance_metrics.bottleneck_events.join(", ")}</p>
+        <p>Bottleneck Events: ${escapeHtml(insights.performance_metrics.bottleneck_events.join(", "))}</p>
       ` : ""}
     </div>
     <div style="margin: 12px 0;">
@@ -1227,7 +1233,7 @@ function displayGeekInsights(insights, appName) {
         ${insights.event_timing_analysis.slice(0, 10).map((t) => `
           <tr style="border-bottom: 1px solid #374151;">
             <td>${t.event_index}</td>
-            <td>${t.estimated_action}</td>
+            <td>${escapeHtml(t.estimated_action)}</td>
             <td>${t.delay_before_ms}ms</td>
           </tr>
         `).join("")}

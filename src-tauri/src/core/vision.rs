@@ -51,6 +51,16 @@ pub fn calculate_ssim(img1: &DynamicImage, img2: &DynamicImage) -> f32 {
     }
 }
 
+/// Build a unique temp-file path for a screenshot capture.
+///
+/// A unique name per call is required so concurrent visual checks (or multiple
+/// app instances) don't clobber each other's screenshot or hit a delete-race.
+/// Defined unconditionally (not behind `cfg`) so it's unit-testable on any host.
+#[allow(dead_code)] // only invoked at runtime on Windows; exercised by tests elsewhere
+fn screenshot_temp_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("ghost_screenshot_{}.png", uuid::Uuid::new_v4()))
+}
+
 /// Capture a screenshot of the entire screen
 /// Returns the image as RGB bytes
 pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
@@ -72,7 +82,7 @@ pub fn capture_screenshot() -> anyhow::Result<Vec<u8>> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
-        let temp_path = std::env::temp_dir().join("ghost_screenshot.png");
+        let temp_path = screenshot_temp_path();
         let temp_str = temp_path.to_string_lossy().replace('\\', "\\\\");
         let script = format!(
             "Add-Type -AssemblyName System.Windows.Forms; \
@@ -208,6 +218,15 @@ mod tests {
         assert!(base64_to_image("not valid base64!!!").is_err());
         // Valid base64, but not a valid image
         assert!(base64_to_image("aGVsbG8gd29ybGQ=").is_err());
+    }
+
+    #[test]
+    fn screenshot_temp_paths_are_unique() {
+        let a = screenshot_temp_path();
+        let b = screenshot_temp_path();
+        assert_ne!(a, b, "each capture must use a distinct temp file");
+        assert!(a.to_string_lossy().ends_with(".png"));
+        assert!(a.starts_with(std::env::temp_dir()));
     }
 
     #[test]

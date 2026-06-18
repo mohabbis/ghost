@@ -152,6 +152,13 @@ impl GhostEngine {
 
     /// Start recording input events. Events will be sent through the provided channel.
     pub fn start_recording(&self, tx: mpsc::Sender<InputEvent>) -> anyhow::Result<()> {
+        // Refuse to start a second session while one is active. Overwriting the
+        // channel here would orphan the running recorder thread and leak the
+        // OS-level event tap / hook (the CGEventTap lifecycle is stateful).
+        if self.tx.lock().unwrap().is_some() {
+            anyhow::bail!("Recording already active; stop the current session first");
+        }
+
         // Clear previous recorded events
         *self.recorded_events.lock().unwrap() = Vec::new();
 
@@ -163,7 +170,16 @@ impl GhostEngine {
         // Mark the session start so stop_recording can report its duration.
         *self.recording_start.lock().unwrap() = Some(Instant::now());
 
-        self.recorder.start(tx)
+        // If the OS-level recorder fails to start, roll the session state back so
+        // the user can retry (otherwise the guard above would wrongly report an
+        // "already active" session forever).
+        if let Err(e) = self.recorder.start(tx) {
+            *self.tx.lock().unwrap() = None;
+            *self.rx.lock().unwrap() = None;
+            *self.recording_start.lock().unwrap() = None;
+            return Err(e);
+        }
+        Ok(())
     }
 
     /// Stop the active recording session.
@@ -331,7 +347,8 @@ impl GhostEngine {
         let file_path = workflows_dir.join(format!("{}.json", name));
         let json = serde_json::to_string_pretty(events)?;
         // Encrypted at rest when a local password is configured (auth.rs).
-        fs::write(&file_path, self.auth.protect(&json)?)?;
+        // Atomic write so a crash mid-save can't truncate the encrypted file.
+        crate::core::security::atomic_write(&file_path, self.auth.protect(&json)?.as_bytes())?;
 
         Ok(file_path)
     }
@@ -479,7 +496,7 @@ impl GhostEngine {
 
         let file_path = workflows_dir.join(format!("{}.json", workflow.name));
         let json = serde_json::to_string_pretty(workflow)?;
-        fs::write(&file_path, self.auth.protect(&json)?)?;
+        crate::core::security::atomic_write(&file_path, self.auth.protect(&json)?.as_bytes())?;
 
         Ok(file_path)
     }
@@ -994,7 +1011,10 @@ impl GhostEngine {
                 .as_secs()
         });
 
-        std::fs::write(&file_path, serde_json::to_string_pretty(&metadata)?)?;
+        crate::core::security::atomic_write(
+            &file_path,
+            serde_json::to_string_pretty(&metadata)?.as_bytes(),
+        )?;
         Ok(file_path.to_string_lossy().to_string())
     }
 
@@ -1201,5 +1221,22 @@ mod tests {
         // Export should round-trip the collected data as JSON.
         let json = engine.export_telemetry().expect("export should succeed");
         assert!(json.contains("analyze_workflow"));
+    }
+
+    #[test]
+    fn start_recording_rejects_reentrant_session() {
+        let engine = GhostEngine::new();
+
+        // Simulate an already-active recording by populating the sender slot.
+        let (active_tx, _active_rx) = mpsc::channel();
+        *engine.tx.lock().unwrap() = Some(active_tx);
+
+        let (tx, _rx) = mpsc::channel();
+        let result = engine.start_recording(tx);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Recording already active"));
     }
 }

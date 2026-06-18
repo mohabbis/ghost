@@ -98,6 +98,9 @@ impl ExecutionRecord {
     }
 }
 
+/// Number of days of execution logs to retain before automatic cleanup.
+const RETENTION_DAYS: u64 = 30;
+
 /// Execution history manager
 pub struct ExecutionHistory {
     logs_dir: PathBuf,
@@ -112,7 +115,11 @@ impl ExecutionHistory {
         let logs_dir = data_dir.join("ghost").join("logs");
         fs::create_dir_all(&logs_dir)?;
 
-        Ok(Self { logs_dir })
+        let history = Self { logs_dir };
+        // Best-effort retention so logs don't grow without bound. Ignore errors;
+        // cleanup is housekeeping, not critical to constructing the history.
+        let _ = history.cleanup_old_logs(RETENTION_DAYS);
+        Ok(history)
     }
 
     /// Save an execution record

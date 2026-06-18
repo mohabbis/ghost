@@ -69,8 +69,14 @@ impl VariableContext {
                 Ok(ts.to_string())
             }
             VarType::FromCSV { path, column, row } => {
-                let contents = std::fs::read_to_string(path)
+                // Confine CSV reads to the ghost data directory. Without this,
+                // a workflow could point `path` at /etc/passwd, ~/.ssh/id_rsa,
+                // etc. and exfiltrate it into a replayed keystroke.
+                let safe_path = sanitized_csv_path(path)?;
+                let contents = std::fs::read_to_string(&safe_path)
                     .map_err(|e| anyhow::anyhow!("Cannot read CSV '{}': {}", path, e))?;
+                // Enforce a size cap and basic structural validation.
+                crate::core::security::validate_csv_contents(&contents)?;
                 let mut lines = contents.lines();
                 // First line is the header
                 let headers: Vec<&str> = lines
@@ -93,6 +99,15 @@ impl VariableContext {
                 Ok(value)
             }
             VarType::FromEnv { key } => {
+                // Only allow explicitly opted-in env vars. Without this guard a
+                // workflow could read OPENAI_API_KEY / AWS_SECRET_ACCESS_KEY /
+                // etc. and type the secret during replay.
+                if !is_allowed_env_key(key) {
+                    anyhow::bail!(
+                        "ENV var '{}' is not allowed; only GHOST_-prefixed, non-secret vars can be used",
+                        key
+                    );
+                }
                 std::env::var(key).map_err(|e| anyhow::anyhow!("ENV var {} not found: {}", key, e))
             }
         }
@@ -107,6 +122,32 @@ impl VariableContext {
     pub fn set(&mut self, name: String, value: String) {
         self.variables.insert(name, value);
     }
+}
+
+/// Validate and confine a CSV path to the ghost data directory.
+///
+/// Requires a `.csv` extension (and no `..` segments) via
+/// [`crate::core::security::validate_csv_path`], then confines the resolved path
+/// under `<data_dir>/ghost` via [`crate::core::security::sanitize_file_path`].
+fn sanitized_csv_path(path: &str) -> anyhow::Result<std::path::PathBuf> {
+    crate::core::security::validate_csv_path(path)?;
+    let base = dirs::data_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?
+        .join("ghost");
+    crate::core::security::sanitize_file_path(path, &base)
+}
+
+/// Whether an environment variable may be resolved by a workflow.
+///
+/// Only `GHOST_`-prefixed variables are allowed, and any name that looks like it
+/// holds a secret is rejected outright as defense-in-depth.
+fn is_allowed_env_key(key: &str) -> bool {
+    if !key.starts_with("GHOST_") {
+        return false;
+    }
+    let upper = key.to_uppercase();
+    const SECRET_MARKERS: [&str; 5] = ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"];
+    !SECRET_MARKERS.iter().any(|m| upper.contains(m))
 }
 
 /// Check if a wait condition is satisfied
@@ -366,14 +407,60 @@ mod tests {
     }
 
     #[test]
+    fn resolve_from_env_rejects_non_ghost_prefix() {
+        // Even if the var exists, a non-GHOST_ key must be refused.
+        std::env::set_var("PATH_LIKE_LEAK", "anything");
+        let mut ctx = VariableContext::new();
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromEnv {
+                key: "PATH_LIKE_LEAK".to_string(),
+            },
+        );
+        assert!(result.is_err());
+        std::env::remove_var("PATH_LIKE_LEAK");
+    }
+
+    #[test]
+    fn resolve_from_env_rejects_secret_looking_keys() {
+        std::env::set_var("GHOST_OPENAI_API_KEY", "sk-secret");
+        let mut ctx = VariableContext::new();
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromEnv {
+                key: "GHOST_OPENAI_API_KEY".to_string(),
+            },
+        );
+        assert!(result.is_err());
+        std::env::remove_var("GHOST_OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn is_allowed_env_key_logic() {
+        assert!(is_allowed_env_key("GHOST_USERNAME"));
+        assert!(is_allowed_env_key("GHOST_REGION"));
+        assert!(!is_allowed_env_key("OPENAI_API_KEY"));
+        assert!(!is_allowed_env_key("HOME"));
+        assert!(!is_allowed_env_key("GHOST_API_KEY"));
+        assert!(!is_allowed_env_key("GHOST_AUTH_TOKEN"));
+        assert!(!is_allowed_env_key("GHOST_DB_PASSWORD"));
+    }
+
+    /// Write a CSV under the confined ghost data dir and return its path.
+    fn write_confined_csv(file_name: &str, contents: &str) -> std::path::PathBuf {
+        let base = dirs::data_dir().unwrap().join("ghost");
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join(file_name);
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
     fn resolve_from_csv_reads_column_by_header() {
-        let mut path = std::env::temp_dir();
-        path.push(format!("ghost_wait_test_{}.csv", std::process::id()));
-        std::fs::write(
-            &path,
+        let path = write_confined_csv(
+            &format!("ghost_wait_test_{}.csv", std::process::id()),
             "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
-        )
-        .unwrap();
+        );
 
         let mut ctx = VariableContext::new();
         let value = ctx
@@ -393,16 +480,10 @@ mod tests {
 
     #[test]
     fn resolve_from_csv_defaults_row_to_zero() {
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "ghost_wait_test_default_row_{}.csv",
-            std::process::id()
-        ));
-        std::fs::write(
-            &path,
+        let path = write_confined_csv(
+            &format!("ghost_wait_test_default_row_{}.csv", std::process::id()),
             "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
-        )
-        .unwrap();
+        );
 
         let mut ctx = VariableContext::new();
         let value = ctx
@@ -418,6 +499,35 @@ mod tests {
         assert_eq!(value, "Alice");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn resolve_from_csv_rejects_path_outside_base() {
+        let mut ctx = VariableContext::new();
+        // Absolute path with a .csv extension but outside the ghost data dir.
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromCSV {
+                path: "/etc/passwd.csv".to_string(),
+                column: "x".to_string(),
+                row: None,
+            },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_from_csv_rejects_non_csv_extension() {
+        let mut ctx = VariableContext::new();
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromCSV {
+                path: "data.txt".to_string(),
+                column: "x".to_string(),
+                row: None,
+            },
+        );
+        assert!(result.is_err());
     }
 
     // --- resolve_selector ---

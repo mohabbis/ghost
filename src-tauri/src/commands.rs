@@ -407,7 +407,6 @@ pub fn save_workflow_with_sidecar(
     tags: Vec<String>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
-    use std::fs;
     use std::time::SystemTime;
 
     security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
@@ -456,9 +455,11 @@ pub fn save_workflow_with_sidecar(
             .collect::<Vec<_>>()
     });
 
-    fs::write(
+    security::atomic_write(
         &meta_path,
-        serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?,
+        serde_json::to_string_pretty(&meta)
+            .map_err(|e| e.to_string())?
+            .as_bytes(),
     )
     .map_err(|e| e.to_string())?;
 

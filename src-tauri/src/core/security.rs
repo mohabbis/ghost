@@ -120,6 +120,21 @@ pub fn sanitize_file_path(path: &str, base_dir: &Path) -> anyhow::Result<PathBuf
     Ok(candidate)
 }
 
+/// Atomically write `contents` to `path` via a temp file + rename.
+///
+/// A direct `fs::write` overwrite can be truncated if the process dies
+/// mid-write, corrupting the (often encrypted, unrecoverable) target. Writing to
+/// a sibling `.tmp` and renaming makes the replacement atomic within the
+/// filesystem, so a reader always sees either the old or the new file intact.
+pub fn atomic_write(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    let tmp_path = match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => path.with_extension(format!("{ext}.tmp")),
+        None => path.with_extension("tmp"),
+    };
+    std::fs::write(&tmp_path, contents)?;
+    std::fs::rename(&tmp_path, path)
+}
+
 /// Validate and sanitize screenshot data
 pub fn validate_screenshot(data: &[u8]) -> anyhow::Result<()> {
     if data.is_empty() {
@@ -395,6 +410,36 @@ mod tests {
     fn sanitize_file_path_rejects_null_byte() {
         let base = std::env::temp_dir();
         assert!(sanitize_file_path("foo\0bar", &base).is_err());
+    }
+
+    // -- atomic_write --
+
+    #[test]
+    fn atomic_write_replaces_existing_file_and_cleans_tmp() {
+        let dir = std::env::temp_dir().join(format!("ghost_atomic_write_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("data.json");
+
+        std::fs::write(&path, b"old contents").unwrap();
+        atomic_write(&path, b"new contents").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new contents");
+        // The temporary sibling must not linger after a successful write.
+        assert!(!dir.join("data.json.tmp").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_write_creates_new_file() {
+        let dir = std::env::temp_dir().join(format!("ghost_atomic_new_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("fresh.txt");
+
+        atomic_write(&path, b"hello").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // -- validate_screenshot --
