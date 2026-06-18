@@ -15,6 +15,12 @@ let recordedEvents = [];
 let isPlaying = false;
 let isPaused = false;
 let playbackSpeed = 1.0;
+let guardAuditCompleted = false;
+let hasReplayedCurrentWorkflow = false;
+let hasSavedCurrentWorkflow = false;
+const MAX_TIMELINE_ITEMS = 220;
+const pendingTimelineEvents = [];
+let timelineFlushScheduled = false;
 
 // Listen for ghost events from the backend
 if (listen) {
@@ -23,7 +29,7 @@ if (listen) {
     if (isRecording) {
       recordedEvents.push(event.payload);
       updateRecordingUI();
-      addEventToTimeline(event.payload);
+      queueTimelineEvent(event.payload);
     }
   });
 }
@@ -142,6 +148,7 @@ async function refreshPermissionBanner() {
   try {
     const { accessibility, inputMonitoring } = await checkPermissions();
     banner.hidden = accessibility && inputMonitoring;
+    updateMissionProgress({ permissionsGranted: accessibility && inputMonitoring });
 
     const text = document.getElementById("perm-text");
     if (text && !banner.hidden) {
@@ -408,6 +415,9 @@ async function startRecording() {
     await invoke("start_recording");
     isRecording = true;
     recordedEvents = [];
+    guardAuditCompleted = false;
+    hasReplayedCurrentWorkflow = false;
+    hasSavedCurrentWorkflow = false;
     const timelineEl = document.getElementById("events-timeline");
     if (timelineEl) timelineEl.innerHTML = "";
     updateRecordingUI();
@@ -427,6 +437,7 @@ async function stopRecording() {
     isRecording = false;
     updateRecordingUI();
     showInsight(`Captured ${recordedEvents.length} event(s). Review the timeline, then replay or save.`);
+    updateWorkflowHealth();
     runGhostGuardAudit({ quiet: true });
   } catch (error) {
     console.error("Failed to stop recording:", error);
@@ -486,6 +497,7 @@ async function replayWorkflow() {
     isPlaying = true;
     updateRecordingUI();
     await invoke("replay_workflow", { events: recordedEvents });
+    hasReplayedCurrentWorkflow = true;
     isPlaying = false;
     updateRecordingUI();
   } catch (error) {
@@ -516,6 +528,7 @@ async function replayWithReliability() {
       backoffMs: replay.retry_backoff_ms ?? 500,
       backoffMultiplier: replay.retry_backoff_multiplier ?? 2.0,
     });
+    hasReplayedCurrentWorkflow = true;
     isPlaying = false;
     updateRecordingUI();
   } catch (error) {
@@ -617,6 +630,9 @@ function renderGuardReport(report) {
     .join("<br>");
   summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}`;
 
+  guardAuditCompleted = true;
+  updateMissionProgress();
+
   if (report.requires_confirmation) {
     showNotification("Ghost Guard found high-risk steps. Use step-by-step review before replay.", "error");
   } else {
@@ -654,6 +670,8 @@ async function saveWorkflow() {
 
   try {
     await invoke("save_workflow", { name, events: recordedEvents });
+    hasSavedCurrentWorkflow = true;
+    updateMissionProgress();
     showNotification(`Workflow "${name}" saved.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
@@ -670,6 +688,9 @@ async function loadWorkflow() {
     if (!name) return;
 
     recordedEvents = await invoke("load_workflow", { name });
+    guardAuditCompleted = false;
+    hasReplayedCurrentWorkflow = false;
+    hasSavedCurrentWorkflow = false;
     updateRecordingUI();
     refreshTimeline();
     showNotification(`Loaded "${name}" — ${recordedEvents.length} events.`);
@@ -709,6 +730,7 @@ async function optimizeWorkflow() {
     const optimized = await invoke("optimize_workflow", { events: recordedEvents });
     const originalCount = recordedEvents.length;
     recordedEvents = optimized;
+    guardAuditCompleted = false;
     updateRecordingUI();
     refreshTimeline();
     showNotification(`Optimized: ${originalCount} events → ${optimized.length} events.`);
@@ -723,6 +745,8 @@ function refreshTimeline() {
   if (timelineEl) {
     timelineEl.innerHTML = "";
     recordedEvents.forEach((event) => addEventToTimeline(event));
+    trimTimeline();
+    updateWorkflowHealth();
   }
 }
 
@@ -754,6 +778,9 @@ async function generateWorkflowFromDescription() {
     showInsight("Generating workflow from your description…");
     const events = await invoke("generate_workflow_from_prompt", { prompt });
     recordedEvents = events;
+    guardAuditCompleted = false;
+    hasReplayedCurrentWorkflow = false;
+    hasSavedCurrentWorkflow = false;
     updateRecordingUI();
     refreshTimeline();
     showNotification(`Generated ${events.length} events from your description.${providerNote}`);
@@ -801,6 +828,8 @@ async function saveWorkflowWithMetadata() {
       description,
       tags,
     });
+    hasSavedCurrentWorkflow = true;
+    updateMissionProgress();
     showNotification(`Workflow "${name}" saved with metadata.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
@@ -1052,6 +1081,32 @@ function describeEvent(event) {
   }
 }
 
+function scheduleTimelineFlush() {
+  if (timelineFlushScheduled) return;
+  timelineFlushScheduled = true;
+  requestAnimationFrame(() => {
+    timelineFlushScheduled = false;
+    const batch = pendingTimelineEvents.splice(0, 80);
+    for (const item of batch) addEventToTimeline(item);
+    trimTimeline();
+    updateWorkflowHealth();
+    if (pendingTimelineEvents.length > 0) scheduleTimelineFlush();
+  });
+}
+
+function queueTimelineEvent(event) {
+  pendingTimelineEvents.push(event);
+  scheduleTimelineFlush();
+}
+
+function trimTimeline() {
+  const timelineEl = document.getElementById("events-timeline");
+  if (!timelineEl) return;
+  while (timelineEl.children.length > MAX_TIMELINE_ITEMS) {
+    timelineEl.removeChild(timelineEl.firstElementChild);
+  }
+}
+
 function addEventToTimeline(event) {
   const timelineEl = document.getElementById("events-timeline");
   if (!timelineEl) return;
@@ -1124,6 +1179,41 @@ function updateRecordingUI() {
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
+  updateWorkflowHealth();
+  updateMissionProgress();
+}
+
+function updateWorkflowHealth() {
+  const steps = recordedEvents.map(describeEvent).filter(Boolean);
+  const healthSteps = document.getElementById("healthSteps");
+  const healthDuration = document.getElementById("healthDuration");
+  const healthSignals = document.getElementById("healthSignals");
+  if (healthSteps) healthSteps.textContent = String(steps.length);
+
+  const durationMs = recordedEvents.reduce((sum, ev) => {
+    const { type, data } = normalizeEvent(ev);
+    return type === "Delay" ? sum + Number(data.ms || 0) : sum;
+  }, 0);
+  if (healthDuration) healthDuration.textContent = durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)}s` : `${durationMs}ms`;
+
+  const richEvents = recordedEvents.filter((ev) => normalizeEvent(ev).data?.element?.name || normalizeEvent(ev).data?.element?.role).length;
+  if (healthSignals) {
+    if (recordedEvents.length === 0) healthSignals.textContent = "Empty";
+    else if (richEvents >= Math.max(1, recordedEvents.length * 0.25)) healthSignals.textContent = "Strong";
+    else healthSignals.textContent = "Basic";
+  }
+}
+
+function updateMissionProgress({ permissionsGranted } = {}) {
+  const mark = (step, done) => {
+    const el = document.querySelector(`[data-mission-step="${step}"]`);
+    if (el) el.classList.toggle("is-complete", !!done);
+  };
+  const permissionDone = typeof permissionsGranted === "boolean" ? permissionsGranted : document.getElementById("perm-banner")?.hidden;
+  mark("permissions", permissionDone);
+  mark("record", recordedEvents.length > 0);
+  mark("audit", guardAuditCompleted);
+  mark("replay", hasReplayedCurrentWorkflow || hasSavedCurrentWorkflow);
 }
 
 // ===== Smart Observer mode =====
@@ -1334,6 +1424,24 @@ async function captureBaseline() {
 
 // ===== Data sources =====
 
+function loadDemoWorkflow() {
+  const now = Date.now();
+  recordedEvents = [
+    { MouseClick: { x: 420, y: 280, button: 0, timestamp: now, element: { app: "Demo CRM", role: "AXButton", role_description: "button", name: "Export CSV" } } },
+    { Delay: { ms: 450 } },
+    { Key: { code: 36, chars: "weekly_report", action: "Down", modifiers: 0, timestamp: now + 450 } },
+    { Delay: { ms: 300 } },
+    { MouseClick: { x: 640, y: 520, button: 0, timestamp: now + 750, element: { app: "Demo Mail", role: "AXButton", role_description: "button", name: "Send" } } },
+  ];
+  guardAuditCompleted = false;
+  hasReplayedCurrentWorkflow = false;
+  hasSavedCurrentWorkflow = false;
+  refreshTimeline();
+  updateRecordingUI();
+  showInsight("Demo loaded. This is the shape of a useful Ghost workflow: clear steps, timing, and UI context.");
+  showNotification("Demo workflow loaded — audit it, then try recording your own.");
+}
+
 async function createDataSource() {
   if (!invoke) return;
 
@@ -1386,6 +1494,7 @@ function wireUpControls() {
   bind("resumeBtn", resumeReplay);
   bind("inspectElementBtn", inspectElementAtCursor);
   bind("guardAuditBtn", () => runGhostGuardAudit());
+  bind("demoWorkflowBtn", loadDemoWorkflow);
 
   bind("saveBtn", saveWorkflow);
   bind("saveAiBtn", saveWorkflowWithMetadata);

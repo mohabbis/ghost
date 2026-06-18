@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ghost",
+  "productName": "Ghost",
   "version": "1.0.12",
   "identifier": "com.muhammadrafiq.ghost",
   "build": {
@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ghost",
-        "width": 800,
-        "height": 600
+        "title": "Ghost",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 680
       }
     ],
     "security": {
