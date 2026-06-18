@@ -123,7 +123,12 @@ impl AuthManager {
         if let Some(parent) = self.auth_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&self.auth_path, serde_json::to_string_pretty(&record)?)?;
+        // Atomic write: a truncated auth.json would brick the password + DEK and
+        // make every encrypted workflow permanently unrecoverable.
+        crate::core::security::atomic_write(
+            &self.auth_path,
+            serde_json::to_string_pretty(&record)?.as_bytes(),
+        )?;
 
         *self.dek.lock().unwrap() = Some(dek);
         Ok(())
