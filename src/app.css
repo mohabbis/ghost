@@ -437,3 +437,150 @@
 .auth-error {
   color: #ef4444;
 }
+
+/* ===== YC-demo polish pass ===== */
+.app-body {
+  background:
+    radial-gradient(circle at top left, rgba(141, 123, 255, 0.18), transparent 34rem),
+    radial-gradient(circle at 85% 0%, rgba(131, 246, 196, 0.08), transparent 28rem),
+    var(--bg);
+}
+
+.app-shell {
+  max-width: 1180px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-top: 18px;
+  background: linear-gradient(180deg, rgba(7, 8, 19, 0.94), rgba(7, 8, 19, 0.72));
+  backdrop-filter: blur(18px);
+}
+
+.app-header__glyph {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #070813;
+  font-size: 1.25rem;
+  font-weight: 950;
+  box-shadow: 0 18px 38px rgba(141, 123, 255, 0.28);
+}
+
+.app-header__brand h1 {
+  letter-spacing: -0.04em;
+}
+
+.panel,
+.app-sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.045));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(18px);
+}
+
+.panel {
+  border-radius: 22px;
+  padding: 22px;
+}
+
+.panel h2,
+.sidebar__heading {
+  letter-spacing: -0.03em;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:focus-visible,
+.auth-input:focus-visible,
+.speed-picker select:focus-visible {
+  outline: 3px solid rgba(200, 182, 255, 0.42);
+  outline-offset: 2px;
+}
+
+.recording-status {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.status-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.status-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(7, 8, 19, 0.38);
+}
+
+.status-card__label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent-warm);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.status-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.notification {
+  padding: 10px 12px;
+  border: 1px solid rgba(131, 246, 196, 0.28);
+  border-radius: 12px;
+  background: rgba(131, 246, 196, 0.1);
+}
+
+.notification--error {
+  border-color: rgba(239, 68, 68, 0.48);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.notification__text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.events-timeline {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.timeline-item {
+  padding: 9px 0;
+  color: #d8d2ea;
+}
+
+@media (max-width: 720px) {
+  .app-header,
+  .app-header__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recording-status,
+  .app-header__actions .btn {
+    width: 100%;
+  }
+}

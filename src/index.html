@@ -14,10 +14,10 @@
     <div class="app-shell">
       <header class="app-header">
         <div class="app-header__brand">
-          <span class="app-header__glyph" aria-hidden="true">🦜</span>
+          <span class="app-header__glyph" aria-hidden="true">G</span>
           <div>
             <h1>Ghost</h1>
-            <p>Watches, learns, and replays your repetitive workflows.</p>
+            <p>Private desktop automation for repeatable work.</p>
           </div>
         </div>
         <div class="app-header__actions">
@@ -44,7 +44,7 @@
               <button class="btn btn--primary" id="recordBtn" >Start Recording</button>
               <button class="btn btn--ghost" id="stopBtn"  disabled>Stop</button>
               <button class="btn btn--ghost" id="replayBtn"  disabled>Replay</button>
-              <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Replay Reliable</button>
+              <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Reliable Replay</button>
             </div>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="cancelBtn"  disabled>Cancel</button>
@@ -67,29 +67,29 @@
             <h2 id="workflow-heading">Workflows</h2>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="saveBtn">Save</button>
-              <button class="btn btn--ghost btn--small" id="saveAiBtn">Save with AI</button>
+              <button class="btn btn--ghost btn--small" id="saveAiBtn">Save + Describe</button>
               <button class="btn btn--ghost btn--small" id="loadBtn">Load</button>
               <button class="btn btn--ghost btn--small" id="analyzeBtn">Analyze</button>
               <button class="btn btn--ghost btn--small" id="optimizeBtn">Optimize</button>
-              <button class="btn btn--ghost btn--small" id="generateAiBtn">Generate with AI ✨</button>
+              <button class="btn btn--ghost btn--small" id="generateAiBtn">Generate Draft</button>
             </div>
           </section>
 
           <section class="panel" aria-labelledby="observer-heading">
-            <h2 id="observer-heading">Smart observer</h2>
-            <p class="panel__hint">While active, Ghost learns from every recording session and proactively suggests automations.</p>
+            <h2 id="observer-heading">Pattern observer</h2>
+            <p class="panel__hint">Optional local pattern detection. Keep it off for sensitive sessions.</p>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="startObserverBtn">Start Observer</button>
               <button class="btn btn--ghost btn--small" id="stopObserverBtn">Stop Observer</button>
               <button class="btn btn--ghost btn--small" id="observeSessionBtn">Observe Session</button>
-              <button class="btn btn--ghost btn--small" id="geekModeBtn">Geek Mode 🔧</button>
+              <button class="btn btn--ghost btn--small" id="geekModeBtn">Diagnostics</button>
             </div>
           </section>
 
           <section class="panel" aria-labelledby="advanced-heading">
             <h2 id="advanced-heading">Visual checks &amp; data</h2>
             <div class="btn-row">
-              <button class="btn btn--ghost btn--small" id="visualCheckBtn">Visual Check 👁️</button>
+              <button class="btn btn--ghost btn--small" id="visualCheckBtn">Visual Check</button>
               <button class="btn btn--ghost btn--small" id="captureBaselineBtn">Capture Baseline</button>
               <button class="btn btn--ghost btn--small" id="newDataSourceBtn">New Data Source 📊</button>
               <button class="btn btn--ghost btn--small" id="loadVariablesBtn">Load Variables</button>
@@ -100,13 +100,25 @@
         <aside class="app-sidebar" aria-label="Live activity">
           <div class="insight-card">
             <span class="insight-icon" aria-hidden="true">🦜</span>
-            <span class="insight-text" id="insight-text">Watching your screen silently…</span>
+            <span class="insight-text" id="insight-text">Ready when you are. Start with a short, low-risk workflow.</span>
           </div>
+          <section class="status-stack" aria-label="Automation readiness">
+            <div class="status-card">
+              <span class="status-card__label">Privacy</span>
+              <strong>Local-first</strong>
+              <p>Workflows stay on this device unless you explicitly export them.</p>
+            </div>
+            <div class="status-card">
+              <span class="status-card__label">Reliability</span>
+              <strong>Semantic replay</strong>
+              <p>Captured UI metadata helps workflows survive moved windows and small layout changes.</p>
+            </div>
+          </section>
           <div class="notifications" id="notifications"></div>
 
           <h2 class="sidebar__heading">Event timeline</h2>
           <div class="events-timeline" id="events-timeline">
-            <p class="events-timeline__empty">Events will appear here as you record…</p>
+            <p class="events-timeline__empty">Start a recording to see cleaned, human-readable steps here.</p>
           </div>
         </aside>
       </div>
