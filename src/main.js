@@ -38,12 +38,8 @@ function showNotification(text, kind = "info") {
   if (!notificationsEl) return;
 
   const notification = document.createElement("div");
-  notification.className = "notification notification--proactive";
-  if (kind === "error") {
-    notification.style.borderColor = "#ef4444";
-    notification.style.background = "rgba(239, 68, 68, 0.12)";
-  }
-  const icon = kind === "error" ? "⚠️" : "🦜";
+  notification.className = `notification notification--${kind}`;
+  const icon = kind === "error" ? "⚠️" : "✓";
   notification.innerHTML = `<p class="notification__text">${icon} ${escapeHtml(text)}</p>`;
   notificationsEl.appendChild(notification);
 
@@ -415,7 +411,7 @@ async function startRecording() {
     const timelineEl = document.getElementById("events-timeline");
     if (timelineEl) timelineEl.innerHTML = "";
     updateRecordingUI();
-    showInsight("Recording your actions…");
+    showInsight("Recording. Keep the task focused; stop before entering sensitive information.");
   } catch (error) {
     console.error("Failed to start recording:", error);
     toastError("Could not start recording: " + error);
@@ -430,7 +426,7 @@ async function stopRecording() {
     await invoke("stop_recording");
     isRecording = false;
     updateRecordingUI();
-    showInsight(`Captured ${recordedEvents.length} events. Ready to replay or save.`);
+    showInsight(`Captured ${recordedEvents.length} event(s). Review the timeline, then replay or save.`);
   } catch (error) {
     console.error("Failed to stop recording:", error);
   }
@@ -1089,7 +1085,7 @@ async function startSmartObserver() {
 
   try {
     await invoke("start_observer");
-    showInsight("Smart Observer started — I'm learning your patterns…");
+    showInsight("Pattern observer started. Ghost will look for repeatable actions locally.");
     startObserverUIUpdate();
   } catch (error) {
     console.error("Failed to start observer:", error);
@@ -1102,7 +1098,7 @@ async function stopSmartObserver() {
 
   try {
     await invoke("stop_observer");
-    showInsight("Smart Observer stopped.");
+    showInsight("Pattern observer stopped.");
     if (observerUpdateInterval) {
       clearInterval(observerUpdateInterval);
       observerUpdateInterval = null;
@@ -1145,7 +1141,7 @@ async function observeCurrentSession() {
   try {
     const appName = (await ghostPrompt("Which app were you using?", "Unknown App")) || "Unknown";
     const patternsFound = await invoke("observe_events", { events: recordedEvents, appName: appName });
-    showNotification(`Found ${patternsFound} learned patterns from <strong>${escapeHtml(appName)}</strong>!`);
+    showNotification(`Found ${patternsFound} learned pattern(s) from ${appName}.`);
 
     const suggestions = await invoke("get_proactive_suggestions");
     if (suggestions.length > 0) displaySuggestions(suggestions);
@@ -1186,7 +1182,7 @@ function displaySuggestions(suggestions) {
         <p><strong>${i + 1}. ${escapeHtml(s.suggestion)}</strong></p>
         <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${escapeHtml(s.suggested_workflow_name)}</code></p>
         <p style="font-size: 0.85rem;">Confidence: ${(s.confidence * 100).toFixed(1)}%</p>
-        <button data-create-workflow-from-suggestion="${escapeAttr(s.suggested_workflow_name)}|${escapeAttr(s.pattern_id)}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
+        <button data-create-workflow-from-suggestion data-workflow-name="${escapeAttr(s.suggested_workflow_name)}" data-pattern-id="${escapeAttr(s.pattern_id)}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
       </div>
     `).join("")}
     <button data-close-modal="analysis-modal">Close</button>
@@ -1404,8 +1400,7 @@ function wireUpControls() {
 
     const suggestionTarget = e.target.closest("[data-create-workflow-from-suggestion]");
     if (suggestionTarget) {
-      const [name] = suggestionTarget.dataset.createWorkflowFromSuggestion.split("|");
-      createWorkflowFromSuggestion(name);
+      createWorkflowFromSuggestion(suggestionTarget.dataset.workflowName);
       return;
     }
 
