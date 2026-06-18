@@ -245,3 +245,76 @@ mod workflow_tests {
 }
 
 // Made with Bob
+
+#[test]
+fn test_ghost_guard_flags_sensitive_destructive_workflow() {
+    use ghost_lib::core::events::ElementInfo;
+    use ghost_lib::core::guard::{audit_workflow, GuardCategory, GuardSeverity};
+
+    let events = vec![InputEvent::MouseClick {
+        x: 10,
+        y: 20,
+        button: 0,
+        element: Some(ElementInfo {
+            role: "AXButton".to_string(),
+            name: "Delete password".to_string(),
+            app: "System Settings".to_string(),
+            fallback_coords: Some((10, 20)),
+            value: None,
+            description: None,
+            identifier: None,
+            role_description: Some("button".to_string()),
+        }),
+        timestamp: Some(1),
+        retry_count: None,
+        semantic_tag: None,
+        self_heal: Some(true),
+    }];
+
+    let report = audit_workflow(&events);
+    assert!(report.requires_confirmation);
+    assert_eq!(report.risk_level, "high");
+    assert!(report.score < 65);
+    assert!(report
+        .sensitive_apps
+        .contains(&"System Settings".to_string()));
+    assert!(report.findings.iter().any(|finding| {
+        finding.category == GuardCategory::SensitiveApp && finding.severity == GuardSeverity::High
+    }));
+    assert!(report.findings.iter().any(|finding| {
+        finding.category == GuardCategory::DestructiveAction
+            && finding.severity == GuardSeverity::High
+    }));
+}
+
+#[test]
+fn test_ghost_guard_clean_workflow_is_low_risk() {
+    use ghost_lib::core::events::ElementInfo;
+    use ghost_lib::core::guard::audit_workflow;
+
+    let events = vec![InputEvent::MouseClick {
+        x: 100,
+        y: 200,
+        button: 0,
+        element: Some(ElementInfo {
+            role: "AXButton".to_string(),
+            name: "Export".to_string(),
+            app: "Numbers".to_string(),
+            fallback_coords: Some((100, 200)),
+            value: None,
+            description: None,
+            identifier: Some("export-button".to_string()),
+            role_description: Some("button".to_string()),
+        }),
+        timestamp: Some(1),
+        retry_count: None,
+        semantic_tag: None,
+        self_heal: Some(true),
+    }];
+
+    let report = audit_workflow(&events);
+    assert!(!report.requires_confirmation);
+    assert_eq!(report.risk_level, "low");
+    assert_eq!(report.score, 100);
+    assert!(report.findings.is_empty());
+}
