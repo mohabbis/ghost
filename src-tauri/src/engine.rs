@@ -23,6 +23,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Instant;
 
+fn workflow_file_path(workflows_dir: &std::path::Path, name: &str) -> anyhow::Result<PathBuf> {
+    let safe_name = crate::core::security::sanitize_workflow_path(name)?;
+    Ok(workflows_dir.join(safe_name).with_extension("json"))
+}
+
 /// RAII guard marking a replay as active for its lifetime (drop-safe, so the
 /// flag clears even if the replay errors or panics).
 struct ReplayActiveGuard(Arc<AtomicBool>);
@@ -344,7 +349,7 @@ impl GhostEngine {
         let workflows_dir = data_dir.join("ghost").join("workflows");
         fs::create_dir_all(&workflows_dir)?;
 
-        let file_path = workflows_dir.join(format!("{}.json", name));
+        let file_path = workflow_file_path(&workflows_dir, name)?;
         let json = serde_json::to_string_pretty(events)?;
         // Encrypted at rest when a local password is configured (auth.rs).
         // Atomic write so a crash mid-save can't truncate the encrypted file.
@@ -360,10 +365,8 @@ impl GhostEngine {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
 
-        let file_path = data_dir
-            .join("ghost")
-            .join("workflows")
-            .join(format!("{}.json", name));
+        let workflows_dir = data_dir.join("ghost").join("workflows");
+        let file_path = workflow_file_path(&workflows_dir, name)?;
         // Transparently decrypts envelopes; pre-password plaintext loads as-is.
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
         let events: Vec<InputEvent> = serde_json::from_str(&json)?;
@@ -378,10 +381,8 @@ impl GhostEngine {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
 
-        let file_path = data_dir
-            .join("ghost")
-            .join("workflows")
-            .join(format!("{}.json", name));
+        let workflows_dir = data_dir.join("ghost").join("workflows");
+        let file_path = workflow_file_path(&workflows_dir, name)?;
 
         if file_path.exists() {
             fs::remove_file(file_path)?;
@@ -494,7 +495,7 @@ impl GhostEngine {
         let workflows_dir = data_dir.join("ghost").join("workflows");
         fs::create_dir_all(&workflows_dir)?;
 
-        let file_path = workflows_dir.join(format!("{}.json", workflow.name));
+        let file_path = workflow_file_path(&workflows_dir, &workflow.name)?;
         let json = serde_json::to_string_pretty(workflow)?;
         crate::core::security::atomic_write(&file_path, self.auth.protect(&json)?.as_bytes())?;
 
@@ -565,10 +566,8 @@ impl GhostEngine {
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
 
-        let file_path = data_dir
-            .join("ghost")
-            .join("workflows")
-            .join(format!("{}.json", name));
+        let workflows_dir = data_dir.join("ghost").join("workflows");
+        let file_path = workflow_file_path(&workflows_dir, name)?;
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
         let workflow: Workflow = serde_json::from_str(&json)?;
 
@@ -1194,6 +1193,23 @@ impl Default for GhostEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workflow_file_path_adds_extension_for_safe_names() {
+        let base = std::env::temp_dir().join("ghost_engine_workflow_path");
+        let path = workflow_file_path(&base, "Daily Report_1").unwrap();
+
+        assert_eq!(path, base.join("Daily Report_1.json"));
+    }
+
+    #[test]
+    fn workflow_file_path_rejects_traversal_names() {
+        let base = std::env::temp_dir().join("ghost_engine_workflow_path");
+
+        assert!(workflow_file_path(&base, "../secrets").is_err());
+        assert!(workflow_file_path(&base, "nested/workflow").is_err());
+        assert!(workflow_file_path(&base, "workflow.json").is_err());
+    }
 
     #[test]
     fn telemetry_off_by_default_collects_nothing() {
