@@ -427,6 +427,7 @@ async function stopRecording() {
     isRecording = false;
     updateRecordingUI();
     showInsight(`Captured ${recordedEvents.length} event(s). Review the timeline, then replay or save.`);
+    runGhostGuardAudit({ quiet: true });
   } catch (error) {
     console.error("Failed to stop recording:", error);
   }
@@ -594,6 +595,52 @@ async function inspectElementAtCursor() {
   }
 }
 
+
+// ===== Ghost Guard local audit =====
+
+function severityIcon(severity) {
+  return { low: "ℹ️", medium: "⚠️", high: "🛡️", critical: "🚨" }[severity] || "•";
+}
+
+function renderGuardReport(report) {
+  const card = document.getElementById("ghostGuardCard");
+  const scoreEl = document.getElementById("guardScore");
+  const summaryEl = document.getElementById("guardSummary");
+  if (!card || !scoreEl || !summaryEl) return;
+
+  card.dataset.risk = report.risk_level;
+  scoreEl.textContent = `${report.score}/100 · ${report.risk_level.toUpperCase()} risk`;
+
+  const topFindings = (report.findings || []).slice(0, 3);
+  const findingsHtml = topFindings
+    .map((finding) => `${severityIcon(finding.severity)} ${escapeHtml(finding.title)}`)
+    .join("<br>");
+  summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}`;
+
+  if (report.requires_confirmation) {
+    showNotification("Ghost Guard found high-risk steps. Use step-by-step review before replay.", "error");
+  } else {
+    showNotification("Ghost Guard audit complete.");
+  }
+}
+
+async function runGhostGuardAudit({ quiet = false } = {}) {
+  if (!invoke) return;
+  if (recordedEvents.length === 0) {
+    if (!quiet) toastError("No events to audit yet");
+    return;
+  }
+
+  try {
+    const report = await invoke("ghost_guard_audit", { events: recordedEvents });
+    renderGuardReport(report);
+    if (!quiet) showInsight(`Ghost Guard: ${report.score}/100 ${report.risk_level} risk. ${report.summary}`);
+  } catch (error) {
+    console.error("Ghost Guard audit failed:", error);
+    if (!quiet) toastError("Ghost Guard audit failed: " + error);
+  }
+}
+
 // ===== Workflow management =====
 
 async function saveWorkflow() {
@@ -626,6 +673,7 @@ async function loadWorkflow() {
     updateRecordingUI();
     refreshTimeline();
     showNotification(`Loaded "${name}" — ${recordedEvents.length} events.`);
+    runGhostGuardAudit({ quiet: true });
   } catch (error) {
     console.error("Failed to load workflow:", error);
     toastError("Failed to load workflow: " + error);
@@ -1071,6 +1119,8 @@ function updateRecordingUI() {
   if (stopBtn) stopBtn.disabled = !isRecording;
   if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
   if (replayReliableBtn) replayReliableBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  const guardAuditBtn = document.getElementById("guardAuditBtn");
+  if (guardAuditBtn) guardAuditBtn.disabled = isRecording || recordedEvents.length === 0;
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
@@ -1335,6 +1385,7 @@ function wireUpControls() {
   bind("pauseBtn", pauseReplay);
   bind("resumeBtn", resumeReplay);
   bind("inspectElementBtn", inspectElementAtCursor);
+  bind("guardAuditBtn", () => runGhostGuardAudit());
 
   bind("saveBtn", saveWorkflow);
   bind("saveAiBtn", saveWorkflowWithMetadata);

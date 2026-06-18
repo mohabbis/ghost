@@ -69,6 +69,12 @@ pub fn replay_workflow(events: Vec<InputEvent>, engine: State<GhostEngine>) -> R
     engine.replay(&events).map_err(|e| e.to_string())
 }
 
+/// Run Ghost Guard's local privacy/cybersecurity audit against a workflow.
+#[tauri::command]
+pub fn ghost_guard_audit(events: Vec<InputEvent>) -> crate::core::guard::GhostGuardReport {
+    crate::core::guard::audit_workflow(&events)
+}
+
 /// Cancel an ongoing replay immediately.
 #[tauri::command]
 pub fn cancel_replay(engine: State<GhostEngine>) {

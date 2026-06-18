@@ -18,6 +18,7 @@ pub fn run() {
             commands::start_recording,
             commands::stop_recording,
             commands::replay_workflow,
+            commands::ghost_guard_audit,
             commands::cancel_replay,
             commands::pause_replay,
             commands::resume_replay,
