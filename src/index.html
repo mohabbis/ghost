@@ -17,7 +17,7 @@
           <span class="app-header__glyph" aria-hidden="true">G</span>
           <div>
             <h1>Ghost</h1>
-            <p>Private desktop automation for repeatable work.</p>
+            <p>Turn repetitive desktop work into safe one-click workflows.</p>
           </div>
         </div>
         <div class="app-header__actions">
@@ -38,6 +38,20 @@
 
       <div class="app-grid">
         <main class="app-main">
+          <section class="mission-panel" aria-labelledby="mission-heading">
+            <div>
+              <p class="mission-panel__eyebrow">Your first useful automation</p>
+              <h2 id="mission-heading">Record a task once. Replay it whenever the work comes back.</h2>
+              <p>Ghost is for tedious, repeatable desktop chores: exporting reports, moving files, filling internal tools, and checking UI flows. Keep it local, review each step, then run it with confidence.</p>
+            </div>
+            <ol class="mission-steps" id="missionSteps" aria-label="Setup progress">
+              <li data-mission-step="permissions"><span>1</span><strong>Grant access</strong><em>Needed for clicks and keys</em></li>
+              <li data-mission-step="record"><span>2</span><strong>Record</strong><em>Capture a focused task</em></li>
+              <li data-mission-step="audit"><span>3</span><strong>Audit</strong><em>Ghost Guard reviews risk</em></li>
+              <li data-mission-step="replay"><span>4</span><strong>Replay or save</strong><em>Make it reusable</em></li>
+            </ol>
+          </section>
+
           <section class="panel" aria-labelledby="recording-heading">
             <h2 id="recording-heading">Recording &amp; replay</h2>
             <div class="btn-row">
@@ -60,6 +74,7 @@
                 </select>
               </label>
               <button class="btn btn--ghost btn--small" id="inspectElementBtn">Inspect Element</button>
+              <button class="btn btn--ghost btn--small" id="demoWorkflowBtn">Load Demo</button>
             </div>
           </section>
 
@@ -121,6 +136,12 @@
             </div>
           </section>
           <div class="notifications" id="notifications"></div>
+
+          <div class="workflow-health" aria-label="Current workflow health">
+            <div><span>Steps</span><strong id="healthSteps">0</strong></div>
+            <div><span>Duration</span><strong id="healthDuration">0s</strong></div>
+            <div><span>Signals</span><strong id="healthSignals">Empty</strong></div>
+          </div>
 
           <h2 class="sidebar__heading">Event timeline</h2>
           <div class="events-timeline" id="events-timeline">
