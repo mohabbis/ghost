@@ -726,3 +726,14 @@
     grid-template-columns: 1fr;
   }
 }
+
+.experimental-panel summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.experimental-panel[open] summary {
+  margin-bottom: 12px;
+  color: var(--text);
+}

@@ -140,7 +140,7 @@ Ghost uses Windows-native input hooks and replay APIs. Some apps running as admi
 
 ## Product roadmap
 
-See [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md) for the realistic plan: stable recording/replay first, workflow debugging second, constrained AI assistance third.
+See [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md) for the realistic plan: stable recording/replay first, workflow debugging second, constrained AI assistance third. See [`docs/GHOST_GUARD.md`](docs/GHOST_GUARD.md) for the local safety-audit layer and sensitive-input roadmap.
 
 ## Current priorities
 
