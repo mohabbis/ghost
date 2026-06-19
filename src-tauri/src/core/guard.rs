@@ -21,11 +21,13 @@ pub enum GuardSeverity {
 #[serde(rename_all = "snake_case")]
 pub enum GuardCategory {
     SensitiveApp,
+    SensitiveField,
     DestructiveAction,
     CredentialInput,
     LowLocatorConfidence,
     ExternalDraft,
     EmptyWorkflow,
+    ReplayReliability,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +48,18 @@ pub struct GhostGuardReport {
     pub sensitive_apps: Vec<String>,
     pub findings: Vec<GuardFinding>,
     pub requires_confirmation: bool,
+    pub blocks_replay: bool,
+    pub safe_to_save: bool,
     pub summary: String,
+    pub ai_audit: GuardAuditLayer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardAuditLayer {
+    pub privacy_summary: String,
+    pub replay_summary: String,
+    pub recommended_next_steps: Vec<String>,
+    pub blocked_steps: Vec<usize>,
 }
 
 const SENSITIVE_APP_HINTS: &[&str] = &[
@@ -59,6 +72,8 @@ const SENSITIVE_APP_HINTS: &[&str] = &[
     "wallet",
     "crypto",
     "authenticator",
+    "login",
+    "sign in",
     "terminal",
     "system settings",
     "settings",
@@ -69,7 +84,21 @@ const DESTRUCTIVE_HINTS: &[&str] = &[
     "execute", "confirm",
 ];
 
-const CREDENTIAL_HINTS: &[&str] = &["password", "passcode", "token", "secret", "api key", "otp"];
+const CREDENTIAL_HINTS: &[&str] = &[
+    "password",
+    "passcode",
+    "token",
+    "secret",
+    "api key",
+    "apikey",
+    "otp",
+    "verification code",
+    "credit card",
+    "card number",
+    "cvv",
+    "ssn",
+    "social security",
+];
 
 pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
     let mut findings = Vec::new();
@@ -97,17 +126,17 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
             } => {
                 if let Some(el) = element {
                     let haystack = element_text(el);
-                    if contains_any(&haystack, SENSITIVE_APP_HINTS) {
+                    if is_sensitive_element(el) || contains_any(&haystack, SENSITIVE_APP_HINTS) {
                         if !el.app.is_empty() && el.app != "Unknown" {
                             sensitive_apps.insert(el.app.clone());
                         }
                         findings.push(GuardFinding {
                             severity: GuardSeverity::High,
-                            category: GuardCategory::SensitiveApp,
+                            category: if is_sensitive_element(el) { GuardCategory::SensitiveField } else { GuardCategory::SensitiveApp },
                             step_index: Some(idx),
                             title: "Sensitive app or surface detected".into(),
                             detail: format!("Step {} touches {}.", idx + 1, readable_element(el)),
-                            recommendation: "Require manual confirmation before replaying this step, or add the app to a blocklist.".into(),
+                            recommendation: "Ghost suppresses keystroke capture after clicks into sensitive fields. Re-record and stop before entering secrets; replay should require manual confirmation.".into(),
                         });
                     }
                     if contains_any(&haystack, DESTRUCTIVE_HINTS) {
@@ -194,6 +223,12 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
     let requires_confirmation = findings
         .iter()
         .any(|f| matches!(f.severity, GuardSeverity::High | GuardSeverity::Critical));
+    let blocks_replay = findings
+        .iter()
+        .any(|f| matches!(f.severity, GuardSeverity::Critical));
+    let safe_to_save = !findings
+        .iter()
+        .any(|f| matches!(f.category, GuardCategory::CredentialInput));
     let risk_level = match score {
         85..=100 => "low",
         65..=84 => "medium",
@@ -216,6 +251,8 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
         )
     };
 
+    let ai_audit = build_audit_layer(events, &findings, blocks_replay);
+
     GhostGuardReport {
         score,
         risk_level,
@@ -223,7 +260,10 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
         sensitive_apps: sensitive_apps.into_iter().collect(),
         findings,
         requires_confirmation,
+        blocks_replay,
+        safe_to_save,
         summary,
+        ai_audit,
     }
 }
 
@@ -259,10 +299,158 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| haystack.contains(needle))
 }
 
+pub fn is_sensitive_element(el: &ElementInfo) -> bool {
+    let role = el.role.to_ascii_lowercase();
+    let role_description = el
+        .role_description
+        .clone()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let haystack = element_text(el);
+
+    role.contains("securetextfield")
+        || role.contains("password")
+        || role_description.contains("secure")
+        || role_description.contains("password")
+        || contains_any(&haystack, CREDENTIAL_HINTS)
+}
+
+pub fn should_suppress_keyboard_after_click(event: &InputEvent) -> bool {
+    matches!(
+        event,
+        InputEvent::MouseClick {
+            element: Some(el),
+            button: 0 | 2,
+            ..
+        } if is_sensitive_element(el)
+    )
+}
+
+pub fn sanitize_recorded_event(event: InputEvent, suppress_keyboard: bool) -> Option<InputEvent> {
+    match event {
+        InputEvent::Key {
+            action: KeyAction::Down,
+            ..
+        } if suppress_keyboard => None,
+        InputEvent::Key { chars, .. } if looks_like_secret(&chars) => None,
+        other => Some(other),
+    }
+}
+
+fn build_audit_layer(
+    events: &[InputEvent],
+    findings: &[GuardFinding],
+    blocks_replay: bool,
+) -> GuardAuditLayer {
+    let credential_count = findings
+        .iter()
+        .filter(|f| {
+            matches!(
+                f.category,
+                GuardCategory::CredentialInput | GuardCategory::SensitiveField
+            )
+        })
+        .count();
+    let coordinate_clicks = findings
+        .iter()
+        .filter(|f| matches!(f.category, GuardCategory::LowLocatorConfidence))
+        .count();
+    let blocked_steps = findings
+        .iter()
+        .filter(|f| matches!(f.severity, GuardSeverity::Critical))
+        .filter_map(|f| f.step_index.map(|idx| idx + 1))
+        .collect::<Vec<_>>();
+
+    let mut recommended_next_steps = Vec::new();
+    if credential_count > 0 {
+        recommended_next_steps.push("Re-record the workflow and stop before entering passwords, OTPs, tokens, payment data, or other secrets.".to_string());
+    }
+    if coordinate_clicks > 0 {
+        recommended_next_steps.push("Re-record with accessibility metadata available or inspect coordinate-only steps before replay.".to_string());
+    }
+    if blocks_replay {
+        recommended_next_steps.push(
+            "Remove blocked steps before replay; use a manual checkpoint for sensitive input."
+                .to_string(),
+        );
+    }
+    if recommended_next_steps.is_empty() {
+        recommended_next_steps.push("Run the first replay while watching, then save only if the result matches your intent.".to_string());
+    }
+
+    GuardAuditLayer {
+        privacy_summary: if credential_count > 0 {
+            format!("Detected {credential_count} sensitive-input risk(s). Ghost should not store or replay those values.")
+        } else {
+            "No obvious stored-password, token, or payment-field input was detected.".to_string()
+        },
+        replay_summary: if coordinate_clicks > 0 {
+            format!("{coordinate_clicks} click step(s) rely only on screen coordinates, which can break when windows move.")
+        } else if events.is_empty() {
+            "There are no steps to replay yet.".to_string()
+        } else {
+            "Replay has usable semantic metadata or non-click steps for this local audit."
+                .to_string()
+        },
+        recommended_next_steps,
+        blocked_steps,
+    }
+}
+
 fn looks_like_secret(chars: &str) -> bool {
     let lower = chars.to_lowercase();
     contains_any(&lower, CREDENTIAL_HINTS)
         || (chars.len() >= 20
             && chars.chars().any(|c| c.is_ascii_digit())
             && chars.chars().any(|c| c.is_ascii_uppercase()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn element(role: &str, name: &str, app: &str) -> ElementInfo {
+        ElementInfo {
+            role: role.to_string(),
+            name: name.to_string(),
+            app: app.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn sensitive_element_detection_catches_password_fields() {
+        let el = element("AXSecureTextField", "Password", "Demo Login");
+        assert!(is_sensitive_element(&el));
+    }
+
+    #[test]
+    fn sanitizer_drops_keyboard_when_sensitive_context_active() {
+        let event = InputEvent::Key {
+            code: 1,
+            chars: "a".to_string(),
+            modifiers: 0,
+            action: KeyAction::Down,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+        };
+        assert!(sanitize_recorded_event(event, true).is_none());
+    }
+
+    #[test]
+    fn audit_blocks_secret_like_text() {
+        let report = audit_workflow(&[InputEvent::Key {
+            code: 1,
+            chars: "sk-SECRETTokenValue123456789".to_string(),
+            modifiers: 0,
+            action: KeyAction::Down,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+        }]);
+        assert!(report.blocks_replay);
+        assert!(!report.safe_to_save);
+        assert_eq!(report.ai_audit.blocked_steps, vec![1]);
+    }
 }

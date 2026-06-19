@@ -35,7 +35,28 @@ pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(),
     // inside the thread instead of capturing the borrowed `State`.
     let app_handle = app.clone();
     std::thread::spawn(move || {
+        let mut suppress_keyboard = false;
         while let Ok(mut event) = rx.recv() {
+            if crate::core::guard::should_suppress_keyboard_after_click(&event) {
+                suppress_keyboard = true;
+                let _ = app_handle.emit("ghost:guard", "Sensitive input detected; keyboard capture paused until you click a non-sensitive field.");
+                continue;
+            }
+
+            if matches!(event, InputEvent::MouseClick { .. }) {
+                suppress_keyboard = false;
+            }
+
+            let Some(mut event) =
+                crate::core::guard::sanitize_recorded_event(event, suppress_keyboard)
+            else {
+                let _ = app_handle.emit(
+                    "ghost:guard",
+                    "Ghost Guard suppressed sensitive keyboard input.",
+                );
+                continue;
+            };
+
             // Stamp arrival time (epoch ms) so replay can reproduce the
             // recorded rhythm between events.
             if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {

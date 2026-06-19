@@ -18,6 +18,7 @@ let playbackSpeed = 1.0;
 let guardAuditCompleted = false;
 let hasReplayedCurrentWorkflow = false;
 let hasSavedCurrentWorkflow = false;
+let latestGuardReport = null;
 const MAX_TIMELINE_ITEMS = 220;
 const pendingTimelineEvents = [];
 let timelineFlushScheduled = false;
@@ -31,6 +32,11 @@ if (listen) {
       updateRecordingUI();
       queueTimelineEvent(event.payload);
     }
+  });
+
+  listen("ghost:guard", (event) => {
+    showNotification(String(event.payload || "Ghost Guard suppressed sensitive input."), "error");
+    showInsight("Ghost Guard is protecting sensitive input. Stop recording before typing secrets.");
   });
 }
 
@@ -416,6 +422,7 @@ async function startRecording() {
     isRecording = true;
     recordedEvents = [];
     guardAuditCompleted = false;
+    latestGuardReport = null;
     hasReplayedCurrentWorkflow = false;
     hasSavedCurrentWorkflow = false;
     const timelineEl = document.getElementById("events-timeline");
@@ -490,8 +497,33 @@ async function observerLearnFromSession() {
   }
 }
 
+async function confirmGuardBeforeReplay() {
+  if (recordedEvents.length === 0) return false;
+  if (!latestGuardReport) {
+    await runGhostGuardAudit({ quiet: true });
+  }
+
+  if (latestGuardReport?.blocks_replay) {
+    const steps = latestGuardReport.ai_audit?.blocked_steps?.join(", ") || "unknown";
+    toastError(`Replay blocked by Ghost Guard. Remove sensitive step(s): ${steps}.`);
+    showInsight("Replay blocked: Ghost Guard found stored secret-like input. Re-record with manual checkpoints.");
+    return false;
+  }
+
+  if (latestGuardReport?.requires_confirmation) {
+    const ok = await ghostPick("Ghost Guard found high-risk steps. Continue?", ["Review first", "Replay anyway"]);
+    if (ok !== "Replay anyway") {
+      showInsight("Review the timeline and Ghost Guard findings before replay.");
+      return false;
+    }
+  }
+
+  return true;
+}
+
 async function replayWorkflow() {
   if (!invoke) return notAvailable();
+  if (!(await confirmGuardBeforeReplay())) return;
 
   try {
     isPlaying = true;
@@ -514,6 +546,8 @@ async function replayWithReliability() {
     toastError("No events recorded yet");
     return;
   }
+
+  if (!(await confirmGuardBeforeReplay())) return;
 
   try {
     // Retry behavior comes from Settings (replay.*) — no popups.
@@ -628,8 +662,11 @@ function renderGuardReport(report) {
   const findingsHtml = topFindings
     .map((finding) => `${severityIcon(finding.severity)} ${escapeHtml(finding.title)}`)
     .join("<br>");
-  summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}`;
+  const nextSteps = report.ai_audit?.recommended_next_steps?.slice(0, 2) || [];
+  const nextHtml = nextSteps.map((step) => `• ${escapeHtml(step)}`).join("<br>");
+  summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}${nextHtml ? `<br>${nextHtml}` : ""}`;
 
+  latestGuardReport = report;
   guardAuditCompleted = true;
   updateMissionProgress();
 
@@ -665,6 +702,12 @@ async function saveWorkflow() {
     toastError("No events recorded yet");
     return;
   }
+  if (!latestGuardReport) await runGhostGuardAudit({ quiet: true });
+  if (latestGuardReport && latestGuardReport.safe_to_save === false) {
+    toastError("Save blocked: Ghost Guard found secret-like input. Re-record without passwords, tokens, or payment data.");
+    return;
+  }
+
   const name = await ghostPrompt("Name this workflow", "", "e.g. Friday timesheet");
   if (!name) return;
 
@@ -689,6 +732,7 @@ async function loadWorkflow() {
 
     recordedEvents = await invoke("load_workflow", { name });
     guardAuditCompleted = false;
+    latestGuardReport = null;
     hasReplayedCurrentWorkflow = false;
     hasSavedCurrentWorkflow = false;
     updateRecordingUI();
@@ -814,6 +858,12 @@ async function saveWorkflowWithMetadata() {
     return;
   }
 
+  if (!latestGuardReport) await runGhostGuardAudit({ quiet: true });
+  if (latestGuardReport && latestGuardReport.safe_to_save === false) {
+    toastError("Save blocked: Ghost Guard found secret-like input. Re-record without passwords, tokens, or payment data.");
+    return;
+  }
+
   try {
     const name = await suggestWorkflowName();
     if (!name) return;
@@ -845,7 +895,8 @@ function displayAnalysisResults(analysis) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>Workflow Analysis: ${escapeHtml(analysis.workflow_name)}</h3>
+    <h3>Local Workflow Analysis: ${escapeHtml(analysis.workflow_name)}</h3>
+    <p class="panel__hint">This is deterministic local analysis, not a connected AI model.</p>
     <p><strong>Total Events:</strong> ${analysis.total_events}</p>
     <p><strong>Estimated Duration:</strong> ${analysis.estimated_duration_ms}ms</p>
     <p><strong>Reliability Score:</strong> ${(analysis.reliability_score * 100).toFixed(1)}%</p>
@@ -1434,6 +1485,7 @@ function loadDemoWorkflow() {
     { MouseClick: { x: 640, y: 520, button: 0, timestamp: now + 750, element: { app: "Demo Mail", role: "AXButton", role_description: "button", name: "Send" } } },
   ];
   guardAuditCompleted = false;
+  latestGuardReport = null;
   hasReplayedCurrentWorkflow = false;
   hasSavedCurrentWorkflow = false;
   refreshTimeline();

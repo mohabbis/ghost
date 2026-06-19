@@ -58,7 +58,7 @@
               <button class="btn btn--primary" id="recordBtn" >Start Recording</button>
               <button class="btn btn--ghost" id="stopBtn"  disabled>Stop</button>
               <button class="btn btn--ghost" id="replayBtn"  disabled>Replay</button>
-              <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Reliable Replay</button>
+              <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Guarded Replay</button>
             </div>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="cancelBtn"  disabled>Cancel</button>
@@ -82,34 +82,28 @@
             <h2 id="workflow-heading">Workflows</h2>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="saveBtn">Save</button>
-              <button class="btn btn--ghost btn--small" id="saveAiBtn">Save + Describe</button>
               <button class="btn btn--ghost btn--small" id="loadBtn">Load</button>
-              <button class="btn btn--ghost btn--small" id="analyzeBtn">Analyze</button>
-              <button class="btn btn--ghost btn--small" id="optimizeBtn">Optimize</button>
-              <button class="btn btn--ghost btn--small" id="generateAiBtn">Generate Draft</button>
+              <button class="btn btn--ghost btn--small" id="analyzeBtn">Local Audit</button>
+              <button class="btn btn--ghost btn--small" id="optimizeBtn">Clean Steps</button>
             </div>
           </section>
 
-          <section class="panel" aria-labelledby="observer-heading">
-            <h2 id="observer-heading">Pattern observer</h2>
-            <p class="panel__hint">Optional local pattern detection. Keep it off for sensitive sessions.</p>
+          <details class="panel experimental-panel">
+            <summary>Experimental tools</summary>
+            <p class="panel__hint">Hidden by default because core recording, auditing, debugging, and replay reliability matter more than prototype surfaces.</p>
             <div class="btn-row">
+              <button class="btn btn--ghost btn--small" id="generateAiBtn">Draft from Prompt</button>
+              <button class="btn btn--ghost btn--small" id="saveAiBtn">Save + Describe</button>
               <button class="btn btn--ghost btn--small" id="startObserverBtn">Start Observer</button>
               <button class="btn btn--ghost btn--small" id="stopObserverBtn">Stop Observer</button>
               <button class="btn btn--ghost btn--small" id="observeSessionBtn">Observe Session</button>
               <button class="btn btn--ghost btn--small" id="geekModeBtn">Diagnostics</button>
-            </div>
-          </section>
-
-          <section class="panel" aria-labelledby="advanced-heading">
-            <h2 id="advanced-heading">Visual checks &amp; data</h2>
-            <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="visualCheckBtn">Visual Check</button>
               <button class="btn btn--ghost btn--small" id="captureBaselineBtn">Capture Baseline</button>
-              <button class="btn btn--ghost btn--small" id="newDataSourceBtn">New Data Source 📊</button>
+              <button class="btn btn--ghost btn--small" id="newDataSourceBtn">New Data Source</button>
               <button class="btn btn--ghost btn--small" id="loadVariablesBtn">Load Variables</button>
             </div>
-          </section>
+          </details>
         </main>
 
         <aside class="app-sidebar" aria-label="Live activity">
@@ -121,7 +115,7 @@
             <div class="status-card">
               <span class="status-card__label">Privacy</span>
               <strong>Local-first</strong>
-              <p>Workflows stay on this device unless you explicitly export them.</p>
+              <p>Workflows stay on this device. Sensitive inputs are suppressed before they reach storage.</p>
             </div>
             <div class="status-card">
               <span class="status-card__label">Reliability</span>
@@ -202,7 +196,7 @@
             Ghost watches the repetitive things you do on screen, then replays them
             for you — record a task once, run it forever.
           </p>
-          <p class="onboarding__privacy">🔒 Ghost never records passwords or secure text fields.</p>
+          <p class="onboarding__privacy">🔒 Ghost Guard blocks sensitive text-field capture and suppresses secret-like keystrokes.</p>
           <div class="onboarding__actions">
             <button class="btn btn--ghost" id="onboardingIgnore" type="button">Not now</button>
             <button class="btn btn--primary" id="onboardingStart" type="button">Show me how it works</button>
