@@ -1,5 +1,8 @@
 //! Cloud sync capabilities for Ghost workflows.
 //! Provides secure synchronization across devices.
+//! 
+//! **NOTE:** Cloud sync is currently disabled in this build.
+//! All cloud-related methods return errors indicating the feature is unavailable.
 
 use crate::core::events::Workflow;
 use serde::{Deserialize, Serialize};
@@ -78,31 +81,19 @@ impl CloudSyncManager {
     }
 
     /// Authenticate with cloud service
-    pub fn authenticate(&mut self, token: String) -> Result<bool, String> {
-        // In a real implementation, this would validate the token with the API
-        self.config.auth_token = Some(token);
-        Ok(true)
+    pub fn authenticate(&mut self, _token: String) -> Result<bool, String> {
+        // Cloud sync is disabled in this build - placeholder implementation
+        Err("Cloud sync is not available in this build".to_string())
     }
 
     /// Sync workflows to cloud
-    pub fn sync_workflows(&self, workflows: &[Workflow]) -> Result<Vec<String>, String> {
-        if self.config.auth_token.is_none() {
-            return Err("Not authenticated. Please login first.".to_string());
-        }
-
-        // In a real implementation, this would make API calls
-        // For now, return the workflow names as "synced"
-        Ok(workflows.iter().map(|w| w.name.clone()).collect())
+    pub fn sync_workflows(&self, _workflows: &[Workflow]) -> Result<Vec<String>, String> {
+        Err("Cloud sync is not available in this build".to_string())
     }
 
     /// Load workflows from cloud
     pub fn load_workflows(&self) -> Result<Vec<Workflow>, String> {
-        if self.config.auth_token.is_none() {
-            return Err("Not authenticated. Please login first.".to_string());
-        }
-
-        // In a real implementation, this would fetch from the API
-        Ok(Vec::new())
+        Err("Cloud sync is not available in this build".to_string())
     }
 
     /// Create a new workspace
@@ -199,44 +190,27 @@ mod tests {
     }
 
     #[test]
-    fn authenticate_stores_token() {
+    fn authenticate_returns_error_in_this_build() {
         let mut mgr = manager();
-        assert!(mgr.authenticate("token123".to_string()).unwrap());
-        assert_eq!(mgr.config.auth_token, Some("token123".to_string()));
+        let result = mgr.authenticate("token123".to_string());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
     }
 
     #[test]
-    fn sync_workflows_requires_authentication() {
+    fn sync_workflows_returns_error_in_this_build() {
         let mgr = manager();
         let result = mgr.sync_workflows(&[]);
         assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
     }
 
     #[test]
-    fn sync_workflows_returns_workflow_names_when_authenticated() {
-        let mut mgr = manager();
-        mgr.authenticate("token123".to_string()).unwrap();
-
-        let wf1 = Workflow {
-            name: "Workflow A".to_string(),
-            ..Default::default()
-        };
-        let wf2 = Workflow {
-            name: "Workflow B".to_string(),
-            ..Default::default()
-        };
-
-        let synced = mgr.sync_workflows(&[wf1, wf2]).unwrap();
-        assert_eq!(
-            synced,
-            vec!["Workflow A".to_string(), "Workflow B".to_string()]
-        );
-    }
-
-    #[test]
-    fn load_workflows_requires_authentication() {
+    fn load_workflows_returns_error_in_this_build() {
         let mgr = manager();
-        assert!(mgr.load_workflows().is_err());
+        let result = mgr.load_workflows();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
     }
 
     #[test]
