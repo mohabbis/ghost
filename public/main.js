@@ -34,6 +34,40 @@ function revealOnScroll() {
 
 window.addEventListener("DOMContentLoaded", revealOnScroll);
 
+// ===== Mobile navigation toggle =====
+// Below 560px the inline nav links collapse into a tap-to-open dropdown.
+function setupMobileNav() {
+  const nav = document.querySelector(".nav");
+  const toggle = document.getElementById("navToggle");
+  const links = document.getElementById("navLinks");
+  if (!nav || !toggle || !links) return;
+
+  const close = () => {
+    nav.classList.remove("nav--open");
+    toggle.setAttribute("aria-expanded", "false");
+  };
+
+  toggle.addEventListener("click", () => {
+    const open = nav.classList.toggle("nav--open");
+    toggle.setAttribute("aria-expanded", String(open));
+  });
+
+  // Close after picking a destination so the dropdown doesn't linger.
+  links.querySelectorAll("a").forEach((a) => a.addEventListener("click", close));
+
+  // Close if the user clicks outside the nav while it's open.
+  document.addEventListener("click", (e) => {
+    if (nav.classList.contains("nav--open") && !nav.contains(e.target)) close();
+  });
+
+  // Reset state when resizing back up to the desktop layout.
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 560) close();
+  });
+}
+
+window.addEventListener("DOMContentLoaded", setupMobileNav);
+
 // ===== Typing Animation & Proactive Notifications =====
 
 // Proactive observation messages for typing animation

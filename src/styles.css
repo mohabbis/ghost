@@ -21,6 +21,9 @@
 
 html {
   scroll-behavior: smooth;
+  /* Guard against accidental horizontal scroll on small screens without
+     turning the document into a scroll container (`clip` keeps sticky working). */
+  overflow-x: clip;
 }
 
 body {
@@ -165,6 +168,7 @@ h1,
 h2,
 h3 {
   letter-spacing: -0.055em;
+  overflow-wrap: break-word;
 }
 
 h1 {

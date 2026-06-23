@@ -21,6 +21,10 @@
 
 html {
   scroll-behavior: smooth;
+  /* Guard against accidental horizontal scroll on small screens (long words,
+     wide display headings) without turning the document into a scroll
+     container — `clip` keeps `position: sticky` working. */
+  overflow-x: clip;
 }
 
 body {
@@ -105,6 +109,43 @@ a {
   color: var(--text);
 }
 
+/* Hamburger toggle — only shown on narrow screens (see media query below). */
+.nav__toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.nav__toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: var(--text);
+  transition: transform 180ms ease, opacity 140ms ease;
+}
+
+.nav--open .nav__toggle span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.nav--open .nav__toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.nav--open .nav__toggle span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -165,6 +206,8 @@ h1,
 h2,
 h3 {
   letter-spacing: -0.055em;
+  /* Long single words shouldn't punch through the viewport on phones. */
+  overflow-wrap: break-word;
 }
 
 h1 {
@@ -1062,8 +1105,48 @@ h3 {
 }
 
 @media (max-width: 560px) {
+  /* Collapse the inline nav links into a tap-to-open dropdown panel. */
+  .nav {
+    flex-wrap: nowrap;
+    position: sticky;
+  }
+
+  .nav__toggle {
+    display: flex;
+    margin-left: auto;
+  }
+
   .nav__links {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: rgba(5, 7, 19, 0.97);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    /* Closed by default; opened via the `.nav--open` toggle class. */
     display: none;
+  }
+
+  .nav--open .nav__links {
+    display: flex;
+  }
+
+  .nav__links a {
+    padding: 12px 16px;
+    border-radius: 14px;
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .nav__links a:hover {
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .btn {
@@ -1079,6 +1162,15 @@ h3 {
   .cta {
     padding: 24px;
     border-radius: 26px;
+  }
+
+  /* Let the reliability badge drop below the task instead of squeezing it. */
+  .demo-result__header {
+    flex-wrap: wrap;
+  }
+
+  .demo-badge {
+    margin-left: 0;
   }
 }
 
@@ -1314,6 +1406,14 @@ body::after {
 }
 
 @media (max-width: 860px) {
+  /* The 2026 `.hero` rule re-establishes a 2-column grid with a 360px-min
+     right column *after* the base 860px collapse, so it leaks onto mobile and
+     crushes the headline column to ~0 width (breaking the H1 letter-by-letter).
+     Re-collapse to a single column here. */
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
   .hero-card {
     transform: none;
   }
