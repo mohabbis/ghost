@@ -585,6 +585,41 @@
   }
 }
 
+/* ===== Small phones ===== */
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 16px 14px 32px;
+  }
+
+  .panel {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .mission-panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  /* Stack the Record → Learn → Replay flow vertically so it doesn't get
+     crushed in the narrow onboarding card. */
+  .onboarding {
+    padding: 14px;
+  }
+
+  .onboarding__card {
+    padding: 26px 18px 20px;
+  }
+
+  .onboarding__flow {
+    flex-direction: column;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
+}
+
 .guard-card {
   border-color: rgba(131, 246, 196, 0.28);
   background: linear-gradient(135deg, rgba(131, 246, 196, 0.1), rgba(141, 123, 255, 0.08));
