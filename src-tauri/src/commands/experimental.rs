@@ -304,6 +304,8 @@ pub fn cloud_sync_workflows(
         let description = description.unwrap_or_default();
         // Convert events to workflow with proper metadata.
         let workflow = crate::core::events::Workflow {
+            schema_version: crate::core::events::current_workflow_schema_version(),
+            app_version: crate::core::events::current_app_version(),
             name,
             events,
             metadata: crate::core::events::WorkflowMetadata {

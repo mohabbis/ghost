@@ -176,7 +176,50 @@ pub enum InputEvent {
     },
 }
 
-/// Metadata for AI-powered workflow analysis
+pub const WORKFLOW_SCHEMA_VERSION: &str = "0.1.0";
+
+pub fn current_workflow_schema_version() -> String {
+    WORKFLOW_SCHEMA_VERSION.to_string()
+}
+
+pub fn current_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+fn unix_timestamp_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Versioned storage envelope for simple event-only workflow files.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct WorkflowEventFile {
+    #[serde(default = "current_workflow_schema_version")]
+    pub schema_version: String,
+    #[serde(default = "current_app_version")]
+    pub app_version: String,
+    #[serde(default)]
+    pub saved_at: u64,
+    #[serde(default)]
+    pub name: String,
+    pub events: Vec<InputEvent>,
+}
+
+impl WorkflowEventFile {
+    pub fn new(name: &str, events: &[InputEvent]) -> Self {
+        Self {
+            schema_version: current_workflow_schema_version(),
+            app_version: current_app_version(),
+            saved_at: unix_timestamp_secs(),
+            name: name.to_string(),
+            events: events.to_vec(),
+        }
+    }
+}
+
+/// Metadata for AI-powered workflow analysis.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct WorkflowMetadata {
     pub name: String,
@@ -189,13 +232,30 @@ pub struct WorkflowMetadata {
     pub element_confidence: f32,
 }
 
-/// Enhanced workflow with metadata
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// Enhanced workflow with metadata.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Workflow {
+    #[serde(default = "current_workflow_schema_version")]
+    pub schema_version: String,
+    #[serde(default = "current_app_version")]
+    pub app_version: String,
     pub name: String,
     pub events: Vec<InputEvent>,
     pub metadata: WorkflowMetadata,
     pub reliability: Option<ReliabilitySettings>,
+}
+
+impl Default for Workflow {
+    fn default() -> Self {
+        Self {
+            schema_version: current_workflow_schema_version(),
+            app_version: current_app_version(),
+            name: String::new(),
+            events: Vec::new(),
+            metadata: WorkflowMetadata::default(),
+            reliability: None,
+        }
+    }
 }
 
 /// Accessibility element metadata captured during recording.
@@ -494,6 +554,8 @@ mod tests {
     #[test]
     fn workflow_default_is_empty() {
         let workflow = Workflow::default();
+        assert_eq!(workflow.schema_version, WORKFLOW_SCHEMA_VERSION);
+        assert_eq!(workflow.app_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(workflow.name, "");
         assert!(workflow.events.is_empty());
         assert!(workflow.reliability.is_none());
@@ -516,6 +578,8 @@ mod tests {
     #[test]
     fn workflow_roundtrip_with_events() {
         let workflow = Workflow {
+            schema_version: current_workflow_schema_version(),
+            app_version: current_app_version(),
             name: "My Workflow".to_string(),
             events: vec![InputEvent::Delay {
                 ms: 100,
@@ -531,7 +595,31 @@ mod tests {
         let json = serde_json::to_string(&workflow).unwrap();
         let restored: Workflow = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.name, "My Workflow");
+        assert_eq!(restored.schema_version, WORKFLOW_SCHEMA_VERSION);
         assert_eq!(restored.events.len(), 1);
         assert!(restored.reliability.is_some());
+    }
+
+    #[test]
+    fn legacy_workflow_without_schema_defaults_to_current_schema() {
+        let json = r#"{
+            "name": "Legacy",
+            "events": [],
+            "metadata": {
+                "name": "Legacy",
+                "description": "",
+                "tags": [],
+                "created_at": 0,
+                "updated_at": 0,
+                "estimated_duration_ms": 0,
+                "reliability_score": 1.0,
+                "element_confidence": 1.0
+            },
+            "reliability": null
+        }"#;
+
+        let restored: Workflow = serde_json::from_str(json).unwrap();
+        assert_eq!(restored.schema_version, WORKFLOW_SCHEMA_VERSION);
+        assert_eq!(restored.app_version, env!("CARGO_PKG_VERSION"));
     }
 }

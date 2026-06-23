@@ -53,20 +53,19 @@ See [`command-registry.md`](command-registry.md) for the current module split an
 
 Workflow files should carry a schema version. Breaking changes should include explicit migration code rather than hopeful parsing, the traditional software equivalent of closing your eyes while reversing a truck.
 
+Current workflow schema version: `0.1.0`.
+
+Event-only workflow files are saved with a top-level `schema_version`, `app_version`, `saved_at`, `name`, and `events` envelope. Legacy event-array files still load for backwards compatibility. Metadata workflow files carry `schema_version` and `app_version` directly on the workflow object, with serde defaults for older files that predate the fields.
+
 Recommended envelope:
 
 ```json
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.1.0",
   "app_version": "1.0.12",
-  "created_at": "2026-06-23T00:00:00Z",
-  "platform": "macos",
-  "steps": [],
-  "safety": {
-    "requires_confirmation": true,
-    "allowed_apps": [],
-    "blocked_apps": []
-  }
+  "saved_at": 1782252000,
+  "name": "Open Reports",
+  "events": []
 }
 ```
 

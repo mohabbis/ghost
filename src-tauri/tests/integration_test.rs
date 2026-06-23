@@ -2,7 +2,7 @@
 //! Tests the full workflow from recording to replay
 
 use ghost_lib::config::GhostConfig;
-use ghost_lib::core::events::{InputEvent, KeyAction};
+use ghost_lib::core::events::{InputEvent, KeyAction, WORKFLOW_SCHEMA_VERSION};
 use ghost_lib::error::{ErrorKind, GhostError};
 
 #[test]
@@ -385,14 +385,13 @@ fn test_workflow_save_load_round_trip_preserves_timestamps() {
         },
     ];
 
-    engine
+    let path = engine
         .save_workflow(&name, &events)
         .expect("save should succeed");
     let loaded = engine.load_workflow(&name).expect("load should succeed");
 
     // Cleanup before asserting so a failure doesn't leave the fixture behind.
-    let base = dirs::data_dir().unwrap().join("ghost");
-    std::fs::remove_file(base.join(format!("{name}.json"))).ok();
+    std::fs::remove_file(&path).ok();
 
     assert_eq!(loaded.len(), events.len());
     let timestamps: Vec<Option<u64>> = loaded.iter().map(event_timestamp).collect();
@@ -411,4 +410,53 @@ fn test_workflow_save_load_round_trip_preserves_timestamps() {
         loaded[1],
         InputEvent::MouseClick { button: 1, .. }
     ));
+}
+
+#[test]
+fn test_workflow_save_writes_schema_envelope() {
+    use ghost_lib::engine::GhostEngine;
+
+    let engine = GhostEngine::new();
+    let name = format!("itest_schema_{}", std::process::id());
+    let events = vec![InputEvent::Delay {
+        ms: 250,
+        timestamp: Some(250),
+    }];
+
+    let path = engine
+        .save_workflow(&name, &events)
+        .expect("save should succeed");
+    let raw = std::fs::read_to_string(&path).expect("saved workflow should be readable");
+    std::fs::remove_file(&path).ok();
+
+    let saved: serde_json::Value = serde_json::from_str(&raw).expect("workflow JSON should parse");
+    assert_eq!(saved["schema_version"], WORKFLOW_SCHEMA_VERSION);
+    assert_eq!(saved["app_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(saved["name"], name);
+    assert_eq!(saved["events"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn test_legacy_workflow_event_array_still_loads() {
+    use ghost_lib::engine::GhostEngine;
+
+    let engine = GhostEngine::new();
+    let name = format!("itest_legacy_schema_{}", std::process::id());
+    let events = vec![InputEvent::Delay {
+        ms: 125,
+        timestamp: Some(125),
+    }];
+    let workflows_dir = dirs::data_dir().unwrap().join("ghost").join("workflows");
+    std::fs::create_dir_all(&workflows_dir).expect("workflow dir should be created");
+    let path = workflows_dir.join(format!("{name}.json"));
+    std::fs::write(&path, serde_json::to_string_pretty(&events).unwrap())
+        .expect("legacy workflow should be written");
+
+    let loaded = engine
+        .load_workflow(&name)
+        .expect("legacy load should succeed");
+    std::fs::remove_file(&path).ok();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(event_timestamp(&loaded[0]), Some(125));
 }

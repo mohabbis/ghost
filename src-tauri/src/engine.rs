@@ -6,7 +6,8 @@ use crate::config::GhostConfig;
 use crate::core::ai::WorkflowAnalysis;
 use crate::core::ai::WorkflowAnalyzer;
 use crate::core::events::{
-    ElementInfo, InputEvent, KeyAction, VisualCheckPoint, WaitCondition, Workflow, WorkflowMetadata,
+    ElementInfo, InputEvent, KeyAction, VisualCheckPoint, WaitCondition, Workflow,
+    WorkflowEventFile, WorkflowMetadata, WORKFLOW_SCHEMA_VERSION,
 };
 use crate::core::execution::ExecutionHistory;
 use crate::core::knowledge::{KnowledgeBase, LearnedPattern, ProactiveSuggestion};
@@ -26,6 +27,29 @@ use std::time::Instant;
 fn workflow_file_path(workflows_dir: &std::path::Path, name: &str) -> anyhow::Result<PathBuf> {
     let safe_name = crate::core::security::sanitize_workflow_path(name)?;
     Ok(workflows_dir.join(safe_name).with_extension("json"))
+}
+
+fn ensure_supported_workflow_schema(schema_version: &str) -> anyhow::Result<()> {
+    if schema_version == WORKFLOW_SCHEMA_VERSION {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Unsupported workflow schema version `{}`; expected `{}`",
+            schema_version,
+            WORKFLOW_SCHEMA_VERSION
+        )
+    }
+}
+
+fn parse_workflow_events(json: &str) -> anyhow::Result<Vec<InputEvent>> {
+    let value: serde_json::Value = serde_json::from_str(json)?;
+    if value.is_array() {
+        return Ok(serde_json::from_value(value)?);
+    }
+
+    let workflow_file: WorkflowEventFile = serde_json::from_value(value)?;
+    ensure_supported_workflow_schema(&workflow_file.schema_version)?;
+    Ok(workflow_file.events)
 }
 
 /// RAII guard marking a replay as active for its lifetime (drop-safe, so the
@@ -350,7 +374,7 @@ impl GhostEngine {
         fs::create_dir_all(&workflows_dir)?;
 
         let file_path = workflow_file_path(&workflows_dir, name)?;
-        let json = serde_json::to_string_pretty(events)?;
+        let json = serde_json::to_string_pretty(&WorkflowEventFile::new(name, events))?;
         // Encrypted at rest when a local password is configured (auth.rs).
         // Atomic write so a crash mid-save can't truncate the encrypted file.
         crate::core::security::atomic_write(&file_path, self.auth.protect(&json)?.as_bytes())?;
@@ -369,9 +393,7 @@ impl GhostEngine {
         let file_path = workflow_file_path(&workflows_dir, name)?;
         // Transparently decrypts envelopes; pre-password plaintext loads as-is.
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
-        let events: Vec<InputEvent> = serde_json::from_str(&json)?;
-
-        Ok(events)
+        parse_workflow_events(&json)
     }
 
     /// Delete a workflow from disk.
@@ -457,6 +479,8 @@ impl GhostEngine {
             .as_secs();
 
         Workflow {
+            schema_version: crate::core::events::current_workflow_schema_version(),
+            app_version: crate::core::events::current_app_version(),
             name: name.to_string(),
             events: events.to_vec(),
             metadata: WorkflowMetadata {
@@ -496,6 +520,7 @@ impl GhostEngine {
         fs::create_dir_all(&workflows_dir)?;
 
         let file_path = workflow_file_path(&workflows_dir, &workflow.name)?;
+        ensure_supported_workflow_schema(&workflow.schema_version)?;
         let json = serde_json::to_string_pretty(workflow)?;
         crate::core::security::atomic_write(&file_path, self.auth.protect(&json)?.as_bytes())?;
 
@@ -529,6 +554,8 @@ impl GhostEngine {
             .as_secs();
 
         Workflow {
+            schema_version: crate::core::events::current_workflow_schema_version(),
+            app_version: crate::core::events::current_app_version(),
             name: name.to_string(),
             events: events.to_vec(),
             metadata: WorkflowMetadata {
@@ -570,6 +597,7 @@ impl GhostEngine {
         let file_path = workflow_file_path(&workflows_dir, name)?;
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
         let workflow: Workflow = serde_json::from_str(&json)?;
+        ensure_supported_workflow_schema(&workflow.schema_version)?;
 
         Ok(workflow)
     }
