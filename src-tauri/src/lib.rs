@@ -15,6 +15,7 @@ pub fn run() {
         .manage(engine::GhostEngine::new())
         .manage(commands::CloudState::default())
         .invoke_handler(tauri::generate_handler![
+            // Stable core: recording, replay, inspection, workflow storage, and permissions.
             commands::start_recording,
             commands::stop_recording,
             commands::replay_workflow,
@@ -26,11 +27,6 @@ pub fn run() {
             commands::is_replay_running,
             commands::set_playback_speed,
             commands::get_playback_speed,
-            commands::get_config,
-            commands::update_config,
-            commands::get_telemetry_stats,
-            commands::export_telemetry,
-            commands::get_performance_summary,
             commands::inspect_element,
             commands::inspect_element_at_cursor,
             commands::save_workflow,
@@ -42,40 +38,41 @@ pub fn run() {
             commands::request_accessibility,
             commands::check_input_monitoring,
             commands::request_input_monitoring,
-            // Local login: password + at-rest workflow encryption
+            // Local auth and at-rest workflow protection.
             commands::auth_status,
             commands::auth_setup,
             commands::auth_unlock,
             commands::auth_lock,
-            // AI-powered commands (Phase 1 & 3)
+            // Configuration, telemetry, and diagnostics.
+            commands::get_config,
+            commands::update_config,
+            commands::get_telemetry_stats,
+            commands::export_telemetry,
+            commands::get_performance_summary,
+            // Experimental surfaces. These remain registered for frontend compatibility,
+            // but they are product-boundary candidates for feature flags or a separate
+            // command namespace before Ghost is presented as user-ready.
             commands::analyze_workflow,
             commands::optimize_workflow,
             commands::suggest_workflow_name,
             commands::save_workflow_with_metadata,
             commands::load_workflow_with_metadata,
-            // Phase 3: AI-Assisted Workflow Generation
             commands::generate_workflow_from_prompt,
             commands::analyze_and_tag_workflow,
             commands::save_workflow_with_sidecar,
-            // Reliability commands
             commands::replay_with_reliability,
-            // Cloud sync commands
             commands::init_cloud_sync,
             commands::cloud_authenticate,
             commands::cloud_sync_workflows,
             commands::create_workspace,
             commands::get_audit_logs,
-            // Phase 5: Execution & Analytics
             commands::get_execution_history,
             commands::get_all_executions,
             commands::get_workflow_analytics,
-            // Phase 4A: Visual Regression
             commands::replay_with_visual_check,
             commands::capture_baseline_screenshot,
-            // Phase 4C: Data Sources
             commands::create_data_source,
             commands::load_variables,
-            // Phase 4: Smart Observer Mode
             commands::start_observer,
             commands::stop_observer,
             commands::is_observer_active,

@@ -49,6 +49,12 @@ Treat these as prototype or roadmap features until they are tested across real a
 - Enterprise audit logging.
 - Data-driven workflow testing.
 
+## Command and trust boundaries
+
+Ghost's stable product boundary is explicit recording, replay, workflow storage, local protection, diagnostics, and safety review. AI assistance, observer suggestions, visual checks, cloud/workspace features, and analytics remain experimental until they have documented limits and reliability coverage.
+
+The public Tauri command names are compatibility contracts for the frontend. Internal command implementations may be reorganized into core, auth, diagnostics, and experimental modules, but renames or removals should be treated as IPC breaking changes. See [`docs/core-boundaries.md`](docs/core-boundaries.md) for the command-surface policy and release-readiness gate.
+
 ## Project structure
 
 ```text
