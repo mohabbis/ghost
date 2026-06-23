@@ -1,6 +1,6 @@
 //! Cloud sync capabilities for Ghost workflows.
 //! Provides secure synchronization across devices.
-//! 
+//!
 //! **NOTE:** Cloud sync is currently disabled in this build.
 //! All cloud-related methods return errors indicating the feature is unavailable.
 
@@ -194,7 +194,10 @@ mod tests {
         let mut mgr = manager();
         let result = mgr.authenticate("token123".to_string());
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]
@@ -202,7 +205,10 @@ mod tests {
         let mgr = manager();
         let result = mgr.sync_workflows(&[]);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]
@@ -210,7 +216,10 @@ mod tests {
         let mgr = manager();
         let result = mgr.load_workflows();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]

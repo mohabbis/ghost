@@ -526,4 +526,63 @@ mod tests {
             LLMConfig::from_ghost_config(&ai_settings("local", Some("https://example.test/v1")));
         assert_eq!(cfg.endpoint.as_deref(), Some("https://example.test/v1"));
     }
+
+    fn element(name: &str, coords: Option<(i32, i32)>) -> ElementInfo {
+        ElementInfo {
+            role: "button".to_string(),
+            name: name.to_string(),
+            app: "TestApp".to_string(),
+            fallback_coords: coords,
+            value: None,
+            description: None,
+            identifier: None,
+            role_description: None,
+        }
+    }
+
+    // The LocalFallback heuristics run whenever no API key is configured — the
+    // common case — yet had no behavioral coverage.
+
+    #[tokio::test]
+    async fn local_click_prompt_targets_first_element() {
+        let elements = [element("Submit", Some((42, 99)))];
+        let events = LocalFallback::new()
+            .generate_workflow("click the submit button", None, None, &elements)
+            .await
+            .expect("local generation never errors");
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            InputEvent::MouseClick {
+                x, y, semantic_tag, ..
+            } => {
+                // Uses the element's recorded coordinates, not the (0,0) default.
+                assert_eq!((*x, *y), (42, 99));
+                assert_eq!(semantic_tag.as_ref().unwrap().action, "click");
+            }
+            other => panic!("expected MouseClick, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn local_type_and_wait_prompts_emit_key_and_delay() {
+        let events = LocalFallback::new()
+            .generate_workflow("type the name then wait", None, None, &[])
+            .await
+            .unwrap();
+
+        // "type" → a Key event, "wait" → a 1s Delay, in prompt order.
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], InputEvent::Key { .. }));
+        assert!(matches!(events[1], InputEvent::Delay { ms: 1000, .. }));
+    }
+
+    #[tokio::test]
+    async fn local_unmatched_prompt_yields_no_events() {
+        let events = LocalFallback::new()
+            .generate_workflow("ponder the meaning of automation", None, None, &[])
+            .await
+            .unwrap();
+        assert!(events.is_empty());
+    }
 }
