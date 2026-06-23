@@ -1229,6 +1229,9 @@ function updateRecordingUI() {
   const resumeBtn = document.getElementById("resumeBtn");
 
   if (statusEl) {
+    // Drive the live glow classes (defined in app.css) off the same state.
+    statusEl.classList.toggle("recording-status--live", isRecording);
+    statusEl.classList.toggle("recording-status--playing", isPlaying && !isPaused);
     if (isRecording) {
       statusEl.innerHTML = '<span class="pulse" aria-hidden="true"></span> Recording workflow...';
       statusEl.style.color = "#ef4444";

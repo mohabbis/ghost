@@ -48,6 +48,29 @@ body::before {
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 78%);
 }
 
+/* Slow-drifting ambient aurora — sits behind content, gives the whole
+   surface a sense of life without competing with the UI. */
+body::after {
+  position: fixed;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(34rem 34rem at 22% 18%, rgba(141, 123, 255, 0.18), transparent 62%),
+    radial-gradient(30rem 30rem at 80% 26%, rgba(131, 246, 196, 0.1), transparent 62%),
+    radial-gradient(32rem 32rem at 58% 88%, rgba(255, 184, 107, 0.1), transparent 62%);
+  filter: blur(6px);
+  animation: aurora-drift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes aurora-drift {
+  0% { transform: translate3d(-2%, -1.5%, 0) scale(1.02) rotate(0deg); }
+  50% { transform: translate3d(2.5%, 2%, 0) scale(1.07) rotate(1.5deg); }
+  100% { transform: translate3d(1%, -2%, 0) scale(1.04) rotate(-1deg); }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -172,35 +195,35 @@ h3 {
 }
 
 h1 {
-  max-width: 12ch;
-  margin-bottom: 24px;
-  font-size: clamp(3.25rem, 9vw, 6.9rem);
-  line-height: 0.86;
+  max-width: 13ch;
+  margin-bottom: 22px;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  line-height: 0.92;
 }
 
 h2 {
-  margin-bottom: 18px;
-  font-size: clamp(2rem, 5vw, 4.2rem);
-  line-height: 0.98;
+  margin-bottom: 16px;
+  font-size: clamp(1.6rem, 3.4vw, 2.7rem);
+  line-height: 1.04;
 }
 
 h3 {
   margin-bottom: 10px;
-  font-size: 1.35rem;
+  font-size: 1.2rem;
 }
 
 .hero__lede,
 .section p,
 .check-list {
   color: var(--muted);
-  font-size: 1.08rem;
-  line-height: 1.75;
+  font-size: 1rem;
+  line-height: 1.7;
 }
 
 .hero__lede {
   max-width: 680px;
   margin-bottom: 30px;
-  font-size: 1.22rem;
+  font-size: 1.1rem;
 }
 
 .hero__actions,
@@ -224,7 +247,7 @@ h3 {
 
 .stats dt {
   color: var(--text);
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 900;
 }
 
@@ -381,7 +404,15 @@ h3 {
   border-radius: 50%;
   top: 3px;
   left: 3px;
+  /* Pupils track the cursor via JS (--px/--py); falls back to the idle
+     wander animation when the pointer hasn't moved / on touch devices. */
+  transform: translate(var(--px, 0px), var(--py, 0px));
+  transition: transform 140ms ease-out;
   animation: eye-pupil 4s infinite;
+}
+
+.parrot-face.is-tracking .parrot-eye::after {
+  animation: none;
 }
 
 .parrot-beak {
@@ -634,6 +665,26 @@ h3 {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* Staggered cascade: direct children of a revealing grid/list ease in one
+   after another instead of snapping in together. */
+.reveal-group > * {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 520ms ease, transform 520ms ease;
+}
+
+.reveal-group.is-visible > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-group.is-visible > *:nth-child(1) { transition-delay: 40ms; }
+.reveal-group.is-visible > *:nth-child(2) { transition-delay: 120ms; }
+.reveal-group.is-visible > *:nth-child(3) { transition-delay: 200ms; }
+.reveal-group.is-visible > *:nth-child(4) { transition-delay: 280ms; }
+.reveal-group.is-visible > *:nth-child(5) { transition-delay: 360ms; }
+.reveal-group.is-visible > *:nth-child(6) { transition-delay: 440ms; }
 
 @keyframes pulse {
   0% { box-shadow: 0 0 0 0 rgba(131, 246, 196, 0.45); }
