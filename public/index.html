@@ -229,11 +229,11 @@
       <main id="top">
         <section class="hero" aria-labelledby="hero-title">
           <div class="hero__copy">
-            <p class="eyebrow">Your smart AI parrot helper</p>
-            <h1 id="hero-title">Hey, I noticed you... <span class="typed-text" id="typed-text"></span></h1>
+            <p class="eyebrow">Private desktop automation</p>
+            <h1 id="hero-title">Automate the work that keeps coming back.</h1>
             <p class="hero__lede">
-              Ghost is your intelligent desktop companion that watches, learns, and proactively helps with repetitive tasks.
-              Like a clever parrot, it observes your patterns and offers smart suggestions before you even ask.
+              Ghost records repetitive desktop tasks, turns them into reliable workflows, and keeps every click, keystroke,
+              and saved workflow local to your machine.
             </p>
             <div class="hero__actions">
               <!-- Mac -->
@@ -250,23 +250,23 @@
                 <svg class="btn__os-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.4l-9 1.68V12h9zm-17 .75h6v6.42L3 17.68v-4.93zm17 0h-9v6.75l9-1.68v-5.07z"/></svg>
                 Download for Windows
               </a>
-              <a class="btn btn--ghost" href="#how-it-works">See how it helps</a>
+              <a class="btn btn--ghost" href="#demo">Build a sample workflow</a>
             </div>
             <p class="download-note" data-show="mac">macOS 12 Monterey or later &middot; Apple Silicon &amp; Intel &middot; Free &middot; 🔒 All data stays on your device</p>
             <p class="download-note" data-show="windows">Windows 10 or later &middot; 64-bit &middot; Free &middot; 🔒 All data stays on your device</p>
             <p class="download-note" data-show="mobile other">Desktop app available now for macOS and Windows &middot; Free &middot; 🔒 All data stays on your device</p>
             <dl class="stats" aria-label="Ghost product highlights">
               <div>
-                <dt>🤖 Observant</dt>
-                <dd>Watches your workflows silently</dd>
+                <dt>Local-first</dt>
+                <dd>No account, cloud sync, or telemetry required</dd>
               </div>
               <div>
-                <dt>💡 Proactive</dt>
-                <dd>Offers help before you ask</dd>
+                <dt>Guarded replay</dt>
+                <dd>Risk checks before automations run</dd>
               </div>
               <div>
-                <dt>🦜 Learning</dt>
-                <dd>Adapts to your patterns</dd>
+                <dt>Native app</dt>
+                <dd>Built for macOS and Windows desktops</dd>
               </div>
             </dl>
           </div>
@@ -357,26 +357,63 @@
           </aside>
         </section>
 
+
+        <section class="trust-strip reveal" aria-label="Why teams choose Ghost">
+          <span>Designed for personal ops</span>
+          <span>Local workflow storage</span>
+          <span>Human-reviewed replays</span>
+          <span>No account required</span>
+        </section>
+
+        <section class="section bento-section" aria-labelledby="control-title">
+          <div class="section__heading reveal">
+            <p class="eyebrow">Built for confidence</p>
+            <h2 id="control-title">Automation you can inspect before you trust.</h2>
+            <p>Ghost makes every workflow understandable: see the captured steps, review the risk summary, then choose when to replay.</p>
+          </div>
+          <div class="bento-grid reveal">
+            <article class="bento-card bento-card--wide">
+              <span class="bento-card__kicker">Ghost Guard</span>
+              <h3>Privacy and replay checks are part of the flow.</h3>
+              <p>Sensitive fields are suppressed, risky steps are highlighted, and guarded replay pauses when something looks different.</p>
+            </article>
+            <article class="bento-card">
+              <span class="bento-card__icon" aria-hidden="true">⌘</span>
+              <h3>Record once</h3>
+              <p>Capture clicks, keys, waits, and UI context as a reusable workflow.</p>
+            </article>
+            <article class="bento-card">
+              <span class="bento-card__icon" aria-hidden="true">✓</span>
+              <h3>Clean steps</h3>
+              <p>Turn noisy desktop events into a readable checklist you can edit.</p>
+            </article>
+            <article class="bento-card bento-card--accent">
+              <span class="bento-card__kicker">Local by default</span>
+              <h3>Your automations stay on your computer.</h3>
+            </article>
+          </div>
+        </section>
+
         <section id="how-it-works" class="section" aria-labelledby="how-title">
           <div class="section__heading">
             <p class="eyebrow">How it helps</p>
-            <h2 id="how-title">Your AI parrot watches, learns, and assists.</h2>
+            <h2 id="how-title">From repeated task to reusable workflow.</h2>
           </div>
           <div class="feature-grid">
             <article class="feature-card">
               <span class="feature-card__icon" aria-hidden="true">👁️</span>
               <h3>Observe</h3>
-              <p>Your parrot silently watches your desktop activity, learning your unique patterns and workflows.</p>
+              <p>Start a focused recording while you perform the desktop task exactly once.</p>
             </article>
             <article class="feature-card">
               <span class="feature-card__icon" aria-hidden="true">🤖</span>
               <h3>Learn</h3>
-              <p>It builds understanding of your intent and notices when you repeat the same actions.</p>
+              <p>Ghost converts raw events into semantic steps with useful UI context.</p>
             </article>
             <article class="feature-card">
               <span class="feature-card__icon" aria-hidden="true">💡</span>
               <h3>Assist</h3>
-              <p>Like a helpful geek, it pops up with suggestions: "Hey, I noticed you do this every Tuesday..."</p>
+              <p>Replay manually or save the workflow for the next time the task returns.</p>
             </article>
           </div>
         </section>
@@ -384,17 +421,16 @@
         <section id="use-cases" class="section split" aria-labelledby="use-title">
           <div>
             <p class="eyebrow">Proactive help examples</p>
-            <h2 id="use-title">Your AI parrot notices patterns and offers smart suggestions.</h2>
+            <h2 id="use-title">Make the boring parts of desktop work disappear.</h2>
             <p>
-              Ghost acts like that geeky friend who's always watching and ready to help. It learns your habits
-              and speaks up when it sees something repetitive.
+              Use Ghost for predictable, repeatable workflows where a human still wants visibility and control before the final action.
             </p>
           </div>
           <ul class="check-list">
-            <li>🦜 "Hey, I noticed you copy-paste customer info every morning — want me to automate that?"</li>
-            <li>🦜 "Recognized your weekly report pattern — I can have it ready by 9am."</li>
-            <li>🦜 "I see you opening these 5 apps in the same order — let me set up a launcher."</li>
-            <li>🦜 "That form you fill out daily? I can pre-fill it and double-check your work."</li>
+            <li>Move customer data between internal tools without repeated copy-paste.</li>
+            <li>Export recurring reports and file them in the right folder every week.</li>
+            <li>Launch your morning workspace and arrange windows in one click.</li>
+            <li>Fill routine forms with checkpoints before anything is submitted.</li>
           </ul>
         </section>
 
@@ -535,6 +571,16 @@
           </div>
         </section>
       </main>
+
+      <footer class="site-footer">
+        <a class="brand" href="#top" aria-label="Ghost home"><span class="brand__mark" aria-hidden="true">👻</span><span>Ghost</span></a>
+        <p>Private desktop automation for repetitive work.</p>
+        <div class="site-footer__links">
+          <a href="#privacy">Privacy</a>
+          <a href="https://github.com/mohabbis/ghost">GitHub</a>
+          <a href="#download">Download</a>
+        </div>
+      </footer>
     </div>
 
     <!-- Analysis Modal -->
