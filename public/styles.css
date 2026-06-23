@@ -1406,6 +1406,14 @@ body::after {
 }
 
 @media (max-width: 860px) {
+  /* The 2026 `.hero` rule re-establishes a 2-column grid with a 360px-min
+     right column *after* the base 860px collapse, so it leaks onto mobile and
+     crushes the headline column to ~0 width (breaking the H1 letter-by-letter).
+     Re-collapse to a single column here. */
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
   .hero-card {
     transform: none;
   }
