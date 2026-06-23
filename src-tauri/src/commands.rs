@@ -604,7 +604,10 @@ pub fn init_cloud_sync(
     state: tauri::State<'_, CloudState>,
 ) -> Result<bool, String> {
     let manager = CloudSyncManager::new(config);
-    *state.manager.lock().unwrap() = Some(manager);
+    *state
+        .manager
+        .lock()
+        .map_err(|_| "Cloud sync state lock poisoned".to_string())? = Some(manager);
     Ok(true)
 }
 
@@ -613,7 +616,10 @@ pub fn cloud_authenticate(
     token: String,
     state: tauri::State<'_, CloudState>,
 ) -> Result<bool, String> {
-    let mut manager_lock = state.manager.lock().unwrap();
+    let mut manager_lock = state
+        .manager
+        .lock()
+        .map_err(|_| "Cloud sync state lock poisoned".to_string())?;
     if let Some(manager) = manager_lock.as_mut() {
         manager.authenticate(token).map_err(|e| e.to_string())
     } else {
@@ -628,7 +634,10 @@ pub fn cloud_sync_workflows(
     description: Option<String>,
     state: tauri::State<'_, CloudState>,
 ) -> Result<Vec<String>, String> {
-    let manager_lock = state.manager.lock().unwrap();
+    let manager_lock = state
+        .manager
+        .lock()
+        .map_err(|_| "Cloud sync state lock poisoned".to_string())?;
     if let Some(manager) = manager_lock.as_ref() {
         let name = name.unwrap_or_else(|| "Unnamed Workflow".to_string());
         let description = description.unwrap_or_default();
@@ -668,7 +677,10 @@ pub fn create_workspace(
     owner_id: String,
     state: tauri::State<'_, CloudState>,
 ) -> Result<Workspace, String> {
-    let mut manager_lock = state.manager.lock().unwrap();
+    let mut manager_lock = state
+        .manager
+        .lock()
+        .map_err(|_| "Cloud sync state lock poisoned".to_string())?;
     if let Some(manager) = manager_lock.as_mut() {
         Ok(manager.create_workspace(name, owner_id))
     } else {
@@ -681,7 +693,10 @@ pub fn get_audit_logs(
     limit: Option<usize>,
     state: tauri::State<'_, CloudState>,
 ) -> Result<Vec<AuditLog>, String> {
-    let manager_lock = state.manager.lock().unwrap();
+    let manager_lock = state
+        .manager
+        .lock()
+        .map_err(|_| "Cloud sync state lock poisoned".to_string())?;
     if let Some(manager) = manager_lock.as_ref() {
         Ok(manager.get_audit_logs(limit).into_iter().cloned().collect())
     } else {

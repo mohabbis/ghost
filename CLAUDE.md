@@ -119,7 +119,10 @@ latest GitHub Release assets (`Ghost.dmg`, `Ghost_Setup.exe`), not the files che
   events (same payload + timestamp). Never "debounce" same-position clicks — that destroys
   double-clicks and unbalances press/release pairs.
 - Element scans (`wait.rs::resolve_selector`, `engine.rs::get_visible_elements`) probe a 48px
-  grid, NOT per-pixel — per-pixel AX scans take minutes.
+  grid, NOT per-pixel — per-pixel AX scans take minutes. The grid is bounded by
+  `core::vision::display_bounds()` (queries the real primary display via `enigo`, falls back to
+  `DEFAULT_DISPLAY_BOUNDS` = 1920×1080 on headless/CI), not hardcoded dimensions, so larger
+  displays are fully covered.
 
 ## IPC contract (Rust ↔ JS)
 

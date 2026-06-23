@@ -324,3 +324,91 @@ fn test_ghost_guard_clean_workflow_is_low_risk() {
     assert_eq!(report.score, 100);
     assert!(report.findings.is_empty());
 }
+
+/// Extract the timestamp from any timestamped event variant.
+fn event_timestamp(e: &InputEvent) -> Option<u64> {
+    match e {
+        InputEvent::MouseClick { timestamp, .. } => *timestamp,
+        InputEvent::Key { timestamp, .. } => *timestamp,
+        InputEvent::Delay { timestamp, .. } => *timestamp,
+        InputEvent::Scroll { timestamp, .. } => *timestamp,
+        _ => None,
+    }
+}
+
+/// Full save → load round-trip through GhostEngine. Exercises the workflow
+/// persistence path (file IO + name sanitization) end-to-end and asserts that
+/// event payloads — crucially the per-event timestamps that drive replay
+/// pacing — survive the serialize/deserialize cycle unchanged.
+#[test]
+fn test_workflow_save_load_round_trip_preserves_timestamps() {
+    use ghost_lib::engine::GhostEngine;
+
+    let engine = GhostEngine::new();
+
+    // Unique name keeps the test hermetic against the real data dir / parallel runs.
+    let name = format!("itest_roundtrip_{}", std::process::id());
+
+    let events = vec![
+        InputEvent::MouseClick {
+            x: 320,
+            y: 240,
+            button: 0,
+            element: None,
+            timestamp: Some(1000),
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: Some(true),
+        },
+        InputEvent::MouseClick {
+            x: 320,
+            y: 240,
+            button: 1,
+            element: None,
+            timestamp: Some(1080),
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: Some(true),
+        },
+        InputEvent::Delay {
+            ms: 500,
+            timestamp: Some(1580),
+        },
+        InputEvent::Key {
+            code: 65,
+            chars: "a".to_string(),
+            modifiers: 0,
+            action: KeyAction::Down,
+            timestamp: Some(1600),
+            retry_count: None,
+            semantic_tag: None,
+        },
+    ];
+
+    engine
+        .save_workflow(&name, &events)
+        .expect("save should succeed");
+    let loaded = engine.load_workflow(&name).expect("load should succeed");
+
+    // Cleanup before asserting so a failure doesn't leave the fixture behind.
+    let base = dirs::data_dir().unwrap().join("ghost");
+    std::fs::remove_file(base.join(format!("{name}.json"))).ok();
+
+    assert_eq!(loaded.len(), events.len());
+    let timestamps: Vec<Option<u64>> = loaded.iter().map(event_timestamp).collect();
+    assert_eq!(
+        timestamps,
+        vec![Some(1000), Some(1080), Some(1580), Some(1600)],
+        "timestamps must survive the save/load round-trip for replay pacing"
+    );
+
+    // The press/release click pair must come back as two distinct events.
+    assert!(matches!(
+        loaded[0],
+        InputEvent::MouseClick { button: 0, .. }
+    ));
+    assert!(matches!(
+        loaded[1],
+        InputEvent::MouseClick { button: 1, .. }
+    ));
+}

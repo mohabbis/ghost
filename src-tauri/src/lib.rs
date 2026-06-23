@@ -2,7 +2,7 @@ pub mod auth;
 mod commands;
 pub mod config;
 pub mod core;
-mod engine;
+pub mod engine;
 pub mod error;
 pub mod performance;
 mod platform;

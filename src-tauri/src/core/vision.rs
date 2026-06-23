@@ -4,6 +4,27 @@
 use image::{DynamicImage, GenericImageView};
 use std::path::Path;
 
+/// Default display bounds (width, height) used when the real primary-display
+/// size can't be queried — e.g. headless / CI with no display server.
+pub const DEFAULT_DISPLAY_BOUNDS: (i32, i32) = (1920, 1080);
+
+/// Best-effort primary-display size in pixels.
+///
+/// Coarse element-grid scans (in `engine.rs` and `core/wait.rs`) used to be
+/// bounded by hardcoded constants (1600×1080 / 1000×1000), which missed
+/// elements on larger displays. This queries the real display via `enigo` and
+/// falls back to [`DEFAULT_DISPLAY_BOUNDS`] when no display is available.
+pub fn display_bounds() -> (i32, i32) {
+    use enigo::{Enigo, Mouse, Settings};
+    match Enigo::new(&Settings::default()) {
+        Ok(enigo) => match enigo.main_display() {
+            Ok((w, h)) if w > 0 && h > 0 => (w, h),
+            _ => DEFAULT_DISPLAY_BOUNDS,
+        },
+        Err(_) => DEFAULT_DISPLAY_BOUNDS,
+    }
+}
+
 /// Calculate SSIM (Structural Similarity Index) between two images
 pub fn calculate_ssim(img1: &DynamicImage, img2: &DynamicImage) -> f32 {
     let (w, h) = img1.dimensions();
@@ -159,6 +180,18 @@ pub fn base64_to_image(data: &str) -> anyhow::Result<DynamicImage> {
 mod tests {
     use super::*;
     use image::{Rgb, RgbImage};
+
+    #[test]
+    fn display_bounds_are_positive() {
+        // On a headless CI box `enigo` can't query a display, so this falls back
+        // to DEFAULT_DISPLAY_BOUNDS; on a real desktop it returns the live size.
+        // Either way the bounds must be positive so grid scans actually run.
+        let (w, h) = display_bounds();
+        assert!(
+            w > 0 && h > 0,
+            "display bounds must be positive, got {w}x{h}"
+        );
+    }
 
     fn solid_image(w: u32, h: u32, r: u8, g: u8, b: u8) -> DynamicImage {
         let img = RgbImage::from_fn(w, h, |_, _| Rgb([r, g, b]));

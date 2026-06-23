@@ -919,12 +919,37 @@ function displayAnalysisResults(analysis) {
     <button data-close-modal="analysis-modal">Close</button>
   `;
 
+  showModal(modal);
+}
+
+// Tracks the element focused before a modal opened so focus can be restored on
+// close (basic accessibility: keyboard/screen-reader users land back where they
+// were instead of at the top of the document).
+let lastFocusedBeforeModal = null;
+
+function showModal(modal) {
+  if (!modal) return;
+  lastFocusedBeforeModal = document.activeElement;
   modal.style.display = "flex";
+  // Move focus into the dialog (the .modal-content carries role="dialog" and
+  // tabindex="-1" so it is programmatically focusable).
+  const content = modal.querySelector(".modal-content");
+  if (content) content.focus();
 }
 
 function closeModal(modalId = "analysis-modal") {
   const modal = document.getElementById(modalId);
-  if (modal) modal.style.display = "none";
+  if (!modal) return;
+  modal.style.display = "none";
+  // Clear the dialog body so stale markup and its event listeners don't
+  // accumulate across repeated opens.
+  const content = modal.querySelector(".modal-content");
+  if (content) content.innerHTML = "";
+  // Restore focus to wherever it was before the modal opened.
+  if (lastFocusedBeforeModal && typeof lastFocusedBeforeModal.focus === "function") {
+    lastFocusedBeforeModal.focus();
+  }
+  lastFocusedBeforeModal = null;
 }
 
 // ===== Settings =====
@@ -1015,7 +1040,7 @@ async function openSettings() {
     </div>
   `;
 
-  modal.style.display = "flex";
+  showModal(modal);
 }
 
 async function saveSettings() {
@@ -1379,7 +1404,7 @@ function displaySuggestions(suggestions) {
     <button data-close-modal="analysis-modal">Close</button>
   `;
 
-  modal.style.display = "flex";
+  showModal(modal);
 }
 
 async function createWorkflowFromSuggestion(name) {
@@ -1430,7 +1455,7 @@ function displayGeekInsights(insights, appName) {
     <button data-close-modal="analysis-modal">Close</button>
   `;
 
-  modal.style.display = "flex";
+  showModal(modal);
 }
 
 // ===== Visual regression =====

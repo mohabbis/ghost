@@ -646,10 +646,12 @@ impl GhostEngine {
 
         // Probe a coarse grid — elements are tens of pixels wide, so a 48px
         // stride captures them with ~700 lookups instead of the 250k a
-        // per-pixel scan would take (minutes of AX traffic per call).
+        // per-pixel scan would take (minutes of AX traffic per call). The grid
+        // is bounded by the real display size so larger screens are covered.
         const STRIDE: usize = 48;
-        for y in (0..1080).step_by(STRIDE) {
-            for x in (0..1600).step_by(STRIDE) {
+        let (max_x, max_y) = crate::core::vision::display_bounds();
+        for y in (0..max_y).step_by(STRIDE) {
+            for x in (0..max_x).step_by(STRIDE) {
                 if let Ok(Some(el)) = self.locator.inspect_at(x, y) {
                     // Avoid duplicates
                     if !elements
@@ -778,7 +780,11 @@ impl GhostEngine {
             .iter()
             .filter_map(|el| {
                 el.fallback_coords.as_ref().map(|(ex, ey)| {
-                    let dist = ((x - ex).pow(2) + (y - ey).pow(2)) as f32;
+                    // Cast to i64 before squaring: on a large virtual desktop
+                    // the squared pixel delta can exceed i32::MAX and overflow.
+                    let dx = (x - ex) as i64;
+                    let dy = (y - ey) as i64;
+                    let dist = (dx * dx + dy * dy) as f32;
                     (el, dist)
                 })
             })
