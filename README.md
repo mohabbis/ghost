@@ -80,7 +80,7 @@ Ghost is built as a Tauri 2 app.
 Core files:
 
 - `src-tauri/src/lib.rs` — Tauri app setup and command registration.
-- `src-tauri/src/commands.rs` — IPC command handlers.
+- `src-tauri/src/commands/` — grouped IPC command handlers.
 - `src-tauri/src/engine.rs` — platform-agnostic orchestration.
 - `src-tauri/src/core/events.rs` — shared event schema.
 - `src-tauri/src/platform/macos.rs` — macOS implementation.
