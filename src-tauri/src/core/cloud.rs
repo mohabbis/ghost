@@ -1,6 +1,6 @@
 //! Cloud sync capabilities for Ghost workflows.
 //! Provides secure synchronization across devices.
-//! 
+//!
 //! **NOTE:** Cloud sync is currently disabled in this build.
 //! All cloud-related methods return errors indicating the feature is unavailable.
 
@@ -66,6 +66,9 @@ pub struct AuditLog {
 
 /// Cloud sync manager
 pub struct CloudSyncManager {
+    // Retained for the future real backend; unused while cloud sync is a
+    // disabled in-memory stub (authenticate/sync/load all return errors).
+    #[allow(dead_code)]
     config: CloudConfig,
     workspaces: HashMap<String, Workspace>,
     audit_logs: Vec<AuditLog>,
@@ -194,7 +197,10 @@ mod tests {
         let mut mgr = manager();
         let result = mgr.authenticate("token123".to_string());
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]
@@ -202,7 +208,10 @@ mod tests {
         let mgr = manager();
         let result = mgr.sync_workflows(&[]);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]
@@ -210,7 +219,10 @@ mod tests {
         let mgr = manager();
         let result = mgr.load_workflows();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Cloud sync is not available in this build");
+        assert_eq!(
+            result.unwrap_err(),
+            "Cloud sync is not available in this build"
+        );
     }
 
     #[test]

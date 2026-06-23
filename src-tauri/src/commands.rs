@@ -36,7 +36,7 @@ pub fn start_recording(app: AppHandle, engine: State<GhostEngine>) -> Result<(),
     let app_handle = app.clone();
     std::thread::spawn(move || {
         let mut suppress_keyboard = false;
-        while let Ok(mut event) = rx.recv() {
+        while let Ok(event) = rx.recv() {
             if crate::core::guard::should_suppress_keyboard_after_click(&event) {
                 suppress_keyboard = true;
                 let _ = app_handle.emit("ghost:guard", "Sensitive input detected; keyboard capture paused until you click a non-sensitive field.");

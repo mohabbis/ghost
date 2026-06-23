@@ -1240,6 +1240,47 @@ mod tests {
     }
 
     #[test]
+    fn set_playback_speed_clamps_and_round_trips() {
+        let engine = GhostEngine::new();
+
+        // A normal factor passes through unchanged so the speed picker actually
+        // takes effect (it once silently did nothing).
+        engine.set_playback_speed(2.5);
+        assert_eq!(engine.get_playback_speed(), 2.5);
+
+        // Non-positive / tiny factors clamp to the 0.1 floor instead of
+        // freezing or reversing replay.
+        engine.set_playback_speed(0.0);
+        assert_eq!(engine.get_playback_speed(), 0.1);
+        engine.set_playback_speed(-5.0);
+        assert_eq!(engine.get_playback_speed(), 0.1);
+    }
+
+    #[test]
+    fn is_replay_running_false_when_idle() {
+        // Reflects the real `replay_active` flag, not the stop flag, so a fresh
+        // engine reports no replay in flight.
+        let engine = GhostEngine::new();
+        assert!(!engine.is_replay_running());
+    }
+
+    #[test]
+    fn update_config_live_applies_playback_speed() {
+        let engine = GhostEngine::new();
+        // Snapshot the persisted config so this test can restore it and not
+        // leak a non-default speed into other tests sharing the on-disk config.
+        let original = GhostConfig::load().unwrap_or_default();
+
+        let mut updated = original.clone();
+        updated.replay.default_speed = 3.0;
+        engine.update_config(updated).expect("valid config applies");
+        assert_eq!(engine.get_playback_speed(), 3.0);
+
+        // Restore the original persisted config.
+        engine.update_config(original).expect("restore config");
+    }
+
+    #[test]
     fn start_recording_rejects_reentrant_session() {
         let engine = GhostEngine::new();
 

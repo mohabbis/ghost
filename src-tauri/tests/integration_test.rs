@@ -175,9 +175,12 @@ fn test_performance_settings() {
 fn test_ai_settings() {
     let config = GhostConfig::default();
 
-    assert!(config.ai.enabled);
-    assert!(config.ai.auto_optimize);
-    assert!(config.ai.proactive_suggestions);
+    // AI features are opt-in: Ghost ships privacy-first with every AI toggle
+    // off by default, and the provider falls back to local heuristics.
+    assert!(!config.ai.enabled);
+    assert!(!config.ai.auto_optimize);
+    assert!(!config.ai.proactive_suggestions);
+    assert_eq!(config.ai.provider, "local");
 }
 
 #[cfg(test)]
@@ -278,8 +281,11 @@ fn test_ghost_guard_flags_sensitive_destructive_workflow() {
     assert!(report
         .sensitive_apps
         .contains(&"System Settings".to_string()));
+    // A "Delete password" control matches a secure-field hint, so the guard
+    // categorizes it as a SensitiveField (the more specific finding) rather
+    // than a generic SensitiveApp, while still recording the app above.
     assert!(report.findings.iter().any(|finding| {
-        finding.category == GuardCategory::SensitiveApp && finding.severity == GuardSeverity::High
+        finding.category == GuardCategory::SensitiveField && finding.severity == GuardSeverity::High
     }));
     assert!(report.findings.iter().any(|finding| {
         finding.category == GuardCategory::DestructiveAction
