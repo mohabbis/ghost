@@ -60,6 +60,31 @@
   border: 1px solid var(--border);
   font-size: 0.85rem;
   white-space: nowrap;
+  transition: border-color 240ms ease, background 240ms ease, box-shadow 240ms ease;
+}
+
+/* Live states: the chip breathes while recording (red) or replaying (purple)
+   so the app's current mode is glanceable from anywhere on screen. */
+.recording-status--live {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.12);
+  animation: status-breathe-red 1.8s ease-in-out infinite;
+}
+
+.recording-status--playing {
+  border-color: rgba(141, 123, 255, 0.55);
+  background: rgba(141, 123, 255, 0.12);
+  animation: status-breathe-purple 2s ease-in-out infinite;
+}
+
+@keyframes status-breathe-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 18px 0 rgba(239, 68, 68, 0.4); }
+}
+
+@keyframes status-breathe-purple {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(141, 123, 255, 0); }
+  50% { box-shadow: 0 0 18px 0 rgba(141, 123, 255, 0.4); }
 }
 
 .banner {
@@ -664,10 +689,10 @@
 }
 
 .mission-panel h2 {
-  max-width: 15ch;
+  max-width: 16ch;
   margin: 0 0 12px;
-  font-size: clamp(1.85rem, 4vw, 3.5rem);
-  line-height: 0.95;
+  font-size: clamp(1.5rem, 3vw, 2.4rem);
+  line-height: 1.02;
 }
 
 .mission-panel p:not(.mission-panel__eyebrow) {

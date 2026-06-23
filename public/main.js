@@ -5,8 +5,8 @@ function revealOnScroll() {
   // hard-coded `reveal` class in the markup. Every `.reveal` element starts
   // at opacity 0, so each one MUST be observed (or force-shown) — otherwise
   // it stays invisible and leaves a blank gap in the page.
-  const targets = new Set(document.querySelectorAll(".reveal"));
-  document.querySelectorAll(".section, .hero-card, .feature-card").forEach((element) => {
+  const targets = new Set(document.querySelectorAll(".reveal, .reveal-group"));
+  document.querySelectorAll(".section, .hero-card").forEach((element) => {
     element.classList.add("reveal");
     targets.add(element);
   });
@@ -33,6 +33,41 @@ function revealOnScroll() {
 }
 
 window.addEventListener("DOMContentLoaded", revealOnScroll);
+
+// ===== Cursor-tracking parrot eyes =====
+// The hero parrot glances toward the pointer — a small, on-brand sign of life.
+// Skipped entirely for reduced-motion or coarse (touch) pointers.
+function setupParrotEyes() {
+  if (prefersReducedMotion.matches) return;
+  if (!window.matchMedia("(pointer: fine)").matches) return;
+
+  const face = document.querySelector(".parrot-face");
+  const eyes = document.querySelectorAll(".parrot-eye");
+  if (!face || !eyes.length) return;
+
+  const MAX = 2.5; // px of pupil travel
+  let raf = null;
+
+  function track(event) {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      face.classList.add("is-tracking");
+      eyes.forEach((eye) => {
+        const rect = eye.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const angle = Math.atan2(event.clientY - cy, event.clientX - cx);
+        eye.style.setProperty("--px", `${Math.cos(angle) * MAX}px`);
+        eye.style.setProperty("--py", `${Math.sin(angle) * MAX}px`);
+      });
+    });
+  }
+
+  window.addEventListener("mousemove", track, { passive: true });
+}
+
+window.addEventListener("DOMContentLoaded", setupParrotEyes);
 
 // ===== Mobile navigation toggle =====
 // Below 560px the inline nav links collapse into a tap-to-open dropdown.
