@@ -85,7 +85,13 @@ impl VariableContext {
                     .split(',')
                     .map(|s| s.trim())
                     .collect();
-                let col_idx = headers.iter().position(|h| h == column).unwrap_or(0);
+                let col_idx = headers.iter().position(|h| h == column).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "CSV column '{}' not found (available columns: {})",
+                        column,
+                        headers.join(", ")
+                    )
+                })?;
                 let row_idx = row.unwrap_or(0);
                 let data_row = lines
                     .nth(row_idx)
@@ -170,9 +176,11 @@ pub fn check_wait_condition(condition: &WaitCondition, locator: &dyn ElementLoca
             Err(e) => WaitResult::Error(e.to_string()),
         },
         WaitCondition::TextPresent { text } => {
-            // Search for element containing the text via accessibility API
-            for y in (0..1000).step_by(50) {
-                for x in (0..1000).step_by(50) {
+            // Search for element containing the text via accessibility API,
+            // bounded by the real display size rather than a fixed 1000×1000.
+            let (max_x, max_y) = crate::core::vision::display_bounds();
+            for y in (0..max_y).step_by(48) {
+                for x in (0..max_x).step_by(48) {
                     if let Ok(Some(el)) = locator.inspect_at(x, y) {
                         if el.name.to_lowercase().contains(&text.to_lowercase()) {
                             return WaitResult::Success;
@@ -251,15 +259,15 @@ pub fn resolve_selector(
         ElementSelector::Semantic { role, name, app } => {
             // Probe a coarse grid: UI elements are tens of pixels wide, so a
             // 48px stride finds them with ~900 lookups instead of the 1M a
-            // per-pixel scan would need (which took minutes per poll).
+            // per-pixel scan would need (which took minutes per poll). The grid
+            // is bounded by the real display size so larger screens are covered.
             const STRIDE: i32 = 48;
-            const MAX_X: i32 = 1920;
-            const MAX_Y: i32 = 1080;
+            let (max_x, max_y) = crate::core::vision::display_bounds();
 
             let mut found: Option<(i32, i32)> = None;
 
-            'scan: for y in (0..MAX_Y).step_by(STRIDE as usize) {
-                for x in (0..MAX_X).step_by(STRIDE as usize) {
+            'scan: for y in (0..max_y).step_by(STRIDE as usize) {
+                for x in (0..max_x).step_by(STRIDE as usize) {
                     if let Ok(Some(el)) = locator.inspect_at(x, y) {
                         if el.role == *role
                             && el.name.contains(name)
@@ -499,6 +507,32 @@ mod tests {
         assert_eq!(value, "Alice");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn resolve_from_csv_errors_on_missing_column() {
+        let path = write_confined_csv(
+            &format!("ghost_wait_test_missing_col_{}.csv", std::process::id()),
+            "name,email\nAlice,alice@example.com\n",
+        );
+
+        let mut ctx = VariableContext::new();
+        let result = ctx.resolve(
+            "v",
+            &VarType::FromCSV {
+                path: path.to_string_lossy().to_string(),
+                column: "phone".to_string(), // not in the header
+                row: Some(0),
+            },
+        );
+        std::fs::remove_file(&path).ok();
+
+        // Previously this silently fell back to column 0 ("name"); it must now error.
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("phone"),
+            "error should name the missing column: {err}"
+        );
     }
 
     #[test]

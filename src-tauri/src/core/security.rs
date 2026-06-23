@@ -10,6 +10,9 @@ const MAX_PATH_LENGTH: usize = 4096;
 /// Allowed characters for workflow names (alphanumeric, dash, underscore, space)
 const WORKFLOW_NAME_PATTERN: &str = r"^[a-zA-Z0-9_\- ]+$";
 
+/// Maximum number of CSV rows (including the header) we accept.
+const MAX_CSV_ROWS: usize = 100_000;
+
 /// Security audit configuration
 pub mod audit {
     use serde::{Deserialize, Serialize};
@@ -166,7 +169,14 @@ impl SimpleCrypto {
     /// Create a new crypto instance with a key
     pub fn new(key: &str) -> Self {
         let mut key_bytes = [0u8; 32];
-        let key_chars = key.as_bytes();
+        // An empty key would make `i % key_chars.len()` divide by zero and
+        // panic (index out of bounds). Fall back to a fixed non-empty seed so
+        // construction is always safe even if a caller passes an unset value.
+        let key_chars: &[u8] = if key.is_empty() {
+            b"ghost-default-key"
+        } else {
+            key.as_bytes()
+        };
         for (i, byte) in key_bytes.iter_mut().enumerate() {
             *byte = key_chars[i % key_chars.len()].wrapping_add(i as u8);
         }
@@ -197,12 +207,23 @@ pub fn validate_csv_path(path: &str) -> anyhow::Result<PathBuf> {
         anyhow::bail!("File must have .csv extension");
     }
 
-    // Check for suspicious patterns
     let path_str = path.to_string_lossy();
+
+    // Reject null bytes
+    if path_str.contains('\0') {
+        anyhow::bail!("Invalid CSV path: null byte detected");
+    }
+
+    // Reject directory traversal
     if path_str.contains("..") {
         anyhow::bail!("Invalid CSV path: directory traversal detected");
     }
 
+    // NOTE: this is a format/shape check only. Absolute paths are *not* rejected
+    // here because the sole caller (`wait::sanitized_csv_path`) pairs this with
+    // `sanitize_file_path`, which canonicalizes against the ghost data dir and
+    // is what actually confines the read. Don't reject absolute paths here — a
+    // legitimate CSV picked from the data dir is an absolute path.
     Ok(path.to_path_buf())
 }
 
@@ -214,8 +235,15 @@ pub fn validate_csv_contents(contents: &str) -> anyhow::Result<Vec<String>> {
     }
 
     // Parse and validate
-    let mut headers = Vec::new();
+    let mut headers: Vec<String> = Vec::new();
+    let mut row_count = 0usize;
+
     for (i, line) in contents.lines().enumerate() {
+        row_count += 1;
+        if row_count > MAX_CSV_ROWS {
+            anyhow::bail!("CSV exceeds maximum row count ({MAX_CSV_ROWS})");
+        }
+
         if i == 0 {
             // Validate headers
             for header in line.split(',') {
@@ -224,6 +252,23 @@ pub fn validate_csv_contents(contents: &str) -> anyhow::Result<Vec<String>> {
                     anyhow::bail!("CSV has empty column header");
                 }
                 headers.push(header.to_string());
+            }
+        } else {
+            // Validate data rows. Blank trailing lines are tolerated, but any
+            // non-empty row must have the same column count as the header.
+            // Previously only the header (i == 0) was validated, so ragged rows
+            // passed through silently and broke column lookups downstream.
+            if line.trim().is_empty() {
+                continue;
+            }
+            let field_count = line.split(',').count();
+            if field_count != headers.len() {
+                anyhow::bail!(
+                    "CSV row {} has {} fields but header declares {}",
+                    i + 1,
+                    field_count,
+                    headers.len()
+                );
             }
         }
     }
@@ -241,10 +286,29 @@ pub fn validate_prompt(prompt: &str) -> anyhow::Result<()> {
         anyhow::bail!("Prompt exceeds maximum length (10000 characters)");
     }
 
-    // Check for potential prompt injection patterns (basic)
-    let injection_patterns = ["ignore previous", "disregard", "system:", "assistant:"];
-    for pattern in injection_patterns {
-        if prompt.to_lowercase().contains(pattern) {
+    let lowered = prompt.to_lowercase();
+
+    // Phrase-level injection attempts: match the full instruction, not bare
+    // words like "disregard" that appear in legitimate automation prompts.
+    const INJECTION_PHRASES: &[&str] = &[
+        "ignore previous instructions",
+        "ignore all previous instructions",
+        "disregard previous instructions",
+        "disregard all previous instructions",
+        "ignore the above",
+    ];
+    for phrase in INJECTION_PHRASES {
+        if lowered.contains(phrase) {
+            anyhow::bail!("Potential prompt injection detected");
+        }
+    }
+
+    // Role-marker injection: only flag "system:" / "assistant:" when they begin
+    // a line (a forged chat turn). A mid-sentence mention — e.g. a step that
+    // types "System: All checks passed" into a field — is legitimate.
+    for line in lowered.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("system:") || trimmed.starts_with("assistant:") {
             anyhow::bail!("Potential prompt injection detected");
         }
     }
@@ -254,9 +318,14 @@ pub fn validate_prompt(prompt: &str) -> anyhow::Result<()> {
 
 /// Validate coordinates are within screen bounds
 pub fn validate_coordinates(x: i32, y: i32) -> anyhow::Result<()> {
-    // Assume max screen size of 10000x10000
-    if !(0..=10000).contains(&x) || !(0..=10000).contains(&y) {
-        anyhow::bail!("Coordinates out of valid range (0-10000)");
+    // Allow the full signed virtual-desktop range. Secondary monitors placed to
+    // the left of / above the primary legitimately produce negative coordinates
+    // on both macOS and Windows, so only values outside a generous bound are
+    // rejected (guards against garbage / overflowed values).
+    const MIN: i32 = -32768;
+    const MAX: i32 = 32767;
+    if !(MIN..=MAX).contains(&x) || !(MIN..=MAX).contains(&y) {
+        anyhow::bail!("Coordinates out of valid range ({MIN}..={MAX})");
     }
     Ok(())
 }
@@ -490,12 +559,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn simple_crypto_empty_key_panics() {
-        // FIXME: SimpleCrypto::new("") divides by key.len() == 0 and panics
-        // with a division-by-zero / index-out-of-bounds. Any caller that can
-        // pass an empty key (e.g. an unset config value) crashes here.
-        SimpleCrypto::new("");
+    fn simple_crypto_empty_key_does_not_panic() {
+        // An empty key previously divided by key.len() == 0 and panicked. It
+        // now falls back to a fixed seed, so construction is safe and encryption
+        // still round-trips.
+        let crypto = SimpleCrypto::new("");
+        let data = b"sensitive workflow";
+        assert_eq!(crypto.decrypt(&crypto.encrypt(data)), data);
     }
 
     // -- validate_csv_path --
@@ -513,12 +583,12 @@ mod tests {
     }
 
     #[test]
-    fn validate_csv_path_does_not_confine_absolute_paths() {
-        // FIXME: unlike sanitize_file_path, validate_csv_path performs no
-        // base-directory confinement. Any absolute path ending in ".csv" and
-        // containing no ".." passes, so "/etc/passwd.csv"-style paths are
-        // accepted as long as the file has a .csv extension.
-        assert!(validate_csv_path("/etc/some-config.csv").is_ok());
+    fn validate_csv_path_rejects_null_bytes() {
+        // Format-shape checks. End-to-end confinement of absolute paths to the
+        // ghost data dir is enforced by sanitize_file_path in the caller
+        // (see core::wait::tests::resolve_from_csv_rejects_path_outside_base).
+        assert!(validate_csv_path("data\0/customers.csv").is_err());
+        assert!(validate_csv_path("data/customers.csv").is_ok());
     }
 
     // -- validate_csv_contents --
@@ -543,10 +613,17 @@ mod tests {
     }
 
     #[test]
-    fn validate_csv_contents_does_not_validate_data_rows() {
-        // FIXME: only the header row (i == 0) is validated; malformed or
-        // empty-field data rows pass through untouched.
+    fn validate_csv_contents_rejects_ragged_data_rows() {
+        // Data rows whose column count differs from the header are now rejected
+        // instead of passing through silently.
         let csv = "name,email\n,\n,,,extra,fields";
+        assert!(validate_csv_contents(csv).is_err());
+    }
+
+    #[test]
+    fn validate_csv_contents_accepts_consistent_data_rows() {
+        // Empty field values are legitimate as long as the column count matches.
+        let csv = "name,email\nAlice,\n,bob@example.com\n";
         assert!(validate_csv_contents(csv).is_ok());
     }
 
@@ -575,12 +652,12 @@ mod tests {
     }
 
     #[test]
-    fn validate_prompt_false_positive_on_benign_text() {
-        // FIXME: the injection-pattern check is a naive substring match, so
-        // legitimate prompts that happen to mention these words (e.g. an
-        // automation step that types "System:" into a chat field) are
-        // rejected as "prompt injection".
-        assert!(validate_prompt("Type 'System: All checks passed' into the log field").is_err());
+    fn validate_prompt_accepts_benign_mention_of_keywords() {
+        // Legitimate prompts that mention these words mid-sentence (e.g. an
+        // automation step that types "System:" into a field, or asks to
+        // "disregard whitespace") are no longer rejected.
+        assert!(validate_prompt("Type 'System: All checks passed' into the log field").is_ok());
+        assert!(validate_prompt("Disregard whitespace and click Submit").is_ok());
     }
 
     // -- validate_coordinates --
@@ -594,16 +671,17 @@ mod tests {
 
     #[test]
     fn validate_coordinates_rejects_out_of_range_values() {
-        assert!(validate_coordinates(10001, 0).is_err());
-        assert!(validate_coordinates(0, 10001).is_err());
+        assert!(validate_coordinates(40000, 0).is_err());
+        assert!(validate_coordinates(0, 40000).is_err());
+        assert!(validate_coordinates(-40000, 0).is_err());
     }
 
     #[test]
-    fn validate_coordinates_rejects_negative_values() {
-        // FIXME: secondary monitors positioned to the left of or above the
-        // primary monitor legitimately produce negative coordinates on both
-        // macOS and Windows. As written, any such coordinate is rejected.
-        assert!(validate_coordinates(-1, 0).is_err());
-        assert!(validate_coordinates(0, -1).is_err());
+    fn validate_coordinates_accepts_negative_values() {
+        // Secondary monitors positioned to the left of / above the primary
+        // legitimately produce negative coordinates on macOS and Windows.
+        assert!(validate_coordinates(-1, 0).is_ok());
+        assert!(validate_coordinates(0, -1).is_ok());
+        assert!(validate_coordinates(-1920, -200).is_ok());
     }
 }

@@ -85,7 +85,7 @@ impl AuthManager {
     /// Whether workflow data is currently accessible. An unconfigured
     /// installation is always "unlocked" (no protection requested).
     pub fn is_unlocked(&self) -> bool {
-        !self.is_configured() || self.dek.lock().unwrap().is_some()
+        !self.is_configured() || self.dek.lock().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
     /// Create the password, generate and wrap the DEK, and leave the app
@@ -130,7 +130,7 @@ impl AuthManager {
             serde_json::to_string_pretty(&record)?.as_bytes(),
         )?;
 
-        *self.dek.lock().unwrap() = Some(dek);
+        *self.dek.lock().unwrap_or_else(|e| e.into_inner()) = Some(dek);
         Ok(())
     }
 
@@ -156,7 +156,7 @@ impl AuthManager {
             Ok(dek_vec) if dek_vec.len() == KEY_LEN => {
                 let mut dek = [0u8; KEY_LEN];
                 dek.copy_from_slice(&dek_vec);
-                *self.dek.lock().unwrap() = Some(dek);
+                *self.dek.lock().unwrap_or_else(|e| e.into_inner()) = Some(dek);
                 Ok(true)
             }
             Ok(_) => anyhow::bail!("corrupt auth file: unexpected key length"),
@@ -166,7 +166,7 @@ impl AuthManager {
 
     /// Drop the in-memory key; workflow data becomes inaccessible until unlock.
     pub fn lock(&self) {
-        *self.dek.lock().unwrap() = None;
+        *self.dek.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Prepare a JSON string for writing to disk: encrypted when a password is
@@ -213,9 +213,12 @@ impl AuthManager {
     }
 
     fn require_dek(&self) -> anyhow::Result<[u8; KEY_LEN]> {
-        self.dek.lock().unwrap().ok_or_else(|| {
-            anyhow::anyhow!("Ghost is locked — unlock with your password to access workflows")
-        })
+        self.dek
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .ok_or_else(|| {
+                anyhow::anyhow!("Ghost is locked — unlock with your password to access workflows")
+            })
     }
 }
 
