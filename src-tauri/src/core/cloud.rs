@@ -66,6 +66,9 @@ pub struct AuditLog {
 
 /// Cloud sync manager
 pub struct CloudSyncManager {
+    // Retained for the future real backend; unused while cloud sync is a
+    // disabled in-memory stub (authenticate/sync/load all return errors).
+    #[allow(dead_code)]
     config: CloudConfig,
     workspaces: HashMap<String, Workspace>,
     audit_logs: Vec<AuditLog>,
