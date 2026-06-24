@@ -1,0 +1,148 @@
+//! Safe target filename proposal.
+//!
+//! Pure string logic, no IO. Two jobs:
+//!
+//! 1. [`safe_file_name`] — sanitize a name so it is valid cross-platform
+//!    (Windows is the strict one) without changing meaning.
+//! 2. [`deduplicate`] — when a target name is already taken, derive a distinct
+//!    ` (2)`, ` (3)`, … variant. The Organizer **never silently overwrites**
+//!    (`AGENTS.md` non-negotiable rule), so collisions are resolved by renaming,
+//!    never by clobbering.
+
+use std::collections::HashSet;
+use std::path::Path;
+
+/// Characters that are illegal in filenames on Windows (a superset of the
+/// POSIX restrictions, so sanitizing for Windows is safe everywhere).
+const ILLEGAL: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+/// Sanitize a single filename component.
+///
+/// Replaces illegal and control characters with `_`, collapses runs of
+/// whitespace, and trims leading/trailing spaces and dots (trailing dots are
+/// invalid on Windows). Never returns an empty string — falls back to `file`.
+/// The extension, if any, is preserved and lowercased-as-is is *not* applied
+/// (we keep the original case of the name).
+pub fn safe_file_name(name: &str) -> String {
+    let (stem, ext) = split_extension(name);
+
+    let cleaned_stem = sanitize_component(stem);
+    let stem_final = if cleaned_stem.is_empty() {
+        "file".to_string()
+    } else {
+        cleaned_stem
+    };
+
+    match ext {
+        Some(ext) => {
+            let cleaned_ext = sanitize_component(ext);
+            if cleaned_ext.is_empty() {
+                stem_final
+            } else {
+                format!("{stem_final}.{cleaned_ext}")
+            }
+        }
+        None => stem_final,
+    }
+}
+
+/// Replace illegal/control chars with `_`, collapse whitespace, trim spaces and
+/// dots from the ends.
+fn sanitize_component(s: &str) -> String {
+    let replaced: String = s
+        .chars()
+        .map(|c| {
+            if ILLEGAL.contains(&c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+
+    // Collapse internal whitespace runs to a single space.
+    let collapsed = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    collapsed
+        .trim_matches(|c: char| c == '.' || c == ' ')
+        .to_string()
+}
+
+/// Split `name` into `(stem, Some(ext))`, or `(name, None)` when there is no
+/// usable extension. A leading dot (dotfile) is treated as part of the stem,
+/// not as an extension separator.
+fn split_extension(name: &str) -> (&str, Option<&str>) {
+    let path = Path::new(name);
+    match (path.file_stem(), path.extension()) {
+        (Some(stem), Some(ext)) => (
+            stem.to_str().unwrap_or(name),
+            Some(ext.to_str().unwrap_or("")),
+        ),
+        _ => (name, None),
+    }
+}
+
+/// Return a name not present in `taken`, appending ` (2)`, ` (3)`, … before the
+/// extension if needed. Does not insert the chosen name into `taken`; the
+/// caller owns that bookkeeping.
+pub fn deduplicate(name: &str, taken: &HashSet<String>) -> String {
+    if !taken.contains(name) {
+        return name.to_string();
+    }
+    let (stem, ext) = split_extension(name);
+    for n in 2..=u32::MAX {
+        let candidate = match ext {
+            Some(ext) => format!("{stem} ({n}).{ext}"),
+            None => format!("{stem} ({n})"),
+        };
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+    }
+    // Unreachable in practice (would require billions of collisions).
+    name.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitizes_illegal_characters() {
+        assert_eq!(safe_file_name("a-b:c?.txt"), "a-b_c_.txt");
+        assert_eq!(safe_file_name("re:port.PDF"), "re_port.PDF"); // case preserved
+    }
+
+    #[test]
+    fn collapses_whitespace_and_trims() {
+        assert_eq!(safe_file_name("  my   file  .pdf"), "my file.pdf");
+    }
+
+    #[test]
+    fn illegal_chars_become_underscores_and_empty_falls_back() {
+        // A name of all-illegal chars sanitizes to underscores (still a valid,
+        // distinct name); only a genuinely empty result falls back to `file`.
+        assert_eq!(safe_file_name("???"), "___");
+        assert_eq!(safe_file_name(""), "file");
+        assert_eq!(safe_file_name("   "), "file"); // whitespace-only collapses away
+    }
+
+    #[test]
+    fn no_extension_is_handled() {
+        assert_eq!(safe_file_name("README"), "README");
+    }
+
+    #[test]
+    fn deduplicate_appends_counter_before_extension() {
+        let mut taken = HashSet::new();
+        taken.insert("a.pdf".to_string());
+        assert_eq!(deduplicate("a.pdf", &taken), "a (2).pdf");
+        taken.insert("a (2).pdf".to_string());
+        assert_eq!(deduplicate("a.pdf", &taken), "a (3).pdf");
+    }
+
+    #[test]
+    fn deduplicate_leaves_unique_names_untouched() {
+        let taken = HashSet::new();
+        assert_eq!(deduplicate("unique.txt", &taken), "unique.txt");
+    }
+}
