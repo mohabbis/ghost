@@ -47,6 +47,8 @@ New Tauri commands should be assigned to one of these groups before being regist
 
 Experimental commands may stay registered for frontend compatibility, but new UI should not present them as user-ready features until they have documented limits and reliability tests.
 
+See [`command-registry.md`](command-registry.md) for the current module split and command inventory.
+
 ## Schema policy
 
 Workflow files should carry a schema version. Breaking changes should include explicit migration code rather than hopeful parsing, the traditional software equivalent of closing your eyes while reversing a truck.
