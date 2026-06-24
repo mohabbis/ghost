@@ -1,6 +1,6 @@
 # Ghost Parrot
 
-Ghost Parrot is the friendly suggestion layer for Ghost. It should feel closer to a coding assistant previewing a fitting next action than a surveillance feature pretending to be helpful. The distinction matters, because humans get twitchy when software watches them. Reasonable, for once.
+Ghost Parrot is the suggestion layer for Ghost. It should behave like an assistive preview system, not an always-on observation feature. The product boundary matters because users need to understand when Ghost is observing activity, what signals it uses, and what control they retain.
 
 ## Product framing
 
@@ -23,7 +23,7 @@ Not like:
 
 > I watched everything you did and built an automation. Trust me.
 
-The first is useful. The second sounds like malware with a mascot.
+The first is inspectable and permission-bounded. The second implies hidden observation and should not appear in product copy or UI.
 
 ## Similarity to assistant previews
 
@@ -108,4 +108,4 @@ Bad:
 
 ## Implementation notes
 
-Parrot should sit on top of observer and knowledge modules, not inside the stable recorder/replay core. Keep the stable core boring. Let Parrot remain experimental until it has tests, a permissions screen, transparent explanations, and a reliable off switch.
+Parrot should sit on top of observer and knowledge modules, not inside the stable recorder/replay core. Keep the stable core constrained and testable. Parrot should remain experimental until it has tests, a permissions screen, transparent explanations, and a reliable off switch.
