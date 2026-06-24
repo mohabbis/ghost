@@ -38,3 +38,79 @@ pub enum Capability {
     /// Ask an LLM to generate a workflow. Suggestion-only; never a direct action.
     GenerateWorkflowFromPrompt,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `kind` tag and snake_case variant names are the contract the planner,
+    /// the frontend, and any audit record all read. Pin the wire shape for a
+    /// representative spread: struct variants (with paths) and a unit variant.
+    #[test]
+    fn serializes_with_kind_tag() {
+        assert_eq!(
+            serde_json::to_value(Capability::ReadFolder {
+                path: PathBuf::from("/home/u/Downloads"),
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "read_folder", "path": "/home/u/Downloads" })
+        );
+        assert_eq!(
+            serde_json::to_value(Capability::MoveFile {
+                from: PathBuf::from("/a"),
+                to: PathBuf::from("/b"),
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "move_file", "from": "/a", "to": "/b" })
+        );
+        assert_eq!(
+            serde_json::to_value(Capability::StartRecording).unwrap(),
+            serde_json::json!({ "kind": "start_recording" })
+        );
+        assert_eq!(
+            serde_json::to_value(Capability::GenerateWorkflowFromPrompt).unwrap(),
+            serde_json::json!({ "kind": "generate_workflow_from_prompt" })
+        );
+    }
+
+    #[test]
+    fn round_trips_every_variant_through_json() {
+        let cases = [
+            Capability::ReadFolder {
+                path: PathBuf::from("/p"),
+            },
+            Capability::CreateFolder {
+                path: PathBuf::from("/p"),
+            },
+            Capability::RenameFile {
+                from: PathBuf::from("/a"),
+                to: PathBuf::from("/b"),
+            },
+            Capability::MoveFile {
+                from: PathBuf::from("/a"),
+                to: PathBuf::from("/b"),
+            },
+            Capability::CopyFile {
+                from: PathBuf::from("/a"),
+                to: PathBuf::from("/b"),
+            },
+            Capability::DeleteFile {
+                path: PathBuf::from("/p"),
+            },
+            Capability::StartRecording,
+            Capability::ReplayWorkflow {
+                workflow_id: "wf-1".into(),
+            },
+            Capability::CaptureScreen,
+            Capability::UseNetwork {
+                host: "example.com".into(),
+            },
+            Capability::GenerateWorkflowFromPrompt,
+        ];
+        for cap in cases {
+            let json = serde_json::to_string(&cap).unwrap();
+            let back: Capability = serde_json::from_str(&json).unwrap();
+            assert_eq!(cap, back);
+        }
+    }
+}

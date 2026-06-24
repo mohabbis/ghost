@@ -73,3 +73,72 @@ impl FolderRule {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `as_str` must round-trip through `from_token`, and the tokens must match
+    /// the values the SQLite migration's CHECK constraint accepts
+    /// (`'deny','ask','allow'`). A drift here corrupts persisted Zones.
+    #[test]
+    fn default_decision_token_round_trip() {
+        for decision in [
+            DefaultDecision::Deny,
+            DefaultDecision::Ask,
+            DefaultDecision::Allow,
+        ] {
+            assert_eq!(
+                DefaultDecision::from_token(decision.as_str()),
+                Some(decision)
+            );
+        }
+        assert_eq!(DefaultDecision::Deny.as_str(), "deny");
+        assert_eq!(DefaultDecision::Ask.as_str(), "ask");
+        assert_eq!(DefaultDecision::Allow.as_str(), "allow");
+    }
+
+    #[test]
+    fn from_token_rejects_unknown_tokens() {
+        assert_eq!(DefaultDecision::from_token("DENY"), None);
+        assert_eq!(DefaultDecision::from_token("permit"), None);
+        assert_eq!(DefaultDecision::from_token(""), None);
+    }
+
+    /// The serde `lowercase` representation backs IPC; keep it aligned with the
+    /// stored token so the wire form and the DB form never diverge.
+    #[test]
+    fn default_decision_serializes_as_lowercase() {
+        assert_eq!(
+            serde_json::to_string(&DefaultDecision::Ask).unwrap(),
+            "\"ask\""
+        );
+        let back: DefaultDecision = serde_json::from_str("\"allow\"").unwrap();
+        assert_eq!(back, DefaultDecision::Allow);
+    }
+
+    #[test]
+    fn read_only_grants_read_and_nothing_else() {
+        let rule = FolderRule::read_only("/home/u/Downloads");
+        assert_eq!(rule.path, PathBuf::from("/home/u/Downloads"));
+        assert!(rule.can_read);
+        assert!(!rule.can_create);
+        assert!(!rule.can_rename);
+        assert!(!rule.can_move);
+        assert!(!rule.can_copy);
+        assert!(!rule.can_delete);
+    }
+
+    #[test]
+    fn zone_round_trips_through_json() {
+        let zone = Zone {
+            id: "z-1".into(),
+            name: "School".into(),
+            description: Some("coursework".into()),
+            default_decision: DefaultDecision::Ask,
+        };
+        let json = serde_json::to_string(&zone).unwrap();
+        let back: Zone = serde_json::from_str(&json).unwrap();
+        assert_eq!(zone, back);
+    }
+}
