@@ -7,53 +7,148 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-Ghost is an early-stage desktop automation app for macOS and Windows.
+Ghost is a local-first desktop automation project for macOS and Windows.
 
-It records user-approved desktop actions, stores them as reusable workflows, and replays them with native input automation. The long-term goal is to make Ghost smart enough to recognize repetitive work and suggest safe automations before the user has to build them manually.
+It records user-approved computer actions, stores them as reusable workflows, and replays them with native desktop automation. The long-term goal is to make repetitive computer work safe, inspectable, and eventually easier to automate through permission-bounded routines.
 
-The foundation works, but this is still a technical preview. Recording and replay are useful, while reliability, debugging, cross-app robustness, signing, and AI-assisted workflow generation are still active work. Software, tragically, continues to require honesty.
+Ghost is still a technical preview. The current foundation works, but reliability, workflow debugging, cross-app replay, release signing, and experimental AI-assisted features are still under active development.
+
+## Product direction
+
+Ghost is being shaped around one principle:
+
+> Ghost may suggest anything, but it should only do what the user has approved inside boundaries the user controls.
+
+The stable product direction is not uncontrolled autonomous computer use. Ghost is intended to become a trusted local automation layer for repetitive computer work.
+
+The near-term focus is:
+
+1. reliable local recording and replay;
+2. clear command and trust boundaries;
+3. safe workflow review before execution;
+4. permission-bounded actions;
+5. auditability and undoable operations;
+6. a focused file-organization workflow as the first practical product wedge.
 
 ## Download
 
 | Platform | Link |
 |---|---|
-| macOS (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
-| Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
+| macOS Apple Silicon + Intel | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
+| Windows 10 / 11 64-bit | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
 > [!NOTE]
-> The macOS build may be ad-hoc signed rather than notarized unless Apple Developer ID secrets are configured for the release workflow. If macOS blocks the app, open **System Settings → Privacy & Security** and approve it, or remove quarantine manually:
+> Current release builds may still be developer-preview quality. The macOS build may be ad-hoc signed rather than fully notarized unless Apple Developer ID secrets are configured in the release workflow.
 >
-> ```bash
-> xattr -dr com.apple.quarantine /Applications/ghost.app
-> ```
+> If macOS blocks the app, open **System Settings → Privacy & Security** and approve it.
 >
-> A notarized build is the long-term target.
+> A fully signed and notarized release is the long-term target.
 
 ## What Ghost does today
 
-- Records desktop input events on macOS and Windows.
-- Replays saved workflows using native automation.
-- Stores workflows locally.
-- Captures timing and basic UI element metadata where available.
-- Provides Tauri IPC commands for recording, replay, workflow storage, inspection, auth, telemetry, visual checks, observer mode, and AI-assisted experiments.
-- Builds as a Tauri 2 desktop app with a vanilla HTML/CSS/JS frontend and Rust backend.
+Ghost currently supports:
 
-## What is still experimental
+- recording desktop input events on macOS and Windows;
+- replaying saved workflows using native automation;
+- storing workflows locally;
+- capturing timing and basic UI element metadata where available;
+- local workflow inspection and management;
+- diagnostics and telemetry export paths;
+- a Rust backend inside a Tauri 2 desktop app.
 
-Treat these as prototype or roadmap features until they are tested across real apps and documented with clear limits:
+The current frontend is vanilla HTML, CSS, and JavaScript. The backend is Rust.
 
-- AI workflow analysis and generation.
-- Proactive observer suggestions.
-- Visual regression checkpoints.
-- Cloud sync and workspace management.
-- Enterprise audit logging.
-- Data-driven workflow testing.
+## Stable vs experimental
 
-## Command and trust boundaries
+Ghost's stable boundary is intentionally narrow.
 
-Ghost's stable product boundary is explicit recording, replay, workflow storage, local protection, diagnostics, and safety review. AI assistance, observer suggestions, visual checks, cloud/workspace features, and analytics remain experimental until they have documented limits and reliability coverage.
+### Stable core
 
-The public Tauri command names are compatibility contracts for the frontend. Internal command implementations may be reorganized into core, auth, diagnostics, and experimental modules, but renames or removals should be treated as IPC breaking changes. See [`docs/core-boundaries.md`](docs/core-boundaries.md) for the command-surface policy and release-readiness gate.
+The stable core is:
+
+- explicit user-started recording;
+- explicit user-started replay;
+- workflow save, load, list, and delete;
+- local workflow storage;
+- local protection/auth surfaces;
+- permission checks;
+- diagnostics;
+- safety review paths.
+
+### Experimental surface
+
+The following areas are experimental and should not be treated as production-ready:
+
+- AI workflow analysis;
+- AI workflow generation;
+- observer mode;
+- proactive suggestions;
+- learned patterns;
+- cloud sync;
+- workspace management;
+- analytics dashboards;
+- visual regression checkpoints;
+- data-source-driven workflow testing.
+
+Experimental features should remain isolated from the trusted core until they have clear limits, tests, reliability coverage, and user-facing safety controls.
+
+## Trust model
+
+Ghost should never silently mutate important user state.
+
+The intended execution model is:
+
+```text
+Intent → Plan → Policy check → User approval → Execution → Audit log → Undo path
+```
+
+Future development should route dangerous operations through an explicit policy layer before execution.
+
+High-risk operations include:
+
+- deleting files;
+- overwriting files;
+- uploading files;
+- sending messages;
+- submitting forms;
+- typing into unknown apps;
+- replaying actions outside an approved app or folder;
+- running shell commands;
+- using network/cloud sync.
+
+## Recommended product wedge
+
+The first practical product wedge is Ghost Organizer.
+
+Ghost Organizer should help users clean, rename, classify, and move files safely.
+
+Example:
+
+```text
+Downloads/
+  lecture-07.pdf
+  essay-rubric.pdf
+  syllabus-final.pdf
+```
+
+Ghost proposes:
+
+```text
+Documents/School/BIO101/Lectures/BIO101_Lecture_07.pdf
+Documents/School/ENGL201/Assignments/ENGL201_Essay_Rubric.pdf
+Documents/School/CHEM110/Syllabus/CHEM110_Syllabus.pdf
+```
+
+The user should review the plan before Ghost changes anything.
+
+The required safety behavior:
+
+- preview first;
+- no silent deletion;
+- no silent overwrite;
+- approval before mutation;
+- audit every change;
+- provide undo when possible.
 
 ## Project structure
 
@@ -66,37 +161,37 @@ ghost/
 └── .github/workflows/      # CI and release pipelines
 ```
 
-Both `src/` and `public/` currently contain similar frontend assets. Keep them synchronized until the app UI and marketing site are split into separate packages.
+`src/` and `public/` currently contain overlapping frontend/marketing assets. Keep them synchronized until the app UI and marketing site are split into separate packages.
 
 ## Architecture
 
 Ghost is built as a Tauri 2 app.
 
-- **Frontend:** vanilla HTML, CSS, and JavaScript. It handles recording controls, replay controls, workflow views, and Tauri IPC calls.
-- **Backend:** Rust. It owns the workflow engine, platform-specific recording/replay, persistence, auth, telemetry, and command surface.
-- **macOS backend:** uses native macOS accessibility/event APIs and `enigo` for replay.
-- **Windows backend:** uses Win32 hooks, UI metadata lookup, and `enigo` for replay.
+- Frontend: vanilla HTML, CSS, and JavaScript.
+- Backend: Rust.
+- Desktop shell: Tauri 2.
+- macOS backend: native macOS accessibility/event APIs plus replay support.
+- Windows backend: Windows-native input hooks, UI metadata lookup, and replay support.
 
 Core files:
 
-- `src-tauri/src/lib.rs` — Tauri app setup and command registration.
-- `src-tauri/src/commands.rs` — IPC command handlers.
-- `src-tauri/src/engine.rs` — platform-agnostic orchestration.
-- `src-tauri/src/core/events.rs` — shared event schema.
-- `src-tauri/src/platform/macos.rs` — macOS implementation.
-- `src-tauri/src/platform/windows.rs` — Windows implementation.
+```text
+src-tauri/src/lib.rs              # Tauri app setup and command registration
+src-tauri/src/commands.rs         # IPC command handlers or command registry
+src-tauri/src/engine.rs           # Platform-agnostic orchestration
+src-tauri/src/core/events.rs      # Shared event schema
+src-tauri/src/core/security.rs    # Validation, path safety, and guard helpers
+src-tauri/src/platform/macos.rs   # macOS implementation
+src-tauri/src/platform/windows.rs # Windows implementation
+```
 
-## Requirements
+## Development
 
-- macOS 12+ or Windows 10/11
-- Rust stable
-- Tauri CLI
+Install the Tauri CLI:
 
 ```bash
 cargo install tauri-cli --version "^2.0" --locked
 ```
-
-## Development
 
 Run the desktop app:
 
@@ -131,31 +226,43 @@ cargo tauri build
 
 Ghost needs Accessibility permission to observe and replay desktop actions. Keyboard capture may also require Input Monitoring.
 
-Go to:
+Enable Ghost in:
 
 ```text
 System Settings → Privacy & Security → Accessibility
 System Settings → Privacy & Security → Input Monitoring
 ```
 
-Enable Ghost, then restart the app.
+Then restart the app.
 
 ### Windows
 
-Ghost uses Windows-native input hooks and replay APIs. Some apps running as administrator or protected system surfaces may not be controllable from a normal user-level Ghost process.
-
-## Product roadmap
-
-See [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md) for the realistic plan: stable recording/replay first, workflow debugging second, constrained AI assistance third. See [`docs/GHOST_GUARD.md`](docs/GHOST_GUARD.md) for the local safety-audit layer and sensitive-input roadmap.
+Ghost uses Windows-native input hooks and replay APIs. Apps running as administrator or protected system surfaces may not be controllable from a normal user-level Ghost process.
 
 ## Current priorities
 
-1. Make recording and replay reliable across common apps.
-2. Add a workflow debugger with per-step inspection and retry.
-3. Improve semantic target resolution so workflows survive window movement.
-4. Add explicit safety controls for sensitive apps and destructive actions.
-5. Separate experimental AI features from stable public claims.
-6. Improve release signing and installer quality.
+1. Restore and keep CI green.
+2. Keep the stable command surface small and reviewable.
+3. Separate experimental commands from trusted core behavior.
+4. Add a real policy engine for dangerous operations.
+5. Build a focused file-organization workflow with preview, approval, audit, and undo.
+6. Improve replay reliability across common apps.
+7. Improve semantic target resolution so workflows survive window movement.
+8. Improve release signing and installer quality.
+
+## Development rule
+
+No new feature should bypass the trust model.
+
+Before adding a command or workflow capability, answer:
+
+- What can it touch?
+- Can it mutate user state?
+- Can it access sensitive data?
+- Can it use the network?
+- Can it be undone?
+- Does the user approve it before execution?
+- Is it stable or experimental?
 
 ## Release notes
 
@@ -164,7 +271,7 @@ The release workflow builds:
 - `Ghost.dmg` for macOS.
 - `Ghost_Setup.exe` for Windows.
 
-Release packaging is intentionally separate from compile-only CI because native desktop installers fail for different reasons than Rust code. Apparently desktops are still real computers, not vibes.
+Release packaging is intentionally separate from compile-only CI because native desktop installers can fail for platform-specific reasons.
 
 ## License
 
