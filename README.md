@@ -9,26 +9,50 @@
 
 Ghost is a local-first desktop automation project for macOS and Windows.
 
-It records user-approved computer actions, stores them as reusable workflows, and replays them with native desktop automation. The long-term goal is to make repetitive computer work safe, inspectable, and eventually easier to automate through permission-bounded routines.
+It watches only what the user asks it to watch, records approved actions, turns them into reusable workflows, and replays them through native desktop automation. The ambition is simple: make repetitive computer work safe enough to trust and clear enough to inspect before anything changes.
 
-Ghost is still a technical preview. The current foundation works, but reliability, workflow debugging, cross-app replay, release signing, and experimental AI-assisted features are still under active development.
+Ghost is not an autonomous agent running loose on your machine. It is a technical preview of a permission-bounded automation layer: record, review, approve, run, audit, undo when possible.
 
-## Product direction
+## Why Ghost exists
 
-Ghost is being shaped around one principle:
+Most desktop automation tools fall into one of two bad categories:
+
+- powerful but brittle scripts that break the second a window moves;
+- magical AI agents that promise too much and explain too little.
+
+Ghost is aiming for the middle path: practical local automation with visible plans, controlled permissions, and a user-approved execution boundary.
+
+The first serious wedge is file organization, because everyone has a Downloads folder that looks like civilization gave up.
+
+## Product principle
 
 > Ghost may suggest anything, but it should only do what the user has approved inside boundaries the user controls.
 
-The stable product direction is not uncontrolled autonomous computer use. Ghost is intended to become a trusted local automation layer for repetitive computer work.
+That principle shapes the product:
 
-The near-term focus is:
+- suggestions are allowed;
+- silent mutation is not;
+- risky actions need a policy check;
+- users approve before execution;
+- changes should leave an audit trail;
+- destructive operations should have an undo path whenever possible.
+
+Ghost is being built as a trusted local automation layer, not uncontrolled autonomous computer use wearing a nicer coat.
+
+## What Ghost is becoming
+
+The near-term roadmap is focused on making a small number of workflows feel reliable instead of pretending the whole computer can be solved in one weekend. Civilization has tried that strategy. It produced printer drivers.
+
+Ghost is moving toward:
 
 1. reliable local recording and replay;
-2. clear command and trust boundaries;
-3. safe workflow review before execution;
-4. permission-bounded actions;
-5. auditability and undoable operations;
-6. a focused file-organization workflow as the first practical product wedge.
+2. workflow review before execution;
+3. permission-bounded actions;
+4. a real policy layer for dangerous operations;
+5. audit logs and undoable changes;
+6. better semantic targeting so workflows survive window movement;
+7. Ghost Organizer as the first practical product wedge;
+8. experimental AI assistance that stays outside the trusted core until it earns its place.
 
 ## Download
 
@@ -38,11 +62,13 @@ The near-term focus is:
 | Windows 10 / 11 64-bit | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
 > [!NOTE]
-> Current release builds may still be developer-preview quality. The macOS build may be ad-hoc signed rather than fully notarized unless Apple Developer ID secrets are configured in the release workflow.
+> Current builds are developer-preview quality. They may work, they may be useful, and they may also remind you why production software has release managers.
+>
+> The macOS build may be ad-hoc signed rather than fully notarized unless Apple Developer ID secrets are configured in the release workflow.
 >
 > If macOS blocks the app, open **System Settings → Privacy & Security** and approve it.
 >
-> A fully signed and notarized release is the long-term target.
+> Fully signed and notarized releases are the long-term target.
 
 ## What Ghost does today
 
@@ -60,9 +86,11 @@ The current frontend is vanilla HTML, CSS, and JavaScript. The backend is Rust.
 
 ## Stable vs experimental
 
-Ghost's stable boundary is intentionally narrow.
+Ghost has a deliberately narrow stable boundary.
 
 ### Stable core
+
+The trusted core should stay small, boring, and reviewable. Boring is good. Boring means fewer surprise flamethrowers in the workflow engine.
 
 The stable core is:
 
@@ -116,13 +144,13 @@ High-risk operations include:
 - running shell commands;
 - using network/cloud sync.
 
-## Recommended product wedge
+## Ghost Organizer
 
-The first practical product wedge is Ghost Organizer.
+Ghost Organizer is the first practical wedge.
 
-Ghost Organizer should help users clean, rename, classify, and move files safely.
+The goal: help users clean, rename, classify, and move files safely without turning their computer into a roulette table.
 
-Example:
+Example starting point:
 
 ```text
 Downloads/
@@ -131,7 +159,7 @@ Downloads/
   syllabus-final.pdf
 ```
 
-Ghost proposes:
+Ghost proposes a plan:
 
 ```text
 Documents/School/BIO101/Lectures/BIO101_Lecture_07.pdf
@@ -139,9 +167,9 @@ Documents/School/ENGL201/Assignments/ENGL201_Essay_Rubric.pdf
 Documents/School/CHEM110/Syllabus/CHEM110_Syllabus.pdf
 ```
 
-The user should review the plan before Ghost changes anything.
+Before Ghost changes anything, the user reviews the proposed moves.
 
-The required safety behavior:
+Required behavior:
 
 - preview first;
 - no silent deletion;
@@ -149,6 +177,8 @@ The required safety behavior:
 - approval before mutation;
 - audit every change;
 - provide undo when possible.
+
+This is the product wedge because it is concrete, useful, testable, and risky enough to require a real trust model. Tiny miracle: a use case with both utility and constraints.
 
 ## Project structure
 
@@ -241,11 +271,11 @@ Ghost uses Windows-native input hooks and replay APIs. Apps running as administr
 
 ## Current priorities
 
-1. Restore and keep CI green.
+1. Keep CI green.
 2. Keep the stable command surface small and reviewable.
 3. Separate experimental commands from trusted core behavior.
 4. Add a real policy engine for dangerous operations.
-5. Build a focused file-organization workflow with preview, approval, audit, and undo.
+5. Build Ghost Organizer with preview, approval, audit, and undo.
 6. Improve replay reliability across common apps.
 7. Improve semantic target resolution so workflows survive window movement.
 8. Improve release signing and installer quality.
@@ -263,6 +293,8 @@ Before adding a command or workflow capability, answer:
 - Can it be undone?
 - Does the user approve it before execution?
 - Is it stable or experimental?
+
+If the answer is vague, the feature is not ready for the trusted core.
 
 ## Release notes
 
