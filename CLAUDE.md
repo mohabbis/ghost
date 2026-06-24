@@ -137,10 +137,13 @@ src-tauri/src/
 ```
 
 Scaffolded so far: `policy/` (pure deny-by-default trust engine —
-capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`) and
-`storage/` (SQLite-backed Zones + folder rules, versioned migrations). Both are
-backend-only and not yet wired to any Tauri command; command enforcement arrives
-with the Organizer planner/executor.
+capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`),
+`storage/` (SQLite-backed Zones + folder rules, versioned migrations), and
+`organizer/` (read-only planner: scanner/classifier/naming/conflict/planner —
+scans a Zone's folders and emits a reviewable, policy-evaluated plan that
+mutates nothing; see `docs/organizer-planner.md`). All three are backend-only
+and not yet wired to any Tauri command; command enforcement and the executor
+(with audit + undo) arrive in later phases.
 
 Longer-term monorepo direction:
 
