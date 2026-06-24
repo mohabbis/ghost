@@ -46,7 +46,7 @@ pub fn save_workflow_with_metadata(
     tags: Vec<String>,
     engine: State<GhostEngine>,
 ) -> Result<String, String> {
-    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
+    super::core::guard_workflow_name(&name)?;
     let workflow = engine.create_workflow_with_details(&name, &events, &description, &tags);
 
     match engine.save_workflow_with_metadata(&workflow) {
@@ -61,7 +61,7 @@ pub fn load_workflow_with_metadata(
     name: String,
     engine: State<GhostEngine>,
 ) -> Result<crate::core::events::Workflow, String> {
-    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
+    super::core::guard_workflow_name(&name)?;
     engine
         .load_workflow_with_metadata(&name)
         .map_err(|e| e.to_string())
@@ -74,7 +74,7 @@ pub fn generate_workflow_from_prompt(
     screenshot: Option<Vec<u8>>,
     engine: State<GhostEngine>,
 ) -> Result<Vec<InputEvent>, String> {
-    security::validate_prompt(&prompt).map_err(|e| e.to_string())?;
+    super::core::guard_prompt(&prompt)?;
     engine
         .generate_workflow_from_prompt(prompt, screenshot)
         .map_err(|e| e.to_string())
@@ -102,7 +102,7 @@ pub fn save_workflow_with_sidecar(
 ) -> Result<String, String> {
     use std::time::SystemTime;
 
-    security::sanitize_workflow_path(&name).map_err(|e| e.to_string())?;
+    super::core::guard_workflow_name(&name)?;
 
     let tagged_events = engine
         .analyze_and_tag_workflow(events.clone())
