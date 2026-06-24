@@ -1,117 +1,132 @@
 # CLAUDE.md
 
-This file guides Claude Code when working in the Ghost repository.
+Claude Code instructions for the Ghost repository.
+
+`AGENTS.md` is the canonical agent contract. Read and follow it first. This file adds Claude-specific execution guidance and should not conflict with `AGENTS.md`.
+
+## Operating mode
+
+Work like a cautious product engineer, not a demo agent chasing novelty.
+
+Default behavior:
+
+1. inspect the existing file or module before editing;
+2. preserve the trust model;
+3. keep changes scoped;
+4. avoid broad rewrites unless explicitly requested;
+5. update docs when behavior changes;
+6. run relevant checks when possible;
+7. report what changed and what was not validated.
 
 ## Product identity
 
-Ghost is a local-first automation layer for repetitive personal computer work.
-
-Do not frame Ghost as a generic AI agent, chatbot, macro recorder, RPA clone, or app that takes over the user's computer. The product value is trustworthy execution: clear boundaries, reviewable plans, deterministic operations, audit logs, and undo paths.
+Ghost is a local-first desktop automation product for macOS and Windows.
 
 Canonical positioning:
 
 > Ghost turns repeated computer work into safe, reusable, permission-bounded routines.
 
-The strategic wedge is Ghost Organizer: safe file organization with preview, approval, folder boundaries, audit, and undo.
+Do not frame Ghost as:
 
-## Current repo reality
+- a generic autonomous AI agent;
+- a chatbot;
+- an RPA clone;
+- a macro recorder only;
+- an app that silently takes over the user's computer.
 
-Ghost is currently an early-stage Tauri 2 desktop app for macOS and Windows. It has foundations for recording, replay, workflow storage, local protection, diagnostics, and platform-specific automation. It is not ready to be marketed as a broad computer-controlling assistant.
-
-Stable product center:
-
-- permission checks and requests
-- explicit user-approved recording
-- replay controls: cancel, pause, resume, speed
-- workflow save/load/list/delete
-- recorded event review and element inspection
-- local auth and at-rest workflow protection
-- diagnostics and safe telemetry export
-- Ghost Guard / safety audit concepts
-
-Experimental unless hardened and feature-gated:
-
-- AI workflow analysis and optimization
-- prompt-generated workflows
-- proactive observer mode
-- learned-pattern suggestions
-- cloud sync and workspaces
-- enterprise audit logs
-- analytics dashboards
-- visual regression workflows
-- data-source workflow testing
-- geek insights
-
-Do not add new user-facing UI for experimental surfaces unless the task explicitly calls for developer/experimental mode.
-
-## Core engineering philosophy
-
-Every meaningful operation should pass through this pipeline:
+The product value is trustworthy execution:
 
 ```text
-Intent -> Plan -> Policy -> Approval -> Execution -> Audit -> Undo
+Record -> Inspect -> Approve -> Replay -> Audit -> Undo
+```
+
+## Current wedge
+
+Prioritize Ghost Organizer before broad automation.
+
+Ghost Organizer flow:
+
+```text
+Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo
+```
+
+Required behavior:
+
+- preview every filesystem mutation;
+- deny silent delete and silent overwrite;
+- detect conflicts;
+- require approval before mutation;
+- write audit events;
+- write undo data before reversible operations.
+
+## Engineering rules
+
+Every meaningful operation should pass through:
+
+```text
+Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Undo path
 ```
 
 Rules:
 
-1. No file, app, window, network, or user-data operation should bypass policy.
-2. AI output may propose, but must not execute directly.
-3. Every meaningful operation must write an audit event.
-4. Every reversible operation must write an undo entry before execution.
-5. Ghost must deny by default.
-6. Experimental features must be isolated behind explicit flags or modules.
-7. Coordinates are fallback automation identity, never the primary model.
-8. No Tauri command should be added without a risk classification.
-9. The MVP must not silently overwrite or delete files.
-10. Human approval is required before meaningful changes.
+1. AI may propose; deterministic code executes only approved plans.
+2. Ghost denies risky actions by default.
+3. High-risk commands require explicit approval or must remain unavailable in default UI.
+4. New Tauri commands need a module and risk class.
+5. Experimental features stay gated or labeled.
+6. Coordinates are fallback automation identity, not the primary model.
+7. Replay must be interruptible.
+8. Reversible mutations must write undo data before execution.
+9. Sensitive reads must be scoped and visible to the user.
+10. Marketing/docs must not promise capabilities the app cannot support.
 
-AI may suggest plans, categories, filenames, explanations, routine drafts, and improvements. The deterministic Ghost core must verify and execute only approved plans.
-
-## Privacy and permission boundaries
-
-Ghost should not be always watching.
+## Privacy boundaries
 
 Default stance:
 
-- No camera requirement.
-- No microphone requirement.
-- No hidden screen capture.
-- No background email or draft monitoring.
-- Keyboard and pointer capture only during explicit recording or approved routine execution.
-- Browser and email access only when user-approved, scoped, and zone-bound.
+- no camera;
+- no microphone;
+- no hidden screen capture;
+- no background email monitoring;
+- no background browser/tab reading;
+- no raw secret capture;
+- no cloud-first storage;
+- keyboard/pointer capture only during explicit recording or approved replay.
 
-For Ghost Organizer MVP, avoid broad OS permissions where possible. File organization should work through explicit folder selection and local filesystem operations.
+For Organizer, use explicit folder selection and local filesystem operations.
 
-For Ghost Routines later, input recording may be used only with visible active state, emergency stop, permission checks, and sensitive-input suppression.
-
-Browser integration should evolve in layers:
-
-1. OS-level active app/window awareness.
-2. Browser extension for active-tab/domain metadata and explicit selected-text sharing.
-3. Official APIs where appropriate.
-
-Per-tab or per-window access must be scoped through Zones and app/domain rules.
+For Routines later, input recording requires visible active state, emergency stop, permission checks, and sensitive-input suppression.
 
 ## Target product layers
 
-Design Ghost as three coherent layers sharing one trust engine:
+Build in this order:
 
-1. Ghost Organizer
-   - safe file/folder cleanup
-   - classification, naming, moving, conflicts, preview, audit, undo
-2. Ghost Routines
-   - explicit recorded routines across apps and websites
-   - semantic replay with coordinates as fallback
-3. Ghost Intelligence
-   - suggestion-only planning, explanation, classification, and routine detection
+1. **Ghost Organizer**
+   - safe file/folder cleanup;
+   - classification, naming, moving, conflict detection, preview, audit, undo.
+2. **Ghost Routines**
+   - explicit recorded routines across apps and websites;
+   - semantic replay with coordinates as fallback.
+3. **Ghost Intelligence**
+   - suggestion-only planning, classification, explanation, and routine detection.
 
-Build order: Organizer first, Routines second, Intelligence last.
+Organizer first. Routines second. Intelligence last.
 
 ## Architecture direction
 
-Keep Rust/Tauri for now. Do not rewrite the whole product before proving the wedge.
+Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 
-Near-term refactor direction:
+Current structure:
+
+```text
+src/                    # Tauri desktop frontend
+public/                 # marketing/download site
+src-tauri/              # Rust backend
+docs/                   # planning and technical docs
+.github/workflows/      # CI and release pipelines
+```
+
+Near-term backend direction:
 
 ```text
 src-tauri/src/
@@ -136,95 +151,47 @@ src-tauri/src/
     undo_journal.rs
 ```
 
-Longer-term monorepo direction:
-
-```text
-apps/desktop/
-crates/ghost-core/
-crates/ghost-policy/
-crates/ghost-organizer/
-crates/ghost-workflows/
-crates/ghost-platform/
-crates/ghost-platform-macos/
-crates/ghost-platform-windows/
-crates/ghost-storage/
-crates/ghost-security/
-crates/ghost-audit/
-crates/ghost-ai/
-```
-
-The app shell should stay thin. Product logic belongs in modules/crates that can be tested without the UI.
-
-## Current app structure
-
-The current desktop app uses:
-
-- `src/` for the Tauri desktop frontend.
-- `public/` for the marketing/download site.
-- `src-tauri/` for the Rust backend.
-- `docs/` for product and technical planning.
-- `.github/workflows/` for CI and release pipelines.
-
-Important: `src/` and `public/` are not interchangeable. The desktop UI and marketing site may share assets or tokens, but do not blindly sync their HTML/JS behavior.
+The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
 ## Replay invariants
 
 Do not regress these behaviors:
 
-- Clicks are press/release pairs.
-- Timestamps drive replay pacing and must be preserved when events are transformed.
-- Pause/cancel must be checked inside replay loops.
-- Use interruptible sleeps for replay delays.
-- Playback speed must flow from engine state into platform replay.
-- Semantic element resolution should be preferred when available.
-- Coordinate replay is fallback only.
-- Double-clicks and repeated same-position clicks must not be debounced away.
+- clicks are press/release pairs;
+- timestamps drive replay pacing;
+- pause/cancel are checked inside replay loops;
+- replay delays are interruptible;
+- playback speed flows from engine state into platform replay;
+- semantic element resolution is preferred when available;
+- coordinate replay is fallback only;
+- double-clicks and repeated same-position clicks are preserved.
 
 ## Command surface expectations
 
-Command modules should be grouped by intent:
+Command modules:
 
-- stable core
-- auth/protection
-- diagnostics
-- experimental
+- `commands/core.rs` for stable automation, recording, replay, workflow storage, permissions;
+- `commands/auth.rs` for local password state and protection;
+- `commands/diagnostics.rs` for config, telemetry export, and performance summaries;
+- `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
-Every command should have a documented risk class. At minimum, track whether it touches:
+Before changing commands, read:
 
-- files
-- OS input
-- screenshots/screen contents
-- network
-- authentication/secrets
-- app/window state
+- `docs/command-registry.md`;
+- `docs/core-boundaries.md`.
 
-High and critical commands must require explicit approval, remain developer-only, or be unavailable in default product UI.
+Every command should document whether it touches:
 
-## Ghost Organizer MVP
+- files;
+- OS input;
+- screenshots/screen contents;
+- network;
+- authentication/secrets;
+- app/window state.
 
-The next serious product slice is Ghost Organizer.
+## Validation
 
-MVP flow:
-
-1. User selects a source folder.
-2. User selects a destination folder or Zone.
-3. User defines categories or chooses templates.
-4. Ghost scans candidate files.
-5. Ghost classifies deterministically first.
-6. Ghost generates safe target folders and filenames.
-7. Ghost detects conflicts and low-confidence items.
-8. Ghost creates a reviewable plan.
-9. Policy engine evaluates the plan.
-10. User approves.
-11. Executor performs deterministic filesystem operations.
-12. Audit log and undo journal are written.
-13. User sees completion summary and undo option.
-
-MVP must not delete files. It must not silently overwrite. It must keep operations inside approved folder boundaries.
-
-## Testing and validation
-
-Before declaring a feature ready, run when applicable:
+Use the relevant checks:
 
 ```bash
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -234,11 +201,15 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo tauri build --no-bundle
 ```
 
-For release readiness, do not call Ghost consumer-ready until:
+If checks cannot run, report that directly.
 
-- macOS builds are Developer ID signed and notarized.
-- Windows builds are signed.
-- experimental commands are hidden, gated, or clearly labeled.
-- app UI and marketing/download site are separated or generated from a shared source.
-- workflow schemas have versioning and migration tests.
-- file operations have policy, audit, and undo coverage.
+## Response format
+
+When finishing a task, report:
+
+- files changed;
+- commit SHA if applicable;
+- validation performed;
+- risks or follow-up work.
+
+Do not claim a build, release, signing, notarization, or CI result unless it actually happened.
