@@ -17,6 +17,29 @@ fn read(rel: &str) -> String {
         .unwrap_or_else(|e| panic!("could not read {}: {}", rel, e))
 }
 
+fn read_command_sources() -> String {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let command_dir = root.join("src/commands");
+
+    let mut sources = vec![read("src/commands.rs")];
+
+    if command_dir.exists() {
+        let mut files = std::fs::read_dir(&command_dir)
+            .unwrap_or_else(|e| panic!("could not read {}: {}", command_dir.display(), e))
+            .map(|entry| entry.expect("could not read command source entry").path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+            .collect::<Vec<_>>();
+        files.sort();
+
+        sources.extend(files.into_iter().map(|path| {
+            std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("could not read {}: {}", path.display(), e))
+        }));
+    }
+
+    sources.join("\n")
+}
+
 fn registered_commands() -> HashSet<String> {
     read("src/lib.rs")
         .lines()
@@ -96,10 +119,10 @@ fn split_top_level(s: &str, sep: char) -> Vec<String> {
     parts
 }
 
-/// Parse commands.rs into command → set of accepted JS arg keys (camelCased
+/// Parse command sources into command → set of accepted JS arg keys (camelCased
 /// param names, minus Tauri-injected params like State/AppHandle/Window).
 fn command_arg_keys() -> HashMap<String, HashSet<String>> {
-    let src = read("src/commands.rs");
+    let src = read_command_sources();
     let re = regex::Regex::new(r"(?s)#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\(([^)]*)\)")
         .unwrap();
     let mut map = HashMap::new();
@@ -200,7 +223,7 @@ fn frontend_invoke_args_match_command_params() {
     let commands = command_arg_keys();
     assert!(
         commands.len() > 30,
-        "commands.rs parsing looks broken — only found {} commands",
+        "command source parsing looks broken — only found {} commands",
         commands.len()
     );
 
@@ -238,7 +261,7 @@ fn frontend_actually_uses_the_ipc_bridge() {
     let invoked = invoked_commands();
     assert!(
         invoked.len() > 20,
-        "main.js parsing looks broken — only found {} invocations",
+        "src/main.js invokes parsing looks broken — only found {} invocations",
         invoked.len()
     );
 }
