@@ -138,11 +138,18 @@ src-tauri/src/
     experimental.rs
   policy/
     capability.rs
+    decision.rs
     engine.rs
     risk.rs
+    zone.rs
+  storage/
+    migrations.rs
+    zones.rs
   organizer/
     scanner.rs
     classifier.rs
+    naming.rs
+    conflict.rs
     planner.rs
     executor.rs
     undo.rs
@@ -150,6 +157,8 @@ src-tauri/src/
     audit_log.rs
     undo_journal.rs
 ```
+
+Scaffolded so far: `policy/` (pure deny-by-default trust engine — capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`), `storage/` (SQLite-backed Zones + folder rules, versioned migrations), and `organizer/` (read-only planner: scanner/classifier/naming/conflict/planner — scans a Zone's folders and emits a reviewable, policy-evaluated plan that mutates nothing; see `docs/organizer-planner.md`). All three are backend-only and not yet wired to any Tauri command; command enforcement and the executor (with audit + undo) arrive in later phases.
 
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
