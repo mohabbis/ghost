@@ -311,8 +311,8 @@ function setParrotEmotion(emotion) {
 - Platform preference distribution
 
 **Tools**:
-- Plausible (privacy-friendly alternative to GA)
-- Netlify Analytics (if deploying there)
+- Plausible or another privacy-friendly analytics tool
+- Hosting-provider analytics only if available in the current deployment stack
 - Custom event tracking for demo engagement
 
 ### 4.3 A/B Testing Framework
@@ -367,53 +367,28 @@ function setParrotEmotion(emotion) {
 
 ---
 
-## 🔗 Related Files
+## 🔗 Integration Points
 
-### Backend (Rust):
-- `src-tauri/src/core/llm.rs` - LLM integration
-- `src-tauri/src/core/vision.rs` - Visual understanding
-- `src-tauri/src/core/knowledge.rs` - Pattern learning
-- `src-tauri/src/core/events.rs` - Event schema
-- `src-tauri/src/engine.rs` - Main orchestration
-- `src-tauri/src/core/tutorial.rs` - **NEW** Tutorial engine
+### Backend → Frontend
+- `analyze_workflow()` command → Show insights in UI
+- `generate_workflow_from_prompt()` command → Chat interface
+- `get_proactive_suggestions()` command → Parrot notifications
+- `get_geek_insights()` command → Power user dashboard
 
-### Frontend (Vanilla JS):
-- `public/index.html` - Marketing site structure
-- `public/main.js` - Interactive demo logic
-- `public/styles.css` - Visual design
-- `public/assets/` - Images, icons, illustrations
-
-### Configuration:
-- `netlify.toml` - Deployment settings
-- `vercel.json` - Alternative deployment
-- `src-tauri/tauri.conf.json` - App configuration
+### Marketing Site → App
+- Download links point to latest GitHub releases
+- Demo data should mirror real app capabilities
+- Waitlist submissions feed into beta invite system
+- Analytics track which features users care about most
 
 ---
 
-## 💡 Key Principles
+## 📝 Notes
 
-1. **Delightful First**: Make users smile when they meet Ghost
-2. **Transparent AI**: Explain what Ghost is doing and why
-3. **Progressive Disclosure**: Simple defaults, advanced options available
-4. **Privacy First**: All processing local unless explicitly syncing
-5. **Platform Native**: Feels at home on macOS and Windows
+This plan prioritizes making Ghost feel **magical but approachable**. The AI parrot should be:
+- **Helpful** without being annoying
+- **Smart** without being creepy
+- **Playful** without being childish
+- **Powerful** without being overwhelming
 
----
-
-## 📝 Notes for Claude
-
-When implementing this plan:
-
-1. **Start small**: Pick one phase and complete it fully
-2. **Test interactively**: Run `cargo tauri dev` frequently
-3. **Preserve existing features**: Don't break recording/replay
-4. **Document as you go**: Update CLAUDE.md with learnings
-5. **Prioritize UX**: If something feels clunky, iterate until smooth
-
-**First Task Recommendation**: 
-Begin with Phase 2.1 (Interactive Demo) — it's high-visibility, low-risk, and will immediately improve the marketing site while you work on the deeper AI enhancements.
-
----
-
-*Last updated: Post-claude-branch merge*
-*Status: Ready for implementation*
+The goal: Users install Ghost and within 60 seconds think, *"Oh, this is like having a tiny automation assistant watching my back."*
