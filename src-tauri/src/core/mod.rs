@@ -11,6 +11,7 @@ pub mod security;
 pub mod traits;
 pub mod vision;
 pub mod wait;
+pub mod workflow_schema;
 
 pub use ai::*;
 pub use cloud::*;
@@ -23,5 +24,6 @@ pub use security::*;
 pub use traits::*;
 pub use vision::*;
 pub use wait::*;
+pub use workflow_schema::*;
 
 pub mod guard;
