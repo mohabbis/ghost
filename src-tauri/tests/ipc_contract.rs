@@ -99,7 +99,20 @@ fn split_top_level(s: &str, sep: char) -> Vec<String> {
 /// Parse commands.rs into command → set of accepted JS arg keys (camelCased
 /// param names, minus Tauri-injected params like State/AppHandle/Window).
 fn command_arg_keys() -> HashMap<String, HashSet<String>> {
-    let src = read("src/commands.rs");
+    // Command implementations were split out of commands.rs into per-product
+    // modules (PR #57); commands.rs is now just a re-export registry. Parse all
+    // of them so this guard keeps covering the real command signatures.
+    let src = [
+        "src/commands.rs",
+        "src/commands/core.rs",
+        "src/commands/auth.rs",
+        "src/commands/diagnostics.rs",
+        "src/commands/experimental.rs",
+    ]
+    .iter()
+    .map(|p| read(p))
+    .collect::<Vec<_>>()
+    .join("\n");
     let re = regex::Regex::new(r"(?s)#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\(([^)]*)\)")
         .unwrap();
     let mut map = HashMap::new();

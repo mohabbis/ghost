@@ -6,6 +6,8 @@ pub mod engine;
 pub mod error;
 pub mod performance;
 mod platform;
+pub mod policy;
+pub mod storage;
 pub mod telemetry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -136,6 +136,12 @@ src-tauri/src/
     undo_journal.rs
 ```
 
+Scaffolded so far: `policy/` (pure deny-by-default trust engine —
+capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`) and
+`storage/` (SQLite-backed Zones + folder rules, versioned migrations). Both are
+backend-only and not yet wired to any Tauri command; command enforcement arrives
+with the Organizer planner/executor.
+
 Longer-term monorepo direction:
 
 ```text

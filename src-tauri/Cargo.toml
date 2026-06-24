@@ -32,6 +32,10 @@ regex = "1.10"
 dirs = "5"
 argon2 = "0.5"
 aes-gcm = "0.10"
+# Local trust-boundary storage (Zones + folder rules). `bundled` compiles
+# SQLite from source so there is no system-library dependency and it builds on
+# the headless Linux CI leg. MIT-licensed (passes deny.toml).
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 [features]
 default = []
