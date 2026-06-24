@@ -434,11 +434,14 @@ mod tests {
 
     #[test]
     fn conflicts_are_detected_and_resolved_without_overwrite() {
-        // Two differently-cased-but-distinct files of the same category whose
-        // safe names collide should produce a conflict + de-duplicated target.
+        // Two distinct files of the same category whose safe names collide should
+        // produce a conflict + de-duplicated target. The collision is driven by
+        // whitespace collapse (a sanitization that works cross-platform) rather
+        // than illegal characters like `?`/`*`, which cannot exist in a filename
+        // on Windows and so could never be written there in the first place.
         let tmp = tempdir();
-        tmp.file("a/q?.pdf", b"1"); // sanitizes to "q_.pdf"
-        tmp.file("b/q*.pdf", b"2"); // also sanitizes to "q_.pdf"
+        tmp.file("a/report  card.pdf", b"1"); // two spaces -> "report card.pdf"
+        tmp.file("b/report card.pdf", b"2"); // one space  -> "report card.pdf"
         let rules = vec![full_rule(tmp.path())];
 
         let plan = plan_with_rules("z", &rules);
@@ -453,7 +456,7 @@ mod tests {
             })
             .collect();
         // The two collide; one keeps the safe name, the other is de-duplicated.
-        assert!(move_targets.contains(&"q_.pdf".to_string()));
+        assert!(move_targets.contains(&"report card.pdf".to_string()));
         assert!(move_targets.iter().any(|n| n.contains("(2)")));
         assert!(plan.summary.conflicts >= 1);
     }
