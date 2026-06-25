@@ -8,8 +8,10 @@ mod auth;
 mod core;
 mod diagnostics;
 mod experimental;
+mod updates;
 
 pub use auth::*;
 pub use core::*;
 pub use diagnostics::*;
 pub use experimental::*;
+pub use updates::*;

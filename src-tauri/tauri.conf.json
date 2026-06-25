@@ -24,12 +24,32 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Safe, reusable, permission-bounded computer routines.",
+    "longDescription": "Ghost turns repeated computer work into safe, reusable, permission-bounded routines: record, inspect, approve, replay, audit, undo.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "entitlements": "Ghost.entitlements"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mohabbis/ghost/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_OUTPUT_OF_cargo_tauri_signer_generate"
+    }
   }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Extra Info.plist keys Tauri merges into the macOS bundle. Usage-description
+    strings are shown in the system permission prompts; clear, honest copy is
+    part of the trust model (the user must understand what they are approving).
+  -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.productivity</string>
+
+  <!-- Shown when Ghost asks to control other apps via Apple Events (automation). -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Ghost replays approved routines by controlling other apps only while you have explicitly started a recording or approved a replay.</string>
+
+  <!-- Shown if a routine ever needs to drive System Events / accessibility automation. -->
+  <key>NSSystemAdministrationUsageDescription</key>
+  <string>Ghost needs this only to replay routines you have recorded and approved. It never runs in the background without a visible active state.</string>
+</dict>
+</plist>

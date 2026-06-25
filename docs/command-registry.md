@@ -29,6 +29,7 @@ Use the right module, then re-export/register from the registry layer.
 | `commands/core.rs` | Stable local automation: permissions, recording, replay, inspection, workflow storage | explicit, tested, user-started |
 | `commands/auth.rs` | Local password state and at-rest workflow protection | local-only, no network dependency |
 | `commands/diagnostics.rs` | Config summaries, telemetry export, performance/debug data | read-first, redacted, user-initiated export |
+| `commands/updates.rs` | Signed auto-update: read-only check + user-approved install | signature-verified, user-gated install |
 | `commands/experimental.rs` | AI, observer mode, cloud sync, analytics, visual checks, data sources, research features | gated, labeled, not default product UI |
 
 ## Required command metadata
@@ -157,6 +158,13 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `get_telemetry_stats` | stable | – | – | – | – | – | – | low | Local in-memory counters. |
 | `export_telemetry` | stable | ✓ | – | – | – | – | – | low | Exports anonymized telemetry; opt-in. |
 | `get_performance_summary` | stable | – | – | – | – | – | – | low | In-memory performance metrics. |
+
+### `commands/updates.rs` — signed auto-update (stable)
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `check_for_update` | stable | – | – | – | ✓ | – | – | medium | Read-only query of the update endpoint; downloads/changes nothing. Returns `None` when current. Failures (no endpoint / unconfigured key) are swallowed in the UI so launch is never blocked. |
+| `install_update` | stable | ✓ | – | – | ✓ | – | ✓ | high | Downloads, **verifies the signature against the embedded public key**, replaces the app, and relaunches. **User-gated by design** — the UI calls this only after explicit "Update now". A failed verification installs nothing. |
 
 ### `commands/experimental.rs` — experimental (gated / not default UI)
 

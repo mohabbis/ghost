@@ -16,6 +16,7 @@ pub mod telemetry;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(engine::GhostEngine::new())
         .manage(commands::CloudState::default())
         .invoke_handler(tauri::generate_handler![
@@ -42,6 +43,9 @@ pub fn run() {
             commands::request_accessibility,
             commands::check_input_monitoring,
             commands::request_input_monitoring,
+            // Signed auto-update: a read-only check plus a user-approved install.
+            commands::check_for_update,
+            commands::install_update,
             // Local auth and at-rest workflow protection.
             commands::auth_status,
             commands::auth_setup,
