@@ -453,4 +453,181 @@ mod tests {
         assert!(!report.safe_to_save);
         assert_eq!(report.ai_audit.blocked_steps, vec![1]);
     }
+
+    // --- helpers ---------------------------------------------------------
+
+    fn click(element: Option<ElementInfo>, button: u8) -> InputEvent {
+        InputEvent::MouseClick {
+            x: 10,
+            y: 20,
+            button,
+            element,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        }
+    }
+
+    fn key_down(chars: &str) -> InputEvent {
+        InputEvent::Key {
+            code: 1,
+            chars: chars.to_string(),
+            modifiers: 0,
+            action: KeyAction::Down,
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+        }
+    }
+
+    // --- looks_like_secret ----------------------------------------------
+
+    #[test]
+    fn looks_like_secret_matches_credential_keywords() {
+        assert!(looks_like_secret("my password is here"));
+        assert!(looks_like_secret("OTP"));
+        assert!(looks_like_secret("enter your api key"));
+        assert!(looks_like_secret("cvv"));
+    }
+
+    #[test]
+    fn looks_like_secret_matches_high_entropy_tokens() {
+        // >= 20 chars with at least one digit and one uppercase letter.
+        assert!(looks_like_secret("ABCDEFGHIJ1234567890"));
+    }
+
+    #[test]
+    fn looks_like_secret_ignores_benign_text() {
+        assert!(!looks_like_secret("hello"));
+        assert!(!looks_like_secret("click the submit button"));
+        // Long, but all-lowercase with no credential keyword: not secret-shaped.
+        assert!(!looks_like_secret("abcdefghij1234567890"));
+    }
+
+    // --- is_sensitive_element -------------------------------------------
+
+    #[test]
+    fn sensitive_element_detection_uses_credential_hints_in_name() {
+        assert!(is_sensitive_element(&element(
+            "AXTextField",
+            "Card number",
+            "Shop"
+        )));
+    }
+
+    #[test]
+    fn sensitive_element_detection_uses_secure_role_description() {
+        let el = ElementInfo {
+            role: "AXTextField".to_string(),
+            name: "Field".to_string(),
+            app: "App".to_string(),
+            role_description: Some("Secure entry".to_string()),
+            ..Default::default()
+        };
+        assert!(is_sensitive_element(&el));
+    }
+
+    #[test]
+    fn sensitive_element_detection_ignores_benign_fields() {
+        assert!(!is_sensitive_element(&element("AXButton", "Save", "Notes")));
+    }
+
+    // --- should_suppress_keyboard_after_click ---------------------------
+
+    #[test]
+    fn suppress_after_sensitive_left_or_right_click_only() {
+        let sensitive = || Some(element("AXSecureTextField", "Password", "Login"));
+        assert!(should_suppress_keyboard_after_click(&click(sensitive(), 0))); // left
+        assert!(should_suppress_keyboard_after_click(&click(sensitive(), 2))); // right
+                                                                               // Middle-click (button 1) is not a field-focusing interaction.
+        assert!(!should_suppress_keyboard_after_click(&click(
+            sensitive(),
+            1
+        )));
+    }
+
+    #[test]
+    fn suppress_does_not_trigger_for_benign_or_coordinate_clicks() {
+        let benign = Some(element("AXButton", "Save", "Notes"));
+        assert!(!should_suppress_keyboard_after_click(&click(benign, 0)));
+        assert!(!should_suppress_keyboard_after_click(&click(None, 0)));
+    }
+
+    // --- sanitize_recorded_event ----------------------------------------
+
+    #[test]
+    fn sanitizer_drops_secret_text_even_without_active_suppression() {
+        assert!(sanitize_recorded_event(key_down("my password"), false).is_none());
+    }
+
+    #[test]
+    fn sanitizer_passes_benign_keys_and_mouse_events() {
+        assert!(sanitize_recorded_event(key_down("a"), false).is_some());
+        // Mouse events are never suppressed, even while keyboard capture is paused.
+        assert!(sanitize_recorded_event(click(None, 0), true).is_some());
+    }
+
+    // --- audit_workflow --------------------------------------------------
+
+    #[test]
+    fn audit_flags_empty_workflow_without_requiring_confirmation() {
+        let report = audit_workflow(&[]);
+        assert_eq!(report.event_count, 0);
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::EmptyWorkflow));
+        assert!(!report.requires_confirmation);
+    }
+
+    #[test]
+    fn audit_flags_destructive_action_and_requires_confirmation() {
+        let report = audit_workflow(&[click(Some(element("AXButton", "Delete", "Files")), 0)]);
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::DestructiveAction));
+        assert!(report.requires_confirmation);
+        // High severity, but not a credential, so the workflow is still saveable.
+        assert!(!report.blocks_replay);
+        assert!(report.safe_to_save);
+    }
+
+    #[test]
+    fn audit_flags_coordinate_only_clicks_as_low_confidence() {
+        let report = audit_workflow(&[click(None, 0)]);
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.category == GuardCategory::LowLocatorConfidence)
+            .expect("expected a low-confidence finding");
+        assert_eq!(finding.severity, GuardSeverity::Low);
+        assert!(!report.requires_confirmation);
+    }
+
+    #[test]
+    fn audit_records_sensitive_app_in_report() {
+        let report = audit_workflow(&[click(
+            Some(element("AXButton", "Accounts", "Bank of America")),
+            0,
+        )]);
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::SensitiveApp));
+        assert!(report
+            .sensitive_apps
+            .contains(&"Bank of America".to_string()));
+    }
+
+    #[test]
+    fn audit_clean_workflow_is_low_risk_and_saveable() {
+        let report = audit_workflow(&[click(Some(element("AXButton", "Save", "Notes")), 0)]);
+        assert!(report.findings.is_empty());
+        assert_eq!(report.score, 100);
+        assert_eq!(report.risk_level, "low");
+        assert!(report.safe_to_save);
+        assert!(!report.requires_confirmation);
+    }
 }
