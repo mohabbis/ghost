@@ -208,7 +208,10 @@ mod tests {
             if let Ok(rd) = std::fs::read_dir(dir) {
                 for e in rd.flatten() {
                     let p = e.path();
-                    out.push(p.strip_prefix(base).unwrap().display().to_string());
+                    // Normalize to `/` so assertions are separator-agnostic
+                    // (Path::display emits `\` on Windows).
+                    let rel = p.strip_prefix(base).unwrap().display().to_string();
+                    out.push(rel.replace('\\', "/"));
                     if p.is_dir() {
                         walk(&p, base, out);
                     }
