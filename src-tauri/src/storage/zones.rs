@@ -207,4 +207,81 @@ mod tests {
         )
         .is_denied());
     }
+
+    #[test]
+    fn get_zone_returns_none_for_unknown_id() {
+        let conn = open_in_memory().unwrap();
+        assert!(get_zone(&conn, "does-not-exist").unwrap().is_none());
+    }
+
+    #[test]
+    fn list_zones_is_empty_on_a_fresh_database() {
+        let conn = open_in_memory().unwrap();
+        assert!(list_zones(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn folder_rules_are_empty_for_a_zone_without_rules() {
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Empty", None, DefaultDecision::Deny).unwrap();
+        assert!(list_folder_rules(&conn, &zone.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn create_zone_without_description_round_trips_as_none() {
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "NoDesc", None, DefaultDecision::Allow).unwrap();
+        assert_eq!(zone.description, None);
+
+        let loaded = get_zone(&conn, &zone.id).unwrap().unwrap();
+        assert_eq!(loaded.description, None);
+        assert_eq!(loaded.default_decision, DefaultDecision::Allow);
+    }
+
+    #[test]
+    fn list_zones_is_ordered_by_name() {
+        let conn = open_in_memory().unwrap();
+        create_zone(&conn, "Charlie", None, DefaultDecision::Ask).unwrap();
+        create_zone(&conn, "Alpha", None, DefaultDecision::Ask).unwrap();
+        create_zone(&conn, "Bravo", None, DefaultDecision::Ask).unwrap();
+
+        let names: Vec<String> = list_zones(&conn)
+            .unwrap()
+            .into_iter()
+            .map(|z| z.name)
+            .collect();
+        assert_eq!(names, vec!["Alpha", "Bravo", "Charlie"]);
+    }
+
+    #[test]
+    fn folder_rules_are_ordered_by_path() {
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Z", None, DefaultDecision::Ask).unwrap();
+        add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/zeta")).unwrap();
+        add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/alpha")).unwrap();
+
+        let paths: Vec<PathBuf> = list_folder_rules(&conn, &zone.id)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.path)
+            .collect();
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/home/u/alpha"),
+                PathBuf::from("/home/u/zeta")
+            ]
+        );
+    }
+
+    #[test]
+    fn folder_rules_are_scoped_to_their_zone() {
+        let conn = open_in_memory().unwrap();
+        let a = create_zone(&conn, "A", None, DefaultDecision::Ask).unwrap();
+        let b = create_zone(&conn, "B", None, DefaultDecision::Ask).unwrap();
+        add_folder_rule(&conn, &a.id, &FolderRule::read_only("/home/u/a")).unwrap();
+
+        assert_eq!(list_folder_rules(&conn, &a.id).unwrap().len(), 1);
+        assert!(list_folder_rules(&conn, &b.id).unwrap().is_empty());
+    }
 }
