@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hardened-runtime-compatible entitlements for the notarized Ghost build.
+
+    Ghost is a recorder/automation product. Accessibility and Input Monitoring
+    are TCC user grants (not entitlements) — the OS prompts the user, and those
+    grants only PERSIST across updates when the app keeps a stable Developer ID
+    signature, which is why notarized signing matters here. The one capability
+    that is an entitlement is sending Apple Events (automation), declared below.
+
+    Deliberately minimal: no library-validation bypass, no JIT, no unsigned
+    executable memory. Add a capability here only when a real feature needs it.
+  -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+</dict>
+</plist>

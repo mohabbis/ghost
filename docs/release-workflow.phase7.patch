@@ -1,0 +1,106 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 48d6298..87fd025 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -47,7 +47,21 @@ jobs:
+           fi
+ 
+       - name: Build universal macOS DMG
+-        run: cargo tauri build --target universal-apple-darwin --bundles dmg
++        env:
++          # When the updater signing key is configured, Tauri signs the update
++          # artifacts (over the already Developer-ID-signed .app, so the order is
++          # correct). Without the key, the build is unchanged.
++          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
++          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
++        run: |
++          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
++            echo "Updater signing key present -> producing signed updater artifacts"
++            cargo tauri build --target universal-apple-darwin --bundles dmg \
++              --config '{"bundle":{"createUpdaterArtifacts":true}}'
++          else
++            echo "No updater signing key -> skipping updater artifacts"
++            cargo tauri build --target universal-apple-darwin --bundles dmg
++          fi
+ 
+       - name: Stage macOS asset
+         run: |
+@@ -68,6 +82,18 @@ jobs:
+           files: Ghost.dmg
+           fail_on_unmatched_files: true
+ 
++      # Updater artifacts (the .app.tar.gz the updater downloads + its .sig).
++      # Gated on the files actually existing, so it no-ops until the updater
++      # signing key is configured.
++      - name: Upload macOS updater artifacts
++        if: ${{ hashFiles('src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz') != '' }}
++        uses: softprops/action-gh-release@v3
++        with:
++          files: |
++            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
++            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
++          fail_on_unmatched_files: false
++
+       - name: Upload website artifact
+         uses: actions/upload-artifact@v7
+         with:
+@@ -94,8 +120,43 @@ jobs:
+         shell: pwsh
+         run: choco install nsis -y --no-progress
+ 
++      # Azure Trusted Signing is applied DURING the build (Tauri `signCommand`),
++      # not afterward: signing must happen before the updater signature is
++      # computed, or the .sig would not match the signed installer. Both signing
++      # (Azure creds) and updater artifacts (signing key) are independently
++      # optional — with no secrets, this is exactly the previous unsigned build.
+       - name: Build Windows NSIS installer
+-        run: cargo tauri build --bundles nsis
++        shell: pwsh
++        env:
++          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
++          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
++          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
++          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
++          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
++          AZURE_TS_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
++          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
++          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
++        run: |
++          $useUpdater = [bool]$env:TAURI_SIGNING_PRIVATE_KEY
++          $useAzure   = [bool]$env:AZURE_CLIENT_ID
++
++          $bundle = @{}
++          if ($useUpdater) { $bundle.createUpdaterArtifacts = $true }
++          if ($useAzure) {
++            Write-Host "Azure Trusted Signing enabled -> signing binaries during bundling"
++            cargo install trusted-signing-cli --locked
++            $signCmd = "trusted-signing-cli -e $env:AZURE_TS_ENDPOINT -a $env:AZURE_TS_ACCOUNT -c $env:AZURE_TS_PROFILE %1"
++            $bundle.windows = @{ signCommand = $signCmd }
++          }
++
++          if ($bundle.Count -gt 0) {
++            $json = (@{ bundle = $bundle } | ConvertTo-Json -Compress -Depth 5)
++            Write-Host "Building with config override: $json"
++            cargo tauri build --bundles nsis --config $json
++          } else {
++            Write-Host "No signing or updater secrets -> plain unsigned build"
++            cargo tauri build --bundles nsis
++          }
+ 
+       - name: Stage Windows asset
+         shell: pwsh
+@@ -117,6 +178,14 @@ jobs:
+           files: Ghost_Setup.exe
+           fail_on_unmatched_files: true
+ 
++      # The updater downloads the NSIS installer; publish its .sig alongside.
++      - name: Upload Windows updater signature
++        if: ${{ hashFiles('src-tauri/target/release/bundle/nsis/*-setup.exe.sig') != '' }}
++        uses: softprops/action-gh-release@v3
++        with:
++          files: src-tauri/target/release/bundle/nsis/*-setup.exe.sig
++          fail_on_unmatched_files: false
++
+       - name: Upload website artifact
+         uses: actions/upload-artifact@v7
+         with:

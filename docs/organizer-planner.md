@@ -78,7 +78,7 @@ Implemented: `scanner`, `classifier`, `naming`, `conflict`, `planner`, with unit
 tests covering scan filtering, classification, safe-naming + de-duplication,
 conflict detection, and end-to-end planning (no-mutation, per-action decisions,
 delete-free, out-of-boundary deny, low-confidence flagging, and loading rules
-from storage). **Not yet wired** to any Tauri command and there is **no
-executor** — applying an approved plan, with audit logging and undo journaling,
-is the next phase. Each command exposed at that point gets a row in
-`docs/command-registry.md`.
+from storage). The executor that applies an approved plan — with audit logging
+and undo journaling — now exists; see `docs/organizer-executor.md`. Both remain
+**backend-only and not yet wired** to any Tauri command. Each command exposed at
+that point gets a row in `docs/command-registry.md`.

@@ -1651,10 +1651,71 @@ function wireUpControls() {
   });
 }
 
+// --- Signed auto-update (suggest -> user approves -> apply) -----------------
+// Ghost never swaps itself out silently: it checks for a signed update, tells
+// the user, and installs only when they click "Update now". The check is
+// read-only and failures (no endpoint, unconfigured key) are swallowed so they
+// can never disrupt the app.
+async function checkForUpdatesOnLaunch() {
+  if (!invoke) return; // static/dev mode: nothing to check against
+  try {
+    const info = await invoke("check_for_update");
+    if (info) showUpdatePrompt(info);
+  } catch (err) {
+    console.warn("Update check skipped:", err);
+  }
+}
+
+function showUpdatePrompt(info) {
+  const container = document.getElementById("notifications");
+  if (!container) return;
+
+  const card = document.createElement("div");
+  card.className = "notification notification--info";
+
+  const text = document.createElement("p");
+  text.className = "notification__text";
+  text.textContent = `✓ Ghost ${info.version} is available (you have ${info.current_version}).`;
+  card.appendChild(text);
+
+  const actions = document.createElement("div");
+  actions.className = "notification__actions";
+
+  const updateBtn = document.createElement("button");
+  updateBtn.type = "button";
+  updateBtn.textContent = "Update now";
+  updateBtn.addEventListener("click", () => installApprovedUpdate(updateBtn, text));
+
+  const laterBtn = document.createElement("button");
+  laterBtn.type = "button";
+  laterBtn.textContent = "Later";
+  laterBtn.addEventListener("click", () => card.remove());
+
+  actions.appendChild(updateBtn);
+  actions.appendChild(laterBtn);
+  card.appendChild(actions);
+  container.appendChild(card);
+}
+
+async function installApprovedUpdate(button, statusEl) {
+  if (!invoke) return;
+  button.disabled = true;
+  statusEl.textContent = "Downloading and installing update… Ghost will restart.";
+  try {
+    // Verifies the signature against the embedded public key, installs, relaunches.
+    await invoke("install_update");
+  } catch (err) {
+    button.disabled = false;
+    statusEl.textContent = `Update failed: ${err}`;
+    toastError(`Update failed: ${err}`);
+  }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
   refreshPermissionBanner();
   initAuthGate(); // lock screen (if password set) or first-run walkthrough
   syncSpeedFromConfig();
+  checkForUpdatesOnLaunch(); // signed, user-approved auto-update
 });
