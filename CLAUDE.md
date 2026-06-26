@@ -67,6 +67,12 @@ Every meaningful operation should pass through:
 Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Undo path
 ```
 
+For recorded routines, the review path should move toward:
+
+```text
+Raw Input Capture -> Deterministic Compression -> Semantic Timeline -> Guard -> Policy -> Approval -> Execute -> Vault -> Undo
+```
+
 Rules:
 
 1. AI may propose; deterministic code executes only approved plans.
@@ -95,7 +101,7 @@ Default stance:
 
 For Organizer, use explicit folder selection and local filesystem operations.
 
-For Routines later, input recording requires visible active state, emergency stop, permission checks, and sensitive-input suppression.
+For Routines later, input recording requires visible active state, emergency stop, permission checks, sensitive-input suppression, and a deterministic review layer before execution.
 
 ## Target product layers
 
@@ -106,6 +112,7 @@ Build in this order:
    - classification, naming, moving, conflict detection, preview, audit, undo.
 2. **Ghost Routines**
    - explicit recorded routines across apps and websites;
+   - deterministic event compression into reviewable semantic steps;
    - semantic replay with coordinates as fallback.
 3. **Ghost Intelligence**
    - suggestion-only planning, classification, explanation, and routine detection.
@@ -136,6 +143,9 @@ src-tauri/src/
     auth.rs
     diagnostics.rs
     experimental.rs
+  core/
+    compress.rs          # deterministic text compression for LLM-bound content
+    compression/         # deterministic event compression for workflow review
   policy/
     capability.rs
     decision.rs
@@ -160,6 +170,8 @@ src-tauri/src/
 
 Scaffolded so far: `policy/` (pure deny-by-default trust engine — capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`), `storage/` (SQLite-backed Zones + folder rules, versioned migrations), and `organizer/` (read-only planner: scanner/classifier/naming/conflict/planner — scans a Zone's folders and emits a reviewable, policy-evaluated plan that mutates nothing; see `docs/organizer-planner.md`). All three are backend-only and not yet wired to any Tauri command; command enforcement and the executor (with audit + undo) arrive in later phases.
 
+Also scaffolded: `core/compress.rs` for deterministic text compression before experimental model calls, and `core/compression/` for deterministic event compression from raw `InputEvent` streams into reviewable `CompressedStep`s. Event compression is backend-only for now; the `compress_workflow` command, timeline UI, and Ghost Guard routing are follow-up work. See `docs/token-compression.md` and `docs/event-compression.md`.
+
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
 ## Replay invariants
@@ -174,6 +186,21 @@ Do not regress these behaviors:
 - semantic element resolution is preferred when available;
 - coordinate replay is fallback only;
 - double-clicks and repeated same-position clicks are preserved.
+
+## Event compression invariants
+
+Do not regress these behaviors:
+
+- press/release mouse pairs compress into one `Click` step;
+- typed runs compress into one `TypeText` step;
+- typed text is redacted by default;
+- secure-field text is never retained, even with text retention enabled;
+- shortcut chords compress into `Shortcut` with a friendly action when known;
+- scroll bursts merge into one coarse `Scroll` step;
+- sub-250 ms delays are dropped as noise;
+- meaningful delays become `Wait` steps;
+- unclassified events become `Unknown`, not silent loss;
+- low-confidence and coordinate-only targets are flagged for review.
 
 ## Command surface expectations
 
