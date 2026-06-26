@@ -132,6 +132,13 @@ function ghostPick(message, options) {
   });
 }
 
+// A yes/no confirmation built on the same in-app dialog. Resolves true only on
+// explicit approval — used to gate Organizer execution behind a clear consent.
+async function ghostConfirm(message, confirmLabel = "Yes") {
+  const choice = await ghostPick(message, [confirmLabel]);
+  return choice === confirmLabel;
+}
+
 // ===== Accessibility permission gate =====
 
 // Recording needs BOTH macOS permissions: Accessibility (clicks) and
@@ -1559,6 +1566,328 @@ async function loadVariablesFromSource() {
 
 // ===== Wire up the UI =====
 
+// ===== Ghost Organizer =====
+// The wedge product's trust pipeline, surfaced end-to-end:
+//   Scan -> Preview -> Approve -> Organize -> Audit -> Undo
+// `organizer_plan` is read-only (mutates nothing); `organizer_execute` and
+// `organizer_undo` mutate only inside an approved Zone and the backend
+// re-checks policy on every action, so the UI never decides what is safe.
+
+let organizerZones = [];
+let organizerSelectedZoneId = null;
+let organizerHasReviewedPlan = false;
+
+async function organizerInit() {
+  if (!invoke) return; // static mode: the panel stays inert
+  await organizerRefreshZones();
+}
+
+function organizerSelectedZone() {
+  return organizerZones.find((z) => z.id === organizerSelectedZoneId) || null;
+}
+
+async function organizerRefreshZones() {
+  try {
+    organizerZones = await invoke("organizer_list_zones");
+  } catch (err) {
+    organizerZones = [];
+    toastError("Could not load Zones: " + err);
+  }
+  const select = document.getElementById("organizerZoneSelect");
+  if (!select) return;
+
+  if (organizerZones.length === 0) {
+    select.innerHTML = `<option value="">No Zones yet — create one</option>`;
+    organizerSelectedZoneId = null;
+  } else {
+    if (!organizerZones.some((z) => z.id === organizerSelectedZoneId)) {
+      organizerSelectedZoneId = organizerZones[0].id;
+    }
+    select.innerHTML = organizerZones
+      .map(
+        (z) =>
+          `<option value="${escapeAttr(z.id)}"${z.id === organizerSelectedZoneId ? " selected" : ""}>${escapeHtml(z.name)}</option>`,
+      )
+      .join("");
+  }
+  // Switching Zones invalidates any previewed plan.
+  organizerHasReviewedPlan = false;
+  await organizerRefreshRules();
+}
+
+async function organizerRefreshRules() {
+  const list = document.getElementById("organizerRulesList");
+  if (!list) return;
+  const zone = organizerSelectedZone();
+  if (!zone) {
+    list.textContent = "Create a Zone, then add the folder you want to organize.";
+    organizerUpdateButtons([]);
+    return;
+  }
+  let rules = [];
+  try {
+    rules = await invoke("organizer_list_folder_rules", { zoneId: zone.id });
+  } catch (err) {
+    toastError("Could not load folders: " + err);
+  }
+  if (rules.length === 0) {
+    list.textContent = "No folders in this Zone yet — add one above.";
+  } else {
+    list.innerHTML = rules
+      .map((r) => {
+        const grants = [
+          r.can_read && "read",
+          r.can_create && "create",
+          r.can_move && "move",
+          r.can_rename && "rename",
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return `<span class="organizer-rule-chip">${escapeHtml(r.path)} <em>(${escapeHtml(grants || "no permissions")})</em></span>`;
+      })
+      .join("");
+  }
+  organizerUpdateButtons(rules);
+}
+
+function organizerUpdateButtons(rules) {
+  const scanBtn = document.getElementById("organizerScanBtn");
+  const runBtn = document.getElementById("organizerRunBtn");
+  const hasFolders = Array.isArray(rules) && rules.length > 0;
+  if (scanBtn) scanBtn.disabled = !organizerSelectedZone() || !hasFolders;
+  if (runBtn) runBtn.disabled = !organizerHasReviewedPlan;
+}
+
+async function organizerCreateZone() {
+  if (!invoke) return notAvailable();
+  const name = await ghostPrompt("Name this Zone (e.g. Downloads cleanup)", "", "Zone name");
+  if (!name) return;
+  try {
+    const zone = await invoke("organizer_create_zone", { name, description: null });
+    organizerSelectedZoneId = zone.id;
+    await organizerRefreshZones();
+    showNotification(`Zone "${zone.name}" created. Add the folder to organize.`, "info");
+  } catch (err) {
+    toastError("Could not create Zone: " + err);
+  }
+}
+
+async function organizerAddFolder() {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone) return toastError("Create a Zone first.");
+  const path = document.getElementById("organizerFolderPath")?.value?.trim();
+  if (!path) return toastError("Enter a folder path to add.");
+
+  const rule = {
+    path,
+    can_read: !!document.getElementById("permRead")?.checked,
+    can_create: !!document.getElementById("permCreate")?.checked,
+    can_rename: !!document.getElementById("permRename")?.checked,
+    can_move: !!document.getElementById("permMove")?.checked,
+    can_copy: false,
+    can_delete: false, // Ghost never deletes through the Organizer.
+  };
+  try {
+    await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
+    const input = document.getElementById("organizerFolderPath");
+    if (input) input.value = "";
+    organizerHasReviewedPlan = false;
+    await organizerRefreshRules();
+    showNotification("Folder added to the Zone.", "info");
+  } catch (err) {
+    toastError("Could not add folder: " + err);
+  }
+}
+
+// Render a capability as a compact, human-readable action line.
+function organizerDescribeCapability(cap) {
+  const base = (p) => String(p ?? "").split(/[\\/]/).pop() || p;
+  switch (cap.kind) {
+    case "create_folder":
+      return `Create folder <code>${escapeHtml(cap.path)}</code>`;
+    case "move_file":
+      return `Move <code>${escapeHtml(base(cap.from))}</code> → <code>${escapeHtml(cap.to)}</code>`;
+    case "rename_file":
+      return `Rename <code>${escapeHtml(base(cap.from))}</code> → <code>${escapeHtml(base(cap.to))}</code>`;
+    default:
+      return `<code>${escapeHtml(cap.kind || "action")}</code>`;
+  }
+}
+
+function organizerDecisionBadge(decision) {
+  if (!decision) return "";
+  if (decision.decision === "allow")
+    return `<span class="org-badge org-badge--allow">Allowed</span>`;
+  if (decision.decision === "deny")
+    return `<span class="org-badge org-badge--deny" title="${escapeAttr(decision.reason || "")}">Denied</span>`;
+  if (decision.decision === "require_confirmation")
+    return `<span class="org-badge org-badge--confirm">Needs approval · ${escapeHtml(decision.risk || "")}</span>`;
+  return "";
+}
+
+async function organizerScan() {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone) return toastError("Create a Zone first.");
+  const result = document.getElementById("organizerResult");
+  if (result) result.innerHTML = `<p class="organizer-muted">Scanning… nothing has been changed.</p>`;
+
+  let plan;
+  try {
+    plan = await invoke("organizer_plan", { zoneId: zone.id });
+  } catch (err) {
+    if (result) result.innerHTML = "";
+    return toastError("Scan failed: " + err);
+  }
+  organizerRenderPlan(plan);
+  organizerHasReviewedPlan = plan.actions.length > 0;
+  organizerUpdateButtons(await safeRules(zone.id));
+  showInsight("Preview ready. Nothing moved yet — review each step, then approve.");
+}
+
+async function safeRules(zoneId) {
+  try {
+    return await invoke("organizer_list_folder_rules", { zoneId });
+  } catch {
+    return [];
+  }
+}
+
+function organizerRenderPlan(plan) {
+  const result = document.getElementById("organizerResult");
+  if (!result) return;
+  const s = plan.summary || {};
+  const rows = plan.actions
+    .map((a) => {
+      const conflict = a.conflict
+        ? `<span class="org-flag" title="${escapeAttr(a.conflict.original_target || "")}">conflict</span>`
+        : "";
+      const low =
+        typeof a.confidence === "number" && a.confidence <= 0.5
+          ? `<span class="org-flag">low confidence</span>`
+          : "";
+      return `<tr>
+        <td>${organizerDescribeCapability(a.capability)} ${conflict} ${low}</td>
+        <td>${organizerDecisionBadge(a.decision)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const skipped = (plan.skipped || []).length
+    ? `<p class="organizer-muted">${plan.skipped.length} file(s) left alone (already organized or no destination).</p>`
+    : "";
+
+  result.innerHTML = `
+    <div class="organizer-summary">
+      <strong>${s.files_scanned ?? 0}</strong> scanned ·
+      <strong>${s.move_file ?? 0}</strong> moves ·
+      <strong>${s.create_folder ?? 0}</strong> new folders ·
+      <strong>${s.conflicts ?? 0}</strong> conflicts ·
+      <strong>${s.denied ?? 0}</strong> denied
+    </div>
+    ${
+      plan.actions.length
+        ? `<table class="organizer-table"><thead><tr><th>Proposed action</th><th>Policy</th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<p class="organizer-muted">No actions proposed for this Zone.</p>`
+    }
+    ${skipped}
+    <p class="organizer-note">Preview only — approve below to apply. Ghost writes an undo journal before moving any file.</p>`;
+}
+
+async function organizerRun() {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone) return;
+  const ok = await ghostConfirm(
+    `Organize "${zone.name}" now? Files move into category folders. You can undo this afterward.`,
+  );
+  if (!ok) return;
+
+  let res;
+  try {
+    res = await invoke("organizer_execute", { zoneId: zone.id });
+  } catch (err) {
+    return toastError("Organize failed: " + err);
+  }
+  const r = res.report || {};
+  const auditRows = (r.audit || [])
+    .map((e) => {
+      const outcome = e.outcome?.outcome || "?";
+      const detail = e.outcome?.reason || e.outcome?.error || "";
+      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
+    })
+    .join("");
+
+  const result = document.getElementById("organizerResult");
+  if (result) {
+    result.innerHTML = `
+      <div class="organizer-summary organizer-summary--done">
+        ✓ <strong>${r.applied ?? 0}</strong> applied ·
+        <strong>${r.skipped ?? 0}</strong> skipped ·
+        <strong>${r.failed ?? 0}</strong> failed
+      </div>
+      <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+      <h3 class="organizer-subhead">Audit log</h3>
+      <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
+    const undoBtn = document.getElementById("organizerUndoLastBtn");
+    if (undoBtn) undoBtn.addEventListener("click", () => organizerUndo(res.execution_id));
+  }
+  organizerHasReviewedPlan = false;
+  organizerUpdateButtons(await safeRules(zone.id));
+  showNotification(`Organized: ${r.applied ?? 0} change(s) applied.`, "info");
+}
+
+async function organizerUndo(executionId) {
+  if (!invoke) return notAvailable();
+  if (!executionId) return;
+  try {
+    const report = await invoke("organizer_undo", { executionId });
+    showNotification(
+      `Undo complete: ${report.reverted} reverted, ${report.skipped} skipped, ${report.failed} failed.`,
+      report.failed ? "error" : "info",
+    );
+    await organizerRefreshRules();
+  } catch (err) {
+    toastError("Undo failed: " + err);
+  }
+}
+
+async function organizerShowHistory() {
+  if (!invoke) return notAvailable();
+  let history = [];
+  try {
+    history = await invoke("organizer_list_executions");
+  } catch (err) {
+    return toastError("Could not load history: " + err);
+  }
+  const modal = document.getElementById("analysis-modal");
+  const content = modal?.querySelector(".modal-content");
+  if (!content) return;
+  const zoneName = (id) => organizerZones.find((z) => z.id === id)?.name || id;
+  const rows = history.length
+    ? history
+        .map(
+          (h) => `<li>
+            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed</div>
+            <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
+          </li>`,
+        )
+        .join("")
+    : "<li>No runs yet.</li>";
+  content.innerHTML = `
+    <h3 style="margin-top:0">Organizer history</h3>
+    <ul class="organizer-history">${rows}</ul>
+    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+  content.querySelectorAll("[data-undo-exec]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      await organizerUndo(btn.dataset.undoExec);
+      closeModal("analysis-modal");
+    }),
+  );
+  showModal(modal);
+}
+
 function wireUpControls() {
   const bind = (id, handler) => {
     const el = document.getElementById(id);
@@ -1596,6 +1925,23 @@ function wireUpControls() {
   bind("perm-grant", requestAccessibility);
   bind("settingsBtn", openSettings);
   bind("lockBtn", lockApp);
+
+  // Ghost Organizer: the wedge product's trust pipeline.
+  bind("organizerNewZoneBtn", organizerCreateZone);
+  bind("organizerAddFolderBtn", organizerAddFolder);
+  bind("organizerScanBtn", organizerScan);
+  bind("organizerRunBtn", organizerRun);
+  bind("organizerHistoryBtn", organizerShowHistory);
+  const zoneSelect = document.getElementById("organizerZoneSelect");
+  if (zoneSelect) {
+    zoneSelect.addEventListener("change", (e) => {
+      organizerSelectedZoneId = e.target.value || null;
+      organizerHasReviewedPlan = false;
+      const result = document.getElementById("organizerResult");
+      if (result) result.innerHTML = "";
+      organizerRefreshRules();
+    });
+  }
 
   // Lock screen
   bind("unlockBtn", tryUnlock);
@@ -1718,4 +2064,5 @@ window.addEventListener("DOMContentLoaded", () => {
   initAuthGate(); // lock screen (if password set) or first-run walkthrough
   syncSpeedFromConfig();
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
+  organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
 });

@@ -7,7 +7,7 @@
 use rusqlite::Connection;
 
 /// The schema version this binary produces.
-pub const LATEST_VERSION: i64 = 1;
+pub const LATEST_VERSION: i64 = 2;
 
 /// Bring `conn` up to [`LATEST_VERSION`], applying forward migrations only.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -22,6 +22,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         version = 1;
         // user_version does not accept bound parameters; `version` is an
         // internal constant, never user input, so formatting it is safe.
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    }
+
+    if version < 2 {
+        conn.execute_batch(MIGRATION_V2)?;
+        version = 2;
         conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
     }
 
@@ -52,6 +58,25 @@ CREATE TABLE zone_folder_rules (
 );
 
 CREATE INDEX idx_zone_folder_rules_zone ON zone_folder_rules(zone_id);
+"#;
+
+/// v1 -> v2: record executed Organizer runs so a past run can be reviewed and
+/// undone. The audit log and undo journal are stored verbatim as JSON (both are
+/// `serde`-serializable), keeping all disk-mutation logic in `crate::organizer`
+/// while this table is a neutral, append-only history.
+const MIGRATION_V2: &str = r#"
+CREATE TABLE organizer_executions (
+  id TEXT PRIMARY KEY,
+  zone_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  applied INTEGER NOT NULL,
+  skipped INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  audit_json TEXT NOT NULL,
+  undo_json TEXT NOT NULL
+);
+
+CREATE INDEX idx_organizer_executions_zone ON organizer_executions(zone_id);
 "#;
 
 #[cfg(test)]

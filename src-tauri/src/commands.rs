@@ -8,10 +8,12 @@ mod auth;
 mod core;
 mod diagnostics;
 mod experimental;
+mod organizer;
 mod updates;
 
 pub use auth::*;
 pub use core::*;
 pub use diagnostics::*;
 pub use experimental::*;
+pub use organizer::*;
 pub use updates::*;

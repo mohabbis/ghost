@@ -90,6 +90,17 @@ pub fn run() {
             commands::get_learned_patterns,
             commands::get_app_usage_stats,
             commands::generate_geek_insights,
+            // Ghost Organizer: the wedge product's trust pipeline, end to end.
+            // Plan is read-only; execute/undo mutate only inside approved Zones,
+            // writing an audit log and undo journal for every run.
+            commands::organizer_list_zones,
+            commands::organizer_list_folder_rules,
+            commands::organizer_create_zone,
+            commands::organizer_add_folder_rule,
+            commands::organizer_plan,
+            commands::organizer_execute,
+            commands::organizer_list_executions,
+            commands::organizer_undo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
