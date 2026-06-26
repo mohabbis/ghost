@@ -25,7 +25,7 @@ The near-term focus is:
 
 1. reliable local recording and replay;
 2. clear command and trust boundaries;
-3. safe workflow review before execution;
+3. deterministic workflow review before execution;
 4. permission-bounded actions;
 5. auditability and undoable operations;
 6. a focused file-organization workflow as the first practical product wedge.
@@ -40,7 +40,7 @@ The near-term focus is:
 > [!NOTE]
 > Current release builds may still be developer-preview quality. The macOS build may be ad-hoc signed rather than fully notarized unless Apple Developer ID secrets are configured in the release workflow.
 >
-> If macOS blocks the app, open **System Settings → Privacy & Security** and approve it.
+> If macOS blocks the app, open **System Settings -> Privacy & Security** and approve it.
 >
 > A fully signed and notarized release is the long-term target.
 
@@ -52,6 +52,9 @@ Ghost currently supports:
 - replaying saved workflows using native automation;
 - storing workflows locally;
 - capturing timing and basic UI element metadata where available;
+- compressing raw input streams into deterministic, reviewable semantic steps;
+- redacting typed text by default in the event-compression read model;
+- flagging low-confidence, coordinate-only, and secure-field steps for review;
 - local workflow inspection and management;
 - diagnostics and telemetry export paths;
 - a Rust backend inside a Tauri 2 desktop app.
@@ -70,6 +73,7 @@ The stable core is:
 - explicit user-started replay;
 - workflow save, load, list, and delete;
 - local workflow storage;
+- deterministic backend read models for workflow review;
 - local protection/auth surfaces;
 - permission checks;
 - diagnostics;
@@ -99,8 +103,10 @@ Ghost should never silently mutate important user state.
 The intended execution model is:
 
 ```text
-Intent → Plan → Policy check → User approval → Execution → Audit log → Undo path
+Raw Input Capture -> Deterministic Compression -> Semantic Timeline -> Guard -> Policy check -> User approval -> Execution -> Audit log -> Undo path
 ```
+
+Deterministic compression is a review layer, not an execution layer. It converts raw events into compact steps the user can inspect before any routine runs. Replay still depends on raw events until semantic execution is explicitly implemented.
 
 Future development should route dangerous operations through an explicit policy layer before execution.
 
@@ -115,6 +121,25 @@ High-risk operations include:
 - replaying actions outside an approved app or folder;
 - running shell commands;
 - using network/cloud sync.
+
+## Event compression
+
+`src-tauri/src/core/compression/` is the backend-only deterministic event-compression module. It turns raw `InputEvent` streams into a `CompressionReport` made of reviewable semantic steps:
+
+- `Click` from mouse press/release pairs;
+- `TypeText` from typed runs, redacted by default;
+- `Shortcut` from command/control chords;
+- `Scroll` from scroll bursts;
+- `Wait` from meaningful delays;
+- `Unknown` for anything unclassified, so events are surfaced rather than silently dropped.
+
+It is pure and deterministic: no LLM, no network, and no user-state mutation. Low-confidence targets, coordinate-only targets, and secure-field interactions are flagged in the report warnings.
+
+Read more in [`docs/event-compression.md`](docs/event-compression.md).
+
+Do not confuse event compression with `src-tauri/src/core/compress.rs`, which compresses text payloads for model calls. Event compression lives under `core/compression/`; text compression lives in `core/compress.rs`.
+
+Current status: Sprint 1 backend module and tests exist. The `compress_workflow` Tauri command and compressed-step timeline UI are still future work.
 
 ## Recommended product wedge
 
@@ -176,14 +201,16 @@ Ghost is built as a Tauri 2 app.
 Core files:
 
 ```text
-src-tauri/src/lib.rs              # Tauri app setup and command registration
-src-tauri/src/commands.rs         # public IPC command registry
-src-tauri/src/commands/           # grouped IPC command implementations
-src-tauri/src/engine.rs           # Platform-agnostic orchestration
-src-tauri/src/core/events.rs      # Shared event schema
-src-tauri/src/core/security.rs    # Validation, path safety, and guard helpers
-src-tauri/src/platform/macos.rs   # macOS implementation
-src-tauri/src/platform/windows.rs # Windows implementation
+src-tauri/src/lib.rs                    # Tauri app setup and command registration
+src-tauri/src/commands.rs               # public IPC command registry
+src-tauri/src/commands/                 # grouped IPC command implementations
+src-tauri/src/engine.rs                 # Platform-agnostic orchestration
+src-tauri/src/core/events.rs            # Shared event schema
+src-tauri/src/core/compression/         # Raw-event -> semantic-step compression read model
+src-tauri/src/core/compress.rs          # Text-payload compression for model calls
+src-tauri/src/core/security.rs          # Validation, path safety, and guard helpers
+src-tauri/src/platform/macos.rs         # macOS implementation
+src-tauri/src/platform/windows.rs       # Windows implementation
 ```
 
 ## Development
@@ -230,8 +257,8 @@ Ghost needs Accessibility permission to observe and replay desktop actions. Keyb
 Enable Ghost in:
 
 ```text
-System Settings → Privacy & Security → Accessibility
-System Settings → Privacy & Security → Input Monitoring
+System Settings -> Privacy & Security -> Accessibility
+System Settings -> Privacy & Security -> Input Monitoring
 ```
 
 Then restart the app.
@@ -245,11 +272,12 @@ Ghost uses Windows-native input hooks and replay APIs. Apps running as administr
 1. Restore and keep CI green.
 2. Keep the stable command surface small and reviewable.
 3. Separate experimental commands from trusted core behavior.
-4. Add a real policy engine for dangerous operations.
-5. Build a focused file-organization workflow with preview, approval, audit, and undo.
-6. Improve replay reliability across common apps.
-7. Improve semantic target resolution so workflows survive window movement.
-8. Improve release signing and installer quality.
+4. Wire deterministic event compression into a user-facing compressed-step review timeline.
+5. Add a real policy engine for dangerous operations.
+6. Build a focused file-organization workflow with preview, approval, audit, and undo.
+7. Improve replay reliability across common apps.
+8. Improve semantic target resolution so workflows survive window movement.
+9. Improve release signing and installer quality.
 
 ## Development rule
 
