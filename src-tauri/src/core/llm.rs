@@ -2,10 +2,17 @@
 //! Provides abstraction over OpenAI, Claude, and local fallback modes.
 
 use crate::config::AISettings;
+use crate::core::compress::compress_to_budget;
 use crate::core::events::{ElementInfo, InputEvent};
 
 use std::env;
 use std::sync::{Arc, RwLock};
+
+/// Token ceiling for the accessibility-tree context embedded in a prompt. An
+/// AX tree can be enormous; compressing it to this budget keeps the request
+/// bounded and cuts how much page content is sent to the model. See
+/// [`crate::core::compress`].
+const AX_CONTEXT_TOKEN_BUDGET: usize = 2000;
 
 /// LLM provider trait for workflow generation
 #[async_trait::async_trait]
@@ -182,12 +189,19 @@ impl LLMProvider for OpenAIProvider {
 
         let client = reqwest::Client::new();
 
+        // Compress the (potentially huge) accessibility tree before it enters
+        // the prompt: deterministic, and it shrinks how much page content leaves
+        // the machine. See `crate::core::compress`.
+        let ax_context = ax_tree
+            .map(|t| compress_to_budget(t, AX_CONTEXT_TOKEN_BUDGET).0)
+            .unwrap_or_else(|| "no context".to_string());
+
         // Build the conversation with element context
         let system_prompt = format!(
             "You are an AI automation assistant. Convert natural language commands into structured input events.\
             \n\nTask: {}\
             \n\nAvailable UI elements: {:?}\
-            \n\nAccessibility tree context: {:?}\
+            \n\nAccessibility tree context: {}\
             \n\nOutput ONLY valid JSON matching this schema: {{\"events\": [INPUT_EVENTS]}}\
             \nWhere each INPUT_EVENT is one of:\
             \n- {{\"MouseClick\": {{\"x\": int, \"y\": int, \"button\": int, \"element\": {{\"role\": str, \"name\": str, \"app\": str}}}}}}\
@@ -197,7 +211,7 @@ impl LLMProvider for OpenAIProvider {
             \nSet optional fields to null. Keep events array minimal but complete.",
             prompt,
             element_context.iter().take(10).collect::<Vec<_>>(),
-            ax_tree.unwrap_or("no context")
+            ax_context
         );
 
         let endpoint = self
@@ -277,15 +291,20 @@ impl LLMProvider for ClaudeProvider {
 
         let client = reqwest::Client::new();
 
+        // Same deterministic compression as the OpenAI path (see above).
+        let ax_context = ax_tree
+            .map(|t| compress_to_budget(t, AX_CONTEXT_TOKEN_BUDGET).0)
+            .unwrap_or_else(|| "no context".to_string());
+
         let system_prompt = format!(
             "You are an AI automation assistant. Convert natural language commands into structured input events.\
             \n\nTask: {}\
             \n\nAvailable UI elements: {:?}\
-            \n\nAccessibility tree context: {:?}\
+            \n\nAccessibility tree context: {}\
             \n\nOutput ONLY valid JSON matching this schema: {{\"events\": [INPUT_EVENTS]}}",
             prompt,
-            element_context,
-            ax_tree.unwrap_or("no context")
+            element_context.iter().take(10).collect::<Vec<_>>(),
+            ax_context
         );
 
         let response = client
