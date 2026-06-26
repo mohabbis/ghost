@@ -7,6 +7,7 @@
 use rusqlite::Connection;
 use std::path::PathBuf;
 
+pub mod executions;
 pub mod migrations;
 pub mod zones;
 

@@ -30,6 +30,7 @@ Use the right module, then re-export/register from the registry layer.
 | `commands/auth.rs` | Local password state and at-rest workflow protection | local-only, no network dependency |
 | `commands/diagnostics.rs` | Config summaries, telemetry export, performance/debug data | read-first, redacted, user-initiated export |
 | `commands/updates.rs` | Signed auto-update: read-only check + user-approved install | signature-verified, user-gated install |
+| `commands/organizer.rs` | Ghost Organizer: Zone/rule management + plan/execute/undo for safe file organization | policy-gated, read-only plan, audited + undoable execution |
 | `commands/experimental.rs` | AI, observer mode, cloud sync, analytics, visual checks, data sources, research features | gated, labeled, not default product UI |
 
 ## Required command metadata
@@ -109,7 +110,7 @@ An experimental command can move toward the stable core only after:
 
 ## Risk inventory
 
-Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI; none are wired to the policy engine (`src-tauri/src/policy/`) yet — that happens when Ghost Organizer lands.
+Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI. The legacy recording/replay surface is not yet wired to the policy engine (`src-tauri/src/policy/`); the **Ghost Organizer** commands (`commands/organizer.rs`) are the first surface that is — every proposed and executed action passes through `policy::evaluate`, and the executor writes an audit log and undo journal.
 
 Legend — what the command touches: **Files** = local filesystem · **OS** = OS input synthesis/capture · **Scr** = screen contents / accessibility tree · **Net** = network · **Auth** = authentication or secrets · **Win** = app/window state. `✓` yes · `–` no · `~` conditional.
 
@@ -165,6 +166,26 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `check_for_update` | stable | – | – | – | ✓ | – | – | medium | Read-only query of the update endpoint; downloads/changes nothing. Returns `None` when current. Failures (no endpoint / unconfigured key) are swallowed in the UI so launch is never blocked. |
 | `install_update` | stable | ✓ | – | – | ✓ | – | ✓ | high | Downloads, **verifies the signature against the embedded public key**, replaces the app, and relaunches. **User-gated by design** — the UI calls this only after explicit "Update now". A failed verification installs nothing. |
+
+### `commands/organizer.rs` — Ghost Organizer (stable)
+
+The wedge product's trust pipeline, surfaced end to end. The plan step is
+read-only and mutates nothing; execution re-checks policy per action, refuses to
+overwrite, writes undo data before each mutation, and records an audit event for
+every action. `organizer_execute` deliberately does **not** accept a plan from
+the frontend — it re-plans server-side from the Zone id, so a stale or tampered
+plan can never reach the filesystem.
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
+| `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
+| `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). New Zones default to `Ask`. |
+| `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. |
+| `organizer_plan` | stable | ✓ | – | – | – | – | – | low | **Read-only.** Scans directory metadata, classifies, detects conflicts, policy-checks every action; mutates nothing. This is the preview the user approves. |
+| `organizer_execute` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Re-plans, re-checks policy per action, never overwrites, writes undo before each mutation, records an audit event, and persists the run. Moves/renames only inside an approved Zone; never deletes. |
+| `organizer_list_executions` | stable | ✓ | – | – | – | – | – | low | Lists past executions for the history/undo view (DB only). |
+| `organizer_undo` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Replays a stored undo journal in reverse; never overwrites an occupied origin and never removes a non-empty folder. |
 
 ### `commands/experimental.rs` — experimental (gated / not default UI)
 

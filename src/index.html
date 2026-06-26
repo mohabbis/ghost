@@ -88,6 +88,45 @@
             </div>
           </section>
 
+          <section class="panel organizer-panel" id="organizerPanel" aria-labelledby="organizer-heading">
+            <div class="organizer-head">
+              <h2 id="organizer-heading">Ghost Organizer</h2>
+              <span class="organizer-pipeline" aria-hidden="true">Scan → Preview → Approve → Organize → Audit → Undo</span>
+            </div>
+            <p class="panel__hint">Pick a folder, preview every proposed move, then approve. Ghost never deletes, never overwrites, and writes an undo journal before it touches a file.</p>
+
+            <div class="organizer-zone">
+              <label class="organizer-field">
+                <span>Zone</span>
+                <select id="organizerZoneSelect" aria-label="Select a Zone"></select>
+              </label>
+              <button class="btn btn--ghost btn--small" id="organizerNewZoneBtn" type="button">New Zone</button>
+            </div>
+
+            <div class="organizer-rule" id="organizerRuleRow">
+              <label class="organizer-field organizer-field--grow">
+                <span>Folder</span>
+                <input type="text" id="organizerFolderPath" placeholder="/Users/you/Downloads" autocomplete="off" spellcheck="false" />
+              </label>
+              <fieldset class="organizer-perms" aria-label="Permissions to grant in this folder">
+                <label><input type="checkbox" id="permRead" checked /> Read</label>
+                <label><input type="checkbox" id="permCreate" checked /> Create folders</label>
+                <label><input type="checkbox" id="permMove" checked /> Move</label>
+                <label><input type="checkbox" id="permRename" checked /> Rename</label>
+              </fieldset>
+              <button class="btn btn--ghost btn--small" id="organizerAddFolderBtn" type="button">Add folder</button>
+            </div>
+            <p class="organizer-rules-list" id="organizerRulesList" aria-live="polite"></p>
+
+            <div class="btn-row">
+              <button class="btn btn--primary" id="organizerScanBtn" type="button" disabled>Scan &amp; Preview</button>
+              <button class="btn btn--ghost" id="organizerRunBtn" type="button" disabled title="Review the plan first">Approve &amp; Organize</button>
+              <button class="btn btn--ghost btn--small" id="organizerHistoryBtn" type="button">History</button>
+            </div>
+
+            <div class="organizer-result" id="organizerResult" aria-live="polite"></div>
+          </section>
+
           <details class="panel experimental-panel">
             <summary>Experimental tools</summary>
             <p class="panel__hint">Hidden by default because core recording, auditing, debugging, and replay reliability matter more than prototype surfaces.</p>
