@@ -5,6 +5,7 @@
 //! drift, humanity's favorite maintenance strategy for some reason.
 
 mod auth;
+mod compression;
 mod core;
 mod diagnostics;
 mod experimental;
@@ -12,6 +13,7 @@ mod organizer;
 mod updates;
 
 pub use auth::*;
+pub use compression::*;
 pub use core::*;
 pub use diagnostics::*;
 pub use experimental::*;

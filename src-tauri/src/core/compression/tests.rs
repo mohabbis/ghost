@@ -40,16 +40,29 @@ fn key(chars: &str, modifiers: u8, action: KeyAction) -> InputEvent {
 
 fn typed(text: &str) -> Vec<InputEvent> {
     text.chars()
-        .flat_map(|c| vec![key(&c.to_string(), 0, KeyAction::Down), key(&c.to_string(), 0, KeyAction::Up)])
+        .flat_map(|c| {
+            vec![
+                key(&c.to_string(), 0, KeyAction::Down),
+                key(&c.to_string(), 0, KeyAction::Up),
+            ]
+        })
         .collect()
 }
 
 fn scroll(dx: i32, dy: i32) -> InputEvent {
-    InputEvent::Scroll { dx, dy, phase: 0, timestamp: None }
+    InputEvent::Scroll {
+        dx,
+        dy,
+        phase: 0,
+        timestamp: None,
+    }
 }
 
 fn delay(ms: u64) -> InputEvent {
-    InputEvent::Delay { ms, timestamp: None }
+    InputEvent::Delay {
+        ms,
+        timestamp: None,
+    }
 }
 
 fn element(role: &str, name: &str, app: &str, id: Option<&str>) -> ElementInfo {
@@ -146,7 +159,10 @@ fn coordinate_only_click_gets_low_confidence() {
         }
         other => panic!("expected click, got {other:?}"),
     }
-    assert!(report.warnings.iter().any(|w| matches!(w, CompressionWarning::CoordinateOnlyTarget { .. })));
+    assert!(report
+        .warnings
+        .iter()
+        .any(|w| matches!(w, CompressionWarning::CoordinateOnlyTarget { .. })));
 }
 
 #[test]
@@ -155,10 +171,14 @@ fn secure_field_typing_is_redacted() {
     let mut events = vec![left_press(Some(secure)), left_release()];
     events.extend(typed("hunter2"));
     let report = compress(&events);
-    let type_step = report.steps.iter().find_map(|s| match s {
-        CompressedStep::TypeText(t) => Some(t),
-        _ => None,
-    }).expect("typing step");
+    let type_step = report
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            CompressedStep::TypeText(t) => Some(t),
+            _ => None,
+        })
+        .expect("typing step");
     assert!(type_step.secure_field);
     assert!(type_step.redacted);
     assert!(type_step.text.is_none());
@@ -170,10 +190,14 @@ fn opting_out_retains_nonsecure_text_but_never_secure() {
     let mut events = vec![left_press(Some(plain)), left_release()];
     events.extend(typed("cat"));
     let report = compress_with_options(&events, true);
-    let t = report.steps.iter().find_map(|s| match s {
-        CompressedStep::TypeText(t) => Some(t),
-        _ => None,
-    }).unwrap();
+    let t = report
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            CompressedStep::TypeText(t) => Some(t),
+            _ => None,
+        })
+        .unwrap();
     assert!(!t.redacted);
     assert_eq!(t.text.as_deref(), Some("cat"));
 
@@ -181,10 +205,14 @@ fn opting_out_retains_nonsecure_text_but_never_secure() {
     let mut secure_events = vec![left_press(Some(secure)), left_release()];
     secure_events.extend(typed("cat"));
     let secure_report = compress_with_options(&secure_events, true);
-    let secure_t = secure_report.steps.iter().find_map(|s| match s {
-        CompressedStep::TypeText(t) => Some(t),
-        _ => None,
-    }).unwrap();
+    let secure_t = secure_report
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            CompressedStep::TypeText(t) => Some(t),
+            _ => None,
+        })
+        .unwrap();
     assert!(secure_t.redacted);
     assert!(secure_t.text.is_none());
 }

@@ -21,7 +21,13 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
     let mut i = 0;
     while i < events.len() {
         match &events[i] {
-            InputEvent::MouseClick { x, y, button, element, .. } => {
+            InputEvent::MouseClick {
+                x,
+                y,
+                button,
+                element,
+                ..
+            } => {
                 match mouse_kind(*button) {
                     Some(MouseKind::Press(btn)) => {
                         if let Some(el) = element {
@@ -48,7 +54,12 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                 }
                 i += 1;
             }
-            InputEvent::Key { chars, modifiers, action, .. } => {
+            InputEvent::Key {
+                chars,
+                modifiers,
+                action,
+                ..
+            } => {
                 if !matches!(action, KeyAction::Down) {
                     i += 1;
                     continue;
@@ -126,14 +137,26 @@ fn next_is_release(events: &[InputEvent], i: usize) -> bool {
 }
 
 fn next_is_key_up(events: &[InputEvent], i: usize) -> bool {
-    matches!(events.get(i + 1), Some(InputEvent::Key { action: KeyAction::Up, .. }))
+    matches!(
+        events.get(i + 1),
+        Some(InputEvent::Key {
+            action: KeyAction::Up,
+            ..
+        })
+    )
 }
 
 fn consume_typing_run(events: &[InputEvent], i: usize) -> (usize, usize) {
     let mut count = 0;
     let mut consumed = 0;
     let mut j = i;
-    while let Some(InputEvent::Key { chars, modifiers, action, .. }) = events.get(j) {
+    while let Some(InputEvent::Key {
+        chars,
+        modifiers,
+        action,
+        ..
+    }) = events.get(j)
+    {
         match action {
             KeyAction::Down if is_typed_char(chars, *modifiers) => {
                 count += 1;
@@ -150,7 +173,13 @@ fn consume_typing_run(events: &[InputEvent], i: usize) -> (usize, usize) {
 fn collect_typed_text(events: &[InputEvent], i: usize, consumed: usize) -> String {
     let mut out = String::new();
     for ev in &events[i..i + consumed] {
-        if let InputEvent::Key { chars, modifiers, action: KeyAction::Down, .. } = ev {
+        if let InputEvent::Key {
+            chars,
+            modifiers,
+            action: KeyAction::Down,
+            ..
+        } = ev
+        {
             if is_typed_char(chars, *modifiers) {
                 out.push_str(chars);
             }

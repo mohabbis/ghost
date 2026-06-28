@@ -43,6 +43,8 @@ pub fn run() {
             commands::request_accessibility,
             commands::check_input_monitoring,
             commands::request_input_monitoring,
+            // Deterministic workflow compression for review timeline.
+            commands::compress_workflow,
             // Signed auto-update: a read-only check plus a user-approved install.
             commands::check_for_update,
             commands::install_update,

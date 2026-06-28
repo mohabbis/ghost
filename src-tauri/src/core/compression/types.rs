@@ -32,7 +32,9 @@ impl CompressedStep {
         match self {
             CompressedStep::Click(s) => s.confidence,
             CompressedStep::TypeText(s) => s.confidence,
-            CompressedStep::Shortcut(_) | CompressedStep::Scroll(_) | CompressedStep::Wait(_) => 1.0,
+            CompressedStep::Shortcut(_) | CompressedStep::Scroll(_) | CompressedStep::Wait(_) => {
+                1.0
+            }
             CompressedStep::Unknown(_) => 0.0,
         }
     }
