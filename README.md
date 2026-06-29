@@ -96,6 +96,8 @@ The following areas are experimental and should not be treated as production-rea
 
 Experimental features should remain isolated from the trusted core until they have clear limits, tests, reliability coverage, and user-facing safety controls.
 
+This isolation is enforced at build time: the experimental command surface is compiled only under the `experimental` Cargo feature. A stock build (`cargo build`) registers none of these IPC commands, and the desktop app hides the experimental tools panel unless the backend reports the feature is on (via the always-present `is_experimental_enabled` command). To work on these surfaces, build with `cargo tauri dev --features experimental` (or pass `--features experimental` to `cargo check`/`test`/`clippy`).
+
 ## Trust model
 
 Ghost should never silently mutate important user state.

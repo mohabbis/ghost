@@ -35,3 +35,11 @@ pub fn get_performance_summary(
 ) -> crate::performance::PerformanceSummary {
     engine.get_performance_summary()
 }
+
+/// Report whether this build was compiled with the experimental command
+/// surface enabled. Always registered so the frontend can feature-detect and
+/// hide experimental controls rather than calling commands that do not exist.
+#[tauri::command]
+pub fn is_experimental_enabled() -> bool {
+    cfg!(feature = "experimental")
+}

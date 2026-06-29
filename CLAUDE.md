@@ -211,6 +211,8 @@ Command modules:
 - `commands/diagnostics.rs` for config, telemetry export, and performance summaries;
 - `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
+`commands/experimental.rs` and its registration in `lib.rs` are gated behind the `experimental` Cargo feature, which is off by default. A stock build exposes only the trusted core; the experimental commands are compiled and registered only with `--features experimental`. The frontend hides the experimental tools panel unless the always-registered `is_experimental_enabled` command reports the feature is on. Keep new experimental commands behind this flag, and run experimental checks with `--features experimental` (CI does this in a dedicated leg).
+
 Before changing commands, read:
 
 - `docs/command-registry.md`;

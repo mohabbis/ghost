@@ -14,11 +14,16 @@ pub mod telemetry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(engine::GhostEngine::new())
-        .manage(commands::CloudState::default())
+        .manage(engine::GhostEngine::new());
+
+    // Cloud sync state only exists when the experimental surface is compiled in.
+    #[cfg(feature = "experimental")]
+    let builder = builder.manage(commands::CloudState::default());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             // Stable core: recording, replay, inspection, workflow storage, and permissions.
             commands::start_recording,
@@ -59,38 +64,71 @@ pub fn run() {
             commands::get_telemetry_stats,
             commands::export_telemetry,
             commands::get_performance_summary,
-            // Experimental surfaces. These remain registered for frontend compatibility,
-            // but they are product-boundary candidates for feature flags or a separate
-            // command namespace before Ghost is presented as user-ready.
+            // Always registered so the frontend can detect whether the
+            // experimental surface below is compiled in and gate its UI.
+            commands::is_experimental_enabled,
+            // Experimental surfaces, compiled only under `--features experimental`.
+            // A stock build does not register or expose these; the frontend hides
+            // the experimental panel when `is_experimental_enabled` returns false.
+            #[cfg(feature = "experimental")]
             commands::analyze_workflow,
+            #[cfg(feature = "experimental")]
             commands::optimize_workflow,
+            #[cfg(feature = "experimental")]
             commands::suggest_workflow_name,
+            #[cfg(feature = "experimental")]
             commands::save_workflow_with_metadata,
+            #[cfg(feature = "experimental")]
             commands::load_workflow_with_metadata,
+            #[cfg(feature = "experimental")]
             commands::generate_workflow_from_prompt,
+            #[cfg(feature = "experimental")]
             commands::analyze_and_tag_workflow,
+            #[cfg(feature = "experimental")]
             commands::save_workflow_with_sidecar,
+            #[cfg(feature = "experimental")]
             commands::replay_with_reliability,
+            #[cfg(feature = "experimental")]
             commands::init_cloud_sync,
+            #[cfg(feature = "experimental")]
             commands::cloud_authenticate,
+            #[cfg(feature = "experimental")]
             commands::cloud_sync_workflows,
+            #[cfg(feature = "experimental")]
             commands::create_workspace,
+            #[cfg(feature = "experimental")]
             commands::get_audit_logs,
+            #[cfg(feature = "experimental")]
             commands::get_execution_history,
+            #[cfg(feature = "experimental")]
             commands::get_all_executions,
+            #[cfg(feature = "experimental")]
             commands::get_workflow_analytics,
+            #[cfg(feature = "experimental")]
             commands::replay_with_visual_check,
+            #[cfg(feature = "experimental")]
             commands::capture_baseline_screenshot,
+            #[cfg(feature = "experimental")]
             commands::create_data_source,
+            #[cfg(feature = "experimental")]
             commands::load_variables,
+            #[cfg(feature = "experimental")]
             commands::start_observer,
+            #[cfg(feature = "experimental")]
             commands::stop_observer,
+            #[cfg(feature = "experimental")]
             commands::is_observer_active,
+            #[cfg(feature = "experimental")]
             commands::set_observer_interval,
+            #[cfg(feature = "experimental")]
             commands::observe_events,
+            #[cfg(feature = "experimental")]
             commands::get_proactive_suggestions,
+            #[cfg(feature = "experimental")]
             commands::get_learned_patterns,
+            #[cfg(feature = "experimental")]
             commands::get_app_usage_stats,
+            #[cfg(feature = "experimental")]
             commands::generate_geek_insights,
             // Ghost Organizer: the wedge product's trust pipeline, end to end.
             // Plan is read-only; execute/undo mutate only inside approved Zones,

@@ -2057,6 +2057,22 @@ async function installApprovedUpdate(button, statusEl) {
   }
 }
 
+// The experimental tools panel drives commands that only exist when the backend
+// is compiled with `--features experimental`. A stock build does not register
+// them, so reveal the panel only when the backend confirms the surface is on.
+// Fail closed: any error leaves the panel hidden rather than showing dead buttons.
+async function initExperimentalPanel() {
+  const panel = document.getElementById("experimentalPanel");
+  if (!panel || !invoke) return;
+  try {
+    if (await invoke("is_experimental_enabled")) {
+      panel.hidden = false;
+    }
+  } catch {
+    // Older/stock build without the detection command: keep it hidden.
+  }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
@@ -2065,4 +2081,5 @@ window.addEventListener("DOMContentLoaded", () => {
   syncSpeedFromConfig();
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
+  initExperimentalPanel(); // reveal experimental tools only in experimental builds
 });
