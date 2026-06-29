@@ -45,6 +45,13 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 [features]
 default = []
 profiling = ["tracing-chrome"]
+# Experimental command surface (AI generation, observer mode, cloud sync,
+# analytics, visual checks, data sources). Off by default so a stock build
+# exposes only the trusted core (recording/replay, workflow storage,
+# permissions, Organizer, compression, auth, diagnostics, updates). The
+# underlying engine/core logic always compiles; this flag only gates the IPC
+# command surface and the frontend panel that drives it.
+experimental = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

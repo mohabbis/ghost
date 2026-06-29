@@ -8,6 +8,7 @@ mod auth;
 mod compression;
 mod core;
 mod diagnostics;
+#[cfg(feature = "experimental")]
 mod experimental;
 mod organizer;
 mod updates;
@@ -16,6 +17,7 @@ pub use auth::*;
 pub use compression::*;
 pub use core::*;
 pub use diagnostics::*;
+#[cfg(feature = "experimental")]
 pub use experimental::*;
 pub use organizer::*;
 pub use updates::*;

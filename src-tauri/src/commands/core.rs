@@ -16,7 +16,11 @@ pub(crate) fn guard_workflow_name(name: &str) -> Result<(), String> {
 }
 
 /// Reject a prompt that fails validation (empty, oversized, or injection-shaped)
-/// before it reaches the LLM, surfacing a stringified error to IPC.
+/// before it reaches the LLM, surfacing a stringified error to IPC. Its only
+/// production caller is the experimental prompt-to-workflow command, but the
+/// validation logic is unit-tested unconditionally, so the function stays
+/// compiled and is simply allowed to be unused in a stock build.
+#[cfg_attr(not(feature = "experimental"), allow(dead_code))]
 pub(crate) fn guard_prompt(prompt: &str) -> Result<(), String> {
     security::validate_prompt(prompt).map_err(|e| e.to_string())
 }
