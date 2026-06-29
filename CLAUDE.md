@@ -168,9 +168,16 @@ src-tauri/src/
     undo_journal.rs
 ```
 
-Scaffolded so far: `policy/` (pure deny-by-default trust engine — capability/decision/risk/zone + `evaluate`; see `docs/policy-engine.md`), `storage/` (SQLite-backed Zones + folder rules, versioned migrations), and `organizer/` (read-only planner: scanner/classifier/naming/conflict/planner — scans a Zone's folders and emits a reviewable, policy-evaluated plan that mutates nothing; see `docs/organizer-planner.md`). All three are backend-only and not yet wired to any Tauri command; command enforcement and the executor (with audit + undo) arrive in later phases.
+Built so far — the Ghost Organizer trust pipeline is wired end to end:
 
-Also scaffolded: `core/compress.rs` for deterministic text compression before experimental model calls, and `core/compression/` for deterministic event compression from raw `InputEvent` streams into reviewable `CompressedStep`s. Event compression is backend-only for now; the `compress_workflow` command, timeline UI, and Ghost Guard routing are follow-up work. See `docs/token-compression.md` and `docs/event-compression.md`.
+- `policy/` — pure deny-by-default trust engine (capability/decision/risk/zone + `evaluate`); see `docs/policy-engine.md`.
+- `storage/` — SQLite-backed Zones + folder rules + execution history, versioned migrations.
+- `organizer/` — read-only planner (scanner/classifier/naming/conflict/planner) that emits a reviewable, policy-evaluated plan that mutates nothing (`docs/organizer-planner.md`), plus the executor and undo path (`docs/organizer-executor.md`).
+- `audit/` — append-only audit log and undo journal written for every mutating run.
+
+These are wired to the `organizer_*` Tauri commands and the Organizer UI: plan is read-only; execute re-checks policy per action, writes undo before mutating, and audits every change; undo replays the journal in reverse. The executor never overwrites or deletes silently.
+
+Also built: `core/compress.rs` for deterministic text compression before experimental model calls, and `core/compression/` for deterministic event compression from raw `InputEvent` streams into reviewable `CompressedStep`s. Both are exercised in product — the `compress_workflow` command and the compressed-step review timeline UI are live. See `docs/token-compression.md` and `docs/event-compression.md`. (Ghost Guard routing of compressed steps remains follow-up work.)
 
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
