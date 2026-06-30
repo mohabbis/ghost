@@ -212,7 +212,14 @@ impl GhostEngine {
     }
 
     /// Replay a sequence of recorded events.
-    pub fn replay(&self, events: &[InputEvent]) -> anyhow::Result<()> {
+    ///
+    /// `workflow_name` labels the run in execution history; pass `None` for an
+    /// unsaved workflow.
+    pub fn replay(
+        &self,
+        events: &[InputEvent],
+        workflow_name: Option<String>,
+    ) -> anyhow::Result<()> {
         // Reset the stop flag and pause state before starting
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
@@ -234,8 +241,49 @@ impl GhostEngine {
             started.elapsed().as_secs(),
             result.is_ok(),
         );
+        self.record_replay(workflow_name, events.len(), started, &result);
 
         result
+    }
+
+    /// Persist an execution record for a finished replay so success-rate,
+    /// duration, and failure analytics reflect real runs. Best-effort: a
+    /// failure to write history must never fail the replay itself.
+    fn record_replay(
+        &self,
+        workflow_name: Option<String>,
+        events_processed: usize,
+        started: Instant,
+        result: &anyhow::Result<()>,
+    ) {
+        use crate::core::execution::{build_replay_record, ReplayOutcome};
+
+        // The platform replayers return Ok(()) on user cancel, so consult the
+        // stop flag to distinguish a cancelled run from a completed one.
+        let outcome = if self.replay_stop_flag.load(Ordering::Relaxed) {
+            ReplayOutcome::Cancelled
+        } else {
+            match result {
+                Ok(()) => ReplayOutcome::Completed,
+                Err(e) => ReplayOutcome::Failed(e.to_string()),
+            }
+        };
+
+        let record = build_replay_record(
+            workflow_name,
+            events_processed,
+            started.elapsed().as_millis() as u64,
+            self.get_playback_speed(),
+            outcome,
+        );
+
+        if let Ok(guard) = self.execution_tracker.lock() {
+            if let Some(history) = guard.as_ref() {
+                if let Err(e) = history.save(&record) {
+                    tracing::warn!("Failed to save replay execution record: {e}");
+                }
+            }
+        }
     }
 
     /// Cancel an ongoing replay immediately.
@@ -579,19 +627,25 @@ impl GhostEngine {
         &self,
         events: &[InputEvent],
         reliability: &crate::core::events::ReliabilitySettings,
+        workflow_name: Option<String>,
     ) -> anyhow::Result<()> {
         // Reset flags
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
 
+        let started = Instant::now();
         let _active = ReplayActiveGuard::new(self.replay_active.clone());
-        self.replayer.execute_with_reliability(
+        let result = self.replayer.execute_with_reliability(
             events,
             self.replay_stop_flag.clone(),
             self.replay_paused.clone(),
             self.get_playback_speed(),
             reliability,
-        )
+        );
+        drop(_active);
+        self.record_replay(workflow_name, events.len(), started, &result);
+
+        result
     }
 
     /// Get element info at coordinates for validation

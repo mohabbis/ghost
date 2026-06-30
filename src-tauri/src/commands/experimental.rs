@@ -213,6 +213,7 @@ pub fn replay_with_reliability(
     backoff_ms: Option<u64>,
     backoff_multiplier: Option<f32>,
     checkpoints: Option<Vec<crate::core::events::Checkpoint>>,
+    workflow_name: Option<String>,
     engine: State<GhostEngine>,
 ) -> Result<(), String> {
     let defaults = engine.default_retry_config();
@@ -227,7 +228,7 @@ pub fn replay_with_reliability(
     };
 
     engine
-        .replay_with_reliability(&events, &reliability)
+        .replay_with_reliability(&events, &reliability, workflow_name)
         .map_err(|e| e.to_string())
 }
 
