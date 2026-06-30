@@ -1888,6 +1888,50 @@ async function organizerShowHistory() {
   showModal(modal);
 }
 
+// Replay history: surface past replay runs (status, duration, failure reason)
+// recorded by the engine's execution history. Read-only; mirrors the Organizer
+// history modal.
+async function showReplayHistory() {
+  if (!invoke) return notAvailable();
+  let history = [];
+  try {
+    history = await invoke("get_replay_history", { limit: 50 });
+  } catch (err) {
+    return toastError("Could not load replay history: " + err);
+  }
+  const modal = document.getElementById("analysis-modal");
+  const content = modal?.querySelector(".modal-content");
+  if (!content) return;
+
+  const fmtWhen = (secs) =>
+    secs ? new Date(secs * 1000).toLocaleString() : "—";
+  const fmtDur = (ms) =>
+    ms || ms === 0 ? `${(ms / 1000).toFixed(1)}s` : "—";
+
+  const rows = history.length
+    ? history
+        .map((h) => {
+          const status = String(h.status || "");
+          const cls = status.toLowerCase();
+          const err = h.error_message
+            ? ` — ${escapeHtml(h.error_message)}`
+            : "";
+          return `<li>
+            <div><strong>${escapeHtml(h.workflow_name)}</strong>
+              <span class="replay-status replay-status--${escapeAttr(cls)}">${escapeHtml(status)}</span></div>
+            <div class="replay-meta">${escapeHtml(fmtWhen(h.start_time))} · ${h.events_processed} events · ${escapeHtml(fmtDur(h.duration_ms))}${err}</div>
+          </li>`;
+        })
+        .join("")
+    : "<li>No replays yet.</li>";
+
+  content.innerHTML = `
+    <h3 style="margin-top:0">Replay history</h3>
+    <ul class="replay-history">${rows}</ul>
+    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+  showModal(modal);
+}
+
 function wireUpControls() {
   const bind = (id, handler) => {
     const el = document.getElementById(id);
@@ -1904,6 +1948,7 @@ function wireUpControls() {
   bind("inspectElementBtn", inspectElementAtCursor);
   bind("guardAuditBtn", () => runGhostGuardAudit());
   bind("demoWorkflowBtn", loadDemoWorkflow);
+  bind("replayHistoryBtn", showReplayHistory);
 
   bind("saveBtn", saveWorkflow);
   bind("saveAiBtn", saveWorkflowWithMetadata);
