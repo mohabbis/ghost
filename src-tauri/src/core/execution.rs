@@ -98,6 +98,53 @@ impl ExecutionRecord {
     }
 }
 
+/// How a replay run finished, used to build its execution record.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReplayOutcome {
+    /// Ran to the end without an error.
+    Completed,
+    /// Stopped early because the user cancelled.
+    Cancelled,
+    /// Ended on an error (carries the stringified reason).
+    Failed(String),
+}
+
+/// Build the execution record for a finished replay run. Kept as a pure
+/// function (no engine state, no IO) so the status/metadata mapping is unit
+/// tested directly; the engine just saves whatever this returns.
+///
+/// `events_processed` is the workflow's event count today; exact per-step
+/// progress arrives with the replay progress reporter.
+pub fn build_replay_record(
+    workflow_name: Option<String>,
+    events_processed: usize,
+    duration_ms: u64,
+    speed: f32,
+    outcome: ReplayOutcome,
+) -> ExecutionRecord {
+    let mut record =
+        ExecutionRecord::new(workflow_name.unwrap_or_else(|| "Unsaved workflow".to_string()));
+    record.metadata.replay_speed = speed;
+    record.metadata.os_version = std::env::consts::OS.to_string();
+    if events_processed > 0 {
+        record.metadata.avg_event_latency_ms = duration_ms as f32 / events_processed as f32;
+    }
+    match outcome {
+        ReplayOutcome::Completed => record.complete(events_processed, duration_ms),
+        ReplayOutcome::Cancelled => {
+            record.events_processed = events_processed;
+            record.duration_ms = Some(duration_ms);
+            record.cancel();
+        }
+        ReplayOutcome::Failed(err) => {
+            record.events_processed = events_processed;
+            record.duration_ms = Some(duration_ms);
+            record.fail(&err, None);
+        }
+    }
+    record
+}
+
 /// Number of days of execution logs to retain before automatic cleanup.
 const RETENTION_DAYS: u64 = 30;
 
@@ -424,6 +471,75 @@ mod tests {
         record2.cancel();
         assert_eq!(record2.status, ExecutionStatus::Cancelled);
         assert!(record2.end_time.is_some());
+    }
+
+    #[test]
+    fn build_replay_record_completed_populates_metadata() {
+        let record = build_replay_record(
+            Some("My Flow".to_string()),
+            4,
+            800,
+            1.5,
+            ReplayOutcome::Completed,
+        );
+        assert_eq!(record.workflow_name, "My Flow");
+        assert_eq!(record.status, ExecutionStatus::Success);
+        assert_eq!(record.events_processed, 4);
+        assert_eq!(record.duration_ms, Some(800));
+        assert_eq!(record.metadata.replay_speed, 1.5);
+        assert_eq!(record.metadata.avg_event_latency_ms, 200.0);
+        assert!(!record.metadata.os_version.is_empty());
+        assert!(record.error_message.is_none());
+    }
+
+    #[test]
+    fn build_replay_record_unnamed_defaults_label() {
+        let record = build_replay_record(None, 0, 0, 1.0, ReplayOutcome::Completed);
+        assert_eq!(record.workflow_name, "Unsaved workflow");
+        // No events → no divide-by-zero, latency stays at the default.
+        assert_eq!(record.metadata.avg_event_latency_ms, 0.0);
+    }
+
+    #[test]
+    fn build_replay_record_failed_carries_error_and_duration() {
+        let record = build_replay_record(
+            None,
+            2,
+            300,
+            1.0,
+            ReplayOutcome::Failed("element gone".to_string()),
+        );
+        assert_eq!(record.status, ExecutionStatus::Failed);
+        assert_eq!(record.error_message.as_deref(), Some("element gone"));
+        assert_eq!(record.events_processed, 2);
+        assert_eq!(record.duration_ms, Some(300));
+    }
+
+    #[test]
+    fn build_replay_record_cancelled_status() {
+        let record = build_replay_record(None, 1, 120, 1.0, ReplayOutcome::Cancelled);
+        assert_eq!(record.status, ExecutionStatus::Cancelled);
+        assert_eq!(record.duration_ms, Some(120));
+    }
+
+    #[test]
+    fn build_replay_record_roundtrips_through_history() {
+        let history = temp_history("replay_record");
+        let record = build_replay_record(
+            Some("Persisted".to_string()),
+            3,
+            450,
+            1.0,
+            ReplayOutcome::Completed,
+        );
+        history.save(&record).unwrap();
+
+        let loaded = history.get_history("Persisted").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].status, ExecutionStatus::Success);
+        assert_eq!(history.get_success_rate("Persisted").unwrap(), 1.0);
+
+        cleanup(&history);
     }
 
     #[test]

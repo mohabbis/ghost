@@ -97,9 +97,18 @@ pub fn stop_recording(engine: State<GhostEngine>) {
 }
 
 /// Replay a workflow of recorded events.
+///
+/// `workflow_name` is optional and only labels the run in execution history;
+/// omitting it records the run under an "Unsaved workflow" label.
 #[tauri::command]
-pub fn replay_workflow(events: Vec<InputEvent>, engine: State<GhostEngine>) -> Result<(), String> {
-    engine.replay(&events).map_err(|e| e.to_string())
+pub fn replay_workflow(
+    events: Vec<InputEvent>,
+    workflow_name: Option<String>,
+    engine: State<GhostEngine>,
+) -> Result<(), String> {
+    engine
+        .replay(&events, workflow_name)
+        .map_err(|e| e.to_string())
 }
 
 /// Run Ghost Guard's local privacy/cybersecurity audit against a workflow.
