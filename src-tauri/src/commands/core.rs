@@ -117,6 +117,27 @@ pub fn ghost_guard_audit(events: Vec<InputEvent>) -> crate::core::guard::GhostGu
     crate::core::guard::audit_workflow(&events)
 }
 
+/// List past replay runs, newest first, from local execution history.
+///
+/// Safe-read: returns only the user's own run records (status, duration,
+/// failure reason) stored locally under `…/ghost/logs`. `limit` caps how many
+/// are returned. This is the stable surface the replay-history UI reads; the
+/// richer per-workflow analytics queries remain experimental.
+#[tauri::command]
+pub fn get_replay_history(
+    limit: Option<usize>,
+    engine: State<GhostEngine>,
+) -> Result<Vec<crate::core::execution::ExecutionRecord>, String> {
+    match engine
+        .get_execution_tracker()
+        .as_ref()
+        .and_then(|guard| guard.as_ref())
+    {
+        Some(history) => history.get_all_records(limit).map_err(|e| e.to_string()),
+        None => Ok(Vec::new()),
+    }
+}
+
 /// Cancel an ongoing replay immediately.
 #[tauri::command]
 pub fn cancel_replay(engine: State<GhostEngine>) {

@@ -30,6 +30,7 @@ pub fn run() {
             commands::stop_recording,
             commands::replay_workflow,
             commands::ghost_guard_audit,
+            commands::get_replay_history,
             commands::cancel_replay,
             commands::pause_replay,
             commands::resume_replay,

@@ -1018,3 +1018,49 @@
 .org-outcome--failed {
   color: #ff8da0;
 }
+
+/* Replay history list: one run per row, label line + dimmed meta line. */
+.replay-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.replay-history li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.replay-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.replay-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+}
+
+.replay-status--success {
+  color: var(--success);
+}
+
+.replay-status--failed {
+  color: #ff8da0;
+}
+
+.replay-status--cancelled,
+.replay-status--running {
+  color: var(--muted);
+}
