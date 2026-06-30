@@ -386,11 +386,7 @@ unsafe fn extract_key_chars(event: CGEventRef) -> String {
 
 /// Safe wrapper for event processing that returns Result instead of panicking.
 /// This is called from cg_event_callback which cannot unwind across FFI boundary.
-unsafe fn process_cg_event(
-    etype: CGEventType,
-    event: CGEventRef,
-    tx: &mpsc::Sender<InputEvent>,
-) -> Option<InputEvent> {
+unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<InputEvent> {
     match etype {
         // Mouse down: perform AX element lookup while we have the coordinates
         kCGMouseEventLeftMouseDown => {
@@ -533,11 +529,7 @@ unsafe extern "C" fn cg_event_callback(
 
     // Wrap everything in catch_unwind to prevent panics from escaping the FFI boundary.
     // A panic in an extern "C" function causes abort, so we must catch any potential panic.
-    let result = std::panic::catch_unwind(|| {
-        unsafe {
-            process_cg_event(etype, event, tx)
-        }
-    });
+    let result = std::panic::catch_unwind(|| unsafe { process_cg_event(etype, event) });
 
     match result {
         Ok(Some(input_event)) => {

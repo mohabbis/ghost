@@ -1,0 +1,26 @@
+# EditorConfig — consistent whitespace across editors and AI agents.
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Rust: rustfmt's defaults (4-space).
+[*.rs]
+indent_size = 4
+
+# Web and config: 2-space, matching the existing frontend and YAML.
+[*.{js,css,html,json,yml,yaml}]
+indent_size = 2
+
+# Makefiles require real tabs.
+[Makefile]
+indent_style = tab
+
+# Markdown: trailing whitespace can be meaningful (hard line breaks).
+[*.md]
+trim_trailing_whitespace = false
