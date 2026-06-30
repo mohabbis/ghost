@@ -368,12 +368,15 @@ unsafe fn extract_modifiers(flags: u64) -> u8 {
 }
 
 /// Extract the Unicode string produced by a keyboard event.
+/// Bounds-safe: clamps actual_len to buffer length to prevent slice panics.
 unsafe fn extract_key_chars(event: CGEventRef) -> String {
     let mut actual_len: usize = 0;
     let mut buf = [0u16; 8];
     CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
     if actual_len > 0 {
-        String::from_utf16_lossy(&buf[..actual_len])
+        // Clamp actual_len to buffer length to prevent out-of-bounds slice access
+        let safe_len = actual_len.min(buf.len());
+        String::from_utf16_lossy(&buf[..safe_len])
     } else {
         String::new()
     }
@@ -381,24 +384,23 @@ unsafe fn extract_key_chars(event: CGEventRef) -> String {
 
 // ── CGEventTap callback ───────────────────────────────────────────────────────
 
-unsafe extern "C" fn cg_event_callback(
-    _proxy: CGEventTapId,
+/// Safe wrapper for event processing that returns Result instead of panicking.
+/// This is called from cg_event_callback which cannot unwind across FFI boundary.
+unsafe fn process_cg_event(
     etype: CGEventType,
     event: CGEventRef,
-    user_info: *mut c_void,
-) -> CGEventRef {
-    let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
-
-    let input_event = match etype {
+    tx: &mpsc::Sender<InputEvent>,
+) -> Option<InputEvent> {
+    match etype {
         // Mouse down: perform AX element lookup while we have the coordinates
         kCGMouseEventLeftMouseDown => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
-                return event;
+                return None;
             }
-            InputEvent::MouseClick {
+            Some(InputEvent::MouseClick {
                 x,
                 y,
                 button: 0,
@@ -407,16 +409,16 @@ unsafe extern "C" fn cg_event_callback(
                 retry_count: None,
                 semantic_tag: None,
                 self_heal: None,
-            }
+            })
         }
         kCGMouseEventLeftMouseUp => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
-                return event;
+                return None;
             }
-            InputEvent::MouseClick {
+            Some(InputEvent::MouseClick {
                 x,
                 y,
                 button: 1,
@@ -425,16 +427,16 @@ unsafe extern "C" fn cg_event_callback(
                 retry_count: None,
                 semantic_tag: None,
                 self_heal: None,
-            }
+            })
         }
         kCGMouseEventRightMouseDown => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
             if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
-                return event;
+                return None;
             }
-            InputEvent::MouseClick {
+            Some(InputEvent::MouseClick {
                 x,
                 y,
                 button: 2,
@@ -443,12 +445,12 @@ unsafe extern "C" fn cg_event_callback(
                 retry_count: None,
                 semantic_tag: None,
                 self_heal: None,
-            }
+            })
         }
         kCGMouseEventRightMouseUp => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
-            InputEvent::MouseClick {
+            Some(InputEvent::MouseClick {
                 x,
                 y,
                 button: 3,
@@ -457,7 +459,7 @@ unsafe extern "C" fn cg_event_callback(
                 retry_count: None,
                 semantic_tag: None,
                 self_heal: None,
-            }
+            })
         }
         kCGKeyDown | kCGKeyUp => {
             let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
@@ -474,7 +476,7 @@ unsafe extern "C" fn cg_event_callback(
             } else {
                 KeyAction::Up
             };
-            InputEvent::Key {
+            Some(InputEvent::Key {
                 code,
                 chars,
                 modifiers,
@@ -482,7 +484,7 @@ unsafe extern "C" fn cg_event_callback(
                 timestamp: None,
                 retry_count: None,
                 semantic_tag: None,
-            }
+            })
         }
         kCGScrollWheelEvent => {
             let dx = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2) as i32;
@@ -499,17 +501,70 @@ unsafe extern "C" fn cg_event_callback(
             } else {
                 momentum_phase
             };
-            InputEvent::Scroll {
+            Some(InputEvent::Scroll {
                 dx,
                 dy,
                 phase,
                 timestamp: None,
-            }
+            })
         }
-        _ => return event,
-    };
+        _ => None,
+    }
+}
 
-    let _ = tx.send(input_event);
+unsafe extern "C" fn cg_event_callback(
+    _proxy: CGEventTapId,
+    etype: CGEventType,
+    event: CGEventRef,
+    user_info: *mut c_void,
+) -> CGEventRef {
+    // Defensive: if user_info is null, just return the event unchanged
+    if user_info.is_null() {
+        return event;
+    }
+
+    // Defensive: if event is null, return it unchanged (shouldn't happen but be safe)
+    if event.is_null() {
+        return event;
+    }
+
+    // Cast user_info to the sender. We've already checked it's not null.
+    let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
+
+    // Wrap everything in catch_unwind to prevent panics from escaping the FFI boundary.
+    // A panic in an extern "C" function causes abort, so we must catch any potential panic.
+    let result = std::panic::catch_unwind(|| {
+        unsafe {
+            process_cg_event(etype, event, tx)
+        }
+    });
+
+    match result {
+        Ok(Some(input_event)) => {
+            // Send the event, but ignore send errors (receiver may have closed)
+            let _ = tx.send(input_event);
+        }
+        Ok(None) => {
+            // Event was filtered out (e.g., secure field) or unknown type
+            // Just pass it through unchanged
+        }
+        Err(e) => {
+            // A panic occurred inside the callback logic. Log it and continue.
+            // This should never happen, but if it does, we don't want to crash the app.
+            let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = e.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unknown panic".to_string()
+            };
+            eprintln!("PANIC in cg_event_callback (ignored): {}", msg);
+            // Optionally log with tracing if available
+            // tracing::error!("PANIC in cg_event_callback: {}", msg);
+        }
+    }
+
+    // Always return the original event (listen-only tap, we don't modify events)
     event
 }
 
