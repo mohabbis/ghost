@@ -1727,7 +1727,7 @@ dependencies = [
 
 [[package]]
 name = "ghost"
-version = "1.0.12"
+version = "1.0.13"
 dependencies = [
  "accessibility-sys",
  "aes-gcm",
