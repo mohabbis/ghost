@@ -3,243 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Ghost is a local-first desktop automation system with reviewable replay history, audit logs, and policy-bounded execution."
-    />
-    <meta
-      name="keywords"
-      content="desktop automation, local-first automation, workflow replay, replay history, audit logs, Tauri, macOS automation, Windows automation"
-    />
-    <meta name="author" content="Muhammad Rafiq" />
+    <meta name="description" content="Ghost turns repetitive desktop work into safe, reviewable automations." />
+    <title>Ghost | Safe Desktop Automation</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="canonical" href="https://ghost.muharafiq.com/" />
-
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ghost.muharafiq.com/" />
-    <meta property="og:title" content="Ghost | Reviewable desktop automation" />
-    <meta
-      property="og:description"
-      content="Local-first desktop automation with compressed workflows, replay history, audit logs, and bounded execution."
-    />
-    <meta property="og:image" content="https://ghost.muharafiq.com/apple-touch-icon.png" />
-
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://ghost.muharafiq.com/" />
-    <meta property="twitter:title" content="Ghost | Reviewable desktop automation" />
-    <meta
-      property="twitter:description"
-      content="Local-first desktop automation with replay history, audit logs, and macOS capture hardening."
-    />
-    <meta property="twitter:image" content="https://ghost.muharafiq.com/apple-touch-icon.png" />
-
-    <title>Ghost | Reviewable desktop automation</title>
-
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Ghost",
-        "description": "Ghost is a local-first desktop automation system that converts user workflows into compressed, reviewable, policy-bounded replays with local history and audit trails.",
-        "url": "https://ghost.muharafiq.com/",
-        "applicationCategory": "ProductivityApplication",
-        "operatingSystem": ["macOS 12+", "Windows 10", "Windows 11"],
-        "author": {
-          "@type": "Person",
-          "name": "Muhammad Rafiq"
-        },
-        "downloadUrl": "https://github.com/mohabbis/ghost/releases/latest",
-        "softwareVersion": "1.0.13-prep",
-        "releaseNotes": "Replay history, macOS event-tap hardening, and release signing preparation.",
-        "featureList": [
-          "Local workflow recording and replay",
-          "Replay execution history",
-          "Compressed workflow review timeline",
-          "Audit logs and policy-bounded execution",
-          "macOS event-tap crash hardening",
-          "macOS and Windows support"
-        ],
-        "requirements": "macOS 12 Monterey or later, or Windows 10/11 64-bit"
-      }
-    </script>
     <script type="module" src="/main.js" defer></script>
   </head>
-
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-nav" aria-label="Primary navigation">
-      <a class="brand" href="#top" aria-label="Ghost home">
-        <span class="brand__mark" aria-hidden="true">G</span>
-        <span>Ghost</span>
-      </a>
-      <nav class="site-nav__links" aria-label="Page sections">
-        <a href="#shipped">Shipped</a>
-        <a href="#system">System</a>
-        <a href="#release">Release</a>
+    <header class="site-nav">
+      <a class="brand" href="#top"><span class="brand__mark">G</span><span>Ghost</span></a>
+      <nav class="site-nav__links">
+        <a href="#how-it-works">How it works</a>
+        <a href="#demo">Demo</a>
+        <a href="#safety">Safety</a>
         <a href="#download">Download</a>
       </nav>
       <a class="btn btn--small" href="https://github.com/mohabbis/ghost">GitHub</a>
     </header>
-
     <main id="main">
-      <section id="top" class="hero" aria-labelledby="hero-title">
+      <section id="top" class="hero">
         <div class="hero__copy">
-          <h1 id="hero-title">Desktop automation you can inspect before it acts.</h1>
-          <p class="hero__lede">
-            Ghost turns noisy desktop behavior into compressed, reviewable workflows with replay history,
-            audit logs, and a hard split between trusted core actions and experimental AI features.
-          </p>
+          <h1 id="hero-title">Ghost turns repetitive desktop work into safe, reviewable automations.</h1>
+          <p class="hero__lede">Record a task once. Ghost explains the workflow, checks risks, asks for approval, and replays with permissions, debugging, and audit logs.</p>
           <div class="hero__actions">
-            <a class="btn" href="#shipped">See the latest ship</a>
-            <a class="btn btn--secondary" href="#release">Release status</a>
+            <a class="btn" href="#demo">See the demo</a>
+            <a class="btn btn--secondary" href="#download">Download</a>
           </div>
-          <dl class="proof-grid" aria-label="Current Ghost status">
-            <div>
-              <dt>Replay history</dt>
-              <dd>Runs now write local execution records.</dd>
-            </div>
-            <div>
-              <dt>macOS capture</dt>
-              <dd>Event-tap callbacks are panic-contained.</dd>
-            </div>
-            <div>
-              <dt>Production site</dt>
-              <dd>June 30 deploys are Ready on Vercel.</dd>
-            </div>
-          </dl>
         </div>
-
-        <aside class="console" aria-label="Ghost product state">
-          <div class="console__chrome" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </div>
+        <aside class="console">
           <div class="state-card state-card--active">
-            <span class="state-card__label">Trusted pipeline</span>
-            <strong>Capture -> Compress -> Audit -> Policy -> Approval -> Execute -> Vault -> Undo</strong>
-          </div>
-          <ol class="trace-list" aria-label="Replay trace preview">
-            <li>
-              <span>01</span>
-              <div>
-                <strong>Record replay outcome</strong>
-                <p>Completed, cancelled, and failed runs persist with duration and workflow metadata.</p>
-              </div>
-            </li>
-            <li>
-              <span>02</span>
-              <div>
-                <strong>Review history locally</strong>
-                <p>A safe-read command powers the Replay History view without enabling experimental tools.</p>
-              </div>
-            </li>
-            <li>
-              <span>03</span>
-              <div>
-                <strong>Harden capture path</strong>
-                <p>The macOS event tap now guards FFI callbacks, null pointers, and Unicode extraction.</p>
-              </div>
-            </li>
-          </ol>
-          <div class="console__footer">
-            <span id="ship-status">Master restored to green after #80.</span>
-            <a href="#release">Release path</a>
+            <span class="state-card__label">Trust pipeline</span>
+            <strong>Intent → Plan → Policy → Ghost Guard → Approval → Execute → Audit → Undo</strong>
           </div>
         </aside>
       </section>
-
-      <section id="shipped" class="section" aria-labelledby="shipped-title">
-        <div class="section__heading">
-          <span class="section__number">01</span>
-          <div>
-            <h2 id="shipped-title">Newest shipped state</h2>
-            <p>PRs #76 through #80 moved Ghost from replay capability to replay observability and release readiness.</p>
-          </div>
-        </div>
-        <div class="ship-grid">
-          <article class="ship-card">
-            <span>#76</span>
-            <h3>Replay execution tracking</h3>
-            <p>Replay runs now build and persist execution records, including status, timing, speed, latency, and OS context.</p>
-          </article>
-          <article class="ship-card">
-            <span>#78</span>
-            <h3>Replay History UI</h3>
-            <p>A trusted-core view surfaces prior runs with status, timestamp, event count, duration, and failure reason.</p>
-          </article>
-          <article class="ship-card">
-            <span>#79</span>
-            <h3>macOS crash fix</h3>
-            <p>The CGEventTap callback is isolated from Rust panics and handles unsafe pointers and text extraction more defensively.</p>
-          </article>
-          <article class="ship-card">
-            <span>#80</span>
-            <h3>Green master restored</h3>
-            <p>Formatting, clippy, line-ending, toolchain, and parallel-agent guardrails were cleaned up after the macOS fix.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="system" class="section system-section" aria-labelledby="system-title">
-        <div>
-          <span class="section__number">02</span>
-          <h2 id="system-title">Built around bounded autonomy.</h2>
-          <p>
-            Ghost is not framed as a black-box agent. The core path is deterministic and local-first:
-            recorded behavior becomes compressed steps, compressed steps become reviewable workflow state,
-            and every replay leaves a trace that can be inspected.
-          </p>
-        </div>
+      <section id="demo" class="section">
+        <div class="section__heading"><span class="section__number">01</span><h2>First workflow: Downloads cleanup</h2></div>
         <div class="system-panel">
-          <div>
-            <strong>Trusted core</strong>
-            <p>Recording, compression, policy checks, approvals, replay, execution history, and audit storage.</p>
-          </div>
-          <div>
-            <strong>Experimental AI</strong>
-            <p>May suggest names, summaries, insights, and future improvements. It does not silently mutate workflows.</p>
-          </div>
-          <div>
-            <strong>Reviewer signal</strong>
-            <p>Concrete UI, local data paths, green CI recovery, and a release process that can be verified end to end.</p>
-          </div>
+          <div><strong>Before</strong><p>Chaotic Downloads folder</p></div>
+          <div><strong>Review plan</strong><p>See every proposed move before anything changes</p></div>
+          <div><strong>Approve + execute</strong><p>Ghost Guard audits risks, then files organize safely</p></div>
+          <div><strong>Audit + undo</strong><p>Every run logged. Reverse changes with one click.</p></div>
         </div>
       </section>
-
-      <section id="release" class="section release-section" aria-labelledby="release-title">
-        <div class="section__heading">
-          <span class="section__number">03</span>
-          <div>
-            <h2 id="release-title">Release line status</h2>
-            <p>The site reflects the June 30 production deploys and the current release prep lane.</p>
-          </div>
-        </div>
-        <div class="release-grid">
-          <article>
-            <h3>Production deploys</h3>
-            <p>Vercel production deploys on June 30 reached Ready state and were aliased to the public Ghost domains.</p>
-          </article>
-          <article>
-            <h3>Version bump</h3>
-            <p>PR #81 prepares v1.0.13 so the replay history and macOS safety work can be tagged cleanly.</p>
-          </article>
-          <article>
-            <h3>Installer trust</h3>
-            <p>macOS signing and notarization are the remaining release trust step before a polished public desktop release.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="download" class="download-section" aria-labelledby="download-title">
-        <div>
-          <h2 id="download-title">Follow the build.</h2>
-          <p>Ghost is public on GitHub, with desktop downloads served from the latest release.</p>
-        </div>
+      <section id="download" class="download-section">
+        <h2>Try Ghost</h2>
         <div class="download-section__actions">
-          <a class="btn" href="https://github.com/mohabbis/ghost/releases/latest">Latest release</a>
-          <a class="btn btn--secondary" href="https://github.com/mohabbis/ghost">Source code</a>
+          <a class="btn" href="https://github.com/mohabbis/ghost/releases/latest">Download</a>
+          <a class="btn btn--secondary" href="https://github.com/mohabbis/ghost">GitHub</a>
         </div>
       </section>
     </main>
