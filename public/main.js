@@ -11,34 +11,15 @@ function revealOnScroll() {
         observer.unobserve(entry.target);
       });
     },
-    { threshold: 0.16 },
+    { threshold: 0.12 },
   );
 
-  document.querySelectorAll(".section, .ship-card, .step-card, .console").forEach((element) => {
+  document.querySelectorAll(".section, .step-card, .system-panel, .console").forEach((element) => {
     element.classList.add("reveal");
     observer.observe(element);
   });
 }
 
-function rotateShipStatus() {
-  const status = document.getElementById("ship-status");
-  if (!status || prefersReducedMotion.matches) return;
-
-  const messages = [
-    "Master restored to green after #80.",
-    "Replay History is now visible in trusted core.",
-    "macOS event-tap callbacks are panic-contained.",
-    "v1.0.13 is queued for signed release prep.",
-  ];
-
-  let index = 0;
-  setInterval(() => {
-    index = (index + 1) % messages.length;
-    status.textContent = messages[index];
-  }, 3200);
-}
-
 window.addEventListener("DOMContentLoaded", () => {
   revealOnScroll();
-  rotateShipStatus();
 });
