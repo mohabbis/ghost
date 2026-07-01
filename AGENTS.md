@@ -190,6 +190,28 @@ When changing behavior, update the matching docs in the same change:
 
 Keep docs short, current, and operational. Do not add vision essays when a checklist will do.
 
+## Working in parallel (multiple agents)
+
+This repo is often worked by several agents/sessions at once. To avoid
+colliding and to keep `master` green:
+
+- Sync first: `git fetch origin master` and rebase/reset your branch onto it
+  before starting and again before pushing. Never branch from a stale base.
+- One change per PR. Keep PRs small and single-purpose so they review and
+  merge fast and rarely conflict.
+- Localize edits to the conflict-hotspot files. `src-tauri/src/lib.rs` (the
+  `generate_handler!` list) and `src/main.js` are touched by almost every
+  feature — add your entry in one place, don't reflow surrounding code.
+- Run the validation commands below before claiming done. Local Linux builds
+  need the GTK/webkit system deps (`libgtk-3-dev libwebkit2gtk-4.1-dev
+  libappindicator3-dev librsvg2-dev patchelf libxdo-dev`); CI installs them.
+- Respect the boundaries: new experimental commands stay behind the
+  `experimental` Cargo feature; don't edit `.github/workflows/*` unless your
+  token has `workflow` scope (the push will be rejected otherwise).
+- Tooling is pinned (`rust-toolchain.toml`) and whitespace is normalized
+  (`.editorconfig`, `.gitattributes`, LF) so diffs stay minimal across
+  platforms — don't fight them with reformat-only changes.
+
 ## Validation
 
 Run relevant checks before claiming code is ready:

@@ -1,17 +1,23 @@
-```
-# Build artifacts
+# Rust / Cargo build artifacts
 target/
 **/target/
-
-# Dependencies
-Cargo.lock
-**/Cargo.lock
-
-# Tauri specific
 **/src-tauri/target/
-**/src-tauri/Cargo.lock
 
-# macOS specific build artifacts
+# macOS build artifacts
 **/*.dSYM/
 **/*.dylib
-```
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs and scratch
+*.log
+scratch/
+tmp/
+
+# Node tooling (marketing site), if introduced
+node_modules/

@@ -1,0 +1,28 @@
+# Normalize line endings to LF for all text so agents on macOS, Windows, and
+# Linux don't produce CRLF churn or spurious whitespace-only conflicts.
+* text=auto eol=lf
+
+# Source and config (explicit for clarity)
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# Binary assets — never normalize or attempt to diff/merge.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   text eol=lf
+*.dmg   binary
+*.exe   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
