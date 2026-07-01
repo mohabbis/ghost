@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Claude Code instructions for the Ghost repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 `AGENTS.md` is the canonical agent contract. Read and follow it first. This file adds Claude-specific execution guidance and should not conflict with `AGENTS.md`.
 
@@ -126,46 +126,46 @@ Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 Current structure:
 
 ```text
-src/                    # Tauri desktop frontend
-public/                 # marketing/download site
+src/                    # Tauri desktop frontend (vanilla JS/HTML/CSS, no bundler; main.js holds most UI logic)
+public/                 # marketing/download site (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/; auto-deployed to Vercel by deploy-website.yml)
 src-tauri/              # Rust backend
 docs/                   # planning and technical docs
-.github/workflows/      # CI and release pipelines
+.github/workflows/      # CI (rust.yml), release (release.yml), site deploy (deploy-website.yml)
 ```
 
-Near-term backend direction:
+Current backend layout:
 
 ```text
 src-tauri/src/
+  lib.rs                 # app wiring + generate_handler! registry (conflict hotspot — add entries in place)
+  engine.rs              # recording/replay engine state
+  auth.rs, config.rs, error.rs, performance.rs, telemetry.rs
+  commands.rs            # thin registry/re-export over commands/
   commands/
-    mod.rs
-    core.rs
-    auth.rs
-    diagnostics.rs
-    experimental.rs
+    core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions
+    auth.rs              # local password state and protection
+    compression.rs       # compress_workflow (event compression -> review timeline)
+    diagnostics.rs       # config, telemetry export, performance, is_experimental_enabled
+    organizer.rs         # organizer_plan / organizer_execute / organizer_list_executions / organizer_undo
+    updates.rs           # updater surface
+    experimental.rs      # AI, observer, cloud sync, analytics, visual checks (feature-gated)
   core/
     compress.rs          # deterministic text compression for LLM-bound content
     compression/         # deterministic event compression for workflow review
+    execution.rs         # ExecutionRecord tracking for replay history
+    replay_support.rs    # shared pause/cancel/pacing replay plumbing
+    events.rs, guard.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
+    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs   # experimental-facing
+  platform/
+    macos.rs, windows.rs, headless.rs   # OS input capture/replay backends (headless used by Linux CI)
   policy/
-    capability.rs
-    decision.rs
-    engine.rs
-    risk.rs
-    zone.rs
+    capability.rs, decision.rs, engine.rs, risk.rs, zone.rs
   storage/
-    migrations.rs
-    zones.rs
+    migrations.rs, zones.rs, executions.rs
   organizer/
-    scanner.rs
-    classifier.rs
-    naming.rs
-    conflict.rs
-    planner.rs
-    executor.rs
-    undo.rs
+    scanner.rs, classifier.rs, naming.rs, conflict.rs, planner.rs, executor.rs, undo.rs
   audit/
-    audit_log.rs
-    undo_journal.rs
+    audit_log.rs, undo_journal.rs
 ```
 
 Built so far — the Ghost Organizer trust pipeline is wired end to end:
@@ -178,6 +178,8 @@ Built so far — the Ghost Organizer trust pipeline is wired end to end:
 These are wired to the `organizer_*` Tauri commands and the Organizer UI: plan is read-only; execute re-checks policy per action, writes undo before mutating, and audits every change; undo replays the journal in reverse. The executor never overwrites or deletes silently.
 
 Also built: `core/compress.rs` for deterministic text compression before experimental model calls, and `core/compression/` for deterministic event compression from raw `InputEvent` streams into reviewable `CompressedStep`s. Both are exercised in product — the `compress_workflow` command and the compressed-step review timeline UI are live. See `docs/token-compression.md` and `docs/event-compression.md`. (Ghost Guard routing of compressed steps remains follow-up work.)
+
+Also built: replay execution tracking and history. The engine records each replay as an `ExecutionRecord` (`core/execution.rs`); the stable `get_replay_history` command (`commands/core.rs`) exposes it, and the frontend renders a replay-history view in `src/main.js`. Organizer runs persist separately via `storage/executions.rs` and surface through `organizer_list_executions` / `organizer_undo`.
 
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
@@ -211,19 +213,23 @@ Do not regress these behaviors:
 
 ## Command surface expectations
 
-Command modules:
+Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 
-- `commands/core.rs` for stable automation, recording, replay, workflow storage, permissions;
+- `commands/core.rs` for stable automation, recording, replay and replay history, workflow storage, permissions;
 - `commands/auth.rs` for local password state and protection;
-- `commands/diagnostics.rs` for config, telemetry export, and performance summaries;
+- `commands/compression.rs` for the `compress_workflow` event-compression command;
+- `commands/diagnostics.rs` for config, telemetry export, performance summaries, and `is_experimental_enabled`;
+- `commands/organizer.rs` for the Organizer plan/execute/history/undo surface;
+- `commands/updates.rs` for the updater;
 - `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
-`commands/experimental.rs` and its registration in `lib.rs` are gated behind the `experimental` Cargo feature, which is off by default. A stock build exposes only the trusted core; the experimental commands are compiled and registered only with `--features experimental`. The frontend hides the experimental tools panel unless the always-registered `is_experimental_enabled` command reports the feature is on. Keep new experimental commands behind this flag, and run experimental checks with `--features experimental` (CI does this in a dedicated leg).
+`commands/experimental.rs` and its registration in `lib.rs` are gated behind the `experimental` Cargo feature, which is off by default. A stock build exposes only the trusted core; the experimental commands are compiled and registered only with `--features experimental`. The frontend hides the experimental tools panel unless the always-registered `is_experimental_enabled` command reports the feature is on. Keep new experimental commands behind this flag. CI does **not** run an experimental leg — when you touch experimental code, run the checks locally with `--features experimental` and say so in the PR (the PR template has a checkbox for it).
 
 Before changing commands, read:
 
 - `docs/command-registry.md`;
-- `docs/core-boundaries.md`.
+- `docs/core-boundaries.md`;
+- `docs/organizer-commands.md` (for the Organizer IPC bridge).
 
 Every command should document whether it touches:
 
@@ -246,7 +252,18 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo tauri build --no-bundle
 ```
 
+Makefile shortcuts exist for all of these: `make ci` runs fmt-check + clippy + test; `make check`, `make build` (`cargo tauri build --no-bundle`), and `make dev` (`cargo tauri dev`) cover the rest.
+
+Notes:
+
+- there is no `package.json` and no frontend build step — `tauri.conf.json` serves `../src` directly, so frontend changes need no compile;
+- local Linux builds need the GTK/webkit system deps listed in `AGENTS.md`; the `platform/headless.rs` backend is what Linux CI exercises;
+- CI (`rust.yml`) runs check/test/clippy on ubuntu/macos/windows, fmt on ubuntu, and a `cargo tauri build --no-bundle` smoke test on macos/windows — it does not run `--features experimental`;
+- for a single test, use `cargo test --manifest-path src-tauri/Cargo.toml <test_name>` (add `--features experimental` if the test lives behind the gate).
+
 If checks cannot run, report that directly.
+
+For release and signing work, read `RELEASING.md`, `docs/macos-signing-checklist.md`, and `docs/azure-signing-cost.md` before touching `release.yml`.
 
 ## Response format
 
