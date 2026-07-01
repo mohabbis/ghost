@@ -3,56 +3,334 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Ghost turns repetitive desktop work into safe, reviewable automations." />
-    <title>Ghost | Safe Desktop Automation</title>
+    <title>Ghost — Desktop automation you inspect before it acts</title>
+    <meta
+      name="description"
+      content="Ghost turns repeated computer work into safe, reusable routines. It runs on your Mac or PC, proposes a plan, and only acts on what you approve — every change audited and reversible. Local-first. No cloud."
+    />
+    <meta name="theme-color" content="#0a0a14" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="canonical" href="https://ghost.muharafiq.com/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ghost — Desktop automation you inspect before it acts" />
+    <meta
+      property="og:description"
+      content="Local-first desktop automation. Ghost proposes a plan, acts only on what you approve, and every change is audited and reversible."
+    />
+    <meta property="og:url" content="https://ghost.muharafiq.com/" />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="stylesheet" href="styles.css" />
-    <script type="module" src="/main.js" defer></script>
+    <script src="/main.js" defer></script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Ghost",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "macOS, Windows",
+        "description": "Local-first desktop automation. Ghost records or plans a task, acts only on what you approve, and keeps every change audited and reversible.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "downloadUrl": "https://github.com/mohabbis/ghost/releases/latest"
+      }
+    </script>
   </head>
-  <body>
-    <header class="site-nav">
-      <a class="brand" href="#top"><span class="brand__mark">G</span><span>Ghost</span></a>
-      <nav class="site-nav__links">
-        <a href="#how-it-works">How it works</a>
+  <body data-platform="other">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="nav" id="top">
+      <a class="brand" href="#top" aria-label="Ghost home">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="26" height="26" role="img" aria-label="Ghost parrot">
+            <path
+              d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z"
+              fill="url(#gp)"
+            />
+            <circle cx="12.6" cy="13" r="3.1" fill="#fff" />
+            <circle cx="19.4" cy="13" r="3.1" fill="#fff" />
+            <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0a0a14" />
+            <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0a0a14" />
+            <path d="M14.2 17.6h3.6l-1.8 2.4Z" fill="#ffb56b" />
+            <defs>
+              <linearGradient id="gp" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#a394ff" />
+                <stop offset="1" stop-color="#7b6cf0" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </span>
+        <span>Ghost</span>
+      </a>
+
+      <nav class="nav__links" id="nav-links" aria-label="Primary">
         <a href="#demo">Demo</a>
-        <a href="#safety">Safety</a>
-        <a href="#download">Download</a>
+        <a href="#how">How it works</a>
+        <a href="#why">Why Ghost</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#roadmap">Roadmap</a>
       </nav>
-      <a class="btn btn--small" href="https://github.com/mohabbis/ghost">GitHub</a>
+
+      <div class="nav__end">
+        <a class="btn btn--ghost btn--sm" href="https://github.com/mohabbis/ghost">GitHub</a>
+        <a class="btn btn--sm" href="#download">Download</a>
+      </div>
+
+      <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+        <span></span><span></span><span></span>
+      </button>
     </header>
+
     <main id="main">
-      <section id="top" class="hero">
+      <!-- ───────────────────────── Hero ───────────────────────── -->
+      <section class="hero reveal">
         <div class="hero__copy">
-          <h1 id="hero-title">Ghost turns repetitive desktop work into safe, reviewable automations.</h1>
-          <p class="hero__lede">Record a task once. Ghost explains the workflow, checks risks, asks for approval, and replays with permissions, debugging, and audit logs.</p>
+          <p class="eyebrow">Local-first · macOS &amp; Windows · No account</p>
+          <h1>Automation you <span class="grad">inspect before</span> it acts.</h1>
+          <p class="lede">
+            Ghost turns repeated computer work into reusable routines on your own machine. It proposes a
+            plan, acts only on what you <strong>approve</strong>, and keeps every change
+            <strong>audited</strong> and <strong>reversible</strong>. Most AI agents live in the cloud and
+            act on their own. Ghost is the opposite.
+          </p>
           <div class="hero__actions">
-            <a class="btn" href="#demo">See the demo</a>
-            <a class="btn btn--secondary" href="#download">Download</a>
+            <a class="btn btn--lg" href="#download" data-download-primary>Download for your computer</a>
+            <a class="btn btn--secondary btn--lg" href="#demo">See it work ↓</a>
           </div>
+          <p class="hero__note">Free technical preview · Your data never leaves your device.</p>
         </div>
-        <aside class="console">
-          <div class="state-card state-card--active">
-            <span class="state-card__label">Trust pipeline</span>
-            <strong>Intent → Plan → Policy → Ghost Guard → Approval → Execute → Audit → Undo</strong>
+
+        <!-- Hero mockup: a proposed plan awaiting approval -->
+        <aside class="mock" aria-hidden="true">
+          <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — proposed plan</em></div>
+          <div class="mock__body">
+            <div class="mock__row"><span class="tag tag--new">＋ folder</span> Documents/Invoices</div>
+            <div class="mock__row"><span class="tag tag--move">→ move</span> receipt-final(2).pdf → Invoices</div>
+            <div class="mock__row"><span class="tag tag--rename">✎ rename</span> IMG_4821.HEIC → 2026-03 Berlin.heic</div>
+            <div class="mock__row mock__row--warn"><span class="tag tag--warn">⚠ conflict</span> keeps both — never overwrites</div>
+            <div class="mock__row mock__row--deny"><span class="tag tag--deny">✕ 0</span> deletes · 0 uploads</div>
+            <div class="mock__foot">
+              <button class="btn btn--sm" type="button" tabindex="-1">Approve</button>
+              <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Undo</button>
+              <span class="mock__parrot">
+                <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+                  <path d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z" fill="url(#gp2)"/>
+                  <circle cx="12.6" cy="13" r="3.1" fill="#fff"/><circle cx="19.4" cy="13" r="3.1" fill="#fff"/>
+                  <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0a0a14"/>
+                  <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0a0a14"/>
+                  <path d="M14.2 17.6h3.6l-1.8 2.4Z" fill="#ffb56b"/>
+                  <defs><linearGradient id="gp2" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse"><stop stop-color="#a394ff"/><stop offset="1" stop-color="#7b6cf0"/></linearGradient></defs>
+                </svg>
+              </span>
+            </div>
           </div>
         </aside>
       </section>
-      <section id="demo" class="section">
-        <div class="section__heading"><span class="section__number">01</span><h2>First workflow: Downloads cleanup</h2></div>
-        <div class="system-panel">
-          <div><strong>Before</strong><p>Chaotic Downloads folder</p></div>
-          <div><strong>Review plan</strong><p>See every proposed move before anything changes</p></div>
-          <div><strong>Approve + execute</strong><p>Ghost Guard audits risks, then files organize safely</p></div>
-          <div><strong>Audit + undo</strong><p>Every run logged. Reverse changes with one click.</p></div>
+
+      <div class="trust-strip reveal">
+        <span>🔒 Runs on your machine</span>
+        <span>✅ You approve every action</span>
+        <span>🧾 Every change audited</span>
+        <span>↩︎ One-click undo</span>
+      </div>
+
+      <!-- ───────────────────────── Interactive demo ───────────────────────── -->
+      <section id="demo" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Interactive demo</p>
+          <h2>Watch the trust model, live.</h2>
+          <p class="section__sub">
+            A faithful in-browser simulation of what the desktop app actually does — nothing here touches
+            your files. Drive it yourself.
+          </p>
+        </div>
+
+        <div class="demo">
+          <div class="demo__tabs" role="tablist" aria-label="Demos">
+            <button class="demo__tab is-active" role="tab" aria-selected="true" data-tab="organizer" id="tab-organizer">
+              🗂️ Organizer
+            </button>
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="replay" id="tab-replay">
+              ⏺️ Record → Replay
+            </button>
+          </div>
+
+          <!-- Tab A: Organizer -->
+          <div class="demo__panel is-active" role="tabpanel" data-panel="organizer" aria-labelledby="tab-organizer">
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot"></span> Downloads — 6 items</div>
+                <ul class="filelist" id="org-files" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle" id="org-planhead">Proposed plan</div>
+                <ul class="planlist" id="org-plan" aria-live="polite"></ul>
+                <div class="audit" id="org-audit" hidden>
+                  <div class="audit__title">🧾 Audit log</div>
+                  <ul id="org-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="org-action" type="button">Scan folder</button>
+              <span class="demo__hint" id="org-hint">Read-only scan — proposes changes, touches nothing.</span>
+            </div>
+          </div>
+
+          <!-- Tab B: Record → Replay -->
+          <div class="demo__panel" role="tabpanel" data-panel="replay" aria-labelledby="tab-replay" hidden>
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot dot--rec" id="rec-dot"></span> <span id="rec-title">Ready to record</span></div>
+                <ul class="steplist" id="rep-steps" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle">Review &amp; audit</div>
+                <ul class="planlist" id="rep-review" aria-live="polite"></ul>
+                <div class="audit" id="rep-audit" hidden>
+                  <div class="audit__title">🧾 Audit log</div>
+                  <ul id="rep-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="rep-action" type="button">Record a task</button>
+              <span class="demo__hint" id="rep-hint">Typed text is redacted by default; secure fields are never captured.</span>
+            </div>
+          </div>
         </div>
       </section>
-      <section id="download" class="download-section">
-        <h2>Try Ghost</h2>
-        <div class="download-section__actions">
-          <a class="btn" href="https://github.com/mohabbis/ghost/releases/latest">Download</a>
-          <a class="btn btn--secondary" href="https://github.com/mohabbis/ghost">GitHub</a>
+
+      <!-- ───────────────────────── How it works ───────────────────────── -->
+      <section id="how" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">The trust pipeline</p>
+          <h2>Every action takes the same seven steps.</h2>
+          <p class="section__sub">AI may propose. Deterministic code executes only what you approved — and writes the receipt.</p>
+        </div>
+        <ol class="pipeline">
+          <li><span class="pipeline__n">1</span><h3>Record / Select</h3><p>Record a task, or pick a folder. Explicit and visible — never in the background.</p></li>
+          <li><span class="pipeline__n">2</span><h3>Inspect</h3><p>Raw input compresses into readable steps. Typed text redacted; secrets dropped.</p></li>
+          <li><span class="pipeline__n">3</span><h3>Plan</h3><p>Ghost proposes exact changes and flags conflicts. The plan mutates nothing.</p></li>
+          <li><span class="pipeline__n">4</span><h3>Approve</h3><p>You review and approve. Deny-by-default: risky actions need explicit consent.</p></li>
+          <li><span class="pipeline__n">5</span><h3>Execute</h3><p>Deterministic code runs the approved plan — no silent delete, no overwrite.</p></li>
+          <li><span class="pipeline__n">6</span><h3>Audit</h3><p>Every change is written to a durable local log you can read back.</p></li>
+          <li><span class="pipeline__n">7</span><h3>Undo</h3><p>Reversible steps record undo data first, so one click puts things back.</p></li>
+        </ol>
+      </section>
+
+      <!-- ───────────────────────── Why Ghost ───────────────────────── -->
+      <section id="why" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Why Ghost is different</p>
+          <h2>The opposite of an autonomous cloud agent.</h2>
+        </div>
+        <div class="compare">
+          <div class="compare__col compare__col--them">
+            <h3>Cloud AI agents</h3>
+            <ul>
+              <li>Read your email, chat, calendar, and files in the cloud</li>
+              <li>Decide and act on their own</li>
+              <li>Raw model output drives actions</li>
+              <li>Your data leaves your machine</li>
+              <li>Hard to see exactly what happened</li>
+            </ul>
+          </div>
+          <div class="compare__col compare__col--us">
+            <h3><span class="brand__mark brand__mark--sm" aria-hidden="true">G</span> Ghost</h3>
+            <ul>
+              <li>Runs on your Mac or PC — nothing uploaded</li>
+              <li>Acts only on the plan you approved</li>
+              <li>Deterministic code executes, not the model</li>
+              <li>Local-first storage, no account</li>
+              <li>Every run audited, every change reversible</li>
+            </ul>
+          </div>
+        </div>
+        <p class="anchor-quote">
+          “Ghost may suggest anything, but it only does what you approve — inside a boundary you control.”
+        </p>
+      </section>
+
+      <!-- ───────────────────────── Privacy ───────────────────────── -->
+      <section id="privacy" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Privacy by default</p>
+          <h2>What Ghost will never do.</h2>
+        </div>
+        <div class="privacy">
+          <div class="privacy__card"><span>🚫📷</span><p>No camera or microphone access.</p></div>
+          <div class="privacy__card"><span>🙈</span><p>No hidden screen capture or background recording.</p></div>
+          <div class="privacy__card"><span>📭</span><p>No background email, browser, or tab reading.</p></div>
+          <div class="privacy__card"><span>🔑</span><p>No raw secret capture — password &amp; payment fields are suppressed.</p></div>
+          <div class="privacy__card"><span>☁️</span><p>No cloud-first storage. Workflows stay on your device.</p></div>
+          <div class="privacy__card"><span>⌨️</span><p>Keyboard &amp; pointer captured only while you record or an approved replay runs.</p></div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Roadmap ───────────────────────── -->
+      <section id="roadmap" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Honest status</p>
+          <h2>What's real today — and what's next.</h2>
+          <p class="section__sub">We'd rather under-promise. Here's exactly where things stand.</p>
+        </div>
+        <div class="roadmap">
+          <div class="roadmap__col roadmap__col--now">
+            <span class="pill pill--now">Shipping now</span>
+            <h3>Ghost Organizer</h3>
+            <p>Safe file cleanup: scan, classify, propose, approve, move/rename, audit, undo — with conflict detection and no silent delete or overwrite.</p>
+          </div>
+          <div class="roadmap__col">
+            <span class="pill">Next</span>
+            <h3>Ghost Routines</h3>
+            <p>Record tasks across apps and sites, review the compressed steps, and replay them — semantic first, coordinates as fallback.</p>
+          </div>
+          <div class="roadmap__col">
+            <span class="pill">Later</span>
+            <h3>Ghost Intelligence</h3>
+            <p>Suggestion-only planning and pattern detection. It proposes; you and deterministic code still decide and execute.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Download ───────────────────────── -->
+      <section id="download" class="download reveal">
+        <div class="download__inner">
+          <h2>Get Ghost</h2>
+          <p class="download__sub" id="download-sub">Free technical preview for macOS and Windows.</p>
+          <div class="download__actions">
+            <a class="btn btn--lg" id="dl-mac" href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg">
+              ⌘ Download for macOS
+            </a>
+            <a class="btn btn--lg" id="dl-win" href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe">
+              ⊞ Download for Windows
+            </a>
+          </div>
+          <p class="download__note">
+            macOS 12+ · Apple Silicon &amp; Intel · Windows 10/11 · Technical preview — builds may be
+            developer-signed. <a href="https://github.com/mohabbis/ghost/releases/latest">All releases →</a>
+          </p>
         </div>
       </section>
     </main>
+
+    <footer class="footer">
+      <div class="footer__brand">
+        <span class="brand"><span class="brand__mark" aria-hidden="true">G</span> Ghost</span>
+        <p>Record → Inspect → Approve → Replay → Audit → Undo.</p>
+      </div>
+      <nav class="footer__links" aria-label="Footer">
+        <a href="#demo">Demo</a>
+        <a href="#how">How it works</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="https://github.com/mohabbis/ghost">GitHub</a>
+      </nav>
+      <p class="footer__fine">Local-first desktop automation · © 2026 Ghost</p>
+    </footer>
   </body>
 </html>
