@@ -2,7 +2,9 @@
 #![allow(non_upper_case_globals)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
-use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
+use crate::core::replay_support::{
+    self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
@@ -393,7 +395,7 @@ unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<Inpu
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
+            if is_secure_click(&element) {
                 return None;
             }
             Some(InputEvent::MouseClick {
@@ -411,7 +413,7 @@ unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<Inpu
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
+            if is_secure_click(&element) {
                 return None;
             }
             Some(InputEvent::MouseClick {
@@ -429,7 +431,7 @@ unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<Inpu
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
             let element = ax_info_at(x, y);
-            if element.as_ref().is_some_and(|e| is_secure_role(&e.role)) {
+            if is_secure_click(&element) {
                 return None;
             }
             Some(InputEvent::MouseClick {
@@ -446,6 +448,12 @@ unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<Inpu
         kCGMouseEventRightMouseUp => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
+            // Same secure-field suppression as the other three click cases:
+            // a release over a password field must not leak its coordinates.
+            let element = ax_info_at(x, y);
+            if is_secure_click(&element) {
+                return None;
+            }
             Some(InputEvent::MouseClick {
                 x,
                 y,
@@ -639,6 +647,13 @@ fn is_secure_role(role: &str) -> bool {
     role.to_ascii_lowercase().contains("securetextfield")
 }
 
+/// Suppression decision shared by every mouse press *and* release capture in
+/// `process_cg_event`: a click over a secure input must not be recorded at
+/// all, not even as bare coordinates.
+fn is_secure_click(element: &Option<ElementInfo>) -> bool {
+    element.as_ref().is_some_and(|e| is_secure_role(&e.role))
+}
+
 /// Re-resolve where to click for a recorded click. Scans nearby points when
 /// the element has moved (shared spiral in core::replay_support); `None`
 /// means no matching element exists anywhere near the recorded point.
@@ -741,6 +756,7 @@ impl ReplayEngine for MacosReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
         use crate::core::vision;
         use crate::core::wait::VariableContext;
@@ -750,7 +766,8 @@ impl ReplayEngine for MacosReplayer {
         let mut var_context = VariableContext::new();
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }
@@ -913,13 +930,15 @@ impl ReplayEngine for MacosReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
         reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = speed.max(0.1);
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }
@@ -1031,5 +1050,44 @@ impl ReplayEngine for MacosReplayer {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn element_with_role(role: &str) -> Option<ElementInfo> {
+        Some(ElementInfo {
+            role: role.into(),
+            ..Default::default()
+        })
+    }
+
+    // `is_secure_click` is the single suppression gate for all four click
+    // captures in `process_cg_event` (left/right, down/up). RightMouseUp
+    // once skipped this check and captured coordinates unconditionally;
+    // these tests pin the shared decision so that can't regress silently.
+
+    #[test]
+    fn click_over_secure_text_field_is_suppressed() {
+        assert!(is_secure_click(&element_with_role("AXSecureTextField")));
+    }
+
+    #[test]
+    fn secure_role_match_is_case_insensitive() {
+        assert!(is_secure_click(&element_with_role("axsecuretextfield")));
+        assert!(is_secure_click(&element_with_role("AXSECURETEXTFIELD")));
+    }
+
+    #[test]
+    fn click_over_ordinary_element_is_captured() {
+        assert!(!is_secure_click(&element_with_role("AXButton")));
+        assert!(!is_secure_click(&element_with_role("AXTextField")));
+    }
+
+    #[test]
+    fn click_with_no_resolved_element_is_captured() {
+        assert!(!is_secure_click(&None));
     }
 }

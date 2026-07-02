@@ -5,7 +5,9 @@
 //! available, and the crate compiles + the full test suite runs everywhere.
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction, ReliabilitySettings};
-use crate::core::replay_support::{check_continue, interruptible_sleep, pacing_gap_ms};
+use crate::core::replay_support::{
+    check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::sync::atomic::AtomicBool;
@@ -73,12 +75,14 @@ impl ReplayEngine for HeadlessReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = speed.max(0.1);
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }
@@ -186,11 +190,12 @@ impl ReplayEngine for HeadlessReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
         _reliability: &ReliabilitySettings,
     ) -> anyhow::Result<()> {
         // Element validation and self-healing retries need an accessibility
         // API; without one the plain replay path is the honest behavior.
-        self.execute(events, stop_flag, pause_flag, speed)
+        self.execute(events, stop_flag, pause_flag, speed, progress)
     }
 }
 

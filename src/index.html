@@ -60,11 +60,14 @@
               <button class="btn btn--ghost" id="stopBtn"  disabled>Stop</button>
               <button class="btn btn--ghost" id="replayBtn"  disabled>Replay</button>
               <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Guarded Replay</button>
+              <button class="btn btn--ghost" id="dryRunBtn" disabled title="See what each step will do before replaying">Preview Steps</button>
             </div>
             <div class="btn-row">
               <button class="btn btn--ghost btn--small" id="cancelBtn"  disabled>Cancel</button>
               <button class="btn btn--ghost btn--small" id="pauseBtn"  disabled>Pause</button>
               <button class="btn btn--ghost btn--small" id="resumeBtn"  disabled>Resume</button>
+              <button class="btn btn--ghost btn--small" id="stepReplayBtn" disabled title="Replay one step at a time">Replay Next Step</button>
+              <button class="btn btn--ghost btn--small" id="retryFailedBtn" hidden>Retry From Failed Step</button>
               <label class="speed-picker">
                 Speed
                 <select id="speedSelect">
@@ -78,6 +81,7 @@
               <button class="btn btn--ghost btn--small" id="demoWorkflowBtn">Load Demo</button>
               <button class="btn btn--ghost btn--small" id="replayHistoryBtn">Replay History</button>
             </div>
+            <div id="replay-progress" class="replay-progress" hidden aria-live="polite"></div>
           </section>
 
           <section class="panel" aria-labelledby="workflow-heading">

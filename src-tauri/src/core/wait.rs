@@ -283,8 +283,16 @@ pub fn resolve_selector(
             found.ok_or_else(|| anyhow::anyhow!("Element not found: {} {:?}", name, role))
         }
         ElementSelector::OCR { text: _, fuzzy: _ } => {
-            // TODO: Implement OCR-based element location
-            Err(anyhow::anyhow!("OCR selector not implemented"))
+            // Not yet implemented, see https://github.com/mohabbis/ghost/issues/87.
+            // OCR targeting is intentionally off the near-term roadmap: Phase 2
+            // (docs/PRODUCT_ROADMAP.md) invests in semantic + fallback locator
+            // strategies instead. Nothing in the default UI offers OCR selectors;
+            // a workflow carrying one fails here with an explicit error rather
+            // than silently resolving to wrong coordinates.
+            Err(anyhow::anyhow!(
+                "OCR element selectors are not implemented in this build (see \
+                 https://github.com/mohabbis/ghost/issues/87)"
+            ))
         }
     }
 }

@@ -181,6 +181,8 @@ Also built: `core/compress.rs` for deterministic text compression before experim
 
 Also built: replay execution tracking and history. The engine records each replay as an `ExecutionRecord` (`core/execution.rs`); the stable `get_replay_history` command (`commands/core.rs`) exposes it, and the frontend renders a replay-history view in `src/main.js`. Organizer runs persist separately via `storage/executions.rs` and surface through `organizer_list_executions` / `organizer_undo`.
 
+Also built: replay inspectability. Platform replay loops advance a shared `ReplayProgress` (`core/replay_support.rs`) so the stable `get_replay_progress` command can report live per-step status and the failing step index; `dry_run_workflow` (`core/dry_run.rs`) returns a pure per-step preview of what a replay would do (typed text never included). The frontend uses these for a preview modal, a live step counter, step-by-step replay, and retry-from-failed-step (the latter two replay event slices through the stable `replay_workflow` command, keeping press/release pairs together).
+
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
 ## Replay invariants

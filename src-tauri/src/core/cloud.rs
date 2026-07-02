@@ -38,6 +38,10 @@ pub struct Workspace {
     pub description: String,
     pub owner_id: String,
     pub member_ids: Vec<String>,
+    /// Role of each member, keyed by user id. Access control (e.g. who may
+    /// add members) is decided by role, not by mere membership.
+    #[serde(default)]
+    pub member_roles: HashMap<String, MemberRole>,
     pub workflows: Vec<String>, // workflow IDs
     pub created_at: u64,
 }
@@ -112,6 +116,7 @@ impl CloudSyncManager {
             description: String::new(),
             owner_id: owner_id.clone(),
             member_ids: vec![owner_id.clone()],
+            member_roles: HashMap::from([(owner_id.clone(), MemberRole::Owner)]),
             workflows: Vec::new(),
             created_at: now,
         };
@@ -131,7 +136,8 @@ impl CloudSyncManager {
         workspace
     }
 
-    /// Add a member to a workspace
+    /// Add a member to a workspace. Only members holding the Owner or Admin
+    /// role may add members; Members and Viewers are rejected.
     pub fn add_member(
         &mut self,
         workspace_id: &str,
@@ -144,12 +150,16 @@ impl CloudSyncManager {
             .get_mut(workspace_id)
             .ok_or_else(|| "Workspace not found".to_string())?;
 
-        // Check if requester is owner or admin (simplified)
-        if workspace.owner_id != requester_id && !workspace.member_ids.contains(&requester_id) {
-            return Err("Unauthorized".to_string());
+        let authorized = matches!(
+            workspace.member_roles.get(&requester_id),
+            Some(MemberRole::Owner) | Some(MemberRole::Admin)
+        );
+        if !authorized {
+            return Err("Unauthorized: only workspace owners and admins can add members".into());
         }
 
         workspace.member_ids.push(user_id.clone());
+        workspace.member_roles.insert(user_id.clone(), role.clone());
 
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -175,11 +185,14 @@ impl CloudSyncManager {
         self.audit_logs.push(log);
     }
 
-    /// Get audit logs (for enterprise compliance)
+    /// Get audit logs, newest first. `limit` caps the result to the *most
+    /// recent* N entries — never the oldest, which is what a compliance view
+    /// of "the last N actions" must show.
     pub fn get_audit_logs(&self, limit: Option<usize>) -> Vec<&AuditLog> {
+        let newest_first = self.audit_logs.iter().rev();
         match limit {
-            Some(n) => self.audit_logs.iter().take(n).collect(),
-            None => self.audit_logs.iter().collect(),
+            Some(n) => newest_first.take(n).collect(),
+            None => newest_first.collect(),
         }
     }
 }
@@ -283,16 +296,12 @@ mod tests {
     }
 
     #[test]
-    fn add_member_by_viewer_currently_succeeds() {
-        // FIXME: add_member's authorization check only verifies that the
-        // requester is *some* existing member of the workspace - it never
-        // looks at that member's MemberRole. A Viewer (who should only be
-        // able to read) can add new members, same as an Owner/Admin. The
-        // MemberRole enum is otherwise unused for access control.
+    fn add_member_by_viewer_is_unauthorized() {
+        // Authorization is role-based: a Viewer is a member but must not be
+        // able to change workspace membership.
         let mut mgr = manager();
         let workspace = mgr.create_workspace("Acme".to_string(), "owner-1".to_string());
 
-        // "viewer" becomes a member with no role tracking, then adds someone else.
         mgr.add_member(
             &workspace.id,
             "viewer".to_string(),
@@ -307,20 +316,63 @@ mod tests {
             MemberRole::Admin,
             "viewer".to_string(),
         );
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("owners and admins"));
     }
 
     #[test]
-    fn get_audit_logs_limit_returns_oldest_entries_first() {
-        // FIXME: "limit" reads as "most recent N" in compliance UIs, but
-        // get_audit_logs(Some(n)) takes the first N entries in insertion
-        // order (oldest first), not the most recent N.
+    fn add_member_by_admin_succeeds_but_plain_member_is_rejected() {
+        let mut mgr = manager();
+        let workspace = mgr.create_workspace("Acme".to_string(), "owner-1".to_string());
+
+        mgr.add_member(
+            &workspace.id,
+            "admin".to_string(),
+            MemberRole::Admin,
+            "owner-1".to_string(),
+        )
+        .unwrap();
+        mgr.add_member(
+            &workspace.id,
+            "member".to_string(),
+            MemberRole::Member,
+            "owner-1".to_string(),
+        )
+        .unwrap();
+
+        assert!(mgr
+            .add_member(
+                &workspace.id,
+                "added-by-admin".to_string(),
+                MemberRole::Member,
+                "admin".to_string(),
+            )
+            .is_ok());
+        assert!(mgr
+            .add_member(
+                &workspace.id,
+                "added-by-member".to_string(),
+                MemberRole::Member,
+                "member".to_string(),
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn get_audit_logs_limit_returns_most_recent_entries_first() {
+        // "limit" means "the most recent N", newest first — a compliance view
+        // of recent activity must never silently show the oldest entries.
         let mut mgr = manager();
         mgr.create_workspace("First".to_string(), "owner-1".to_string());
         mgr.create_workspace("Second".to_string(), "owner-1".to_string());
 
         let limited = mgr.get_audit_logs(Some(1));
         assert_eq!(limited.len(), 1);
-        assert!(limited[0].details.contains("First"));
+        assert!(limited[0].details.contains("Second"));
+
+        let all = mgr.get_audit_logs(None);
+        assert_eq!(all.len(), 2);
+        assert!(all[0].details.contains("Second"));
+        assert!(all[1].details.contains("First"));
     }
 }

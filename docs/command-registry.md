@@ -122,6 +122,9 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `stop_recording` | stable | – | ✓ | – | – | – | ✓ | low | Ends capture; no-op if not recording. |
 | `replay_workflow` | stable | – | ✓ | – | – | – | ✓ | critical | Synthesizes real input. Must route through policy before broad use; wrong focused app/window can misfire. |
 | `ghost_guard_audit` | stable | – | – | – | – | – | – | low | Pure deterministic risk audit of recorded events. |
+| `get_replay_history` | stable | ✓ | – | – | – | – | – | low | Reads past replay runs (status, duration, failure reason) from local execution history; `limit` caps rows. |
+| `get_replay_progress` | stable | – | – | – | – | – | – | low | In-memory getter: current/total step of the running replay plus the last failed step index. Polled by the UI for per-step status. |
+| `dry_run_workflow` | stable | – | – | – | – | – | – | low | Pure preview of what a replay would do (per-step action/target/coords). Executes nothing; typed text never included. |
 | `cancel_replay` | stable | – | ✓ | – | – | – | – | low | Interrupts the replay loop. |
 | `pause_replay` | stable | – | ✓ | – | – | – | – | low | Pauses the replay loop. |
 | `resume_replay` | stable | – | ✓ | – | – | – | – | low | Resumes the replay loop. |
@@ -208,7 +211,7 @@ plan can never reach the filesystem.
 | `cloud_authenticate` | experimental | – | – | – | ✓ | ✓ | – | critical | Stub; would transmit a token. |
 | `cloud_sync_workflows` | experimental | ✓ | – | – | ✓ | – | – | critical | Stub; would upload workflows. |
 | `create_workspace` | experimental | – | – | – | ✓ | – | – | critical | Stub. |
-| `get_audit_logs` | experimental | – | – | – | – | – | – | medium | Returns in-memory cloud audit logs (stub). |
+| `get_audit_logs` | experimental | – | – | – | – | – | – | medium | Returns in-memory cloud audit logs (stub), newest first; `limit` = most recent N. |
 | `get_execution_history` | experimental | ✓ | – | – | – | – | – | low | Execution analytics for one workflow. |
 | `get_all_executions` | experimental | ✓ | – | – | – | – | – | low | Execution analytics across workflows. |
 | `get_workflow_analytics` | experimental | ✓ | – | – | – | – | – | low | Aggregated analytics. |

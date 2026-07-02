@@ -2,7 +2,9 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
-use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
+use crate::core::replay_support::{
+    self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
@@ -482,12 +484,14 @@ impl ReplayEngine for WindowsReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = speed.max(0.1);
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }
@@ -656,13 +660,15 @@ impl ReplayEngine for WindowsReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
         reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = speed.max(0.1);
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }

@@ -340,6 +340,8 @@ pub fn create_workspace(
     }
 }
 
+/// Return in-memory workspace audit logs, newest first. `limit` caps the
+/// result to the most recent N entries.
 #[tauri::command]
 pub fn get_audit_logs(
     limit: Option<usize>,
