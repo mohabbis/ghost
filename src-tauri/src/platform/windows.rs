@@ -79,6 +79,7 @@ extern "system" {
     fn GetWindowTextA(hWnd: HWND, lpString: *mut u8, nMaxCount: i32) -> i32;
     fn GetAncestor(hwnd: HWND, gaFlags: u32) -> HWND;
     fn GetWindowRect(hWnd: HWND, lpRect: *mut RECT) -> bool;
+    fn FindWindowA(lpClassName: *const u8, lpWindowName: *const u8) -> HWND;
 }
 
 #[repr(C)]
@@ -489,14 +490,38 @@ impl ElementLocator for WindowsLocator {
 /// means no matching element exists anywhere near the recorded point, and
 /// the `ResolutionKind` reports which strategy found it — feeding the
 /// per-run resolution trace.
+/// Find the current top-left corner of the top-level window with `title`.
+/// Backs the window-relative resolution strategy: a recorded click can follow
+/// its window anywhere on screen, not just within spiral range.
+fn find_window_origin(title: &str) -> Option<(i32, i32)> {
+    let mut title_z = title.as_bytes().to_vec();
+    title_z.push(0);
+    unsafe {
+        let hwnd = FindWindowA(std::ptr::null(), title_z.as_ptr());
+        if hwnd == 0 {
+            return None;
+        }
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect) {
+            Some((rect.left, rect.top))
+        } else {
+            None
+        }
+    }
+}
+
 fn try_resolve_click_point_traced(
     target: &ElementInfo,
     rx: i32,
     ry: i32,
 ) -> Option<((i32, i32), replay_support::ResolutionKind)> {
-    replay_support::try_resolve_click_point_traced(target, rx, ry, |x, y| unsafe {
-        get_element_at(x, y)
-    })
+    replay_support::try_resolve_click_point_traced(
+        target,
+        rx,
+        ry,
+        |x, y| unsafe { get_element_at(x, y) },
+        find_window_origin,
+    )
 }
 
 /// Resolve a press target and record the outcome (recorded point, spiral hit,

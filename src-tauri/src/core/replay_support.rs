@@ -25,6 +25,9 @@ pub enum ResolutionKind {
     /// The recorded element was found at the recorded point — the strongest
     /// semantic confirmation.
     RecordedPoint,
+    /// The element's window had moved; it was found at the recorded
+    /// window-relative offset inside the window's current frame.
+    WindowRelative,
     /// The element had moved; the search spiral found it nearby.
     SpiralReresolved,
     /// The element was not found anywhere near the recorded point; replay
@@ -148,7 +151,15 @@ pub fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
         return target.name.eq_ignore_ascii_case(&found.name);
     }
     if target.app.is_empty() || target.app == "Unknown" {
-        true
+        // Nameless target with no usable app: when BOTH sides carry a window
+        // title, the title discriminates same-role elements in different
+        // windows. When either side lacks one (recordings made before window
+        // capture existed), keep the permissive role-only match so old
+        // workflows behave exactly as before.
+        match (&target.window_title, &found.window_title) {
+            (Some(t), Some(f)) if !t.is_empty() && !f.is_empty() => t.eq_ignore_ascii_case(f),
+            _ => true,
+        }
     } else {
         target.app.eq_ignore_ascii_case(&found.app)
     }
@@ -171,33 +182,65 @@ pub const SEARCH_DIRS: [(i32, i32); 8] = [
 /// Re-resolve where to click for a recorded element using a platform lookup
 /// closure. Returns `None` when no matching element is found anywhere near
 /// the recorded point (callers decide whether to fall back or retry).
-pub fn try_resolve_click_point<F>(
+pub fn try_resolve_click_point<F, W>(
     target: &ElementInfo,
     rx: i32,
     ry: i32,
     lookup: F,
+    window_origin: W,
 ) -> Option<(i32, i32)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
+    W: Fn(&str) -> Option<(i32, i32)>,
 {
-    try_resolve_click_point_traced(target, rx, ry, lookup).map(|(point, _)| point)
+    try_resolve_click_point_traced(target, rx, ry, lookup, window_origin).map(|(point, _)| point)
 }
 
 /// Like `try_resolve_click_point`, but also reports *how* the target was
-/// found: at the recorded point, or re-resolved nearby via the spiral. This
-/// feeds the per-run resolution trace so fallback decisions are explainable.
-pub fn try_resolve_click_point_traced<F>(
+/// found. Strategy order (strongest signal first, then cheapest):
+///
+/// 1. recorded point — element still where it was captured;
+/// 2. window-relative — `window_origin` locates the recorded window's
+///    current frame, and the element is verified at the recorded offset
+///    inside it (one lookup; survives arbitrarily large window moves);
+/// 3. spiral — scan outward around the recorded point (element moved
+///    within its window, or window moved slightly);
+/// 4. `None` — callers decide whether to coordinate-fall-back or retry.
+///
+/// `window_origin` receives the recorded window title and returns the
+/// window's current top-left corner; platforms without a title-based window
+/// lookup pass `|_| None`, which skips strategy 2 entirely.
+pub fn try_resolve_click_point_traced<F, W>(
     target: &ElementInfo,
     rx: i32,
     ry: i32,
     lookup: F,
+    window_origin: W,
 ) -> Option<((i32, i32), ResolutionKind)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
+    W: Fn(&str) -> Option<(i32, i32)>,
 {
     if let Some(found) = lookup(rx, ry) {
         if descriptor_matches(target, &found) {
             return Some(((rx, ry), ResolutionKind::RecordedPoint));
+        }
+    }
+
+    // Window-relative: only when the recording captured both the window
+    // title and the in-window offset, and the platform can find that window
+    // now. The candidate is verified against the descriptor — a moved window
+    // with rearranged contents must not be blind-clicked.
+    if let (Some(title), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
+        if let Some((ox, oy)) = window_origin(title) {
+            let (px, py) = (ox + relx, oy + rely);
+            if (px, py) != (rx, ry) && px >= 0 && py >= 0 {
+                if let Some(found) = lookup(px, py) {
+                    if descriptor_matches(target, &found) {
+                        return Some(((px, py), ResolutionKind::WindowRelative));
+                    }
+                }
+            }
         }
     }
 
@@ -363,9 +406,13 @@ mod tests {
     fn resolves_to_recorded_point_when_element_unmoved() {
         let target = info("AXButton", "Save", "Notes");
         let at_point = target.clone();
-        let resolved = try_resolve_click_point(&target, 10, 10, |x, y| {
-            (x == 10 && y == 10).then(|| at_point.clone())
-        });
+        let resolved = try_resolve_click_point(
+            &target,
+            10,
+            10,
+            |x, y| (x == 10 && y == 10).then(|| at_point.clone()),
+            |_| None,
+        );
         assert_eq!(resolved, Some((10, 10)));
     }
 
@@ -374,17 +421,118 @@ mod tests {
         let target = info("AXButton", "Save", "Notes");
         let moved = target.clone();
         // Element now lives 70px to the right of where it was recorded.
-        let resolved = try_resolve_click_point(&target, 100, 100, |x, y| {
-            (x == 170 && y == 100).then(|| moved.clone())
-        });
+        let resolved = try_resolve_click_point(
+            &target,
+            100,
+            100,
+            |x, y| (x == 170 && y == 100).then(|| moved.clone()),
+            |_| None,
+        );
         assert_eq!(resolved, Some((170, 100)));
     }
 
     #[test]
     fn returns_none_when_element_gone() {
         let target = info("AXButton", "Save", "Notes");
-        let resolved = try_resolve_click_point(&target, 100, 100, |_, _| None);
+        let resolved = try_resolve_click_point(&target, 100, 100, |_, _| None, |_| None);
         assert_eq!(resolved, None);
+    }
+
+    // ── window-title matching ─────────────────────────────────────────────
+
+    #[test]
+    fn nameless_target_titles_discriminate_when_both_present() {
+        let mut target = info("AXButton", "", "Unknown");
+        target.window_title = Some("Invoices".into());
+        let mut same_window = info("AXButton", "anything", "AnyApp");
+        same_window.window_title = Some("invoices".into());
+        let mut other_window = same_window.clone();
+        other_window.window_title = Some("Chat".into());
+
+        assert!(descriptor_matches(&target, &same_window));
+        assert!(!descriptor_matches(&target, &other_window));
+    }
+
+    #[test]
+    fn nameless_target_without_titles_keeps_permissive_match() {
+        // Old recordings carry no window titles: behavior must be identical
+        // to before title-aware matching existed.
+        let target = info("AXButton", "", "Unknown");
+        let mut found = info("AXButton", "anything", "AnyApp");
+        assert!(descriptor_matches(&target, &found));
+        // One-sided titles also stay permissive.
+        found.window_title = Some("Chat".into());
+        assert!(descriptor_matches(&target, &found));
+    }
+
+    #[test]
+    fn named_target_ignores_title_drift() {
+        // Titles often carry document names that legitimately change; a
+        // role+name match must not be rejected because titles differ.
+        let mut target = info("AXButton", "Save", "Notes");
+        target.window_title = Some("Report v1".into());
+        let mut found = info("AXButton", "Save", "Notes");
+        found.window_title = Some("Report v2".into());
+        assert!(descriptor_matches(&target, &found));
+    }
+
+    // ── window-relative resolution ────────────────────────────────────────
+
+    fn windowed_target() -> ElementInfo {
+        let mut t = info("AXButton", "Save", "Notes");
+        t.window_title = Some("Report".into());
+        t.window_rel = Some((40, 30));
+        t
+    }
+
+    #[test]
+    fn window_relative_resolves_far_window_move() {
+        // Recorded at (140, 130) in a window at (100, 100); the window is now
+        // at (900, 500) — far beyond spiral range. The window lookup plus the
+        // recorded offset finds it in one step.
+        let target = windowed_target();
+        let moved = target.clone();
+        let traced = try_resolve_click_point_traced(
+            &target,
+            140,
+            130,
+            |x, y| (x == 940 && y == 530).then(|| moved.clone()),
+            |title| (title == "Report").then_some((900, 500)),
+        );
+        assert_eq!(traced, Some(((940, 530), ResolutionKind::WindowRelative)));
+    }
+
+    #[test]
+    fn window_relative_candidate_is_verified_not_blind_clicked() {
+        // The window is found, but the element at the recorded offset no
+        // longer matches (window contents rearranged) — the chain must fall
+        // through to the spiral / None rather than click the wrong thing.
+        let target = windowed_target();
+        let stranger = info("AXTextField", "Search", "Notes");
+        let traced = try_resolve_click_point_traced(
+            &target,
+            140,
+            130,
+            |x, y| (x == 940 && y == 530).then(|| stranger.clone()),
+            |title| (title == "Report").then_some((900, 500)),
+        );
+        assert_eq!(traced, None);
+    }
+
+    #[test]
+    fn recorded_point_wins_over_window_relative() {
+        // If the element still matches at the recorded point, that's the
+        // answer — even when the window lookup would also succeed.
+        let target = windowed_target();
+        let at_point = target.clone();
+        let traced = try_resolve_click_point_traced(
+            &target,
+            140,
+            130,
+            |x, y| (x == 140 && y == 130).then(|| at_point.clone()),
+            |_| Some((900, 500)),
+        );
+        assert_eq!(traced, Some(((140, 130), ResolutionKind::RecordedPoint)));
     }
 
     // ── resolution tracing ────────────────────────────────────────────────
@@ -394,18 +542,26 @@ mod tests {
         let target = info("AXButton", "Save", "Notes");
 
         let at_point = target.clone();
-        let traced = try_resolve_click_point_traced(&target, 10, 10, |x, y| {
-            (x == 10 && y == 10).then(|| at_point.clone())
-        });
+        let traced = try_resolve_click_point_traced(
+            &target,
+            10,
+            10,
+            |x, y| (x == 10 && y == 10).then(|| at_point.clone()),
+            |_| None,
+        );
         assert_eq!(traced, Some(((10, 10), ResolutionKind::RecordedPoint)));
 
         let moved = target.clone();
-        let traced = try_resolve_click_point_traced(&target, 100, 100, |x, y| {
-            (x == 170 && y == 100).then(|| moved.clone())
-        });
+        let traced = try_resolve_click_point_traced(
+            &target,
+            100,
+            100,
+            |x, y| (x == 170 && y == 100).then(|| moved.clone()),
+            |_| None,
+        );
         assert_eq!(traced, Some(((170, 100), ResolutionKind::SpiralReresolved)));
 
-        let traced = try_resolve_click_point_traced(&target, 100, 100, |_, _| None);
+        let traced = try_resolve_click_point_traced(&target, 100, 100, |_, _| None, |_| None);
         assert_eq!(traced, None);
     }
 
