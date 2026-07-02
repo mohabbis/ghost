@@ -377,100 +377,96 @@ unsafe fn extract_modifiers(flags: u64) -> u8 {
 }
 
 /// Extract the Unicode string produced by a keyboard event.
-/// Bounds-safe: clamps actual_len to buffer length to prevent slice panics.
+///
+/// The 32-unit buffer comfortably covers any single keystroke — ordinary
+/// keys produce 1–2 UTF-16 units and even IME/dead-key composition bursts
+/// stay in single digits. Overflow is never silent: a recorder that quietly
+/// mangles a keystroke is worse than one that says so, so truncation is
+/// logged, and the cut never splits a surrogate pair (no manufactured
+/// U+FFFD replacement characters).
 unsafe fn extract_key_chars(event: CGEventRef) -> String {
     let mut actual_len: usize = 0;
-    let mut buf = [0u16; 8];
+    let mut buf = [0u16; 32];
     CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
-    if actual_len > 0 {
-        // Clamp actual_len to buffer length to prevent out-of-bounds slice access
-        let safe_len = actual_len.min(buf.len());
-        String::from_utf16_lossy(&buf[..safe_len])
-    } else {
-        String::new()
+    if actual_len == 0 {
+        return String::new();
     }
+    let safe_len = utf16_capture_len(&buf, actual_len);
+    if actual_len > buf.len() {
+        tracing::warn!(
+            "keyboard event produced {} UTF-16 units; captured the first {} — \
+             this recording may be missing typed characters",
+            actual_len,
+            safe_len
+        );
+    }
+    String::from_utf16_lossy(&buf[..safe_len])
+}
+
+/// Clamp a reported UTF-16 length to what the capture buffer actually holds,
+/// without splitting a surrogate pair: if a truncated prefix would end on an
+/// unpaired high surrogate, drop that unit rather than emit U+FFFD for half
+/// a character.
+fn utf16_capture_len(buf: &[u16], actual_len: usize) -> usize {
+    let mut len = actual_len.min(buf.len());
+    if actual_len > buf.len() && len > 0 && (0xD800..0xDC00).contains(&buf[len - 1]) {
+        len -= 1;
+    }
+    len
 }
 
 // ── CGEventTap callback ───────────────────────────────────────────────────────
+
+/// Map a captured mouse-click event into the recorded `InputEvent`, applying
+/// the secure-field suppression uniformly to every press AND release. Pure
+/// (no FFI) so tests cover the actual wiring — that each of the four click
+/// types passes the secure gate and maps to the right button code — not just
+/// the `is_secure_click` predicate in isolation.
+fn capture_click(
+    etype: CGEventType,
+    x: i32,
+    y: i32,
+    element: Option<ElementInfo>,
+) -> Option<InputEvent> {
+    if is_secure_click(&element) {
+        return None;
+    }
+    // Presses retain the element descriptor for replay re-resolution;
+    // releases replay at recorded coordinates and carry none.
+    let (button, keeps_element) = match etype {
+        kCGMouseEventLeftMouseDown => (0, true),
+        kCGMouseEventLeftMouseUp => (1, false),
+        kCGMouseEventRightMouseDown => (2, true),
+        kCGMouseEventRightMouseUp => (3, false),
+        _ => return None,
+    };
+    Some(InputEvent::MouseClick {
+        x,
+        y,
+        button,
+        element: if keeps_element { element } else { None },
+        timestamp: None,
+        retry_count: None,
+        semantic_tag: None,
+        self_heal: None,
+    })
+}
 
 /// Safe wrapper for event processing that returns Result instead of panicking.
 /// This is called from cg_event_callback which cannot unwind across FFI boundary.
 unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<InputEvent> {
     match etype {
-        // Mouse down: perform AX element lookup while we have the coordinates
-        kCGMouseEventLeftMouseDown => {
+        kCGMouseEventLeftMouseDown
+        | kCGMouseEventLeftMouseUp
+        | kCGMouseEventRightMouseDown
+        | kCGMouseEventRightMouseUp => {
             let loc = CGEventGetLocation(event);
             let (x, y) = (loc.x as i32, loc.y as i32);
-            let element = ax_info_at(x, y);
-            if is_secure_click(&element) {
-                return None;
-            }
-            Some(InputEvent::MouseClick {
-                x,
-                y,
-                button: 0,
-                element,
-                timestamp: None,
-                retry_count: None,
-                semantic_tag: None,
-                self_heal: None,
-            })
-        }
-        kCGMouseEventLeftMouseUp => {
-            let loc = CGEventGetLocation(event);
-            let (x, y) = (loc.x as i32, loc.y as i32);
-            let element = ax_info_at(x, y);
-            if is_secure_click(&element) {
-                return None;
-            }
-            Some(InputEvent::MouseClick {
-                x,
-                y,
-                button: 1,
-                element: None,
-                timestamp: None,
-                retry_count: None,
-                semantic_tag: None,
-                self_heal: None,
-            })
-        }
-        kCGMouseEventRightMouseDown => {
-            let loc = CGEventGetLocation(event);
-            let (x, y) = (loc.x as i32, loc.y as i32);
-            let element = ax_info_at(x, y);
-            if is_secure_click(&element) {
-                return None;
-            }
-            Some(InputEvent::MouseClick {
-                x,
-                y,
-                button: 2,
-                element,
-                timestamp: None,
-                retry_count: None,
-                semantic_tag: None,
-                self_heal: None,
-            })
-        }
-        kCGMouseEventRightMouseUp => {
-            let loc = CGEventGetLocation(event);
-            let (x, y) = (loc.x as i32, loc.y as i32);
-            // Same secure-field suppression as the other three click cases:
-            // a release over a password field must not leak its coordinates.
-            let element = ax_info_at(x, y);
-            if is_secure_click(&element) {
-                return None;
-            }
-            Some(InputEvent::MouseClick {
-                x,
-                y,
-                button: 3,
-                element: None,
-                timestamp: None,
-                retry_count: None,
-                semantic_tag: None,
-                self_heal: None,
-            })
+            // The AX lookup runs for every press and release so the secure
+            // gate inside capture_click always sees the element under the
+            // cursor — a release over a password field must not leak its
+            // coordinates any more than a press.
+            capture_click(etype, x, y, ax_info_at(x, y))
         }
         kCGKeyDown | kCGKeyUp => {
             let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
@@ -541,6 +537,19 @@ unsafe extern "C" fn cg_event_callback(
 
     // Cast user_info to the sender. We've already checked it's not null.
     let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
+
+    // TRIPWIRE: the catch_unwind below only works under the default "unwind"
+    // panic strategy. Setting `panic = "abort"` in a profile — a routine
+    // binary-size optimization — would silently turn every callback panic
+    // into an instant process abort with the OS event tap still installed.
+    // Fail the build instead of failing in the field:
+    #[cfg(panic = "abort")]
+    compile_error!(
+        "cg_event_callback relies on std::panic::catch_unwind to contain panics at the \
+         CGEventTap FFI boundary; the abort panic strategy disables catch_unwind. Remove \
+         `panic = \"abort\"` from the profile, or redesign the callback's panic containment \
+         before shipping with it."
+    );
 
     // Wrap everything in catch_unwind to prevent panics from escaping the FFI boundary.
     // A panic in an extern "C" function causes abort, so we must catch any potential panic.
@@ -1185,30 +1194,105 @@ mod tests {
         })
     }
 
-    // `is_secure_click` is the single suppression gate for all four click
-    // captures in `process_cg_event` (left/right, down/up). RightMouseUp
-    // once skipped this check and captured coordinates unconditionally;
-    // these tests pin the shared decision so that can't regress silently.
+    // `capture_click` IS the wiring for all four click captures: the same
+    // function `process_cg_event` calls, minus only the CGEvent/AX FFI glue.
+    // RightMouseUp once skipped the secure gate and captured coordinates
+    // unconditionally; these tests exercise every event-type arm — not just
+    // the `is_secure_click` predicate — so removing the gate from any single
+    // arm fails the suite.
+
+    const ALL_CLICK_TYPES: [CGEventType; 4] = [
+        kCGMouseEventLeftMouseDown,
+        kCGMouseEventLeftMouseUp,
+        kCGMouseEventRightMouseDown,
+        kCGMouseEventRightMouseUp,
+    ];
 
     #[test]
-    fn click_over_secure_text_field_is_suppressed() {
-        assert!(is_secure_click(&element_with_role("AXSecureTextField")));
+    fn every_click_type_is_suppressed_over_secure_fields() {
+        for etype in ALL_CLICK_TYPES {
+            assert!(
+                capture_click(etype, 10, 20, element_with_role("AXSecureTextField")).is_none(),
+                "event type {etype} captured a click over a secure field"
+            );
+        }
     }
 
     #[test]
     fn secure_role_match_is_case_insensitive() {
-        assert!(is_secure_click(&element_with_role("axsecuretextfield")));
-        assert!(is_secure_click(&element_with_role("AXSECURETEXTFIELD")));
+        for role in ["axsecuretextfield", "AXSECURETEXTFIELD"] {
+            assert!(
+                capture_click(kCGMouseEventRightMouseUp, 10, 20, element_with_role(role)).is_none()
+            );
+        }
     }
 
     #[test]
-    fn click_over_ordinary_element_is_captured() {
-        assert!(!is_secure_click(&element_with_role("AXButton")));
-        assert!(!is_secure_click(&element_with_role("AXTextField")));
+    fn ordinary_clicks_map_button_codes_and_element_retention() {
+        // (event type, expected button code, press keeps the element)
+        let cases = [
+            (kCGMouseEventLeftMouseDown, 0u8, true),
+            (kCGMouseEventLeftMouseUp, 1, false),
+            (kCGMouseEventRightMouseDown, 2, true),
+            (kCGMouseEventRightMouseUp, 3, false),
+        ];
+        for (etype, expected_button, keeps_element) in cases {
+            match capture_click(etype, 10, 20, element_with_role("AXButton")) {
+                Some(InputEvent::MouseClick {
+                    x,
+                    y,
+                    button,
+                    element,
+                    ..
+                }) => {
+                    assert_eq!((x, y), (10, 20));
+                    assert_eq!(button, expected_button, "event type {etype}");
+                    assert_eq!(element.is_some(), keeps_element, "event type {etype}");
+                }
+                other => panic!("event type {etype}: expected MouseClick, got {other:?}"),
+            }
+        }
     }
 
     #[test]
-    fn click_with_no_resolved_element_is_captured() {
-        assert!(!is_secure_click(&None));
+    fn clicks_with_no_resolved_element_are_captured() {
+        for etype in ALL_CLICK_TYPES {
+            assert!(capture_click(etype, 10, 20, None).is_some());
+        }
+    }
+
+    #[test]
+    fn non_click_event_types_capture_nothing() {
+        assert!(capture_click(kCGKeyDown, 10, 20, None).is_none());
+        assert!(capture_click(kCGScrollWheelEvent, 10, 20, None).is_none());
+    }
+
+    // ── keyboard capture truncation ───────────────────────────────────────
+
+    #[test]
+    fn utf16_capture_len_passes_through_when_string_fits() {
+        let buf = [0x0041u16; 8]; // 'A' × 8
+        assert_eq!(utf16_capture_len(&buf, 2), 2);
+        assert_eq!(utf16_capture_len(&buf, 8), 8);
+    }
+
+    #[test]
+    fn utf16_capture_len_clamps_overflow_to_buffer() {
+        let buf = [0x0041u16; 8];
+        assert_eq!(utf16_capture_len(&buf, 20), 8);
+    }
+
+    #[test]
+    fn utf16_capture_len_never_splits_a_surrogate_pair() {
+        // Truncated string ends on a high surrogate whose low half was lost
+        // beyond the buffer: the lone half must be dropped, not turned into
+        // a U+FFFD replacement character.
+        let mut buf = [0x0041u16; 8];
+        buf[7] = 0xD83D; // high surrogate (e.g. first half of an emoji)
+        assert_eq!(utf16_capture_len(&buf, 9), 7);
+
+        // But a high surrogate at the end of a string that FITS is kept:
+        // that's genuinely what the event contained.
+        assert_eq!(utf16_capture_len(&buf, 8), 8);
     }
 }
