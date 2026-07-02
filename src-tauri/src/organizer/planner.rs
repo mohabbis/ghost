@@ -4,8 +4,8 @@
 //! the [`OrganizerPlan`] preview. It **mutates nothing**: it reads directory
 //! metadata, classifies, proposes safe targets, detects conflicts, expresses
 //! each proposed change as a [`Capability`], and runs every one through
-//! [`policy::evaluate`]. The executor that actually applies an approved plan is
-//! a later phase.
+//! [`policy::evaluate`]. The executor applies an approved plan through the
+//! separate Execution/Audit/Undo path.
 //!
 //! Destination model (MVP): the first folder rule (ordered by path) that grants
 //! both *create* and *move* is the destination root. Files are sorted into

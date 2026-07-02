@@ -6,7 +6,7 @@ mutates nothing**. It is the `Plan` (and `Policy`) step of the trust pipeline:
 ```text
 Intent -> Plan -> Policy -> Approval -> Execution -> Audit -> Undo
          ^^^^^^^^^^^^^^^^^
-         this module; the executor (Execution/Audit/Undo) is a later phase.
+         this module; the executor performs Execution/Audit/Undo.
 ```
 
 It lives in `src-tauri/src/organizer/` and performs **only read-only filesystem
@@ -79,6 +79,10 @@ tests covering scan filtering, classification, safe-naming + de-duplication,
 conflict detection, and end-to-end planning (no-mutation, per-action decisions,
 delete-free, out-of-boundary deny, low-confidence flagging, and loading rules
 from storage). The executor that applies an approved plan — with audit logging
-and undo journaling — now exists; see `docs/organizer-executor.md`. Both remain
-**backend-only and not yet wired** to any Tauri command. Each command exposed at
-that point gets a row in `docs/command-registry.md`.
+and undo journaling — exists; see `docs/organizer-executor.md`.
+
+The Organizer planner/executor is wired to Tauri through
+`src-tauri/src/commands/organizer.rs` and registered in `src-tauri/src/lib.rs`.
+The command bridge deliberately keeps `organizer_plan` read-only and makes
+`organizer_execute` re-plan server-side before applying changes, so the preview
+and execution path both use deterministic backend logic.

@@ -62,6 +62,6 @@ sibling folders.
 
 Implemented: capability/decision/risk/zone types and `evaluate`, with unit tests
 covering allow, deny, confirmation, the delete ban, and the sibling-prefix
-boundary case. **Not yet wired** to any Tauri command — command enforcement
-lands with the Ghost Organizer planner/executor, at which point each new command
-gets a row in `docs/command-registry.md`.
+boundary case. The Ghost Organizer planner and executor use this engine for
+every proposed and executed file action, and the exposed Organizer commands are
+inventoried in `docs/command-registry.md`.
