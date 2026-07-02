@@ -14,9 +14,9 @@ It lives in `src-tauri/src/organizer/{executor,undo}.rs` and writes its records
 into the passive, serializable ledgers in `src-tauri/src/audit/`
 (`audit_log`, `undo_journal`). The audit module holds **no filesystem logic**:
 all disk mutation stays in `organizer`, while `audit` stays a neutral, inspectable
-record. Like the planner, it is backend-only and **not yet wired to any Tauri
-command** — command enforcement is a later phase, and each command exposed then
-gets a row in `docs/command-registry.md`.
+record. Like the planner, it is exposed through
+`src-tauri/src/commands/organizer.rs`; the command registry documents the
+resulting risk classes in `docs/command-registry.md`.
 
 ## Execution flow
 
@@ -68,5 +68,6 @@ Implemented: `audit::audit_log`, `audit::undo_journal`, `organizer::executor`,
 `organizer::undo`, with unit tests covering happy-path application, policy-denied
 skips, overwrite refusal, missing-source skips, unsupported-capability rejection,
 a full execute→undo round-trip back to the original tree, and folder-preservation
-when a user refills a created folder. **Not yet wired** to any Tauri command; the
-approval UI (Phase 5) and command enforcement consume this in later phases.
+when a user refills a created folder. The executor and undo runner are wired to
+Tauri through `organizer_execute` and `organizer_undo`; the frontend still owns
+the explicit review/approval affordance before calling execution.
