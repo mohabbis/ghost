@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghost social card</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        background: #08080f;
+        color: #eef0f7;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+      .card {
+        width: 1200px;
+        height: 630px;
+        padding: 68px 76px;
+        background:
+          radial-gradient(620px 420px at 82% 10%, rgba(141, 123, 255, 0.28), transparent 62%),
+          radial-gradient(520px 340px at 10% 88%, rgba(255, 181, 107, 0.14), transparent 60%),
+          linear-gradient(135deg, #08080f, #111123 68%, #151529);
+        border: 1px solid #24243a;
+        display: grid;
+        grid-template-columns: 0.95fr 1.05fr;
+        gap: 48px;
+        align-items: center;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 34px;
+        font-weight: 800;
+        margin-bottom: 46px;
+      }
+      .mark {
+        width: 58px;
+        height: 58px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #a394ff, #6f5ee6);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 18px 48px -18px rgba(141, 123, 255, 0.9);
+      }
+      h1 {
+        margin: 0;
+        font-size: 70px;
+        line-height: 0.98;
+        letter-spacing: 0;
+        max-width: 610px;
+      }
+      .accent {
+        background: linear-gradient(100deg, #b3a6ff, #ffb56b);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      p {
+        margin: 26px 0 0;
+        color: #b9bed1;
+        font-size: 29px;
+        line-height: 1.28;
+        max-width: 650px;
+      }
+      .panel {
+        border: 1px solid #30304d;
+        border-radius: 24px;
+        background: rgba(18, 18, 31, 0.9);
+        box-shadow: 0 28px 80px -30px rgba(0, 0, 0, 0.8);
+        padding: 24px;
+      }
+      .bar {
+        height: 34px;
+        border-bottom: 1px solid #30304d;
+        margin: -24px -24px 22px;
+        padding: 10px 18px;
+        color: #8d94ad;
+        font: 15px ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+        margin-top: 12px;
+        border: 1px solid #24243a;
+        border-radius: 12px;
+        background: #08080f;
+        font: 17px ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .tag {
+        min-width: 96px;
+        text-align: center;
+        padding: 6px 9px;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .move { background: rgba(86, 209, 154, 0.14); color: #56d19a; }
+      .rename { background: rgba(179, 166, 255, 0.14); color: #b3a6ff; }
+      .deny { background: rgba(255, 141, 160, 0.14); color: #ff8da0; }
+      .foot {
+        margin-top: 24px;
+        color: #9aa0b8;
+        font-size: 22px;
+        display: flex;
+        gap: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <section>
+        <div class="brand">
+          <div class="mark">
+            <svg viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">
+              <path d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z" fill="#fff"/>
+              <circle cx="12.6" cy="13" r="3.1" fill="#08080f"/>
+              <circle cx="19.4" cy="13" r="3.1" fill="#08080f"/>
+            </svg>
+          </div>
+          Ghost
+        </div>
+        <h1>Client filing you <span class="accent">approve first</span>.</h1>
+        <p>Automatically rename and file invoices, receipts, and statements. Local-first, audited, undoable.</p>
+      </section>
+      <aside class="panel">
+        <div class="bar">Ghost - proposed plan</div>
+        <div class="row"><span class="tag rename">rename</span> acme.pdf -> 2026-03 acme.pdf</div>
+        <div class="row"><span class="tag move">move</span> chase_stmt.pdf -> Statements</div>
+        <div class="row"><span class="tag move">audit</span> every file move recorded</div>
+        <div class="row"><span class="tag deny">0</span> deletes - uploads - cloud sync</div>
+        <div class="foot"><span>Preview</span><span>Approve</span><span>Audit</span><span>Undo</span></div>
+      </aside>
+    </main>
+  </body>
+</html>

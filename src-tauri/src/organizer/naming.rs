@@ -11,6 +11,7 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Characters that are illegal in filenames on Windows (a superset of the
 /// POSIX restrictions, so sanitizing for Windows is safe everywhere).
@@ -44,6 +45,50 @@ pub fn safe_file_name(name: &str) -> String {
         }
         None => stem_final,
     }
+}
+
+/// Prefix `name` with the file timestamp's `YYYY-MM` bucket.
+///
+/// Idempotent for names already beginning with `YYYY-MM ` or `YYYY-MM-`, so
+/// repeated planning never stacks date prefixes.
+pub fn dated_prefix(name: &str, timestamp: SystemTime) -> String {
+    if starts_with_date_prefix(name) {
+        return name.to_string();
+    }
+
+    let days = timestamp
+        .duration_since(UNIX_EPOCH)
+        .map(|d| (d.as_secs() / 86_400) as i64)
+        .unwrap_or(0);
+    let (year, month, _) = civil_from_days(days);
+    format!("{year:04}-{month:02} {name}")
+}
+
+fn starts_with_date_prefix(name: &str) -> bool {
+    let b = name.as_bytes();
+    b.len() >= 8
+        && b[0..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && (b[7] == b' ' || b[7] == b'-')
+}
+
+/// Convert days since 1970-01-01 to a Gregorian date.
+///
+/// Adapted from Howard Hinnant's public-domain civil calendar algorithm; kept
+/// tiny to avoid a date dependency for one filename prefix.
+fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
+    let z = days_since_epoch + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    y += if m <= 2 { 1 } else { 0 };
+    (y as i32, m as u32, d as u32)
 }
 
 /// Replace illegal/control chars with `_`, collapse whitespace, trim spaces and
@@ -144,5 +189,36 @@ mod tests {
     fn deduplicate_leaves_unique_names_untouched() {
         let taken = HashSet::new();
         assert_eq!(deduplicate("unique.txt", &taken), "unique.txt");
+    }
+
+    #[test]
+    fn dated_prefix_uses_year_and_month() {
+        let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
+        assert_eq!(
+            dated_prefix("acme-invoice.pdf", timestamp),
+            "2024-02 acme-invoice.pdf"
+        );
+    }
+
+    #[test]
+    fn dated_prefix_is_idempotent() {
+        let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
+        assert_eq!(
+            dated_prefix("2024-02 acme-invoice.pdf", timestamp),
+            "2024-02 acme-invoice.pdf"
+        );
+        assert_eq!(
+            dated_prefix("2024-02-acme-invoice.pdf", timestamp),
+            "2024-02-acme-invoice.pdf"
+        );
+    }
+
+    #[test]
+    fn dated_prefix_runs_before_sanitizing() {
+        let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
+        assert_eq!(
+            safe_file_name(&dated_prefix("acme:invoice?.pdf", timestamp)),
+            "2024-02 acme_invoice_.pdf"
+        );
     }
 }

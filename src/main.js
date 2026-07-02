@@ -1687,12 +1687,68 @@ async function organizerCreateZone() {
   const name = await ghostPrompt("Name this Zone (e.g. Downloads cleanup)", "", "Zone name");
   if (!name) return;
   try {
-    const zone = await invoke("organizer_create_zone", { name, description: null });
+    const zone = await invoke("organizer_create_zone", { name, description: null, renameDated: false });
     organizerSelectedZoneId = zone.id;
     await organizerRefreshZones();
     showNotification(`Zone "${zone.name}" created. Add the folder to organize.`, "info");
   } catch (err) {
     toastError("Could not create Zone: " + err);
+  }
+}
+
+async function organizerCreateClientFilingPreset() {
+  if (!invoke) return notAvailable();
+  const sourcePath = await ghostPrompt(
+    "Source folder for client documents",
+    "~/Downloads",
+    "/Users/you/Downloads",
+  );
+  if (!sourcePath) return;
+  const destinationPath = await ghostPrompt(
+    "Destination root for filed client documents",
+    "",
+    "/Users/you/Client Files",
+  );
+  if (!destinationPath) return;
+
+  const readOnlyRule = {
+    path: sourcePath.trim(),
+    can_read: true,
+    can_create: false,
+    can_rename: false,
+    can_move: false,
+    can_copy: false,
+    can_delete: false,
+  };
+  const destinationRule = {
+    path: destinationPath.trim(),
+    can_read: true,
+    can_create: true,
+    can_rename: true,
+    can_move: true,
+    can_copy: false,
+    can_delete: false,
+  };
+
+  try {
+    const zone = await invoke("organizer_create_zone", {
+      name: "Client filing",
+      description: "File invoices receipts and statements into dated client folders.",
+      renameDated: true,
+    });
+    organizerSelectedZoneId = zone.id;
+    if (readOnlyRule.path === destinationRule.path) {
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
+    } else {
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: readOnlyRule });
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
+    }
+    organizerHasReviewedPlan = false;
+    await organizerRefreshZones();
+    showNotification("Client filing preset created. Previewing the plan now.", "info");
+    await organizerScan();
+  } catch (err) {
+    toastError("Could not create preset: " + err);
   }
 }
 
@@ -2252,6 +2308,7 @@ function wireUpControls() {
 
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
+  bind("organizerPresetBtn", organizerCreateClientFilingPreset);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
   bind("organizerRunBtn", organizerRun);

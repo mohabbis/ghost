@@ -78,7 +78,7 @@ Workflows, logs, and settings live on your machine, optionally encrypted at rest
 
 ## Who Ghost is for
 
-- **Operators and admins** who move data between web apps, spreadsheets, and files every week and want those minutes back — without giving a bot the keys to everything.
+- **Bookkeepers and practice admins** who download client invoices, receipts, and statements every week and need local filing that is previewed, audited, and reversible.
 - **Students and knowledge workers** drowning in downloads, attachments, and misnamed files.
 - **Builders and tinkerers** who want a desktop automation layer they can actually read, audit, and extend.
 

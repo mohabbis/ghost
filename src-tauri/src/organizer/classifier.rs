@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Category {
     Documents,
+    Invoices,
+    Receipts,
+    Statements,
     Spreadsheets,
     Presentations,
     Images,
@@ -35,6 +38,9 @@ impl Category {
     pub fn folder_name(self) -> &'static str {
         match self {
             Category::Documents => "Documents",
+            Category::Invoices => "Invoices",
+            Category::Receipts => "Receipts",
+            Category::Statements => "Statements",
             Category::Spreadsheets => "Spreadsheets",
             Category::Presentations => "Presentations",
             Category::Images => "Images",
@@ -67,6 +73,10 @@ pub const LOW_CONFIDENCE: f32 = 0.5;
 
 /// Confidence assigned to a clean, unambiguous extension match.
 const EXT_CONFIDENCE: f32 = 0.95;
+
+/// Confidence assigned when a document-like file is sorted by a filename
+/// keyword rather than by extension alone.
+const DOCUMENT_KEYWORD_CONFIDENCE: f32 = 0.85;
 
 /// Map a lowercased extension to its category, or `None` if unknown.
 fn category_for_extension(ext: &str) -> Option<Category> {
@@ -125,6 +135,20 @@ fn filename_note(stem_lower: &str) -> Option<&'static str> {
         .map(|(_, note)| *note)
 }
 
+/// A filename keyword that is strong enough to pick a filing category for
+/// document-like files.
+fn document_keyword_category(stem_lower: &str) -> Option<Category> {
+    if stem_lower.contains("invoice") {
+        Some(Category::Invoices)
+    } else if stem_lower.contains("receipt") {
+        Some(Category::Receipts)
+    } else if stem_lower.contains("statement") {
+        Some(Category::Statements)
+    } else {
+        None
+    }
+}
+
 /// Classify a scanned file deterministically.
 ///
 /// Order of signals: extension (primary), then a filename keyword note. An
@@ -137,13 +161,21 @@ pub fn classify(file: &ScannedFile) -> Classification {
     match file.extension.as_deref().and_then(category_for_extension) {
         Some(category) => {
             let ext = file.extension.as_deref().unwrap_or("");
+            let (category, confidence) = if category == Category::Documents {
+                match document_keyword_category(&stem_lower) {
+                    Some(keyword_category) => (keyword_category, DOCUMENT_KEYWORD_CONFIDENCE),
+                    None => (category, EXT_CONFIDENCE),
+                }
+            } else {
+                (category, EXT_CONFIDENCE)
+            };
             let reason = match note {
                 Some(n) => format!("`.{ext}` -> {} ({n})", category.folder_name()),
                 None => format!("`.{ext}` -> {}", category.folder_name()),
             };
             Classification {
                 category,
-                confidence: EXT_CONFIDENCE,
+                confidence,
                 reason,
             }
         }
@@ -209,9 +241,25 @@ mod tests {
 
     #[test]
     fn filename_keyword_enriches_reason_without_changing_category() {
-        let c = classify(&file("March-Invoice.pdf"));
+        let c = classify(&file("resume.pdf"));
         assert_eq!(c.category, Category::Documents);
-        assert!(c.reason.contains("invoice"));
+        assert!(c.reason.contains("resume"));
+    }
+
+    #[test]
+    fn document_keywords_choose_filing_categories() {
+        let invoice = classify(&file("invoice_acme.pdf"));
+        assert_eq!(invoice.category, Category::Invoices);
+        assert_eq!(invoice.confidence, DOCUMENT_KEYWORD_CONFIDENCE);
+        assert!(invoice.reason.contains("invoice"));
+
+        let statement = classify(&file("bank-statement-2026.pdf"));
+        assert_eq!(statement.category, Category::Statements);
+        assert_eq!(statement.confidence, DOCUMENT_KEYWORD_CONFIDENCE);
+
+        let receipt = classify(&file("travel_receipt.txt"));
+        assert_eq!(receipt.category, Category::Receipts);
+        assert_eq!(receipt.confidence, DOCUMENT_KEYWORD_CONFIDENCE);
     }
 
     #[test]

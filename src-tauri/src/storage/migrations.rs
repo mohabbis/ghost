@@ -7,7 +7,7 @@
 use rusqlite::Connection;
 
 /// The schema version this binary produces.
-pub const LATEST_VERSION: i64 = 2;
+pub const LATEST_VERSION: i64 = 3;
 
 /// Bring `conn` up to [`LATEST_VERSION`], applying forward migrations only.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -28,6 +28,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if version < 2 {
         conn.execute_batch(MIGRATION_V2)?;
         version = 2;
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    }
+
+    if version < 3 {
+        conn.execute_batch(MIGRATION_V3)?;
+        version = 3;
         conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
     }
 
@@ -79,6 +85,11 @@ CREATE TABLE organizer_executions (
 CREATE INDEX idx_organizer_executions_zone ON organizer_executions(zone_id);
 "#;
 
+/// v2 -> v3: opt-in dated renaming for bookkeeping-style filing zones.
+const MIGRATION_V3: &str = r#"
+ALTER TABLE zones ADD COLUMN rename_dated INTEGER NOT NULL DEFAULT 0;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +116,28 @@ mod tests {
             .query_row("SELECT count(*) FROM zones", [], |r| r.get(0))
             .unwrap();
         assert_eq!(zones, 0);
+    }
+
+    #[test]
+    fn migration_v3_adds_rename_dated_default_off() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch("PRAGMA user_version = 2;").unwrap();
+        conn.execute(
+            "INSERT INTO zones (id, name, description, default_decision, created_at, updated_at) \
+             VALUES ('z', 'Existing', NULL, 'ask', '1', '1')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let rename_dated: i64 = conn
+            .query_row("SELECT rename_dated FROM zones WHERE id = 'z'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(rename_dated, 0);
     }
 }

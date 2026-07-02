@@ -25,26 +25,37 @@ pub fn create_zone(
     name: &str,
     description: Option<&str>,
     default_decision: DefaultDecision,
+    rename_dated: bool,
 ) -> rusqlite::Result<Zone> {
     let id = Uuid::new_v4().to_string();
     let ts = now_ts();
     conn.execute(
-        "INSERT INTO zones (id, name, description, default_decision, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-        params![id, name, description, default_decision.as_str(), ts],
+        "INSERT INTO zones \
+         (id, name, description, default_decision, rename_dated, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+        params![
+            id,
+            name,
+            description,
+            default_decision.as_str(),
+            rename_dated as i64,
+            ts
+        ],
     )?;
     Ok(Zone {
         id,
         name: name.to_string(),
         description: description.map(|s| s.to_string()),
         default_decision,
+        rename_dated,
     })
 }
 
 /// Fetch a single Zone by id.
 pub fn get_zone(conn: &Connection, id: &str) -> rusqlite::Result<Option<Zone>> {
-    let mut stmt =
-        conn.prepare("SELECT id, name, description, default_decision FROM zones WHERE id = ?1")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, default_decision, rename_dated FROM zones WHERE id = ?1",
+    )?;
     let mut rows = stmt.query_map(params![id], row_to_zone)?;
     match rows.next() {
         Some(zone) => Ok(Some(zone?)),
@@ -54,8 +65,9 @@ pub fn get_zone(conn: &Connection, id: &str) -> rusqlite::Result<Option<Zone>> {
 
 /// List all Zones, ordered by name.
 pub fn list_zones(conn: &Connection) -> rusqlite::Result<Vec<Zone>> {
-    let mut stmt =
-        conn.prepare("SELECT id, name, description, default_decision FROM zones ORDER BY name")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, default_decision, rename_dated FROM zones ORDER BY name",
+    )?;
     let rows = stmt.query_map([], row_to_zone)?;
     rows.collect()
 }
@@ -115,6 +127,7 @@ fn row_to_zone(row: &Row) -> rusqlite::Result<Zone> {
         // An out-of-range token should never appear (CHECK constraint), but be
         // conservative and fall back to the safest decision.
         default_decision: DefaultDecision::from_token(&token).unwrap_or(DefaultDecision::Deny),
+        rename_dated: row.get::<_, i64>(4)? != 0,
     })
 }
 
@@ -139,7 +152,14 @@ mod tests {
     #[test]
     fn zone_and_rules_round_trip() {
         let conn = open_in_memory().unwrap();
-        let zone = create_zone(&conn, "School", Some("coursework"), DefaultDecision::Ask).unwrap();
+        let zone = create_zone(
+            &conn,
+            "School",
+            Some("coursework"),
+            DefaultDecision::Ask,
+            false,
+        )
+        .unwrap();
         add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/Downloads")).unwrap();
 
         let zones = list_zones(&conn).unwrap();
@@ -159,7 +179,7 @@ mod tests {
     #[test]
     fn loaded_rules_drive_policy_decisions() {
         let conn = open_in_memory().unwrap();
-        let zone = create_zone(&conn, "School", None, DefaultDecision::Ask).unwrap();
+        let zone = create_zone(&conn, "School", None, DefaultDecision::Ask, false).unwrap();
         add_folder_rule(&conn, &zone.id, &full_rule("/home/u/Downloads")).unwrap();
         add_folder_rule(&conn, &zone.id, &full_rule("/home/u/Docs")).unwrap();
 
@@ -223,14 +243,14 @@ mod tests {
     #[test]
     fn folder_rules_are_empty_for_a_zone_without_rules() {
         let conn = open_in_memory().unwrap();
-        let zone = create_zone(&conn, "Empty", None, DefaultDecision::Deny).unwrap();
+        let zone = create_zone(&conn, "Empty", None, DefaultDecision::Deny, false).unwrap();
         assert!(list_folder_rules(&conn, &zone.id).unwrap().is_empty());
     }
 
     #[test]
     fn create_zone_without_description_round_trips_as_none() {
         let conn = open_in_memory().unwrap();
-        let zone = create_zone(&conn, "NoDesc", None, DefaultDecision::Allow).unwrap();
+        let zone = create_zone(&conn, "NoDesc", None, DefaultDecision::Allow, false).unwrap();
         assert_eq!(zone.description, None);
 
         let loaded = get_zone(&conn, &zone.id).unwrap().unwrap();
@@ -241,9 +261,9 @@ mod tests {
     #[test]
     fn list_zones_is_ordered_by_name() {
         let conn = open_in_memory().unwrap();
-        create_zone(&conn, "Charlie", None, DefaultDecision::Ask).unwrap();
-        create_zone(&conn, "Alpha", None, DefaultDecision::Ask).unwrap();
-        create_zone(&conn, "Bravo", None, DefaultDecision::Ask).unwrap();
+        create_zone(&conn, "Charlie", None, DefaultDecision::Ask, false).unwrap();
+        create_zone(&conn, "Alpha", None, DefaultDecision::Ask, false).unwrap();
+        create_zone(&conn, "Bravo", None, DefaultDecision::Ask, false).unwrap();
 
         let names: Vec<String> = list_zones(&conn)
             .unwrap()
@@ -256,7 +276,7 @@ mod tests {
     #[test]
     fn folder_rules_are_ordered_by_path() {
         let conn = open_in_memory().unwrap();
-        let zone = create_zone(&conn, "Z", None, DefaultDecision::Ask).unwrap();
+        let zone = create_zone(&conn, "Z", None, DefaultDecision::Ask, false).unwrap();
         add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/zeta")).unwrap();
         add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/alpha")).unwrap();
 
@@ -277,11 +297,24 @@ mod tests {
     #[test]
     fn folder_rules_are_scoped_to_their_zone() {
         let conn = open_in_memory().unwrap();
-        let a = create_zone(&conn, "A", None, DefaultDecision::Ask).unwrap();
-        let b = create_zone(&conn, "B", None, DefaultDecision::Ask).unwrap();
+        let a = create_zone(&conn, "A", None, DefaultDecision::Ask, false).unwrap();
+        let b = create_zone(&conn, "B", None, DefaultDecision::Ask, false).unwrap();
         add_folder_rule(&conn, &a.id, &FolderRule::read_only("/home/u/a")).unwrap();
 
         assert_eq!(list_folder_rules(&conn, &a.id).unwrap().len(), 1);
         assert!(list_folder_rules(&conn, &b.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn rename_dated_round_trips() {
+        let conn = open_in_memory().unwrap();
+        create_zone(&conn, "Client filing", None, DefaultDecision::Ask, true).unwrap();
+
+        let zones = list_zones(&conn).unwrap();
+        assert_eq!(zones.len(), 1);
+        assert!(zones[0].rename_dated);
+
+        let loaded = get_zone(&conn, &zones[0].id).unwrap().unwrap();
+        assert!(loaded.rename_dated);
     }
 }

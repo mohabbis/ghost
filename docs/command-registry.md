@@ -183,7 +183,7 @@ plan can never reach the filesystem.
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
 | `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
-| `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). New Zones default to `Ask`. |
+| `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). Params: `name`, `description`, optional `renameDated` (default `false`). New Zones default to `Ask`; dated renaming only changes previewed destination names when explicitly enabled. |
 | `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. |
 | `organizer_plan` | stable | ✓ | – | – | – | – | – | low | **Read-only.** Scans directory metadata, classifies, detects conflicts, policy-checks every action; mutates nothing. This is the preview the user approves. |
 | `organizer_execute` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Re-plans, re-checks policy per action, never overwrites, writes undo before each mutation, records an audit event, and persists the run. Moves/renames only inside an approved Zone; never deletes. |

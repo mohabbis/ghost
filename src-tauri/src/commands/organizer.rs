@@ -67,14 +67,25 @@ pub fn organizer_list_folder_rules(zone_id: String) -> Result<Vec<FolderRule>, S
 }
 
 /// Create a new Zone. New Zones default to `Ask` — the user still approves each
-/// mutating action; this is the boundary, not a blanket allow.
+/// mutating action; this is the boundary, not a blanket allow. `rename_dated`
+/// is opt-in and prefixes proposed filenames with their file month.
 ///
 /// Risk class: local-mutate (DB only).
 #[tauri::command]
-pub fn organizer_create_zone(name: String, description: Option<String>) -> Result<Zone, String> {
+pub fn organizer_create_zone(
+    name: String,
+    description: Option<String>,
+    rename_dated: Option<bool>,
+) -> Result<Zone, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    create_zone(&conn, &name, description.as_deref(), DefaultDecision::Ask)
-        .map_err(|e| e.to_string())
+    create_zone(
+        &conn,
+        &name,
+        description.as_deref(),
+        DefaultDecision::Ask,
+        rename_dated.unwrap_or(false),
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Attach a folder rule (a path plus per-operation permissions) to a Zone.
