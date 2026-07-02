@@ -540,6 +540,7 @@ async function replayWorkflow() {
     startReplayProgressPolling();
     await invoke("replay_workflow", { events: recordedEvents });
     hasReplayedCurrentWorkflow = true;
+    await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Failed to replay workflow:", error);
     toastError("Replay failed: " + error);
@@ -577,6 +578,7 @@ async function replayWithReliability() {
       backoffMultiplier: replay.retry_backoff_multiplier ?? 2.0,
     });
     hasReplayedCurrentWorkflow = true;
+    await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Failed to replay with reliability:", error);
     toastError("Replay failed: " + error);
@@ -1140,7 +1142,8 @@ function describeEvent(event) {
         const role = (el.role_description || el.role || "element").replace(/^AX/, "");
         const name = el.name ? ` "${el.name}"` : "";
         const app = el.app && el.app !== "Unknown" ? ` in ${el.app}` : "";
-        description = `${kind} ${role}${name}${app}`;
+        const win = el.window_title ? ` — window "${el.window_title}"` : "";
+        description = `${kind} ${role}${name}${app}${win}`;
       } else {
         description = `${kind} at (${data.x}, ${data.y})`;
       }
@@ -1929,6 +1932,32 @@ async function showReplayHistory() {
   const fmtDur = (ms) =>
     ms || ms === 0 ? `${(ms / 1000).toFixed(1)}s` : "—";
 
+  // Summarize the run's resolution trace: how each click found its target,
+  // with coordinate-fallback steps called out individually — this is where
+  // "why did this run behave that way" gets answered.
+  const traceHtml = (h) => {
+    const trace = h.step_trace || [];
+    if (!trace.length) return "";
+    const count = (kind) => trace.filter((t) => t.kind === kind).length;
+    const parts = [];
+    if (count("RecordedPoint")) parts.push(`${count("RecordedPoint")} found in place`);
+    if (count("SpiralReresolved")) parts.push(`${count("SpiralReresolved")} re-resolved nearby`);
+    if (count("CoordinateFallback")) parts.push(`${count("CoordinateFallback")} lost their element`);
+    if (count("NoDescriptor")) parts.push(`${count("NoDescriptor")} coordinate-only`);
+    const risky = trace.filter(
+      (t) => t.kind === "CoordinateFallback" || t.kind === "NoDescriptor"
+    );
+    const details = risky
+      .map((t) => {
+        const label = t.target_name
+          ? `"${escapeHtml(t.target_name)}" not found — clicked recorded point`
+          : "no element recorded — clicked fixed point";
+        return `<div class="replay-meta replay-trace__fallback">Step ${t.step_index + 1}: ${label} (${t.point[0]}, ${t.point[1]})</div>`;
+      })
+      .join("");
+    return `<div class="replay-meta">Targets: ${escapeHtml(parts.join(" · "))}</div>${details}`;
+  };
+
   const rows = history.length
     ? history
         .map((h) => {
@@ -1941,6 +1970,7 @@ async function showReplayHistory() {
             <div><strong>${escapeHtml(h.workflow_name)}</strong>
               <span class="replay-status replay-status--${escapeAttr(cls)}">${escapeHtml(status)}</span></div>
             <div class="replay-meta">${escapeHtml(fmtWhen(h.start_time))} · ${h.events_processed} events · ${escapeHtml(fmtDur(h.duration_ms))}${err}</div>
+            ${traceHtml(h)}
           </li>`;
         })
         .join("")
@@ -1963,6 +1993,31 @@ async function showReplayHistory() {
 let lastFailedStep = null; // event index the last replay failed on, or null
 let stepReplayCursor = 0; // next event index for step-by-step replay
 let replayProgressTimer = null;
+
+// After a replay, explain how click targets were actually resolved (from the
+// run's persisted resolution trace) so fallback decisions are never silent.
+async function summarizeLastReplayResolution() {
+  if (!invoke) return;
+  try {
+    const [latest] = await invoke("get_replay_history", { limit: 1 });
+    const trace = latest?.step_trace || [];
+    if (!trace.length) return;
+    const lost = trace.filter((t) => t.kind === "CoordinateFallback").length;
+    const blind = trace.filter((t) => t.kind === "NoDescriptor").length;
+    const moved = trace.filter((t) => t.kind === "SpiralReresolved").length;
+    if (lost + blind > 0) {
+      showInsight(
+        `${lost + blind} click(s) ran on raw coordinates` +
+          (lost ? ` (${lost} couldn't find their element)` : "") +
+          ". These steps are the most likely to break — open Replay History for the per-step trace."
+      );
+    } else if (moved > 0) {
+      showInsight(`Every click found its element — ${moved} had moved and were re-resolved nearby.`);
+    }
+  } catch (error) {
+    console.error("Could not summarize resolution trace:", error);
+  }
+}
 
 // Called wherever recordedEvents is replaced wholesale — stale step cursors
 // and failed-step markers must not point into a different workflow.
@@ -2141,6 +2196,7 @@ async function retryFromFailedStep() {
     await invoke("replay_workflow", { events: slice });
     hasReplayedCurrentWorkflow = true;
     showInsight(`Retried from step ${offset + 1} and finished the workflow.`);
+    await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Retry from failed step failed:", error);
     toastError("Retry failed: " + error);

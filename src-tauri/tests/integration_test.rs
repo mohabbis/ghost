@@ -263,10 +263,8 @@ fn test_ghost_guard_flags_sensitive_destructive_workflow() {
             name: "Delete password".to_string(),
             app: "System Settings".to_string(),
             fallback_coords: Some((10, 20)),
-            value: None,
-            description: None,
-            identifier: None,
             role_description: Some("button".to_string()),
+            ..Default::default()
         }),
         timestamp: Some(1),
         retry_count: None,
@@ -307,10 +305,9 @@ fn test_ghost_guard_clean_workflow_is_low_risk() {
             name: "Export".to_string(),
             app: "Numbers".to_string(),
             fallback_coords: Some((100, 200)),
-            value: None,
-            description: None,
             identifier: Some("export-button".to_string()),
             role_description: Some("button".to_string()),
+            ..Default::default()
         }),
         timestamp: Some(1),
         retry_count: None,

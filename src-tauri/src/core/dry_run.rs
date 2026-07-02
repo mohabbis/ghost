@@ -53,10 +53,14 @@ fn describe_target(element: &crate::core::events::ElementInfo) -> String {
     } else {
         &element.role
     };
-    if element.app.is_empty() || element.app == "Unknown" {
+    let base = if element.app.is_empty() || element.app == "Unknown" {
         format!("{} — {}", name, role)
     } else {
         format!("{} — {} in {}", name, role, element.app)
+    };
+    match &element.window_title {
+        Some(title) if !title.is_empty() => format!("{} (window: {})", base, title),
+        _ => base,
     }
 }
 
@@ -288,6 +292,17 @@ mod tests {
             Some("Save — AXButton in Notes")
         );
         assert!(preview[0].detail.contains("Re-resolves"));
+    }
+
+    #[test]
+    fn target_includes_window_title_when_captured() {
+        let mut el = element("Save", "AXButton", "Notes");
+        el.window_title = Some("Quarterly Report".to_string());
+        let preview = preview_workflow(&[click(0, Some(el))]);
+        assert_eq!(
+            preview[0].target.as_deref(),
+            Some("Save — AXButton in Notes (window: Quarterly Report)")
+        );
     }
 
     #[test]

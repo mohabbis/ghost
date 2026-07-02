@@ -552,10 +552,7 @@ mod tests {
             name: name.to_string(),
             app: "TestApp".to_string(),
             fallback_coords: coords,
-            value: None,
-            description: None,
-            identifier: None,
-            role_description: None,
+            ..Default::default()
         }
     }
 

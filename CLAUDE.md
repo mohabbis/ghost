@@ -183,6 +183,8 @@ Also built: replay execution tracking and history. The engine records each repla
 
 Also built: replay inspectability. Platform replay loops advance a shared `ReplayProgress` (`core/replay_support.rs`) so the stable `get_replay_progress` command can report live per-step status and the failing step index; `dry_run_workflow` (`core/dry_run.rs`) returns a pure per-step preview of what a replay would do (typed text never included). The frontend uses these for a preview modal, a live step counter, step-by-step replay, and retry-from-failed-step (the latter two replay event slices through the stable `replay_workflow` command, keeping press/release pairs together).
 
+Also built: target resilience groundwork. Capture stores window-level locator context on `ElementInfo` (`window_title`, `window_rel` — both optional and serde-defaulted for old recordings): macOS reads the AXWindow ancestor's title and frame, Windows the GA_ROOT window's text and rect. Every replayed click records how its target resolved (`ResolutionKind`: recorded point / spiral re-resolution / coordinate fallback / no descriptor) into the run's `step_trace`, persisted on `ExecutionRecord` and rendered in the replay-history view; a post-replay insight summarizes fallback usage. Live window-relative *re-resolution* and window-title-aware descriptor matching are deliberately not wired yet — matching changes need benchmark coverage first.
+
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
 ## Replay invariants
