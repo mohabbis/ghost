@@ -725,9 +725,19 @@ fn try_resolve_click_point_traced(
     rx: i32,
     ry: i32,
 ) -> Option<((i32, i32), replay_support::ResolutionKind)> {
-    replay_support::try_resolve_click_point_traced(target, rx, ry, |x, y| unsafe {
-        ax_info_at(x, y)
-    })
+    // No live window-origin lookup on macOS yet: finding a window by title
+    // needs either process enumeration + per-app AXWindows traversal or
+    // CGWindowList (which requires the Screen Recording permission — off the
+    // table under the privacy defaults). Until a permission-free design
+    // lands, the window-relative strategy is inert here and the spiral
+    // covers moderate moves.
+    replay_support::try_resolve_click_point_traced(
+        target,
+        rx,
+        ry,
+        |x, y| unsafe { ax_info_at(x, y) },
+        |_| None,
+    )
 }
 
 /// Resolve a press target and record the outcome (recorded point, spiral hit,
