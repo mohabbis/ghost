@@ -208,7 +208,7 @@ plan can never reach the filesystem.
 | `cloud_authenticate` | experimental | – | – | – | ✓ | ✓ | – | critical | Stub; would transmit a token. |
 | `cloud_sync_workflows` | experimental | ✓ | – | – | ✓ | – | – | critical | Stub; would upload workflows. |
 | `create_workspace` | experimental | – | – | – | ✓ | – | – | critical | Stub. |
-| `get_audit_logs` | experimental | – | – | – | – | – | – | medium | Returns in-memory cloud audit logs (stub). |
+| `get_audit_logs` | experimental | – | – | – | – | – | – | medium | Returns in-memory cloud audit logs (stub), newest first; `limit` = most recent N. |
 | `get_execution_history` | experimental | ✓ | – | – | – | – | – | low | Execution analytics for one workflow. |
 | `get_all_executions` | experimental | ✓ | – | – | – | – | – | low | Execution analytics across workflows. |
 | `get_workflow_analytics` | experimental | ✓ | – | – | – | – | – | low | Aggregated analytics. |
