@@ -7,328 +7,210 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Ghost turns repetitive desktop work into safe, reviewable automations.**
+> **Ghost turns repeated computer work into safe, reusable, permission-bounded routines.**
 
-Record a task once. Ghost explains the workflow, checks the risks, asks for approval, and replays it across your apps with permissions, debugging, and audit logs.
+Record a task once. Ghost shows you exactly what it saw, checks it for risk, asks for your approval, and replays it — with live progress, an audit trail, and undo.
 
-Ghost is **local-first desktop automation**—not an AI assistant, not a chatbot, not a cloud service. It's a trusted layer that watches user-approved work, converts it into reusable workflows, and executes them safely with explicit permission controls.
+Ghost is **local-first desktop automation** for macOS and Windows. Not a chatbot, not a cloud service, not an autonomous agent. It's a trusted layer between you and your computer: it watches only when you tell it to, executes only what you've approved, and keeps everything on your machine.
 
-## Why Ghost Exists
+## The problem
 
-Tools like Bond organize your work in the cloud. Ghost **operates your computer safely** at the desktop execution layer.
+Every week you do the same twenty minutes of clicking: filing downloads, renaming reports, moving data between a portal and a spreadsheet, filling the same form. It's not hard — it's just *yours*, every week, forever. The tasks are too fiddly for scripts, too specific for off-the-shelf tools, and too sensitive to hand to something you can't inspect.
 
-| Bond | Ghost |
-|------|-------|
-| Cloud-based AI chief of staff | Local-first desktop automation |
-| Summarizes email, Slack, calendar | Records and replays actual computer actions |
-| Suggests what to do | Actually does it (with approval) |
-| Lives in your browser | Runs natively on macOS and Windows |
-| Generic productivity assistant | Focused on repetitive desktop chores |
+Ghost exists for exactly that work. It makes one painful, repetitive desktop workflow reliable enough that you trust it weekly — and it earns that trust by showing its work at every step.
 
-Ghost wins by owning the **desktop execution layer**: browser forms, Finder/File Explorer, PDFs, spreadsheets, downloads, portals, and recurring admin tasks—with full permission control, audit logs, and rollback.
+## How it works
 
-## Quick Start
+```text
+Record → Inspect → Approve → Replay → Audit → Undo
+```
+
+1. **Record** — capture clicks, keystrokes, scrolls, and timing while you do the task once. Passwords and secure fields are suppressed at capture time.
+2. **Inspect** — the recording becomes a readable step timeline, with fragile steps flagged before you ever run them.
+3. **Approve** — Ghost Guard audits the workflow for sensitive apps, destructive actions, and credential inputs. High-risk workflows need explicit confirmation or are blocked.
+4. **Replay** — run it with live per-step status, pause/resume, speed control, and an emergency stop that always works.
+5. **Audit** — every run leaves a durable local record: what ran, how long it took, what failed and why.
+6. **Undo** — reversible operations write their undo data *before* they execute.
+
+## Get Ghost
 
 | Platform | Download |
 |----------|----------|
-| macOS Apple Silicon + Intel | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
-| Windows 10 / 11 64-bit | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
+| macOS (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
+| Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-> **Note:** Current builds are developer-preview quality. macOS builds may be ad-hoc signed; if macOS blocks the app, open **System Settings → Privacy & Security** and approve it. Fully notarized releases are in progress.
+> **Note:** current builds are developer-preview quality. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings → Privacy & Security**. Notarized releases are in progress.
 
-## First Workflow: Downloads Folder Cleanup
+## Your first five minutes: clean up Downloads
 
-The best way to understand Ghost is to see it handle a real, boring task:
+The fastest way to understand Ghost is to watch it handle a real, boring task:
 
-1. **Record**: Open Downloads, sort files by type, rename selected files, move into folders
-2. **Review**: Ghost explains the workflow as human-readable steps
-3. **Approve**: Ghost Guard audits for risks (no deletions, no overwrites)
-4. **Replay**: Run the workflow on another messy folder with visible progress
-5. **Audit**: View the run log showing every file moved, renamed, and approved
+1. **Record** — open Downloads, sort files, rename a few, move them into folders.
+2. **Review** — Ghost replays the recording back to you as human-readable steps.
+3. **Approve** — Ghost Guard confirms there are no deletions, no overwrites, no surprises.
+4. **Replay** — run it on the next messy folder and watch each step execute.
+5. **Audit** — open the run log: every move and rename, timestamped, undoable.
 
-This demonstrates:
-- ✅ Native desktop execution (Finder/File Explorer)
-- ✅ Local-first workflow storage
-- ✅ Ghost Guard safety audit
-- ✅ Permission boundaries (Zone-based)
-- ✅ Replay with visible progress
-- ✅ Audit trail with undo support
+The same flow powers **Ghost Organizer**, the built-in file-cleanup workflow: pick a folder, preview every proposed move, approve the plan, and Ghost executes it inside boundaries you set — writing an audit log and an undo journal before it touches anything. Ghost never silently deletes and never silently overwrites.
 
-## Core Features
+## What Ghost does
 
-### Record Once
-Capture clicks, keystrokes, file paths, window titles, and timing while you work. Ghost suppresses sensitive inputs (passwords, payment fields) automatically.
+### A review timeline, built after every recording
+Raw input events are deterministically compressed into semantic steps — "Clicked *Save* in Notes", "Typed text (redacted)", "Waited 2s" — so you review intent, not noise. Coordinate-only and low-confidence steps are flagged for your attention.
 
-### Review Workflow
-Every recording becomes an editable step list. Rename steps, disable fragile ones, add wait conditions, and inspect targets before replay.
+### A preview of every step, before anything runs
+Dry-run any workflow and Ghost lists exactly what each step will do — which element it will click, where, and which steps would fall back to raw coordinates (the ones most likely to break if a window moves). Nothing executes during a preview.
 
-### Ghost Guard Safety Layer
-Before any replay, Ghost audits the workflow for:
-- Sensitive apps (password managers, banking, terminals)
-- Destructive actions (delete, overwrite, send, submit)
-- Credential inputs (passwords, API keys, OTPs)
-- Low-confidence targets (coordinate-only clicks)
+### A safety check that runs before every replay
+Ghost Guard scans each workflow for sensitive apps (password managers, banking, terminals, system settings), destructive actions (delete, send, submit, pay, install), and credential-shaped input. Risky workflows require explicit confirmation; workflows that captured secret-like input are blocked from replay outright.
 
-High-risk workflows require explicit confirmation or are blocked entirely.
+### Replay you can watch — and interrupt
+Live step counter, pause/resume, playback speed control, and cancel-anytime. Replay one step at a time when you're building trust in a new workflow, and when a run fails, retry from the failed step instead of starting over.
 
-### App-Level Permissions
-Control exactly which apps and folders Ghost can touch:
-- **Zones**: Define approved boundaries (e.g., Downloads → Documents/School)
-- **Capabilities**: Grant read, create, move, rename (delete blocked by default)
-- **Per-workflow overrides**: Tighten permissions for specific automations
+### Boundaries you draw, permissions you grant
+Zones define where Ghost may operate (e.g. Downloads → Documents/School). Capabilities control what it may do there — read, create, move, rename. Delete is blocked by default. Everything else is denied unless you've allowed it.
 
-### Replay Console
-Run workflows with:
-- Start/pause/stop controls
-- Speed adjustment (0.5x–2.0x)
-- Step-by-step status
-- Approval checkpoints for risky actions
-- Emergency cancel at any time
+### A durable record of every run
+Replay history shows every run's status, duration, and failure reason. Organizer runs additionally persist a full audit log and undo journal, so you can always answer "what did Ghost change?" — and reverse it.
 
-### Audit Vault
-Every run produces a durable log:
-- Timestamp, duration, apps touched
-- Files changed, text entered (redacted where sensitive)
-- Approvals requested, steps passed/failed/skipped
-- Error explanations and rollback options
+### Local by default, private by design
+Workflows, logs, and settings live on your machine, optionally encrypted at rest (Argon2 + AES-GCM) behind a local password. No account. No cloud dependency. No telemetry unless you explicitly opt in. No camera, no microphone, no hidden screen capture — input capture happens only during explicit recording or approved replay.
 
-### Workflow Debugger
-When automation fails, understand why:
-- Failed step highlighting
-- Target comparison (expected vs actual)
-- Retry from failed step
-- Skip problematic steps
-- Fragile step warnings (coordinate-only, timing-dependent)
+## Who Ghost is for
 
-## Architecture
+- **Operators and admins** who move data between web apps, spreadsheets, and files every week and want those minutes back — without giving a bot the keys to everything.
+- **Students and knowledge workers** drowning in downloads, attachments, and misnamed files.
+- **Builders and tinkerers** who want a desktop automation layer they can actually read, audit, and extend.
+
+If you want an autonomous agent that acts on your behalf while you're away — Ghost is deliberately not that. Every meaningful action passes through your approval.
+
+## The safety model
+
+One principle, enforced in code:
+
+> **Ghost may suggest anything, but it only does what you have approved, inside boundaries you control.**
+
+Every meaningful operation passes through the same pipeline — no exceptions for file operations, replay, or anything else:
 
 ```text
-Raw Input Capture → Deterministic Timeline → Semantic Workflow → Ghost Guard Audit
-       ↓
-Permission Check → User Review → Native Execution → Run Log → Failure Recovery
+Intent → Plan → Policy check → Approval → Execution → Audit log → Undo path
 ```
 
-Each stage is independently testable and inspectable.
+- **Deny by default.** The policy engine refuses anything not explicitly allowed by your Zones and capabilities.
+- **Deterministic execution.** Suggestions (including any AI-assisted ones) never execute directly; only reviewed, approved plans do.
+- **Suppressed secrets.** Secure-field input is never retained — not in recordings, not in previews, not in logs.
+- **Experimental means off.** AI, cloud, and observer features are compiled out of default builds entirely (`experimental` Cargo feature), not just hidden in the UI.
 
-### Key Modules
+## Under the hood
+
+- **Shell**: Tauri 2 — Rust backend, vanilla HTML/CSS/JS frontend
+- **Capture**: macOS CGEventTap + Accessibility API; Windows input hooks
+- **Replay**: semantic element re-resolution first, recorded coordinates as fallback; interruptible at every step
+- **Storage**: local JSON + SQLite (Zones, rules, run history) — no external services
+- **Encryption**: Argon2 key derivation + AES-GCM for at-rest workflow protection
 
 | Module | Purpose | Status |
 |--------|---------|--------|
-| `core/events.rs` | Input event schema | Stable |
-| `core/guard.rs` | Ghost Guard risk audit | Stable |
-| `core/compression/` | Raw events → semantic steps | Stable |
-| `policy/` | Capability-based permissions | Stable |
-| `storage/` | SQLite Zones, folder rules, execution history | Stable |
-| `organizer/` | File organization workflow | Stable |
-| `audit/` | Audit logs and undo journals | Stable |
-| `platform/macos.rs` | macOS accessibility/event APIs | Stable |
-| `platform/windows.rs` | Windows input hooks/UI automation | Stable |
-| `core/ai.rs` | AI workflow suggestions | Experimental |
-| `core/cloud.rs` | Cloud sync | Experimental |
+| `core/compression/` | Raw events → reviewable semantic steps | Stable |
+| `core/guard.rs` | Ghost Guard pre-replay risk audit | Stable |
+| `core/dry_run.rs` | Step-by-step replay preview | Stable |
+| `policy/` | Deny-by-default capability engine | Stable |
+| `organizer/` | Safe file-cleanup workflow | Stable |
+| `audit/` | Audit logs + undo journals | Stable |
+| `platform/` | macOS / Windows capture & replay backends | Stable |
+| `core/ai.rs`, `core/cloud.rs` | Suggestions, sync | Experimental, compiled out by default |
 
-### Technology Stack
+See [`IMPLEMENTATION.md`](IMPLEMENTATION.md) for the full, honest feature-status matrix.
 
-- **Frontend**: Vanilla HTML, CSS, JavaScript (Tauri 2 webview)
-- **Backend**: Rust (Tauri 2 commands)
-- **Desktop Shell**: Tauri 2
-- **Storage**: SQLite (bundled, no external dependencies)
-- **Encryption**: Argon2 + AES-GCM for local auth
-- **Permissions**: macOS Accessibility + Input Monitoring, Windows UI Automation
+## Where Ghost is today
 
-## Safety Model
+**Early-stage but functional.** Working now:
 
-Ghost follows one principle:
-
-> **Ghost may suggest anything, but it only does what the user has approved inside boundaries the user controls.**
-
-### Canonical Trust Pipeline
-
-Every meaningful operation passes through:
-
-```text
-Intent → Plan → Policy → Approval → Execution → Audit → Undo
-```
-
-No shortcuts exist for file operations, workflow replay, browser actions, or network actions.
-
-### Blocked by Default
-
-- Password managers (1Password, Bitwarden, Keychain)
-- Banking/financial portals
-- Payment pages
-- Terminal/shell commands
-- System settings
-- Private messaging apps
-- Healthcare/medical records
-- Legal/school records
-
-### Require Confirmation
-
-- Sending emails/messages
-- Deleting files (blocked entirely in Organizer MVP)
-- Overwriting files
-- Moving large folders
-- Editing system settings
-- Form submissions
-- App installs/uninstalls
-
-### Allowed with Permission
-
-- File organization inside approved Zones
-- Attachment downloads
-- Browser navigation (non-sensitive sites)
-- Spreadsheet/data entry
-- PDF handling
-- Renaming/moving files
-
-## Current Status
-
-**Ghost is early-stage but functional.** The current build focuses on:
-
-- ✅ Recording and replaying simple workflows
-- ✅ Ghost Guard safety audits
-- ✅ Permission-bounded file organization (Organizer)
-- ✅ Local workflow storage with encryption
-- ✅ Audit logs and undo support
-- ✅ macOS and Windows platform support
+- ✅ Record and replay workflows on macOS and Windows
+- ✅ Ghost Guard safety audits before every replay
+- ✅ Dry-run preview, live per-step replay status, step-by-step replay, retry-from-failed-step
+- ✅ Permission-bounded file organization (Organizer) with audit and undo
+- ✅ Local, optionally encrypted workflow storage
+- ✅ Replay history with failure reasons
 
 **Not yet production-ready:**
-- ⚠️ Cross-app replay reliability (works best within single apps)
-- ⚠️ Semantic target resolution (still depends on coordinates for some apps)
-- ⚠️ Workflow debugger UI (basic timeline exists, advanced debugging coming)
-- ⚠️ Release signing (macOS notarization in progress)
 
-Honest positioning: This is a **technical preview** useful for builders, students, and operators who want to experiment with local desktop automation. It is not yet enterprise-ready.
+- ⚠️ Cross-app replay reliability — semantic targeting still falls back to coordinates in some apps
+- ⚠️ Richer locator strategies (window titles, window-relative positions) — in progress
+- ⚠️ Release signing — macOS notarization in progress
+
+This is a **technical preview** for builders, students, and operators who want to experiment with trustworthy local automation. It is not yet something to run unattended over work you can't afford to redo.
 
 ## Roadmap
 
-### Phase 1: Stabilize Foundation (Now)
-- Reliable recording/replay across common apps
-- Clear command risk inventory
-- Workflow inspector with step editing
-- Run log viewer with failure explanations
+1. **Target resilience** *(now)* — multiple locator strategies per click, semantic lookup before coordinates, fallback decisions explained in the UI, a success/failure trace for every replay.
+2. **Benchmark reliability** — a canonical-workflow suite with replay success rate as the north-star metric.
+3. **Distribution quality** — signed/notarized builds, clean onboarding, honest docs.
+4. **Constrained intelligence** *(last, gated)* — suggestion-only naming, summaries, and failure explanations. AI proposes; deterministic code executes.
 
-### Phase 2: Add Trust & Safety (Now)
-- Ghost Guard UI improvements
-- Per-app permission controls
-- Approval checkpoint system
-- Redaction review for suppressed inputs
+## FAQ
 
-### Phase 3: Debuggability (Next)
-- Step-by-step workflow debugger
-- Failed step explanations
-- Retry/skip/reorder steps
-- Screenshot comparison for failed targets
+**Does my data leave my machine?**
+No. Workflows, logs, and settings are local. There's no account and no server. Telemetry exists but is off unless you opt in.
 
-### Phase 4: Semantic Intelligence (Later)
-- Accessibility-based target resolution
-- Window/control metadata lookup
-- Dynamic value handling
-- Workflow templates for common tasks
+**Can Ghost delete my files?**
+Not silently, and in Organizer not at all — delete is blocked by default, conflicts are detected, and every mutation is previewed, approved, audited, and undoable.
 
-### Phase 5: Polish for Credibility (Later)
-- Signed/notarized macOS builds
-- Windows code signing
-- Demo video/GIFs
-- Examples gallery
-- Test coverage reports
+**What about my passwords?**
+Secure-field input is suppressed at capture time and never retained. Ghost Guard additionally blocks replay of workflows that appear to contain stored secrets.
 
-## Installation
+**Can it run while I'm away?**
+Replay runs when you start it and stays interruptible the whole time; risky workflows require your confirmation before they run at all. Unattended, scheduled execution is deliberately not a current feature.
 
-### Development Setup
+**Why not just use a macro recorder?**
+Raw macros replay blind coordinates and break the moment a window moves — and they'll happily type your password into the wrong field. Ghost reviews, guards, re-resolves targets semantically, and leaves an audit trail.
 
-1. Install Rust toolchain:
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. Install Tauri CLI:
-   ```bash
-   cargo install tauri-cli --version "^2.0" --locked
-   ```
-
-3. Run the desktop app:
-   ```bash
-   cd src-tauri
-   cargo tauri dev
-   ```
-
-4. Build distributable installers:
-   ```bash
-   cargo tauri build
-   ```
-
-### Build Commands
+## Development setup
 
 ```bash
-# Check Rust backend
-cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+# Install Rust, then the Tauri CLI
+cargo install tauri-cli --version "^2.0" --locked
 
-# Run tests
-cargo test --manifest-path src-tauri/Cargo.toml
+# Run the app
+cd src-tauri && cargo tauri dev
 
-# Lint
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-
-# Format check
+# Validate
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-
-# Compile without packaging
-cargo tauri build --no-bundle
+cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
 # Build installers
 cargo tauri build
 ```
 
-## Permissions
+`make ci`, `make check`, `make build`, and `make dev` wrap the common flows.
 
-### macOS
+### Permissions
 
-Ghost needs Accessibility permission to observe and replay desktop actions. Keyboard capture requires Input Monitoring.
+- **macOS**: Accessibility (observe/replay) and Input Monitoring (keyboard capture) under **System Settings → Privacy & Security**; restart the app after granting.
+- **Windows**: native input hooks; apps running elevated (as administrator) may not be controllable from a user-level Ghost process.
 
-Enable Ghost in:
-```
-System Settings → Privacy & Security → Accessibility
-System Settings → Privacy & Security → Input Monitoring
-```
+## Known limitations
 
-Then restart the app.
-
-### Windows
-
-Ghost uses Windows-native input hooks and replay APIs. Apps running as administrator or protected system surfaces may not be controllable from a normal user-level Ghost process.
-
-## Known Limitations
-
-- **Coordinate dependency**: Some workflows depend on screen coordinates rather than semantic UI targets. Moving windows may break replay.
-- **App compatibility**: Works best with standard macOS/Windows apps. Electron apps, games, and virtualized environments may have limited support.
-- **Timing sensitivity**: Fast-changing UIs or network-dependent flows may require manual wait conditions.
-- **No mobile support**: iOS and Android are not supported (and likely won't be due to OS restrictions).
-- **English-first**: UI element detection works best with English-language apps.
+- Some workflows still depend on screen coordinates; moving windows can break them (this is the current focus — see Roadmap).
+- Works best with standard native apps; Electron apps, games, and VMs have limited support.
+- Fast-changing or network-dependent UIs may need manual wait conditions.
+- No mobile support (OS restrictions make it unlikely, ever).
+- UI element detection works best in English-language apps.
 
 ## Contributing
 
-Ghost welcomes contributions focused on:
+Contributions welcome, focused on: replay reliability, semantic target resolution, debugging tools, safety/policy hardening, docs and examples.
 
-- Replay reliability improvements
-- Semantic target resolution
-- Workflow debugging tools
-- Safety/policy enhancements
-- Documentation and examples
+Not accepting: feature bloat, cloud-dependent features (local-first is non-negotiable), or autonomous execution modes (user approval is the product).
 
-**Not accepting right now:**
-- Feature bloat (keep the core narrow and trustworthy)
-- Cloud-dependent features (local-first is non-negotiable)
-- Autonomous agent modes (user approval required for execution)
-
-See [`docs/`](docs/) for architecture details and product planning.
+Read [`AGENTS.md`](AGENTS.md) first — it's the binding contract for humans and AI agents alike. Architecture details live in [`docs/`](docs/).
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Ghost is boringly trustworthy first, then powerful.** That's how it becomes more impressive than AI assistants that promise magic but deliver anxiety.
-
-
+**Boringly trustworthy first, then powerful.** Ghost earns the right to automate your work by showing you everything it does — before, during, and after.
