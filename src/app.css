@@ -1093,3 +1093,8 @@
   font-size: 12px;
   color: var(--success);
 }
+
+/* Per-step resolution trace inside replay history: fallback steps stand out. */
+.replay-trace__fallback {
+  color: #ffb454;
+}

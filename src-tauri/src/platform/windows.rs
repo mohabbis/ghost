@@ -44,6 +44,7 @@ const VK_RWIN: i32 = 0x5C;
 
 // GetAncestor flags
 const GA_ROOTOWNER: u32 = 3;
+const GA_ROOT: u32 = 2;
 
 type HOOKPROC = unsafe extern "system" fn(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
 
@@ -77,6 +78,7 @@ extern "system" {
     fn GetClassNameA(hWnd: HWND, lpClassName: *mut u8, nMaxCount: i32) -> i32;
     fn GetWindowTextA(hWnd: HWND, lpString: *mut u8, nMaxCount: i32) -> i32;
     fn GetAncestor(hwnd: HWND, gaFlags: u32) -> HWND;
+    fn GetWindowRect(hWnd: HWND, lpRect: *mut RECT) -> bool;
 }
 
 #[repr(C)]
@@ -84,6 +86,15 @@ extern "system" {
 struct POINT {
     x: i32,
     y: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RECT {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
 }
 
 #[repr(C)]
@@ -309,11 +320,36 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
         String::from("Unknown")
     };
 
+    // Top-level window (GA_ROOT, not ROOTOWNER: dialogs count as their own
+    // window) supplies the window-title locator and the frame for
+    // window-relative coordinates. Best-effort — both stay None on failure.
+    let top = GetAncestor(hwnd, GA_ROOT);
+    let (window_title, window_rel) = if top != 0 {
+        let mut title_buf = [0u8; 512];
+        let title_len = GetWindowTextA(top, title_buf.as_mut_ptr(), 512);
+        let title = if title_len > 0 {
+            Some(String::from_utf8_lossy(&title_buf[..title_len as usize]).to_string())
+        } else {
+            None
+        };
+        let mut rect = RECT::default();
+        let rel = if GetWindowRect(top, &mut rect) {
+            Some((x - rect.left, y - rect.top))
+        } else {
+            None
+        };
+        (title, rel)
+    } else {
+        (None, None)
+    };
+
     Some(ElementInfo {
         role,
         name,
         app,
         fallback_coords: Some((x, y)),
+        window_title,
+        window_rel,
         ..Default::default()
     })
 }
@@ -450,15 +486,39 @@ impl ElementLocator for WindowsLocator {
 
 /// Re-resolve where to click for a recorded click. Scans nearby points when
 /// the element has moved (shared spiral in core::replay_support); `None`
-/// means no matching element exists anywhere near the recorded point.
-fn try_resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> Option<(i32, i32)> {
-    replay_support::try_resolve_click_point(target, rx, ry, |x, y| unsafe { get_element_at(x, y) })
+/// means no matching element exists anywhere near the recorded point, and
+/// the `ResolutionKind` reports which strategy found it — feeding the
+/// per-run resolution trace.
+fn try_resolve_click_point_traced(
+    target: &ElementInfo,
+    rx: i32,
+    ry: i32,
+) -> Option<((i32, i32), replay_support::ResolutionKind)> {
+    replay_support::try_resolve_click_point_traced(target, rx, ry, |x, y| unsafe {
+        get_element_at(x, y)
+    })
 }
 
-/// Like `try_resolve_click_point`, but falls back to the recorded coordinates
-/// so plain replay always proceeds.
-fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
-    try_resolve_click_point(target, rx, ry).unwrap_or((rx, ry))
+/// Resolve a press target and record the outcome (recorded point, spiral hit,
+/// or coordinate fallback) into the run's resolution trace.
+fn resolve_press_traced(
+    desc: &ElementInfo,
+    rx: i32,
+    ry: i32,
+    idx: usize,
+    progress: &replay_support::ReplayProgress,
+) -> (i32, i32) {
+    let (point, kind) = match try_resolve_click_point_traced(desc, rx, ry) {
+        Some(resolved) => resolved,
+        None => ((rx, ry), replay_support::ResolutionKind::CoordinateFallback),
+    };
+    progress.record_resolution(replay_support::StepResolution {
+        step_index: idx,
+        kind,
+        target_name: Some(desc.name.clone()),
+        point,
+    });
+    point
 }
 
 /// Map a recorded button code to the synthesized button + direction.
@@ -519,9 +579,21 @@ impl ReplayEngine for WindowsReplayer {
 
                     // Re-resolve press targets whose element moved; releases
                     // stay at recorded coordinates so drags end where the
-                    // user ended them.
+                    // user ended them. Each press records how its target was
+                    // resolved into the run trace.
                     let (cx, cy) = match (element, &direction) {
-                        (Some(desc), Direction::Press) => resolve_click_point(desc, *x, *y),
+                        (Some(desc), Direction::Press) => {
+                            resolve_press_traced(desc, *x, *y, idx, &progress)
+                        }
+                        (None, Direction::Press) => {
+                            progress.record_resolution(replay_support::StepResolution {
+                                step_index: idx,
+                                kind: replay_support::ResolutionKind::NoDescriptor,
+                                target_name: None,
+                                point: (*x, *y),
+                            });
+                            (*x, *y)
+                        }
                         _ => (*x, *y),
                     };
 
@@ -703,7 +775,7 @@ impl ReplayEngine for WindowsReplayer {
                                 .max(1);
                             let mut resolved = None;
                             for attempt in 0..max_attempts {
-                                resolved = try_resolve_click_point(desc, *x, *y);
+                                resolved = try_resolve_click_point_traced(desc, *x, *y);
                                 if resolved.is_some() {
                                     break;
                                 }
@@ -720,23 +792,37 @@ impl ReplayEngine for WindowsReplayer {
                                     }
                                 }
                             }
-                            match resolved {
-                                Some(point) => point,
-                                None if reliability.continue_on_error => {
-                                    tracing::warn!(
-                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
-                                        desc.name,
-                                        max_attempts
-                                    );
-                                    (*x, *y)
-                                }
+                            let (point, kind) = match resolved {
+                                Some(resolved) => resolved,
                                 None => {
+                                    ((*x, *y), replay_support::ResolutionKind::CoordinateFallback)
+                                }
+                            };
+                            progress.record_resolution(replay_support::StepResolution {
+                                step_index: idx,
+                                kind: kind.clone(),
+                                target_name: Some(desc.name.clone()),
+                                point,
+                            });
+                            match kind {
+                                replay_support::ResolutionKind::CoordinateFallback
+                                    if !reliability.continue_on_error =>
+                                {
                                     return Err(anyhow::anyhow!(
                                         "Element \"{}\" not found after {} attempts",
                                         desc.name,
                                         max_attempts
                                     ))
                                 }
+                                replay_support::ResolutionKind::CoordinateFallback => {
+                                    tracing::warn!(
+                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
+                                        desc.name,
+                                        max_attempts
+                                    );
+                                    point
+                                }
+                                _ => point,
                             }
                         }
                         _ => (*x, *y),

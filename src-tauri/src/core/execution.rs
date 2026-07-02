@@ -19,6 +19,11 @@ pub struct ExecutionRecord {
     pub error_message: Option<String>,
     pub failure_screenshot: Option<String>, // Path to screenshot on failure
     pub metadata: ExecutionMetadata,
+    /// Per-click resolution trace: which locator strategy each click used
+    /// (recorded point, spiral re-resolution, coordinate fallback).
+    /// `#[serde(default)]` so records written before this field existed load.
+    #[serde(default)]
+    pub step_trace: Vec<crate::core::replay_support::StepResolution>,
 }
 
 /// Execution status
@@ -57,6 +62,7 @@ impl ExecutionRecord {
             error_message: None,
             failure_screenshot: None,
             metadata: ExecutionMetadata::default(),
+            step_trace: Vec::new(),
         }
     }
 
@@ -121,9 +127,11 @@ pub fn build_replay_record(
     duration_ms: u64,
     speed: f32,
     outcome: ReplayOutcome,
+    step_trace: Vec<crate::core::replay_support::StepResolution>,
 ) -> ExecutionRecord {
     let mut record =
         ExecutionRecord::new(workflow_name.unwrap_or_else(|| "Unsaved workflow".to_string()));
+    record.step_trace = step_trace;
     record.metadata.replay_speed = speed;
     record.metadata.os_version = std::env::consts::OS.to_string();
     if events_processed > 0 {
@@ -443,6 +451,7 @@ mod tests {
             error_message: error_message.map(|s| s.to_string()),
             failure_screenshot: None,
             metadata: ExecutionMetadata::default(),
+            step_trace: Vec::new(),
         }
     }
 
@@ -481,6 +490,7 @@ mod tests {
             800,
             1.5,
             ReplayOutcome::Completed,
+            Vec::new(),
         );
         assert_eq!(record.workflow_name, "My Flow");
         assert_eq!(record.status, ExecutionStatus::Success);
@@ -494,7 +504,7 @@ mod tests {
 
     #[test]
     fn build_replay_record_unnamed_defaults_label() {
-        let record = build_replay_record(None, 0, 0, 1.0, ReplayOutcome::Completed);
+        let record = build_replay_record(None, 0, 0, 1.0, ReplayOutcome::Completed, Vec::new());
         assert_eq!(record.workflow_name, "Unsaved workflow");
         // No events → no divide-by-zero, latency stays at the default.
         assert_eq!(record.metadata.avg_event_latency_ms, 0.0);
@@ -508,6 +518,7 @@ mod tests {
             300,
             1.0,
             ReplayOutcome::Failed("element gone".to_string()),
+            Vec::new(),
         );
         assert_eq!(record.status, ExecutionStatus::Failed);
         assert_eq!(record.error_message.as_deref(), Some("element gone"));
@@ -517,13 +528,15 @@ mod tests {
 
     #[test]
     fn build_replay_record_cancelled_status() {
-        let record = build_replay_record(None, 1, 120, 1.0, ReplayOutcome::Cancelled);
+        let record = build_replay_record(None, 1, 120, 1.0, ReplayOutcome::Cancelled, Vec::new());
         assert_eq!(record.status, ExecutionStatus::Cancelled);
         assert_eq!(record.duration_ms, Some(120));
     }
 
     #[test]
     fn build_replay_record_roundtrips_through_history() {
+        use crate::core::replay_support::{ResolutionKind, StepResolution};
+
         let history = temp_history("replay_record");
         let record = build_replay_record(
             Some("Persisted".to_string()),
@@ -531,15 +544,54 @@ mod tests {
             450,
             1.0,
             ReplayOutcome::Completed,
+            vec![StepResolution {
+                step_index: 1,
+                kind: ResolutionKind::SpiralReresolved,
+                target_name: Some("Save".to_string()),
+                point: (170, 100),
+            }],
         );
         history.save(&record).unwrap();
 
         let loaded = history.get_history("Persisted").unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].status, ExecutionStatus::Success);
+        // The resolution trace must survive persistence — it's the run's
+        // explainability record.
+        assert_eq!(loaded[0].step_trace.len(), 1);
+        assert_eq!(
+            loaded[0].step_trace[0].kind,
+            ResolutionKind::SpiralReresolved
+        );
         assert_eq!(history.get_success_rate("Persisted").unwrap(), 1.0);
 
         cleanup(&history);
+    }
+
+    #[test]
+    fn records_without_step_trace_still_deserialize() {
+        // Execution logs written before the resolution trace existed have no
+        // step_trace field; they must load with an empty trace, not error.
+        let json = r#"{
+            "id": "old-1",
+            "workflow_name": "Legacy",
+            "status": "Success",
+            "start_time": 100,
+            "end_time": 101,
+            "duration_ms": 1000,
+            "events_processed": 2,
+            "error_message": null,
+            "failure_screenshot": null,
+            "metadata": {
+                "avg_event_latency_ms": 0.0,
+                "failure_hotspot": null,
+                "replay_speed": 1.0,
+                "device_info": "",
+                "os_version": "macos"
+            }
+        }"#;
+        let record: ExecutionRecord = serde_json::from_str(json).unwrap();
+        assert!(record.step_trace.is_empty());
     }
 
     #[test]

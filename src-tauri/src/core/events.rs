@@ -213,6 +213,16 @@ pub struct ElementInfo {
     pub identifier: Option<String>,
     /// Human-readable role description (e.g. "push button", "text field")
     pub role_description: Option<String>,
+    /// Title of the window containing the element at capture time — a
+    /// locator strategy that survives window moves. `#[serde(default)]` so
+    /// workflows recorded before this field existed still load.
+    #[serde(default)]
+    pub window_title: Option<String>,
+    /// Click position relative to the containing window's top-left corner,
+    /// for window-relative replay strategies. Absent on recordings made
+    /// before this field existed or when the window frame was unavailable.
+    #[serde(default)]
+    pub window_rel: Option<(i32, i32)>,
 }
 
 /// Keyboard action state for key events.

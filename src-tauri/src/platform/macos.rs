@@ -70,6 +70,12 @@ const kAXValueAttribute: &str = "AXValue";
 const kAXDescriptionAttribute: &str = "AXDescription";
 const kAXIdentifierAttribute: &str = "AXIdentifier";
 const kAXRoleDescriptionAttribute: &str = "AXRoleDescription";
+const kAXWindowAttribute: &str = "AXWindow";
+const kAXPositionAttribute: &str = "AXPosition";
+
+// AXValue wrapper types (AXValue.h) — AXPosition/AXSize come back as AXValue
+// boxes, not CFStrings, and must be unpacked with AXValueGetValue.
+const kAXValueCGPointType: u32 = 1;
 
 // External C functions (Core Graphics)
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -122,6 +128,7 @@ extern "C" {
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
     fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
+    fn AXValueGetValue(value: CFTypeRef, value_type: u32, value_ptr: *mut c_void) -> Boolean;
 }
 
 // Core Foundation external functions
@@ -626,6 +633,8 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
         }
     };
 
+    let (window_title, window_rel) = window_info_for(element, x, y);
+
     CFRelease(element as *const c_void);
     CFRelease(system_wide as *const c_void);
 
@@ -638,7 +647,59 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
         description,
         identifier,
         role_description,
+        window_title,
+        window_rel,
     })
+}
+
+/// Resolve the window containing `element`: its title, and the click point
+/// relative to the window's top-left corner. Best-effort — either part is
+/// `None` when the AXWindow ancestor or its frame can't be read, so capture
+/// degrades gracefully on windowless elements (menu bar, desktop).
+unsafe fn window_info_for(
+    element: AXUIElementRef,
+    x: i32,
+    y: i32,
+) -> (Option<String>, Option<(i32, i32)>) {
+    let attr = str_to_cfstring(kAXWindowAttribute);
+    if attr.is_null() {
+        return (None, None);
+    }
+    let mut window: CFTypeRef = std::ptr::null();
+    let got = AXUIElementCopyAttributeValue(element, attr, &mut window);
+    CFRelease(attr);
+    if got != kAXErrorSuccess || window.is_null() {
+        return (None, None);
+    }
+    let window_el = window as AXUIElementRef;
+
+    let title = get_ax_string_attribute(window_el, kAXTitleAttribute).filter(|t| !t.is_empty());
+
+    // Window origin arrives as an AXValue-boxed CGPoint, not a CFString, so
+    // it must be unpacked with AXValueGetValue rather than the string helper.
+    let mut rel = None;
+    let pos_attr = str_to_cfstring(kAXPositionAttribute);
+    if !pos_attr.is_null() {
+        let mut pos_value: CFTypeRef = std::ptr::null();
+        if AXUIElementCopyAttributeValue(window_el, pos_attr, &mut pos_value) == kAXErrorSuccess
+            && !pos_value.is_null()
+        {
+            let mut origin = CGPoint { x: 0.0, y: 0.0 };
+            if AXValueGetValue(
+                pos_value,
+                kAXValueCGPointType,
+                &mut origin as *mut CGPoint as *mut c_void,
+            ) != 0
+            {
+                rel = Some((x - origin.x as i32, y - origin.y as i32));
+            }
+            CFRelease(pos_value);
+        }
+        CFRelease(pos_attr);
+    }
+
+    CFRelease(window);
+    (title, rel)
 }
 
 /// AX exposes secure inputs as `AXSecureTextField` (casing has varied
@@ -656,15 +717,39 @@ fn is_secure_click(element: &Option<ElementInfo>) -> bool {
 
 /// Re-resolve where to click for a recorded click. Scans nearby points when
 /// the element has moved (shared spiral in core::replay_support); `None`
-/// means no matching element exists anywhere near the recorded point.
-fn try_resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> Option<(i32, i32)> {
-    replay_support::try_resolve_click_point(target, rx, ry, |x, y| unsafe { ax_info_at(x, y) })
+/// means no matching element exists anywhere near the recorded point, and
+/// the `ResolutionKind` reports which strategy found it — feeding the
+/// per-run resolution trace.
+fn try_resolve_click_point_traced(
+    target: &ElementInfo,
+    rx: i32,
+    ry: i32,
+) -> Option<((i32, i32), replay_support::ResolutionKind)> {
+    replay_support::try_resolve_click_point_traced(target, rx, ry, |x, y| unsafe {
+        ax_info_at(x, y)
+    })
 }
 
-/// Like `try_resolve_click_point`, but falls back to the recorded coordinates
-/// so plain replay always proceeds.
-fn resolve_click_point(target: &ElementInfo, rx: i32, ry: i32) -> (i32, i32) {
-    try_resolve_click_point(target, rx, ry).unwrap_or((rx, ry))
+/// Resolve a press target and record the outcome (recorded point, spiral hit,
+/// or coordinate fallback) into the run's resolution trace.
+fn resolve_press_traced(
+    desc: &ElementInfo,
+    rx: i32,
+    ry: i32,
+    idx: usize,
+    progress: &replay_support::ReplayProgress,
+) -> (i32, i32) {
+    let (point, kind) = match try_resolve_click_point_traced(desc, rx, ry) {
+        Some(resolved) => resolved,
+        None => ((rx, ry), replay_support::ResolutionKind::CoordinateFallback),
+    };
+    progress.record_resolution(replay_support::StepResolution {
+        step_index: idx,
+        kind,
+        target_name: Some(desc.name.clone()),
+        point,
+    });
+    point
 }
 
 unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> Option<String> {
@@ -795,9 +880,21 @@ impl ReplayEngine for MacosReplayer {
 
                     // Re-resolve press targets whose element moved; releases
                     // stay at recorded coordinates so drags end where the
-                    // user ended them.
+                    // user ended them. Each press records how its target was
+                    // resolved into the run trace.
                     let (cx, cy) = match (element, &direction) {
-                        (Some(desc), Direction::Press) => resolve_click_point(desc, *x, *y),
+                        (Some(desc), Direction::Press) => {
+                            resolve_press_traced(desc, *x, *y, idx, &progress)
+                        }
+                        (None, Direction::Press) => {
+                            progress.record_resolution(replay_support::StepResolution {
+                                step_index: idx,
+                                kind: replay_support::ResolutionKind::NoDescriptor,
+                                target_name: None,
+                                point: (*x, *y),
+                            });
+                            (*x, *y)
+                        }
                         _ => (*x, *y),
                     };
 
@@ -973,7 +1070,7 @@ impl ReplayEngine for MacosReplayer {
                                 .max(1);
                             let mut resolved = None;
                             for attempt in 0..max_attempts {
-                                resolved = try_resolve_click_point(desc, *x, *y);
+                                resolved = try_resolve_click_point_traced(desc, *x, *y);
                                 if resolved.is_some() {
                                     break;
                                 }
@@ -990,23 +1087,37 @@ impl ReplayEngine for MacosReplayer {
                                     }
                                 }
                             }
-                            match resolved {
-                                Some(point) => point,
-                                None if reliability.continue_on_error => {
-                                    tracing::warn!(
-                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
-                                        desc.name,
-                                        max_attempts
-                                    );
-                                    (*x, *y)
-                                }
+                            let (point, kind) = match resolved {
+                                Some(resolved) => resolved,
                                 None => {
+                                    ((*x, *y), replay_support::ResolutionKind::CoordinateFallback)
+                                }
+                            };
+                            progress.record_resolution(replay_support::StepResolution {
+                                step_index: idx,
+                                kind: kind.clone(),
+                                target_name: Some(desc.name.clone()),
+                                point,
+                            });
+                            match kind {
+                                replay_support::ResolutionKind::CoordinateFallback
+                                    if !reliability.continue_on_error =>
+                                {
                                     return Err(anyhow::anyhow!(
                                         "Element \"{}\" not found after {} attempts",
                                         desc.name,
                                         max_attempts
                                     ))
                                 }
+                                replay_support::ResolutionKind::CoordinateFallback => {
+                                    tracing::warn!(
+                                        "Element \"{}\" not found after {} attempts; using recorded coordinates",
+                                        desc.name,
+                                        max_attempts
+                                    );
+                                    point
+                                }
+                                _ => point,
                             }
                         }
                         _ => (*x, *y),

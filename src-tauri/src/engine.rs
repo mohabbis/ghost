@@ -285,6 +285,7 @@ impl GhostEngine {
             started.elapsed().as_millis() as u64,
             self.get_playback_speed(),
             outcome,
+            self.replay_progress.take_trace(),
         );
 
         if let Ok(guard) = self.execution_tracker.lock() {
