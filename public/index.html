@@ -6,7 +6,7 @@
     <title>Ghost — Desktop automation you inspect before it acts</title>
     <meta
       name="description"
-      content="Ghost turns repeated computer work into safe, reusable routines. It runs on your Mac or PC, proposes a plan, and only acts on what you approve — every change audited and reversible. Local-first. No cloud."
+      content="Ghost helps bookkeepers and operators automatically rename and file invoices, receipts, and client statements on their own computer. Every move is previewed, audited, reversible, and local-first."
     />
     <meta name="theme-color" content="#0a0a14" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -18,12 +18,14 @@
     <meta property="og:title" content="Ghost — Desktop automation you inspect before it acts" />
     <meta
       property="og:description"
-      content="Local-first desktop automation. Ghost proposes a plan, acts only on what you approve, and every change is audited and reversible."
+      content="Automatically rename and file invoices, receipts, and client statements without uploading client documents. Ghost previews every move, audits every change, and keeps undo ready."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
-    <!-- summary (not large_image): no og:image asset exists yet — an empty
-         large-image card renders worse than a clean summary card. -->
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://ghost.muharafiq.com/assets/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="keywords" content="automatically rename and file invoices, organize client statements, bookkeeper file organizer, local-first desktop automation, invoice filing software" />
 
     <link rel="stylesheet" href="styles.css" />
     <script src="/main.js" defer></script>
@@ -35,9 +37,11 @@
         "name": "Ghost",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS, Windows",
-        "description": "Local-first desktop automation. Ghost records or plans a task, acts only on what you approve, and keeps every change audited and reversible.",
+        "url": "https://ghost.muharafiq.com/",
+        "description": "Local-first desktop automation for automatically renaming and filing invoices, receipts, and client statements. Ghost records or plans a task, acts only on what you approve, and keeps every change audited and reversible.",
+        "keywords": "automatically rename and file invoices, organize client statements, bookkeeper file organizer, client document filing, local-first desktop automation",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "downloadUrl": "https://github.com/mohabbis/ghost/releases/latest"
+        "downloadUrl": "https://ghost.muharafiq.com/#download"
       }
     </script>
   </head>
@@ -69,6 +73,7 @@
 
       <nav class="nav__links" id="nav-links" aria-label="Primary">
         <a href="#demo">Demo</a>
+        <a href="#client-filing">Client filing</a>
         <a href="#how">How it works</a>
         <a href="#why">Why Ghost</a>
         <a href="#privacy">Privacy</a>
@@ -108,9 +113,9 @@
         <aside class="mock" aria-hidden="true">
           <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — proposed plan</em></div>
           <div class="mock__body">
-            <div class="mock__row"><span class="tag tag--new">＋ folder</span> Documents/Invoices</div>
-            <div class="mock__row"><span class="tag tag--move">→ move</span> receipt-final(2).pdf → Invoices</div>
-            <div class="mock__row"><span class="tag tag--rename">✎ rename</span> IMG_4821.HEIC → 2026-03 Berlin.heic</div>
+            <div class="mock__row"><span class="tag tag--new">＋ folder</span> Receipts</div>
+            <div class="mock__row"><span class="tag tag--move">→ move</span> receipt-final(2).pdf → Receipts</div>
+            <div class="mock__row"><span class="tag tag--rename">✎ rename</span> invoice-acme.pdf → 2026-03 invoice-acme.pdf</div>
             <div class="mock__row mock__row--warn"><span class="tag tag--warn">⚠ conflict</span> keeps both — never overwrites</div>
             <div class="mock__row mock__row--deny"><span class="tag tag--deny">✕ 0</span> deletes · 0 uploads</div>
             <div class="mock__foot">
@@ -155,6 +160,9 @@
             </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="replay" id="tab-replay">
               ⏺️ Record → Replay
+            </button>
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="client-filing" id="tab-client-filing">
+              📁 Client filing
             </button>
           </div>
 
@@ -201,6 +209,56 @@
               <span class="demo__hint" id="rep-hint">Typed text is redacted by default; secure fields are never captured.</span>
             </div>
           </div>
+
+          <!-- Tab C: Client filing -->
+          <div class="demo__panel" role="tabpanel" data-panel="client-filing" aria-labelledby="tab-client-filing" hidden>
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot"></span> Client portal downloads — 5 items</div>
+                <ul class="filelist" id="client-files" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle" id="client-planhead">Client filing plan</div>
+                <ul class="planlist" id="client-plan" aria-live="polite"></ul>
+                <div class="audit" id="client-audit" hidden>
+                  <div class="audit__title">🧾 Audit log</div>
+                  <ul id="client-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="client-action" type="button">Use client filing preset</button>
+              <span class="demo__hint" id="client-hint">Invoices, receipts, and statements file into real category folders with dated names.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Bookkeeper niche ───────────────────────── -->
+      <section id="client-filing" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Built for weekly filing</p>
+          <h2>For bookkeepers, practice admins, and anyone filing client documents.</h2>
+          <p class="section__sub">
+            Download invoices, receipts, and statements from client portals, then let Ghost propose the dated folder plan before anything moves.
+          </p>
+        </div>
+        <div class="niche-grid">
+          <article class="niche-card">
+            <span class="tag tag--move">Audit</span>
+            <h3>Every move has a receipt.</h3>
+            <p>Ghost records what moved, where it went, and why the policy allowed it, so weekly filing does not become a mystery later.</p>
+          </article>
+          <article class="niche-card">
+            <span class="tag tag--rename">Undo</span>
+            <h3>One click puts it back.</h3>
+            <p>The undo journal is written before file mutations, so a bad client drop or naming mistake can be reversed without guesswork.</p>
+          </article>
+          <article class="niche-card">
+            <span class="tag tag--new">Local</span>
+            <h3>Client files stay on your machine.</h3>
+            <p>No account, no cloud inbox, no upload step. Ghost reads local folder metadata and works inside the boundaries you approved.</p>
+          </article>
         </div>
       </section>
 
@@ -325,6 +383,7 @@
       </div>
       <nav class="footer__links" aria-label="Footer">
         <a href="#demo">Demo</a>
+        <a href="#client-filing">Client filing</a>
         <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
         <a href="#roadmap">Roadmap</a>

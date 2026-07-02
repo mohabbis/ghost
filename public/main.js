@@ -213,9 +213,9 @@ function organizerDemo() {
     { name: "screenshot 2026-03-14.png", meta: "Image" },
   ];
   const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Documents/Invoices", desc: "create", audit: "Created folder <b>Documents/Invoices</b>" },
-    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Documents/Invoices", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Documents/Invoices" },
-    { tag: "✎ rename", cls: "tag--rename", strong: "IMG_4821.HEIC", desc: "→ 2026-03 Berlin.heic · Pictures", file: 1, audit: "Renamed + moved <b>2026-03 Berlin.heic</b> → Pictures" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create", audit: "Created folder <b>Receipts</b>" },
+    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Receipts", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Receipts" },
+    { tag: "→ move", cls: "tag--move", strong: "IMG_4821.HEIC", desc: "→ Images", file: 1, audit: "Moved <b>IMG_4821.HEIC</b> → Images" },
     { tag: "→ move", cls: "tag--move", strong: "Q1 budget.xlsx", desc: "→ Documents/Spreadsheets", file: 2, audit: "Moved <b>Q1 budget.xlsx</b> → Documents/Spreadsheets" },
     { tag: "→ move", cls: "tag--move", strong: "screenshot 2026-03-14.png", desc: "→ Pictures/Screenshots", file: 5, audit: "Moved <b>screenshot 2026-03-14.png</b> → Pictures/Screenshots" },
     { tag: "⚠ conflict", cls: "tag--warn", strong: "setup.dmg", desc: "exists in Installers — keeps both, never overwrites", warn: true },
@@ -307,6 +307,136 @@ function organizerDemo() {
     );
     hint.textContent = "Restored to the original state. Nothing was lost.";
     btn.textContent = "Run it again";
+    btn.disabled = false;
+    state = "undone";
+  }
+
+  btn.addEventListener("click", () => {
+    if (state === "idle") scan();
+    else if (state === "planned") execute();
+    else if (state === "done") undo();
+    else if (state === "undone") reset();
+  });
+
+  reset();
+}
+
+/* ============================================================
+   Demo C — Client filing preset
+   ============================================================ */
+function clientFilingDemo() {
+  const filesEl = $("#client-files");
+  const planEl = $("#client-plan");
+  const auditBox = $("#client-audit");
+  const auditEl = $("#client-auditlist");
+  const btn = $("#client-action");
+  const hint = $("#client-hint");
+  const planHead = $("#client-planhead");
+  if (!btn) return;
+
+  const FILES = [
+    { name: "acme-invoice-march.pdf", meta: "Invoice" },
+    { name: "chase_stmt.pdf", meta: "Statement" },
+    { name: "stripe-receipt.pdf", meta: "Receipt" },
+    { name: "acme-invoice-march.pdf", meta: "Duplicate" },
+    { name: "notes.txt", meta: "Doc" },
+  ];
+  const PLAN = [
+    { tag: "＋ folder", cls: "tag--new", strong: "Invoices", desc: "create category folder", audit: "Created folder <b>Invoices</b>" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Statements", desc: "create category folder", audit: "Created folder <b>Statements</b>" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create category folder", audit: "Created folder <b>Receipts</b>" },
+    { tag: "→ move", cls: "tag--move", strong: "acme-invoice-march.pdf", desc: "→ Invoices/2026-03 acme-invoice-march.pdf", file: 0, audit: "Moved <b>2026-03 acme-invoice-march.pdf</b> → Invoices" },
+    { tag: "→ move", cls: "tag--move", strong: "chase_stmt.pdf", desc: "→ Statements/2026-03 chase_stmt.pdf", file: 1, audit: "Moved <b>2026-03 chase_stmt.pdf</b> → Statements" },
+    { tag: "→ move", cls: "tag--move", strong: "stripe-receipt.pdf", desc: "→ Receipts/2026-03 stripe-receipt.pdf", file: 2, audit: "Moved <b>2026-03 stripe-receipt.pdf</b> → Receipts" },
+    { tag: "⚠ conflict", cls: "tag--warn", strong: "acme-invoice-march.pdf", desc: "keeps both as 2026-03 acme-invoice-march (2).pdf", file: 3, warn: true, audit: "Kept both: <b>2026-03 acme-invoice-march (2).pdf</b>" },
+    { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "client files stay local", deny: true },
+  ];
+
+  let state = "idle";
+
+  function fileRow(f, i) {
+    const li = el("li", null, `<span class="fname">${f.name}</span><span class="fmeta">${f.meta}</span>`);
+    li.dataset.file = String(i);
+    li.style.animationDelay = reduce.matches ? "0s" : `${i * 0.06}s`;
+    return li;
+  }
+
+  function planRow(a) {
+    return el(
+      "li",
+      a.warn ? "is-warn" : a.deny ? "is-deny" : null,
+      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>`,
+    );
+  }
+
+  function auditRow(html) {
+    return el("li", null, `✓ ${html}`);
+  }
+
+  function reset() {
+    filesEl.innerHTML = "";
+    planEl.innerHTML = "";
+    auditEl.innerHTML = "";
+    auditBox.hidden = true;
+    planHead.textContent = "Client filing plan";
+    hint.className = "demo__hint";
+    hint.textContent = "Invoices, receipts, and statements file into real category folders with dated names.";
+    btn.textContent = "Use client filing preset";
+    btn.disabled = false;
+    state = "idle";
+  }
+
+  async function scan() {
+    btn.disabled = true;
+    hint.textContent = "Scanning client downloads read-only…";
+    FILES.forEach((f, i) => filesEl.appendChild(fileRow(f, i)));
+    await sequence(
+      PLAN.map((a) => () => planEl.appendChild(planRow(a))),
+      240,
+    );
+    planHead.textContent = "Client filing plan — preview only";
+    hint.textContent = "Review the dated destinations, then approve. Nothing has moved yet.";
+    btn.textContent = "Approve filing";
+    btn.disabled = false;
+    state = "planned";
+  }
+
+  async function execute() {
+    btn.disabled = true;
+    hint.textContent = "Filing approved client documents…";
+    auditBox.hidden = false;
+    const planRows = $$("li", planEl);
+    const acts = PLAN.filter((a) => a.audit);
+    await sequence(
+      acts.map((a, i) => () => {
+        planRows[i]?.classList.add("is-done");
+        if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.add("is-moved");
+        auditEl.appendChild(auditRow(a.audit));
+      }),
+      320,
+    );
+    hint.textContent = "Filed with an audit log. No deletes, no uploads, conflicts preserved.";
+    btn.textContent = "↩︎ Undo filing";
+    btn.disabled = false;
+    state = "done";
+  }
+
+  async function undo() {
+    btn.disabled = true;
+    hint.textContent = "Undoing from the local journal…";
+    const acts = PLAN.filter((a) => a.audit);
+    await sequence(
+      acts
+        .slice()
+        .reverse()
+        .map((a) => () => {
+          if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.remove("is-moved");
+          auditEl.appendChild(auditRow(`Reverted: ${a.audit}`));
+        }),
+      260,
+    );
+    hint.textContent = "Original download folder restored.";
+    btn.textContent = "Run preset again";
     btn.disabled = false;
     state = "undone";
   }
@@ -449,4 +579,5 @@ window.addEventListener("DOMContentLoaded", () => {
   setupScrollSpy();
   organizerDemo();
   replayDemo();
+  clientFilingDemo();
 });

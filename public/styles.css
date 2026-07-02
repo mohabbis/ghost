@@ -393,6 +393,21 @@ ul { margin: 0; padding: 0; list-style: none; }
 .demo__hint { color: var(--faint); font-size: 13.5px; }
 .demo__hint.is-warn { color: var(--warn); }
 
+/* ───────────────────────── Client filing niche ───────────────────────── */
+.niche-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+}
+.niche-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: var(--surface);
+}
+.niche-card h3 { font-size: 20px; margin: 16px 0 10px; }
+.niche-card p { color: var(--muted); font-size: 15px; }
+
 /* ───────────────────────── Pipeline ───────────────────────── */
 .pipeline {
   display: grid;
