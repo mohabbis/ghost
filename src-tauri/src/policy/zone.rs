@@ -44,6 +44,8 @@ pub struct Zone {
     pub name: String,
     pub description: Option<String>,
     pub default_decision: DefaultDecision,
+    #[serde(default)]
+    pub rename_dated: bool,
 }
 
 /// A per-folder permission grant inside a Zone. Operations are only allowed
@@ -136,9 +138,22 @@ mod tests {
             name: "School".into(),
             description: Some("coursework".into()),
             default_decision: DefaultDecision::Ask,
+            rename_dated: true,
         };
         let json = serde_json::to_string(&zone).unwrap();
         let back: Zone = serde_json::from_str(&json).unwrap();
         assert_eq!(zone, back);
+    }
+
+    #[test]
+    fn zone_deserializes_missing_rename_dated_as_false() {
+        let json = r#"{
+            "id": "z-1",
+            "name": "School",
+            "description": null,
+            "default_decision": "ask"
+        }"#;
+        let zone: Zone = serde_json::from_str(json).unwrap();
+        assert!(!zone.rename_dated);
     }
 }

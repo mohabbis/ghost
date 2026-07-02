@@ -172,7 +172,7 @@ Built so far — the Ghost Organizer trust pipeline is wired end to end:
 
 - `policy/` — pure deny-by-default trust engine (capability/decision/risk/zone + `evaluate`); see `docs/policy-engine.md`.
 - `storage/` — SQLite-backed Zones + folder rules + execution history, versioned migrations.
-- `organizer/` — read-only planner (scanner/classifier/naming/conflict/planner) that emits a reviewable, policy-evaluated plan that mutates nothing (`docs/organizer-planner.md`), plus the executor and undo path (`docs/organizer-executor.md`).
+- `organizer/` — read-only planner (scanner/classifier/naming/conflict/planner) that emits a reviewable, policy-evaluated plan that mutates nothing (`docs/organizer-planner.md`), including invoice/receipt/statement folders, opt-in dated renaming, and the client filing preset; plus the executor and undo path (`docs/organizer-executor.md`).
 - `audit/` — append-only audit log and undo journal written for every mutating run.
 
 These are wired to the `organizer_*` Tauri commands and the Organizer UI: plan is read-only; execute re-checks policy per action, writes undo before mutating, and audits every change; undo replays the journal in reverse. The executor never overwrites or deletes silently.

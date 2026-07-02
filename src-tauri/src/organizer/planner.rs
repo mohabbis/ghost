@@ -14,7 +14,7 @@
 //! skipped with [`SkipReason::NoDestination`] — deny-by-default, surfaced.
 
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
-use crate::storage::zones::list_folder_rules;
+use crate::storage::zones::{get_zone, list_folder_rules};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use super::classifier::{classify, LOW_CONFIDENCE};
 use super::conflict::Conflict;
-use super::naming::{deduplicate, safe_file_name};
+use super::naming::{dated_prefix, deduplicate, safe_file_name};
 use super::scanner::{scan, ScannedFile};
 
 /// One proposed change, paired with its policy decision and the metadata the
@@ -84,8 +84,9 @@ pub struct OrganizerPlan {
 
 /// Load the Zone's folder rules from storage and build a plan.
 pub fn plan_zone(conn: &Connection, zone_id: &str) -> anyhow::Result<OrganizerPlan> {
+    let rename_dated = get_zone(conn, zone_id)?.is_some_and(|z| z.rename_dated);
     let rules = list_folder_rules(conn, zone_id)?;
-    Ok(plan_with_rules(zone_id, &rules))
+    Ok(plan_with_rules_and_options(zone_id, &rules, rename_dated))
 }
 
 /// Build a plan from an explicit set of folder rules (no storage dependency).
@@ -93,6 +94,15 @@ pub fn plan_zone(conn: &Connection, zone_id: &str) -> anyhow::Result<OrganizerPl
 /// Exposed separately so the planner is fully testable without a database or
 /// the UI — hand it rules and a temp directory tree and assert on the result.
 pub fn plan_with_rules(zone_id: &str, rules: &[FolderRule]) -> OrganizerPlan {
+    plan_with_rules_and_options(zone_id, rules, false)
+}
+
+/// Build a plan from explicit folder rules and zone options.
+pub fn plan_with_rules_and_options(
+    zone_id: &str,
+    rules: &[FolderRule],
+    rename_dated: bool,
+) -> OrganizerPlan {
     let files = scan_sources(rules);
     let mut summary = PlanSummary {
         files_scanned: files.len(),
@@ -128,7 +138,15 @@ pub fn plan_with_rules(zone_id: &str, rules: &[FolderRule]) -> OrganizerPlan {
     for file in files {
         let class = classify(&file);
         let target_dir = dest_root.join(class.category.folder_name());
-        let base_name = safe_file_name(&file.file_name);
+        let proposed_name = if rename_dated {
+            match file.modified.or(file.created) {
+                Some(timestamp) => dated_prefix(&file.file_name, timestamp),
+                None => file.file_name.clone(),
+            }
+        } else {
+            file.file_name.clone()
+        };
+        let base_name = safe_file_name(&proposed_name);
         let already_here = file.path.parent() == Some(target_dir.as_path());
 
         // A file already correctly placed and safely named needs no action.
@@ -480,8 +498,14 @@ mod tests {
         let tmp = tempdir();
         tmp.file("notes.txt", b"x");
         let conn = open_in_memory().unwrap();
-        let zone =
-            zones::create_zone(&conn, "School", None, crate::policy::DefaultDecision::Ask).unwrap();
+        let zone = zones::create_zone(
+            &conn,
+            "School",
+            None,
+            crate::policy::DefaultDecision::Ask,
+            false,
+        )
+        .unwrap();
         zones::add_folder_rule(&conn, &zone.id, &full_rule(tmp.path())).unwrap();
 
         let plan = plan_zone(&conn, &zone.id).unwrap();
@@ -490,6 +514,60 @@ mod tests {
         // notes.txt -> Documents, in-boundary move requires confirmation.
         assert_eq!(plan.summary.move_file, 1);
         assert!(plan.actions.iter().any(|a| a.decision.needs_confirmation()));
+    }
+
+    #[test]
+    fn rename_dated_off_keeps_original_filename() {
+        let tmp = tempdir();
+        tmp.file("acme-invoice.pdf", b"x");
+        let rules = vec![full_rule(tmp.path())];
+
+        let plan = plan_with_rules_and_options("z", &rules, false);
+        let target = move_target_name(&plan).unwrap();
+        assert_eq!(target, "acme-invoice.pdf");
+    }
+
+    #[test]
+    fn rename_dated_on_prefixes_with_file_month() {
+        let tmp = tempdir();
+        tmp.file("acme-invoice.pdf", b"x");
+        let rules = vec![full_rule(tmp.path())];
+
+        let plan = plan_with_rules_and_options("z", &rules, true);
+        let target = move_target_name(&plan).unwrap();
+        let first_seven = target.get(0..7).unwrap_or("");
+        assert!(
+            first_seven.chars().enumerate().all(|(idx, ch)| {
+                if idx == 4 {
+                    ch == '-'
+                } else {
+                    ch.is_ascii_digit()
+                }
+            }),
+            "expected YYYY-MM prefix, got {target}"
+        );
+        assert!(target.ends_with(" acme-invoice.pdf"));
+    }
+
+    #[test]
+    fn plan_zone_honors_rename_dated_setting() {
+        let tmp = tempdir();
+        tmp.file("acme-invoice.pdf", b"x");
+        let conn = open_in_memory().unwrap();
+        let zone = zones::create_zone(
+            &conn,
+            "Client filing",
+            None,
+            crate::policy::DefaultDecision::Ask,
+            true,
+        )
+        .unwrap();
+        zones::add_folder_rule(&conn, &zone.id, &full_rule(tmp.path())).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).unwrap();
+        let target = move_target_name(&plan).unwrap();
+        assert!(target.ends_with(" acme-invoice.pdf"));
+        assert_ne!(target, "acme-invoice.pdf");
     }
 
     /// Sorted listing of a directory tree (relative paths) for mutation checks.
@@ -509,5 +587,14 @@ mod tests {
         walk(root, root, &mut out);
         out.sort();
         out
+    }
+
+    fn move_target_name(plan: &OrganizerPlan) -> Option<String> {
+        plan.actions.iter().find_map(|a| match &a.capability {
+            Capability::MoveFile { to, .. } | Capability::RenameFile { to, .. } => {
+                Some(to.file_name()?.to_string_lossy().to_string())
+            }
+            _ => None,
+        })
     }
 }
