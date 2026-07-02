@@ -70,8 +70,8 @@ function revealOnScroll() {
   items.forEach((n) => io.observe(n));
 }
 
-/* ---------- parrot cursor-tracking eyes ---------- */
-function setupParrotEyes() {
+/* ---------- ghost cursor-tracking eyes ---------- */
+function setupGhostEyes() {
   if (reduce.matches) return;
   const pupils = $$("[data-eye]");
   if (!pupils.length) return;
@@ -128,25 +128,67 @@ function setupMobileNav() {
   });
 }
 
-/* ---------- demo tabs ---------- */
+/* ---------- demo tabs (WAI-ARIA: click + arrow-key navigation) ---------- */
 function setupTabs() {
   const tabs = $$(".demo__tab");
   const panels = $$(".demo__panel");
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const name = tab.dataset.tab;
-      tabs.forEach((t) => {
-        const on = t === tab;
-        t.classList.toggle("is-active", on);
-        t.setAttribute("aria-selected", String(on));
-      });
-      panels.forEach((p) => {
-        const on = p.dataset.panel === name;
-        p.classList.toggle("is-active", on);
-        p.hidden = !on;
-      });
+
+  const select = (tab, focus = false) => {
+    const name = tab.dataset.tab;
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", String(on));
+      // Roving tabindex: only the active tab sits in the tab order.
+      t.tabIndex = on ? 0 : -1;
+    });
+    panels.forEach((p) => {
+      const on = p.dataset.panel === name;
+      p.classList.toggle("is-active", on);
+      p.hidden = !on;
+    });
+    if (focus) tab.focus();
+  };
+
+  tabs.forEach((tab, i) => {
+    tab.tabIndex = tab.classList.contains("is-active") ? 0 : -1;
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (e) => {
+      let target = null;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") target = tabs[(i + 1) % tabs.length];
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") target = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") target = tabs[0];
+      else if (e.key === "End") target = tabs[tabs.length - 1];
+      if (target) {
+        e.preventDefault();
+        select(target, true);
+      }
     });
   });
+}
+
+/* ---------- scrollspy: highlight the nav link for the section in view ---------- */
+function setupScrollSpy() {
+  const links = $$('.nav__links a[href^="#"]');
+  if (!links.length || !("IntersectionObserver" in window)) return;
+  const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+  const sections = [...byId.keys()].map((id) => document.getElementById(id)).filter(Boolean);
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        const link = byId.get(e.target.id);
+        if (!link) return;
+        if (e.isIntersecting) {
+          links.forEach((a) => a.classList.remove("is-active"));
+          link.classList.add("is-active");
+        }
+      });
+    },
+    // A narrow band around the upper third of the viewport decides the
+    // "current" section, so exactly one link is lit while scrolling.
+    { rootMargin: "-20% 0px -70% 0px" },
+  );
+  sections.forEach((s) => io.observe(s));
 }
 
 /* ============================================================
@@ -369,7 +411,7 @@ function replayDemo() {
       }),
       420,
     );
-    hint.textContent = "Replay complete — logged, and reversible.";
+    hint.textContent = "Replay complete — every click's target traced, logged, and reversible.";
     btn.textContent = "↩︎ Undo replay";
     btn.disabled = false;
     state = "replayed";
@@ -401,9 +443,10 @@ function replayDemo() {
 window.addEventListener("DOMContentLoaded", () => {
   platformDetection();
   revealOnScroll();
-  setupParrotEyes();
+  setupGhostEyes();
   setupMobileNav();
   setupTabs();
+  setupScrollSpy();
   organizerDemo();
   replayDemo();
 });

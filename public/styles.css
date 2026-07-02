@@ -20,8 +20,8 @@
   --accent: #8d7bff; /* ghost purple */
   --accent-soft: #b3a6ff;
   --accent-dim: rgba(141, 123, 255, 0.14);
-  --parrot: #ffb56b; /* warm accent */
-  --parrot-soft: #ffcf9c;
+  --warm: #ffb56b; /* warm accent */
+  --warm-soft: #ffcf9c;
   --success: #56d19a;
   --success-dim: rgba(86, 209, 154, 0.14);
   --warn: #ffcf6b;
@@ -46,6 +46,9 @@
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
+
+/* Anchor jumps land below the sticky nav instead of underneath it. */
+[id] { scroll-margin-top: 84px; }
 
 body {
   margin: 0;
@@ -129,7 +132,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   margin-bottom: 14px;
 }
 .grad {
-  background: linear-gradient(100deg, var(--accent-soft), var(--parrot));
+  background: linear-gradient(100deg, var(--accent-soft), var(--warm));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -176,6 +179,8 @@ ul { margin: 0; padding: 0; list-style: none; }
 .nav__links { display: flex; gap: 26px; margin-left: 8px; margin-right: auto; }
 .nav__links a { color: var(--muted); font-size: 15px; font-weight: 500; transition: color 0.15s; }
 .nav__links a:hover { color: var(--text); }
+/* Scrollspy: the section currently in view stays lit in the nav. */
+.nav__links a.is-active { color: var(--text); }
 .nav__end { display: flex; align-items: center; gap: 10px; }
 .nav__toggle { display: none; }
 
@@ -247,7 +252,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .mock__row--warn { border-color: rgba(255, 207, 107, 0.3); }
 .mock__row--deny { color: var(--muted); }
 .mock__foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
-.mock__parrot { margin-left: auto; opacity: 0.95; }
+.mock__mark { margin-left: auto; opacity: 0.95; }
 
 .tag {
   font-family: var(--mono);
@@ -529,7 +534,7 @@ body[data-platform="windows"] #dl-mac { background: transparent; color: var(--mu
 .footer__links a:hover { color: var(--text); }
 .footer__fine { width: 100%; color: var(--faint); font-size: 13px; padding-top: 8px; }
 
-/* ───────────────────────── Parrot eyes ───────────────────────── */
+/* ───────────────────────── Ghost eyes ───────────────────────── */
 .pupil { transition: transform 0.12s linear; will-change: transform; }
 
 /* ───────────────────────── Reveal ───────────────────────── */
