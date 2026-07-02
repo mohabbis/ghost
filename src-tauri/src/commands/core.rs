@@ -138,6 +138,49 @@ pub fn get_replay_history(
     }
 }
 
+/// Snapshot of live replay progress returned by `get_replay_progress`.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct ReplayProgressView {
+    /// Index of the event currently (or last) executing.
+    pub current_step: usize,
+    /// Total events in the running (or last) replay.
+    pub total_steps: usize,
+    /// Whether a replay is executing right now.
+    pub running: bool,
+    /// Event index the most recent replay failed on, if it failed. Cleared
+    /// when a new replay starts.
+    pub failed_step: Option<usize>,
+}
+
+/// Live per-step progress of the running (or most recent) replay.
+///
+/// Safe-read: returns only in-memory engine state (current step, total steps,
+/// running flag, failed step) — no files, OS input, screen contents, network,
+/// or secrets. The UI polls this during replay to render per-step status and
+/// to offer "retry from failed step" afterwards.
+#[tauri::command]
+pub fn get_replay_progress(engine: State<GhostEngine>) -> ReplayProgressView {
+    let (current_step, total_steps, failed_step) = engine.get_replay_progress();
+    ReplayProgressView {
+        current_step,
+        total_steps,
+        running: engine.is_replay_running(),
+        failed_step,
+    }
+}
+
+/// Preview what replaying `events` would do, without executing anything.
+///
+/// Safe-read: a pure function over the provided events — no OS input is
+/// synthesized, no element lookups run, no files, network, screen contents,
+/// or secrets are touched. Typed text is never included in the preview.
+/// This is the dry-run half of "what Ghost will do next" shown before the
+/// user approves a replay.
+#[tauri::command]
+pub fn dry_run_workflow(events: Vec<InputEvent>) -> Vec<crate::core::dry_run::StepPreview> {
+    crate::core::dry_run::preview_workflow(&events)
+}
+
 /// Cancel an ongoing replay immediately.
 #[tauri::command]
 pub fn cancel_replay(engine: State<GhostEngine>) {

@@ -1064,3 +1064,32 @@
 .replay-status--running {
   color: var(--muted);
 }
+
+/* Live per-step replay status line under the replay controls. */
+.replay-progress {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Dry-run preview: per-step "what will happen" rows + fallback flags. */
+.dry-run__badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffb454;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 6px;
+}
+
+.dry-run__warning {
+  font-size: 12px;
+  color: #ffb454;
+}
+
+.dry-run__ok {
+  font-size: 12px;
+  color: var(--success);
+}

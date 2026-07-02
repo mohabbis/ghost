@@ -31,6 +31,8 @@ pub fn run() {
             commands::replay_workflow,
             commands::ghost_guard_audit,
             commands::get_replay_history,
+            commands::get_replay_progress,
+            commands::dry_run_workflow,
             commands::cancel_replay,
             commands::pause_replay,
             commands::resume_replay,

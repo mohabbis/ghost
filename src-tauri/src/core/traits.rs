@@ -2,6 +2,7 @@
 //! All traits are Send + Sync for thread-safe cross-platform operation.
 
 use crate::core::events::{ElementInfo, InputEvent, ReliabilitySettings};
+use crate::core::replay_support::ReplayProgress;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -28,13 +29,16 @@ pub trait ReplayEngine: Send + Sync {
     /// Execute a sequence of input events.
     /// `stop_flag` cancels replay from another thread; `pause_flag` suspends
     /// it (the loop blocks between events until resumed or cancelled);
-    /// `speed` scales recorded delays/pacing (1.0 = real time, clamped ≥ 0.1).
+    /// `speed` scales recorded delays/pacing (1.0 = real time, clamped ≥ 0.1);
+    /// `progress` is advanced to each event's index just before it executes so
+    /// the engine/UI can render per-step status while the loop runs.
     fn execute(
         &self,
         events: &[InputEvent],
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()>;
 
     /// Execute a sequence of input events with reliability features.
@@ -45,6 +49,7 @@ pub trait ReplayEngine: Send + Sync {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
         reliability: &ReliabilitySettings,
     ) -> anyhow::Result<()>;
 }

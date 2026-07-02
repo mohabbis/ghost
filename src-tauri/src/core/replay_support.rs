@@ -6,7 +6,7 @@
 //! modules supply only the raw "what element is at (x, y)" lookup.
 
 use crate::core::events::ElementInfo;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 /// How often replay re-checks the stop/pause flags while sleeping or paused.
@@ -15,6 +15,39 @@ const POLL_MS: u64 = 25;
 /// Pacing gaps derived from recorded timestamps are capped so a workflow
 /// recorded across a coffee break doesn't make replay hang for minutes.
 pub const MAX_PACING_GAP_MS: u64 = 10_000;
+
+/// Live per-step replay progress. Owned by the engine, advanced by the
+/// platform replay loop just before each event executes, and polled by the
+/// frontend (via `get_replay_progress`) to render per-step status. Lock-free
+/// so the replay loop never blocks on a UI read.
+#[derive(Default)]
+pub struct ReplayProgress {
+    /// Index of the event currently (or last) being executed.
+    current: AtomicUsize,
+    /// Total number of events in the running replay.
+    total: AtomicUsize,
+}
+
+impl ReplayProgress {
+    /// Reset for a new replay of `total` events.
+    pub fn begin(&self, total: usize) {
+        self.current.store(0, Ordering::Relaxed);
+        self.total.store(total, Ordering::Relaxed);
+    }
+
+    /// Mark event `idx` as the one now executing.
+    pub fn set_step(&self, idx: usize) {
+        self.current.store(idx, Ordering::Relaxed);
+    }
+
+    /// Snapshot as (current step index, total steps).
+    pub fn snapshot(&self) -> (usize, usize) {
+        (
+            self.current.load(Ordering::Relaxed),
+            self.total.load(Ordering::Relaxed),
+        )
+    }
+}
 
 /// Block while replay is paused. Returns `false` if replay was cancelled
 /// (stop flag set) either before or during the pause, `true` to proceed.

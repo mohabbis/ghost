@@ -2,7 +2,9 @@
 #![allow(non_upper_case_globals)]
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
-use crate::core::replay_support::{self, check_continue, interruptible_sleep, pacing_gap_ms};
+use crate::core::replay_support::{
+    self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+};
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
@@ -754,6 +756,7 @@ impl ReplayEngine for MacosReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
         use crate::core::vision;
         use crate::core::wait::VariableContext;
@@ -763,7 +766,8 @@ impl ReplayEngine for MacosReplayer {
         let mut var_context = VariableContext::new();
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }
@@ -926,13 +930,15 @@ impl ReplayEngine for MacosReplayer {
         stop_flag: Arc<AtomicBool>,
         pause_flag: Arc<AtomicBool>,
         speed: f32,
+        progress: Arc<ReplayProgress>,
         reliability: &crate::core::events::ReliabilitySettings,
     ) -> anyhow::Result<()> {
         let mut enigo = Enigo::new(&Settings::default())?;
         let speed = speed.max(0.1);
         let mut prev_ts: Option<u64> = None;
 
-        for event in events {
+        for (idx, event) in events.iter().enumerate() {
+            progress.set_step(idx);
             if !check_continue(&stop_flag, &pause_flag) {
                 return Ok(());
             }

@@ -62,6 +62,10 @@ pub struct GhostEngine {
     playback_speed: Arc<Mutex<f32>>,
     /// Pause state for replay
     replay_paused: Arc<AtomicBool>,
+    /// Live per-step progress of the running replay (polled by the UI)
+    replay_progress: Arc<crate::core::replay_support::ReplayProgress>,
+    /// Index of the event the last replay failed on, if it failed
+    last_failed_step: Arc<Mutex<Option<usize>>>,
     /// Recorded events buffer
     recorded_events: Arc<Mutex<Vec<InputEvent>>>,
     /// AI workflow analyzer
@@ -138,6 +142,8 @@ impl GhostEngine {
             replay_active: Arc::new(AtomicBool::new(false)),
             playback_speed: Arc::new(Mutex::new(initial_speed)),
             replay_paused: Arc::new(AtomicBool::new(false)),
+            replay_progress: Arc::new(crate::core::replay_support::ReplayProgress::default()),
+            last_failed_step: Arc::new(Mutex::new(None)),
             recorded_events: Arc::new(Mutex::new(Vec::new())),
             analyzer: WorkflowAnalyzer::new(),
             execution_tracker: Arc::new(Mutex::new(ExecutionHistory::new().ok())),
@@ -220,9 +226,11 @@ impl GhostEngine {
         events: &[InputEvent],
         workflow_name: Option<String>,
     ) -> anyhow::Result<()> {
-        // Reset the stop flag and pause state before starting
+        // Reset the stop flag, pause state, and step progress before starting
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
+        self.replay_progress.begin(events.len());
+        *self.last_failed_step.lock().unwrap() = None;
 
         // Time and record the replay (both no-op unless the user opted in).
         let started = Instant::now();
@@ -233,8 +241,10 @@ impl GhostEngine {
             self.replay_stop_flag.clone(),
             self.replay_paused.clone(),
             self.get_playback_speed(),
+            self.replay_progress.clone(),
         );
         drop(_active);
+        self.record_failed_step(&result);
         self.perf.stop_timer("replay");
         self.telemetry.track_workflow_replayed(
             events.len(),
@@ -284,6 +294,24 @@ impl GhostEngine {
                 }
             }
         }
+    }
+
+    /// After a replay finishes, remember which event it failed on (if any) so
+    /// the UI can mark the step and offer "retry from failed step".
+    fn record_failed_step(&self, result: &anyhow::Result<()>) {
+        if result.is_err() {
+            let (current, _) = self.replay_progress.snapshot();
+            *self.last_failed_step.lock().unwrap() = Some(current);
+        }
+    }
+
+    /// Snapshot live replay progress: (current step, total steps, failed step).
+    /// `failed step` refers to the most recent finished replay and is cleared
+    /// when a new replay starts.
+    pub fn get_replay_progress(&self) -> (usize, usize, Option<usize>) {
+        let (current, total) = self.replay_progress.snapshot();
+        let failed = *self.last_failed_step.lock().unwrap();
+        (current, total, failed)
     }
 
     /// Cancel an ongoing replay immediately.
@@ -632,6 +660,8 @@ impl GhostEngine {
         // Reset flags
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
+        self.replay_progress.begin(events.len());
+        *self.last_failed_step.lock().unwrap() = None;
 
         let started = Instant::now();
         let _active = ReplayActiveGuard::new(self.replay_active.clone());
@@ -640,9 +670,11 @@ impl GhostEngine {
             self.replay_stop_flag.clone(),
             self.replay_paused.clone(),
             self.get_playback_speed(),
+            self.replay_progress.clone(),
             reliability,
         );
         drop(_active);
+        self.record_failed_step(&result);
         self.record_replay(workflow_name, events.len(), started, &result);
 
         result
@@ -893,6 +925,8 @@ impl GhostEngine {
         // Reset flags
         self.replay_stop_flag.store(false, Ordering::Relaxed);
         self.replay_paused.store(false, Ordering::Relaxed);
+        self.replay_progress.begin(events.len());
+        *self.last_failed_step.lock().unwrap() = None;
 
         use crate::core::replay_support::{check_continue, interruptible_sleep, pacing_gap_ms};
 
@@ -902,6 +936,7 @@ impl GhostEngine {
         let mut prev_ts: Option<u64> = None;
 
         for (idx, event) in events.iter().enumerate() {
+            self.replay_progress.set_step(idx);
             if !check_continue(&self.replay_stop_flag, &self.replay_paused) {
                 return Ok(false);
             }

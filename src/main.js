@@ -428,6 +428,7 @@ async function startRecording() {
     await invoke("start_recording");
     isRecording = true;
     recordedEvents = [];
+    resetReplayInspectionState();
     guardAuditCompleted = false;
     latestGuardReport = null;
     hasReplayedCurrentWorkflow = false;
@@ -534,14 +535,18 @@ async function replayWorkflow() {
 
   try {
     isPlaying = true;
+    lastFailedStep = null;
     updateRecordingUI();
+    startReplayProgressPolling();
     await invoke("replay_workflow", { events: recordedEvents });
     hasReplayedCurrentWorkflow = true;
-    isPlaying = false;
-    updateRecordingUI();
   } catch (error) {
     console.error("Failed to replay workflow:", error);
+    toastError("Replay failed: " + error);
+    await captureFailedStep(0);
+  } finally {
     isPlaying = false;
+    stopReplayProgressPolling();
     updateRecordingUI();
   }
 }
@@ -562,7 +567,9 @@ async function replayWithReliability() {
     const replay = config?.replay ?? {};
 
     isPlaying = true;
+    lastFailedStep = null;
     updateRecordingUI();
+    startReplayProgressPolling();
     await invoke("replay_with_reliability", {
       events: recordedEvents,
       maxAttempts: replay.max_retry_attempts ?? 3,
@@ -570,13 +577,14 @@ async function replayWithReliability() {
       backoffMultiplier: replay.retry_backoff_multiplier ?? 2.0,
     });
     hasReplayedCurrentWorkflow = true;
-    isPlaying = false;
-    updateRecordingUI();
   } catch (error) {
     console.error("Failed to replay with reliability:", error);
-    isPlaying = false;
-    updateRecordingUI();
     toastError("Replay failed: " + error);
+    await captureFailedStep(0);
+  } finally {
+    isPlaying = false;
+    stopReplayProgressPolling();
+    updateRecordingUI();
   }
 }
 
@@ -738,6 +746,7 @@ async function loadWorkflow() {
     if (!name) return;
 
     recordedEvents = await invoke("load_workflow", { name });
+    resetReplayInspectionState();
     guardAuditCompleted = false;
     latestGuardReport = null;
     hasReplayedCurrentWorkflow = false;
@@ -781,6 +790,7 @@ async function optimizeWorkflow() {
     const optimized = await invoke("optimize_workflow", { events: recordedEvents });
     const originalCount = recordedEvents.length;
     recordedEvents = optimized;
+    resetReplayInspectionState();
     guardAuditCompleted = false;
     updateRecordingUI();
     refreshTimeline();
@@ -829,6 +839,7 @@ async function generateWorkflowFromDescription() {
     showInsight("Generating workflow from your description…");
     const events = await invoke("generate_workflow_from_prompt", { prompt });
     recordedEvents = events;
+    resetReplayInspectionState();
     guardAuditCompleted = false;
     hasReplayedCurrentWorkflow = false;
     hasSavedCurrentWorkflow = false;
@@ -1260,6 +1271,15 @@ function updateRecordingUI() {
   if (stopBtn) stopBtn.disabled = !isRecording;
   if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
   if (replayReliableBtn) replayReliableBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  const dryRunBtn = document.getElementById("dryRunBtn");
+  if (dryRunBtn) dryRunBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  const stepReplayBtn = document.getElementById("stepReplayBtn");
+  if (stepReplayBtn) stepReplayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  const retryFailedBtn = document.getElementById("retryFailedBtn");
+  if (retryFailedBtn) {
+    retryFailedBtn.hidden = lastFailedStep === null;
+    retryFailedBtn.disabled = isRecording || isPlaying;
+  }
   const guardAuditBtn = document.getElementById("guardAuditBtn");
   if (guardAuditBtn) guardAuditBtn.disabled = isRecording || recordedEvents.length === 0;
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
@@ -1512,6 +1532,7 @@ async function captureBaseline() {
 
 function loadDemoWorkflow() {
   const now = Date.now();
+  resetReplayInspectionState();
   recordedEvents = [
     { MouseClick: { x: 420, y: 280, button: 0, timestamp: now, element: { app: "Demo CRM", role: "AXButton", role_description: "button", name: "Export CSV" } } },
     { Delay: { ms: 450 } },
@@ -1932,6 +1953,205 @@ async function showReplayHistory() {
   showModal(modal);
 }
 
+// ===== Replay inspection =====
+// Week 2 of the trust roadmap: make replay inspectable. Dry-run preview shows
+// "what Ghost will do next" before anything executes; live per-step status is
+// polled from get_replay_progress while a replay runs; step-by-step replay and
+// retry-from-failed-step reuse the stable replay_workflow command over event
+// slices (press/release pairs stay together, preserving click semantics).
+
+let lastFailedStep = null; // event index the last replay failed on, or null
+let stepReplayCursor = 0; // next event index for step-by-step replay
+let replayProgressTimer = null;
+
+// Called wherever recordedEvents is replaced wholesale — stale step cursors
+// and failed-step markers must not point into a different workflow.
+function resetReplayInspectionState() {
+  lastFailedStep = null;
+  stepReplayCursor = 0;
+  const el = replayProgressEl();
+  if (el) {
+    el.hidden = true;
+    el.textContent = "";
+  }
+}
+
+function replayProgressEl() {
+  return document.getElementById("replay-progress");
+}
+
+function startReplayProgressPolling(offset = 0) {
+  const el = replayProgressEl();
+  if (!el || !invoke) return;
+  el.hidden = false;
+  el.textContent = "Starting replay…";
+  stopReplayProgressPolling(true);
+  replayProgressTimer = setInterval(async () => {
+    try {
+      const p = await invoke("get_replay_progress");
+      if (!p || !p.running) return;
+      el.textContent = `Replaying step ${offset + p.current_step + 1} of ${offset + p.total_steps}…`;
+    } catch {
+      // Progress is cosmetic; never let a poll failure disturb the replay.
+    }
+  }, 200);
+}
+
+function stopReplayProgressPolling(silent = false) {
+  if (replayProgressTimer) {
+    clearInterval(replayProgressTimer);
+    replayProgressTimer = null;
+  }
+  if (silent) return;
+  const el = replayProgressEl();
+  if (!el) return;
+  if (lastFailedStep !== null) {
+    el.textContent = `Replay failed at step ${lastFailedStep + 1}. You can retry from that step.`;
+  } else {
+    el.hidden = true;
+    el.textContent = "";
+  }
+}
+
+// After a failed replay, ask the engine which event it stopped on so the UI
+// can mark it and offer "retry from failed step". `offset` maps slice-relative
+// indices back to positions in recordedEvents.
+async function captureFailedStep(offset) {
+  if (!invoke) return;
+  try {
+    const p = await invoke("get_replay_progress");
+    if (p && p.failed_step !== null && p.failed_step !== undefined) {
+      lastFailedStep = offset + p.failed_step;
+    }
+  } catch (error) {
+    console.error("Could not read failed step:", error);
+  }
+}
+
+// Dry-run preview: render the backend's per-step "what will happen" report.
+// Read-only — nothing executes until the user replays for real.
+async function showDryRunPreview() {
+  if (!invoke) return notAvailable();
+  if (recordedEvents.length === 0) return toastError("No events recorded yet");
+
+  let steps = [];
+  try {
+    steps = await invoke("dry_run_workflow", { events: recordedEvents });
+  } catch (err) {
+    return toastError("Could not build preview: " + err);
+  }
+
+  const modal = document.getElementById("analysis-modal");
+  const content = modal?.querySelector(".modal-content");
+  if (!content) return;
+
+  const fallbackCount = steps.filter((s) => s.coordinate_fallback).length;
+  const summary = fallbackCount
+    ? `<p class="dry-run__warning">⚠️ ${fallbackCount} step(s) will click raw coordinates with no element to re-resolve — they break if the UI moves.</p>`
+    : `<p class="dry-run__ok">Every click has an element target or replays a recorded release point.</p>`;
+
+  const rows = steps
+    .map((s) => {
+      const target = s.target ? ` — ${escapeHtml(s.target)}` : "";
+      const badge = s.coordinate_fallback
+        ? ' <span class="dry-run__badge">coordinates only</span>'
+        : "";
+      return `<li>
+        <div><strong>${s.index + 1}. ${escapeHtml(s.action)}</strong>${target}${badge}</div>
+        <div class="replay-meta">${escapeHtml(s.detail)}</div>
+      </li>`;
+    })
+    .join("");
+
+  content.innerHTML = `
+    <h3 style="margin-top:0">Replay preview — what Ghost will do</h3>
+    ${summary}
+    <ul class="replay-history dry-run">${rows}</ul>
+    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+  showModal(modal);
+}
+
+// A "step" for step-by-step replay starts at a user-intent event; releases
+// (mouse-up, key-up) ride along with the press that opened them so click and
+// keystroke pairs never get split across steps.
+function isPrimaryEvent(event) {
+  const { type, data } = normalizeEvent(event);
+  if (type === "MouseClick") return data.button === 0 || data.button === 2;
+  if (type === "Key") return data.action === "Down";
+  return true;
+}
+
+function nextStepBoundary(events, start) {
+  let i = start + 1;
+  while (i < events.length && !isPrimaryEvent(events[i])) i++;
+  return i;
+}
+
+async function replayNextStep() {
+  if (!invoke) return notAvailable();
+  if (recordedEvents.length === 0) return toastError("No events recorded yet");
+  if (isPlaying || isRecording) return;
+
+  if (stepReplayCursor >= recordedEvents.length) stepReplayCursor = 0;
+  // Approve the workflow once at the start of a stepped run, not per step.
+  if (stepReplayCursor === 0 && !(await confirmGuardBeforeReplay())) return;
+
+  const start = stepReplayCursor;
+  const end = nextStepBoundary(recordedEvents, start);
+  const slice = recordedEvents.slice(start, end);
+
+  try {
+    isPlaying = true;
+    updateRecordingUI();
+    await invoke("replay_workflow", { events: slice });
+    stepReplayCursor = end;
+    const remaining = recordedEvents.length - end;
+    showInsight(
+      remaining > 0
+        ? `Replayed events ${start + 1}–${end} of ${recordedEvents.length}. ${remaining} event(s) left — step again to continue.`
+        : `Replayed events ${start + 1}–${end}. End of workflow — the next step starts over.`
+    );
+  } catch (error) {
+    console.error("Step replay failed:", error);
+    toastError("Step replay failed: " + error);
+    await captureFailedStep(start);
+  } finally {
+    isPlaying = false;
+    updateRecordingUI();
+  }
+}
+
+async function retryFromFailedStep() {
+  if (!invoke) return notAvailable();
+  if (lastFailedStep === null) return;
+  if (lastFailedStep >= recordedEvents.length) {
+    lastFailedStep = null;
+    updateRecordingUI();
+    return;
+  }
+  if (!(await confirmGuardBeforeReplay())) return;
+
+  const offset = lastFailedStep;
+  const slice = recordedEvents.slice(offset);
+  try {
+    isPlaying = true;
+    lastFailedStep = null;
+    updateRecordingUI();
+    startReplayProgressPolling(offset);
+    await invoke("replay_workflow", { events: slice });
+    hasReplayedCurrentWorkflow = true;
+    showInsight(`Retried from step ${offset + 1} and finished the workflow.`);
+  } catch (error) {
+    console.error("Retry from failed step failed:", error);
+    toastError("Retry failed: " + error);
+    await captureFailedStep(offset);
+  } finally {
+    isPlaying = false;
+    stopReplayProgressPolling();
+    updateRecordingUI();
+  }
+}
+
 function wireUpControls() {
   const bind = (id, handler) => {
     const el = document.getElementById(id);
@@ -1949,6 +2169,9 @@ function wireUpControls() {
   bind("guardAuditBtn", () => runGhostGuardAudit());
   bind("demoWorkflowBtn", loadDemoWorkflow);
   bind("replayHistoryBtn", showReplayHistory);
+  bind("dryRunBtn", showDryRunPreview);
+  bind("stepReplayBtn", replayNextStep);
+  bind("retryFailedBtn", retryFromFailedStep);
 
   bind("saveBtn", saveWorkflow);
   bind("saveAiBtn", saveWorkflowWithMetadata);

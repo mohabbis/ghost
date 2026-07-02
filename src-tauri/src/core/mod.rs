@@ -4,6 +4,7 @@ pub mod ai;
 pub mod cloud;
 pub mod compress;
 pub mod compression;
+pub mod dry_run;
 pub mod events;
 pub mod execution;
 pub mod knowledge;
