@@ -520,7 +520,9 @@ fn try_resolve_click_point_traced(
         rx,
         ry,
         |x, y| unsafe { get_element_at(x, y) },
-        find_window_origin,
+        // Windows resolves purely by title (FindWindowA); the element's app
+        // is not needed here.
+        |el: &ElementInfo| el.window_title.as_deref().and_then(find_window_origin),
     )
 }
 

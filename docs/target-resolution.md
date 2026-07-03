@@ -58,11 +58,17 @@ Window titles never *reject* a named match: titles legitimately drift
 ## Platform window lookup
 
 - **Windows**: `FindWindowA(title)` + `GetWindowRect` (`platform/windows.rs`).
-- **macOS**: not wired — finding a window by title needs process enumeration
-  + per-app AXWindows traversal, or CGWindowList (which requires the Screen
-  Recording permission and is therefore off the table under the privacy
-  defaults). The strategy is inert there (`|_| None`); the spiral covers
-  moderate moves. Wiring a permission-free lookup is tracked follow-up work.
+- **macOS**: permission-free, under the Accessibility permission replay
+  already requires (`platform/macos.rs::find_window_origin`): libproc
+  enumerates pids (no extra permission), the process name is matched against
+  the recorded element's `app` (including the 32-byte `proc_name`
+  truncation), and that app's `AXWindows` are walked for an `AXTitle` match
+  whose `AXPosition` supplies the origin. Deliberately **not** CGWindowList,
+  which would require the Screen Recording permission. Best-effort at every
+  step — any failure falls through to the spiral / recorded coordinates.
+
+The `window_origin` closure receives the full recorded `ElementInfo`
+(Windows uses only `window_title`; macOS also needs `app`).
 
 ## Changing this code
 

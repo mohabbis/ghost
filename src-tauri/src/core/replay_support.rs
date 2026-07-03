@@ -191,7 +191,7 @@ pub fn try_resolve_click_point<F, W>(
 ) -> Option<(i32, i32)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
-    W: Fn(&str) -> Option<(i32, i32)>,
+    W: Fn(&ElementInfo) -> Option<(i32, i32)>,
 {
     try_resolve_click_point_traced(target, rx, ry, lookup, window_origin).map(|(point, _)| point)
 }
@@ -207,8 +207,9 @@ where
 ///    within its window, or window moved slightly);
 /// 4. `None` — callers decide whether to coordinate-fall-back or retry.
 ///
-/// `window_origin` receives the recorded window title and returns the
-/// window's current top-left corner; platforms without a title-based window
+/// `window_origin` receives the full recorded element (platforms use
+/// `window_title`, and on macOS also `app` to locate the owning process) and
+/// returns the window's current top-left corner; platforms without a window
 /// lookup pass `|_| None`, which skips strategy 2 entirely.
 pub fn try_resolve_click_point_traced<F, W>(
     target: &ElementInfo,
@@ -219,7 +220,7 @@ pub fn try_resolve_click_point_traced<F, W>(
 ) -> Option<((i32, i32), ResolutionKind)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
-    W: Fn(&str) -> Option<(i32, i32)>,
+    W: Fn(&ElementInfo) -> Option<(i32, i32)>,
 {
     if let Some(found) = lookup(rx, ry) {
         if descriptor_matches(target, &found) {
@@ -231,8 +232,8 @@ where
     // title and the in-window offset, and the platform can find that window
     // now. The candidate is verified against the descriptor — a moved window
     // with rearranged contents must not be blind-clicked.
-    if let (Some(title), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
-        if let Some((ox, oy)) = window_origin(title) {
+    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
+        if let Some((ox, oy)) = window_origin(target) {
             let (px, py) = (ox + relx, oy + rely);
             if (px, py) != (rx, ry) && px >= 0 && py >= 0 {
                 if let Some(found) = lookup(px, py) {
@@ -497,7 +498,7 @@ mod tests {
             140,
             130,
             |x, y| (x == 940 && y == 530).then(|| moved.clone()),
-            |title| (title == "Report").then_some((900, 500)),
+            |el| (el.window_title.as_deref() == Some("Report")).then_some((900, 500)),
         );
         assert_eq!(traced, Some(((940, 530), ResolutionKind::WindowRelative)));
     }
@@ -514,7 +515,7 @@ mod tests {
             140,
             130,
             |x, y| (x == 940 && y == 530).then(|| stranger.clone()),
-            |title| (title == "Report").then_some((900, 500)),
+            |el| (el.window_title.as_deref() == Some("Report")).then_some((900, 500)),
         );
         assert_eq!(traced, None);
     }
