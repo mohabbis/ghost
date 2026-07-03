@@ -1098,3 +1098,11 @@
 .replay-trace__fallback {
   color: #ffb454;
 }
+
+/* Cross-run reliability summary at the top of the replay-history modal. */
+.replay-stats {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
