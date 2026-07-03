@@ -50,16 +50,18 @@ pub fn safe_file_name(name: &str) -> String {
 /// Prefix `name` with the file timestamp's `YYYY-MM` bucket.
 ///
 /// Idempotent for names already beginning with `YYYY-MM ` or `YYYY-MM-`, so
-/// repeated planning never stacks date prefixes.
+/// repeated planning never stacks date prefixes. A pre-epoch timestamp
+/// (clock damage) returns the name unchanged — better no filing period than
+/// an invented "1970-01".
 pub fn dated_prefix(name: &str, timestamp: SystemTime) -> String {
     if starts_with_date_prefix(name) {
         return name.to_string();
     }
 
-    let days = timestamp
-        .duration_since(UNIX_EPOCH)
-        .map(|d| (d.as_secs() / 86_400) as i64)
-        .unwrap_or(0);
+    let Ok(since_epoch) = timestamp.duration_since(UNIX_EPOCH) else {
+        return name.to_string();
+    };
+    let days = (since_epoch.as_secs() / 86_400) as i64;
     let (year, month, _) = civil_from_days(days);
     format!("{year:04}-{month:02} {name}")
 }
@@ -220,5 +222,13 @@ mod tests {
             safe_file_name(&dated_prefix("acme:invoice?.pdf", timestamp)),
             "2024-02 acme_invoice_.pdf"
         );
+    }
+
+    #[test]
+    fn dated_prefix_refuses_to_invent_a_period_for_pre_epoch_timestamps() {
+        // Clock damage produces pre-epoch mtimes; stamping those "1970-01"
+        // would file the document under a period it never belonged to.
+        let timestamp = UNIX_EPOCH - std::time::Duration::from_secs(86_400);
+        assert_eq!(dated_prefix("a.pdf", timestamp), "a.pdf");
     }
 }

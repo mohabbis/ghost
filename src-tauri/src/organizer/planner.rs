@@ -451,6 +451,51 @@ mod tests {
     }
 
     #[test]
+    fn client_filing_preset_rule_shape_plans_approvable_moves() {
+        // Pins the exact rule shape the frontend "Client filing" preset
+        // creates (organizerCreateClientFilingPreset in src/main.js): the
+        // source grants read + move-out (a read-only source would make the
+        // policy engine deny every filing move — the bug this test guards),
+        // the destination grants read/create/rename/move. Moves must come
+        // back as confirmable, never denied.
+        let src = tempdir();
+        src.file("acme-invoice.pdf", b"x");
+        let dest = tempdir();
+        let source_rule = FolderRule {
+            path: src.path().to_path_buf(),
+            can_read: true,
+            can_create: false,
+            can_rename: false,
+            can_move: true,
+            can_copy: false,
+            can_delete: false,
+        };
+        let dest_rule = FolderRule {
+            path: dest.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: false,
+            can_delete: false,
+        };
+
+        let plan = plan_with_rules("z", &[source_rule, dest_rule]);
+        let moves: Vec<&PlanAction> = plan
+            .actions
+            .iter()
+            .filter(|a| matches!(a.capability, Capability::MoveFile { .. }))
+            .collect();
+        assert_eq!(moves.len(), 1);
+        assert!(
+            moves[0].decision.needs_confirmation(),
+            "preset moves must be approvable, got {:?}",
+            moves[0].decision
+        );
+        assert_eq!(plan.summary.denied, 0);
+    }
+
+    #[test]
     fn conflicts_are_detected_and_resolved_without_overwrite() {
         // Two distinct files of the same category whose safe names collide should
         // produce a conflict + de-duplicated target. The collision is driven by
