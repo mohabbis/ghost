@@ -1698,9 +1698,11 @@ async function organizerCreateZone() {
 
 async function organizerCreateClientFilingPreset() {
   if (!invoke) return notAvailable();
+  // No "~" default: the backend never expands tildes, so a literal
+  // "~/Downloads" rule would silently scan nothing. Full paths only.
   const sourcePath = await ghostPrompt(
-    "Source folder for client documents",
-    "~/Downloads",
+    "Full path of the source folder for client documents",
+    "",
     "/Users/you/Downloads",
   );
   if (!sourcePath) return;
@@ -1711,12 +1713,17 @@ async function organizerCreateClientFilingPreset() {
   );
   if (!destinationPath) return;
 
-  const readOnlyRule = {
+  // The source must grant move-OUT as well as read: the policy engine denies
+  // MoveFile from a folder whose rule lacks can_move (pinned by the planner
+  // test move_from_read_only_source_is_denied), so a read-only source plans
+  // a run where every filing move is denied. Nothing is ever created back
+  // into or renamed inside the source.
+  const sourceRule = {
     path: sourcePath.trim(),
     can_read: true,
     can_create: false,
     can_rename: false,
-    can_move: false,
+    can_move: true,
     can_copy: false,
     can_delete: false,
   };
@@ -1737,10 +1744,10 @@ async function organizerCreateClientFilingPreset() {
       renameDated: true,
     });
     organizerSelectedZoneId = zone.id;
-    if (readOnlyRule.path === destinationRule.path) {
+    if (sourceRule.path === destinationRule.path) {
       await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
     } else {
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: readOnlyRule });
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: sourceRule });
       await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
     }
     organizerHasReviewedPlan = false;
