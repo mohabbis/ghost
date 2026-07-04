@@ -8,9 +8,9 @@
 }
 
 .app-shell {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px 28px 40px;
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
 }
 
 .app-header {
@@ -472,7 +472,7 @@
 }
 
 .app-shell {
-  max-width: 1180px;
+  max-width: none;
 }
 
 .app-header {
@@ -1141,4 +1141,180 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   font-weight: 600;
+}
+
+/* ===== Opinionated restyle: sidebar shell + focused views =====
+   The app moved from a single-scroll stack of panels to a left nav that
+   swaps one focused view at a time, with a persistent live-activity rail.
+   This section is authoritative for the shell frame; component styles above
+   (panels, organizer, timeline, status cards) are reused unchanged. */
+
+.nav {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: 0 0 236px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(18px);
+}
+
+.nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 14px;
+}
+
+.nav__glyph {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+  border-radius: 11px;
+  box-shadow: 0 12px 26px rgba(141, 123, 255, 0.28);
+}
+
+.nav__wordmark {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.nav__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.nav__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.nav__item.is-active {
+  background: rgba(141, 123, 255, 0.16);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(141, 123, 255, 0.35);
+}
+
+.nav__ico {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.nav__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.nav__foot .recording-status {
+  justify-content: center;
+}
+
+.nav__foot .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 24px 28px 40px;
+}
+
+.workspace__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.95fr);
+  gap: 22px;
+  align-items: start;
+}
+
+/* One view visible at a time; each view stacks its own panels. */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.view[hidden] {
+  display: none;
+}
+
+.app-main {
+  gap: 0;
+}
+
+.app-sidebar {
+  top: 24px;
+}
+
+@media (max-width: 1040px) {
+  .workspace__body {
+    grid-template-columns: 1fr;
+  }
+  .app-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .nav {
+    position: static;
+    height: auto;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav__items {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+  }
+  .nav__foot {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .nav__foot .btn,
+  .nav__foot .recording-status {
+    width: auto;
+  }
+  .nav__item span:not(.nav__ico) {
+    display: none;
+  }
 }

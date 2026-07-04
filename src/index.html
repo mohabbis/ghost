@@ -13,15 +13,28 @@
 
   <body class="app-body">
     <div class="app-shell">
-      <header class="app-header">
-        <div class="app-header__brand">
-          <span class="app-header__glyph" aria-hidden="true">G</span>
-          <div>
-            <h1>Ghost</h1>
-            <p>Turn repetitive desktop work into safe one-click workflows.</p>
-          </div>
+      <nav class="nav" aria-label="Primary">
+        <div class="nav__brand">
+          <span class="app-header__glyph nav__glyph" aria-hidden="true">G</span>
+          <span class="nav__wordmark">Ghost</span>
         </div>
-        <div class="app-header__actions">
+
+        <div class="nav__items" role="tablist" aria-label="Views">
+          <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button">
+            <span class="nav__ico" aria-hidden="true">🗂️</span><span>Organize</span>
+          </button>
+          <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button">
+            <span class="nav__ico" aria-hidden="true">⏺️</span><span>Record &amp; Replay</span>
+          </button>
+          <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button">
+            <span class="nav__ico" aria-hidden="true">🧩</span><span>Workflows</span>
+          </button>
+          <button class="nav__item" id="navExperimental" data-view="experimental" role="tab" aria-selected="false" type="button" hidden>
+            <span class="nav__ico" aria-hidden="true">🧪</span><span>Experimental</span>
+          </button>
+        </div>
+
+        <div class="nav__foot">
           <div class="recording-status" id="recording-status">
             <span class="pulse" aria-hidden="true" style="display:none"></span>
             Ready to record
@@ -29,173 +42,188 @@
           <button class="btn btn--ghost btn--small" id="lockBtn" type="button" hidden>🔒 Lock</button>
           <button class="btn btn--ghost btn--small" id="settingsBtn" type="button">⚙️ Settings</button>
         </div>
-      </header>
+      </nav>
 
-      <!-- Accessibility permission gate -->
-      <section id="perm-banner" class="banner banner--warn" hidden>
-        <span id="perm-text">Ghost needs Accessibility and Input Monitoring permission to watch and replay your actions.</span>
-        <button id="perm-grant" class="btn btn--small">Grant Access</button>
-      </section>
+      <div class="workspace">
+        <!-- Accessibility permission gate -->
+        <section id="perm-banner" class="banner banner--warn" hidden>
+          <span id="perm-text">Ghost needs Accessibility and Input Monitoring permission to watch and replay your actions.</span>
+          <button id="perm-grant" class="btn btn--small">Grant Access</button>
+        </section>
 
-      <div class="app-grid">
-        <main class="app-main">
-          <section class="mission-panel" aria-labelledby="mission-heading">
-            <div>
-              <p class="mission-panel__eyebrow">Your first useful automation</p>
-              <h2 id="mission-heading">Record a task once. Replay it whenever the work comes back.</h2>
-              <p>Ghost is for tedious, repeatable desktop chores: exporting reports, moving files, filling internal tools, and checking UI flows. Keep it local, review each step, then run it with confidence.</p>
+        <div class="workspace__body">
+          <main class="app-main">
+            <!-- View: Organize (the wedge — shown first) -->
+            <section class="view is-active" data-view="organize" role="tabpanel" aria-label="Organize">
+              <section class="panel organizer-panel" id="organizerPanel" aria-labelledby="organizer-heading">
+                <div class="organizer-head">
+                  <h2 id="organizer-heading">Ghost Organizer</h2>
+                  <span class="organizer-pipeline" aria-hidden="true">Scan → Preview → Approve → Organize → Audit → Undo</span>
+                </div>
+                <p class="panel__hint">Pick a folder, preview every proposed move, then approve. Ghost never deletes, never overwrites, and writes an undo journal before it touches a file.</p>
+
+                <div class="organizer-zone">
+                  <label class="organizer-field">
+                    <span>Zone</span>
+                    <select id="organizerZoneSelect" aria-label="Select a Zone"></select>
+                  </label>
+                  <button class="btn btn--ghost btn--small" id="organizerNewZoneBtn" type="button">New Zone</button>
+                  <button class="btn btn--ghost btn--small" id="organizerPresetBtn" type="button">Guided setup</button>
+                </div>
+
+                <div class="organizer-rule" id="organizerRuleRow">
+                  <label class="organizer-field organizer-field--grow">
+                    <span>Folder</span>
+                    <input type="text" id="organizerFolderPath" placeholder="/Users/you/Downloads" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <fieldset class="organizer-perms" aria-label="Permissions to grant in this folder">
+                    <label><input type="checkbox" id="permRead" checked /> Read</label>
+                    <label><input type="checkbox" id="permCreate" checked /> Create folders</label>
+                    <label><input type="checkbox" id="permMove" checked /> Move</label>
+                    <label><input type="checkbox" id="permRename" checked /> Rename</label>
+                  </fieldset>
+                  <label class="organizer-field organizer-trust-field">
+                    <span>Trust</span>
+                    <select id="permTrust" aria-label="How much autonomy to grant in this folder" title="Automate runs without asking; Ask first requires approval per action; Never refuses changes here">
+                      <option value="ask_first" selected>Ask first</option>
+                      <option value="automate">Automate</option>
+                      <option value="never">Never</option>
+                    </select>
+                  </label>
+                  <button class="btn btn--ghost btn--small" id="organizerAddFolderBtn" type="button">Add folder</button>
+                </div>
+                <p class="organizer-rules-list" id="organizerRulesList" aria-live="polite"></p>
+
+                <div class="btn-row">
+                  <button class="btn btn--primary" id="organizerScanBtn" type="button" disabled>Scan &amp; Preview</button>
+                  <button class="btn btn--ghost" id="organizerRunBtn" type="button" disabled title="Review the plan first">Approve &amp; Organize</button>
+                  <button class="btn btn--ghost btn--small" id="organizerHistoryBtn" type="button">History</button>
+                </div>
+
+                <div class="organizer-result" id="organizerResult" aria-live="polite"></div>
+              </section>
+            </section>
+
+            <!-- View: Record & Replay -->
+            <section class="view" data-view="record" role="tabpanel" aria-label="Record and replay" hidden>
+              <section class="mission-panel" aria-labelledby="mission-heading">
+                <div>
+                  <p class="mission-panel__eyebrow">Your first useful automation</p>
+                  <h2 id="mission-heading">Record a task once. Replay it whenever the work comes back.</h2>
+                  <p>Ghost is for tedious, repeatable desktop chores: exporting reports, moving files, filling internal tools, and checking UI flows. Keep it local, review each step, then run it with confidence.</p>
+                </div>
+                <ol class="mission-steps" id="missionSteps" aria-label="Setup progress">
+                  <li data-mission-step="permissions"><span>1</span><strong>Grant access</strong><em>Needed for clicks and keys</em></li>
+                  <li data-mission-step="record"><span>2</span><strong>Record</strong><em>Capture a focused task</em></li>
+                  <li data-mission-step="audit"><span>3</span><strong>Audit</strong><em>Ghost Guard reviews risk</em></li>
+                  <li data-mission-step="replay"><span>4</span><strong>Replay or save</strong><em>Make it reusable</em></li>
+                </ol>
+              </section>
+
+              <section class="panel" aria-labelledby="recording-heading">
+                <h2 id="recording-heading">Recording &amp; replay</h2>
+                <div class="btn-row">
+                  <button class="btn btn--primary" id="recordBtn" >Start Recording</button>
+                  <button class="btn btn--ghost" id="stopBtn"  disabled>Stop</button>
+                  <button class="btn btn--ghost" id="replayBtn"  disabled>Replay</button>
+                  <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Guarded Replay</button>
+                  <button class="btn btn--ghost" id="dryRunBtn" disabled title="See what each step will do before replaying">Preview Steps</button>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn--ghost btn--small" id="cancelBtn"  disabled>Cancel</button>
+                  <button class="btn btn--ghost btn--small" id="pauseBtn"  disabled>Pause</button>
+                  <button class="btn btn--ghost btn--small" id="resumeBtn"  disabled>Resume</button>
+                  <button class="btn btn--ghost btn--small" id="stepReplayBtn" disabled title="Replay one step at a time">Replay Next Step</button>
+                  <button class="btn btn--ghost btn--small" id="retryFailedBtn" hidden>Retry From Failed Step</button>
+                  <label class="speed-picker">
+                    Speed
+                    <select id="speedSelect">
+                      <option value="0.5">0.5x</option>
+                      <option value="1.0" selected>1.0x</option>
+                      <option value="1.5">1.5x</option>
+                      <option value="2.0">2.0x</option>
+                    </select>
+                  </label>
+                  <button class="btn btn--ghost btn--small" id="inspectElementBtn">Inspect Element</button>
+                  <button class="btn btn--ghost btn--small" id="demoWorkflowBtn">Load Demo</button>
+                  <button class="btn btn--ghost btn--small" id="replayHistoryBtn">Replay History</button>
+                </div>
+                <div id="replay-progress" class="replay-progress" hidden aria-live="polite"></div>
+              </section>
+            </section>
+
+            <!-- View: Workflows -->
+            <section class="view" data-view="workflows" role="tabpanel" aria-label="Workflows" hidden>
+              <section class="panel" aria-labelledby="workflow-heading">
+                <h2 id="workflow-heading">Workflows</h2>
+                <p class="panel__hint">Save a reviewed workflow to reuse it, audit it locally, or clean its steps into a tighter, more reliable sequence.</p>
+                <div class="btn-row">
+                  <button class="btn btn--ghost btn--small" id="saveBtn">Save</button>
+                  <button class="btn btn--ghost btn--small" id="loadBtn">Load</button>
+                  <button class="btn btn--ghost btn--small" id="analyzeBtn">Local Audit</button>
+                  <button class="btn btn--ghost btn--small" id="optimizeBtn">Clean Steps</button>
+                </div>
+              </section>
+            </section>
+
+            <!-- View: Experimental (revealed only in experimental builds) -->
+            <section class="view" data-view="experimental" role="tabpanel" aria-label="Experimental" hidden>
+              <details class="panel experimental-panel" id="experimentalPanel" open hidden>
+                <summary>Experimental tools</summary>
+                <p class="panel__hint">Hidden by default because core recording, auditing, debugging, and replay reliability matter more than prototype surfaces.</p>
+                <div class="btn-row">
+                  <button class="btn btn--ghost btn--small" id="generateAiBtn">Draft from Prompt</button>
+                  <button class="btn btn--ghost btn--small" id="saveAiBtn">Save + Describe</button>
+                  <button class="btn btn--ghost btn--small" id="startObserverBtn">Start Observer</button>
+                  <button class="btn btn--ghost btn--small" id="stopObserverBtn">Stop Observer</button>
+                  <button class="btn btn--ghost btn--small" id="observeSessionBtn">Observe Session</button>
+                  <button class="btn btn--ghost btn--small" id="geekModeBtn">Diagnostics</button>
+                  <button class="btn btn--ghost btn--small" id="visualCheckBtn">Visual Check</button>
+                  <button class="btn btn--ghost btn--small" id="captureBaselineBtn">Capture Baseline</button>
+                  <button class="btn btn--ghost btn--small" id="newDataSourceBtn">New Data Source</button>
+                  <button class="btn btn--ghost btn--small" id="loadVariablesBtn">Load Variables</button>
+                </div>
+              </details>
+            </section>
+          </main>
+
+          <aside class="app-sidebar" aria-label="Live activity">
+            <div class="insight-card">
+              <span class="insight-icon" aria-hidden="true">🦜</span>
+              <span class="insight-text" id="insight-text">Ready when you are. Start with a short, low-risk workflow.</span>
             </div>
-            <ol class="mission-steps" id="missionSteps" aria-label="Setup progress">
-              <li data-mission-step="permissions"><span>1</span><strong>Grant access</strong><em>Needed for clicks and keys</em></li>
-              <li data-mission-step="record"><span>2</span><strong>Record</strong><em>Capture a focused task</em></li>
-              <li data-mission-step="audit"><span>3</span><strong>Audit</strong><em>Ghost Guard reviews risk</em></li>
-              <li data-mission-step="replay"><span>4</span><strong>Replay or save</strong><em>Make it reusable</em></li>
-            </ol>
-          </section>
+            <section class="status-stack" aria-label="Automation readiness">
+              <div class="status-card">
+                <span class="status-card__label">Privacy</span>
+                <strong>Local-first</strong>
+                <p>Workflows stay on this device. Sensitive inputs are suppressed before they reach storage.</p>
+              </div>
+              <div class="status-card">
+                <span class="status-card__label">Reliability</span>
+                <strong>Semantic replay</strong>
+                <p>Captured UI metadata helps workflows survive moved windows and small layout changes.</p>
+              </div>
+              <div class="status-card guard-card" id="ghostGuardCard">
+                <span class="status-card__label">Ghost Guard</span>
+                <strong id="guardScore">Audit pending</strong>
+                <p id="guardSummary">Record or load a workflow to get a local privacy, cybersecurity, and replay-risk review.</p>
+                <button class="btn btn--ghost btn--small" id="guardAuditBtn" type="button" disabled>Run Audit</button>
+              </div>
+            </section>
+            <div class="notifications" id="notifications"></div>
 
-          <section class="panel" aria-labelledby="recording-heading">
-            <h2 id="recording-heading">Recording &amp; replay</h2>
-            <div class="btn-row">
-              <button class="btn btn--primary" id="recordBtn" >Start Recording</button>
-              <button class="btn btn--ghost" id="stopBtn"  disabled>Stop</button>
-              <button class="btn btn--ghost" id="replayBtn"  disabled>Replay</button>
-              <button class="btn btn--ghost" id="replayReliableBtn"  disabled>Guarded Replay</button>
-              <button class="btn btn--ghost" id="dryRunBtn" disabled title="See what each step will do before replaying">Preview Steps</button>
-            </div>
-            <div class="btn-row">
-              <button class="btn btn--ghost btn--small" id="cancelBtn"  disabled>Cancel</button>
-              <button class="btn btn--ghost btn--small" id="pauseBtn"  disabled>Pause</button>
-              <button class="btn btn--ghost btn--small" id="resumeBtn"  disabled>Resume</button>
-              <button class="btn btn--ghost btn--small" id="stepReplayBtn" disabled title="Replay one step at a time">Replay Next Step</button>
-              <button class="btn btn--ghost btn--small" id="retryFailedBtn" hidden>Retry From Failed Step</button>
-              <label class="speed-picker">
-                Speed
-                <select id="speedSelect">
-                  <option value="0.5">0.5x</option>
-                  <option value="1.0" selected>1.0x</option>
-                  <option value="1.5">1.5x</option>
-                  <option value="2.0">2.0x</option>
-                </select>
-              </label>
-              <button class="btn btn--ghost btn--small" id="inspectElementBtn">Inspect Element</button>
-              <button class="btn btn--ghost btn--small" id="demoWorkflowBtn">Load Demo</button>
-              <button class="btn btn--ghost btn--small" id="replayHistoryBtn">Replay History</button>
-            </div>
-            <div id="replay-progress" class="replay-progress" hidden aria-live="polite"></div>
-          </section>
-
-          <section class="panel" aria-labelledby="workflow-heading">
-            <h2 id="workflow-heading">Workflows</h2>
-            <div class="btn-row">
-              <button class="btn btn--ghost btn--small" id="saveBtn">Save</button>
-              <button class="btn btn--ghost btn--small" id="loadBtn">Load</button>
-              <button class="btn btn--ghost btn--small" id="analyzeBtn">Local Audit</button>
-              <button class="btn btn--ghost btn--small" id="optimizeBtn">Clean Steps</button>
-            </div>
-          </section>
-
-          <section class="panel organizer-panel" id="organizerPanel" aria-labelledby="organizer-heading">
-            <div class="organizer-head">
-              <h2 id="organizer-heading">Ghost Organizer</h2>
-              <span class="organizer-pipeline" aria-hidden="true">Scan → Preview → Approve → Organize → Audit → Undo</span>
-            </div>
-            <p class="panel__hint">Pick a folder, preview every proposed move, then approve. Ghost never deletes, never overwrites, and writes an undo journal before it touches a file.</p>
-
-            <div class="organizer-zone">
-              <label class="organizer-field">
-                <span>Zone</span>
-                <select id="organizerZoneSelect" aria-label="Select a Zone"></select>
-              </label>
-              <button class="btn btn--ghost btn--small" id="organizerNewZoneBtn" type="button">New Zone</button>
-              <button class="btn btn--ghost btn--small" id="organizerPresetBtn" type="button">Guided setup</button>
+            <div class="workflow-health" aria-label="Current workflow health">
+              <div><span>Steps</span><strong id="healthSteps">0</strong></div>
+              <div><span>Duration</span><strong id="healthDuration">0s</strong></div>
+              <div><span>Signals</span><strong id="healthSignals">Empty</strong></div>
             </div>
 
-            <div class="organizer-rule" id="organizerRuleRow">
-              <label class="organizer-field organizer-field--grow">
-                <span>Folder</span>
-                <input type="text" id="organizerFolderPath" placeholder="/Users/you/Downloads" autocomplete="off" spellcheck="false" />
-              </label>
-              <fieldset class="organizer-perms" aria-label="Permissions to grant in this folder">
-                <label><input type="checkbox" id="permRead" checked /> Read</label>
-                <label><input type="checkbox" id="permCreate" checked /> Create folders</label>
-                <label><input type="checkbox" id="permMove" checked /> Move</label>
-                <label><input type="checkbox" id="permRename" checked /> Rename</label>
-              </fieldset>
-              <label class="organizer-field organizer-trust-field">
-                <span>Trust</span>
-                <select id="permTrust" aria-label="How much autonomy to grant in this folder" title="Automate runs without asking; Ask first requires approval per action; Never refuses changes here">
-                  <option value="ask_first" selected>Ask first</option>
-                  <option value="automate">Automate</option>
-                  <option value="never">Never</option>
-                </select>
-              </label>
-              <button class="btn btn--ghost btn--small" id="organizerAddFolderBtn" type="button">Add folder</button>
+            <h2 class="sidebar__heading">Event timeline</h2>
+            <div class="events-timeline" id="events-timeline">
+              <p class="events-timeline__empty">Start a recording to see cleaned, human-readable steps here.</p>
             </div>
-            <p class="organizer-rules-list" id="organizerRulesList" aria-live="polite"></p>
-
-            <div class="btn-row">
-              <button class="btn btn--primary" id="organizerScanBtn" type="button" disabled>Scan &amp; Preview</button>
-              <button class="btn btn--ghost" id="organizerRunBtn" type="button" disabled title="Review the plan first">Approve &amp; Organize</button>
-              <button class="btn btn--ghost btn--small" id="organizerHistoryBtn" type="button">History</button>
-            </div>
-
-            <div class="organizer-result" id="organizerResult" aria-live="polite"></div>
-          </section>
-
-          <details class="panel experimental-panel" id="experimentalPanel" hidden>
-            <summary>Experimental tools</summary>
-            <p class="panel__hint">Hidden by default because core recording, auditing, debugging, and replay reliability matter more than prototype surfaces.</p>
-            <div class="btn-row">
-              <button class="btn btn--ghost btn--small" id="generateAiBtn">Draft from Prompt</button>
-              <button class="btn btn--ghost btn--small" id="saveAiBtn">Save + Describe</button>
-              <button class="btn btn--ghost btn--small" id="startObserverBtn">Start Observer</button>
-              <button class="btn btn--ghost btn--small" id="stopObserverBtn">Stop Observer</button>
-              <button class="btn btn--ghost btn--small" id="observeSessionBtn">Observe Session</button>
-              <button class="btn btn--ghost btn--small" id="geekModeBtn">Diagnostics</button>
-              <button class="btn btn--ghost btn--small" id="visualCheckBtn">Visual Check</button>
-              <button class="btn btn--ghost btn--small" id="captureBaselineBtn">Capture Baseline</button>
-              <button class="btn btn--ghost btn--small" id="newDataSourceBtn">New Data Source</button>
-              <button class="btn btn--ghost btn--small" id="loadVariablesBtn">Load Variables</button>
-            </div>
-          </details>
-        </main>
-
-        <aside class="app-sidebar" aria-label="Live activity">
-          <div class="insight-card">
-            <span class="insight-icon" aria-hidden="true">🦜</span>
-            <span class="insight-text" id="insight-text">Ready when you are. Start with a short, low-risk workflow.</span>
-          </div>
-          <section class="status-stack" aria-label="Automation readiness">
-            <div class="status-card">
-              <span class="status-card__label">Privacy</span>
-              <strong>Local-first</strong>
-              <p>Workflows stay on this device. Sensitive inputs are suppressed before they reach storage.</p>
-            </div>
-            <div class="status-card">
-              <span class="status-card__label">Reliability</span>
-              <strong>Semantic replay</strong>
-              <p>Captured UI metadata helps workflows survive moved windows and small layout changes.</p>
-            </div>
-            <div class="status-card guard-card" id="ghostGuardCard">
-              <span class="status-card__label">Ghost Guard</span>
-              <strong id="guardScore">Audit pending</strong>
-              <p id="guardSummary">Record or load a workflow to get a local privacy, cybersecurity, and replay-risk review.</p>
-              <button class="btn btn--ghost btn--small" id="guardAuditBtn" type="button" disabled>Run Audit</button>
-            </div>
-          </section>
-          <div class="notifications" id="notifications"></div>
-
-          <div class="workflow-health" aria-label="Current workflow health">
-            <div><span>Steps</span><strong id="healthSteps">0</strong></div>
-            <div><span>Duration</span><strong id="healthDuration">0s</strong></div>
-            <div><span>Signals</span><strong id="healthSignals">Empty</strong></div>
-          </div>
-
-          <h2 class="sidebar__heading">Event timeline</h2>
-          <div class="events-timeline" id="events-timeline">
-            <p class="events-timeline__empty">Start a recording to see cleaned, human-readable steps here.</p>
-          </div>
-        </aside>
+          </aside>
+        </div>
       </div>
     </div>
 
