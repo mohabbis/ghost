@@ -1005,6 +1005,8 @@ async function openSettings() {
   if (!content) return;
 
   const { replay, ai } = settingsConfig;
+  // `audit` may be absent in configs written before the retention feature.
+  const audit = settingsConfig.audit || {};
   const providers = ["local", "openai", "anthropic"];
   const fieldStyle =
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
@@ -1054,6 +1056,17 @@ async function openSettings() {
     </label>
     <p class="panel__hint" style="margin: 4px 0 12px;">API keys come from environment variables (OPENAI_API_KEY / ANTHROPIC_API_KEY), never stored here.</p>
 
+    <h4 style="color: #8d7bff; margin: 12px 0 4px;">Audit retention</h4>
+    <label>Keep only the most recent N runs
+      <input id="cfg-audit-keep-last" type="number" step="1" min="1" placeholder="keep all"
+             value="${escapeAttr(audit.retention_keep_last ?? "")}" style="${fieldStyle}">
+    </label>
+    <label>Delete runs older than N days
+      <input id="cfg-audit-keep-days" type="number" step="1" min="1" placeholder="keep all"
+             value="${escapeAttr(audit.retention_keep_days ?? "")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 4px 0 12px;">Leave blank to keep all audit history (the default). Pruning deletes your own past runs — sealed history you remove can't be recovered.</p>
+
     <div style="display: flex; gap: 8px; margin-top: 8px;">
       <button class="btn btn--primary btn--small" data-save-config>Save</button>
       <button class="btn btn--ghost btn--small" data-close-modal="settings-modal">Cancel</button>
@@ -1083,6 +1096,19 @@ async function saveSettings() {
   settingsConfig.ai.model = document.getElementById("cfg-ai-model")?.value || settingsConfig.ai.model;
   const endpoint = document.getElementById("cfg-ai-endpoint")?.value?.trim();
   settingsConfig.ai.api_endpoint = endpoint ? endpoint : null;
+
+  // Audit retention: a blank field means "keep all" (null); a positive integer
+  // sets the bound. Anything invalid falls back to null rather than 0, which the
+  // backend rejects (0 would wipe history on the next run).
+  const posIntOrNull = (id) => {
+    const raw = document.getElementById(id)?.value?.trim();
+    if (!raw) return null;
+    const n = Math.round(parseFloat(raw));
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  };
+  if (!settingsConfig.audit) settingsConfig.audit = {};
+  settingsConfig.audit.retention_keep_last = posIntOrNull("cfg-audit-keep-last");
+  settingsConfig.audit.retention_keep_days = posIntOrNull("cfg-audit-keep-days");
 
   try {
     await invoke("update_config", { config: settingsConfig });
@@ -2147,7 +2173,7 @@ async function organizerShowHistory() {
     ? history
         .map(
           (h) => `<li>
-            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed</div>
+            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed ${h.sealed ? `<span class="org-seal" title="This run is sealed into the tamper-evident audit chain">🔏 sealed</span>` : ""}</div>
             <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
           </li>`,
         )
@@ -2155,6 +2181,10 @@ async function organizerShowHistory() {
     : "<li>No runs yet.</li>";
   content.innerHTML = `
     <h3 style="margin-top:0">Organizer history</h3>
+    <div class="btn-row" style="margin-bottom:10px">
+      <button class="btn btn--ghost btn--small" id="organizerVerifyBtn" type="button">Verify integrity</button>
+    </div>
+    <p class="organizer-verify-result" id="organizerVerifyResult" aria-live="polite"></p>
     <ul class="organizer-history">${rows}</ul>
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
   content.querySelectorAll("[data-undo-exec]").forEach((btn) =>
@@ -2163,7 +2193,34 @@ async function organizerShowHistory() {
       closeModal("analysis-modal");
     }),
   );
+  const verifyBtn = document.getElementById("organizerVerifyBtn");
+  if (verifyBtn) verifyBtn.addEventListener("click", organizerVerifyIntegrity);
   showModal(modal);
+}
+
+// Verify the tamper-evident audit chain and render the verdict — the payoff of
+// sealing each run: you can prove the local history wasn't altered, offline.
+async function organizerVerifyIntegrity() {
+  if (!invoke) return notAvailable();
+  const out = document.getElementById("organizerVerifyResult");
+  if (out) out.textContent = "Verifying…";
+  let v;
+  try {
+    v = await invoke("organizer_verify_audit_chain");
+  } catch (err) {
+    if (out) out.textContent = "";
+    return toastError("Verify failed: " + err);
+  }
+  if (!out) return;
+  const unsealed =
+    v.unsealed_count > 0 ? ` (${v.unsealed_count} older unsealed run(s) predate this feature)` : "";
+  if (v.intact) {
+    out.innerHTML = `<span class="org-verify org-verify--ok">✓ Chain intact — ${v.sealed_count} run(s) sealed${escapeHtml(unsealed)}</span>`;
+  } else {
+    const at = v.first_break ? ` at run ${escapeHtml(v.first_break.execution_id)}` : "";
+    const why = v.first_break ? ` — ${escapeHtml(v.first_break.reason)}` : "";
+    out.innerHTML = `<span class="org-verify org-verify--bad">✗ Tampering detected${at}${why}</span>`;
+  }
 }
 
 // Replay history: surface past replay runs (status, duration, failure reason)

@@ -19,6 +19,10 @@ pub struct GhostConfig {
     pub privacy: PrivacySettings,
     /// Performance settings
     pub performance: PerformanceSettings,
+    /// Audit retention settings. `#[serde(default)]` keeps config files written
+    /// before this section existed loading cleanly (they get "keep everything").
+    #[serde(default)]
+    pub audit: AuditSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +122,19 @@ pub struct PerformanceSettings {
     pub cache_size_mb: usize,
 }
 
+/// Retention policy for the Organizer's stored execution history (the audit
+/// log). Deleting audit history is opt-in and user-set — both bounds default to
+/// `None`, meaning Ghost keeps everything until the user chooses otherwise.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AuditSettings {
+    /// Keep only the most recent N Organizer runs. `None` keeps all runs.
+    #[serde(default)]
+    pub retention_keep_last: Option<usize>,
+    /// Delete Organizer runs older than N days. `None` keeps all runs.
+    #[serde(default)]
+    pub retention_keep_days: Option<u64>,
+}
+
 impl Default for GhostConfig {
     fn default() -> Self {
         Self {
@@ -166,6 +183,8 @@ impl Default for GhostConfig {
                 cache_enabled: true,
                 cache_size_mb: 100,
             },
+            // Keep all audit history by default; retention is opt-in.
+            audit: AuditSettings::default(),
         }
     }
 }
@@ -222,6 +241,15 @@ impl GhostConfig {
             anyhow::bail!("Thread pool size must be at least 1");
         }
 
+        // A retention bound of 0 would delete all history the moment a run is
+        // saved. Disabling retention is expressed as `None`, not `Some(0)`.
+        if self.audit.retention_keep_last == Some(0) {
+            anyhow::bail!("Audit retention keep-last must be at least 1 (use null to keep all)");
+        }
+        if self.audit.retention_keep_days == Some(0) {
+            anyhow::bail!("Audit retention keep-days must be at least 1 (use null to keep all)");
+        }
+
         Ok(())
     }
 
@@ -256,6 +284,42 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: GhostConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config.general.theme, deserialized.general.theme);
+    }
+
+    /// Default keeps everything: both retention bounds are unset.
+    #[test]
+    fn audit_retention_defaults_to_keep_all() {
+        let config = GhostConfig::default();
+        assert_eq!(config.audit.retention_keep_last, None);
+        assert_eq!(config.audit.retention_keep_days, None);
+    }
+
+    /// A zero retention bound is rejected — disabling retention uses null.
+    #[test]
+    fn zero_retention_bound_is_rejected() {
+        let mut config = GhostConfig::default();
+        config.audit.retention_keep_last = Some(0);
+        assert!(config.validate().is_err());
+
+        let mut config = GhostConfig::default();
+        config.audit.retention_keep_days = Some(0);
+        assert!(config.validate().is_err());
+
+        // A positive bound is fine.
+        let mut config = GhostConfig::default();
+        config.audit.retention_keep_last = Some(50);
+        assert!(config.validate().is_ok());
+    }
+
+    /// A config file written before the `audit` section existed must still load
+    /// (the field is `#[serde(default)]`), yielding keep-everything.
+    #[test]
+    fn config_without_audit_section_deserializes_to_keep_all() {
+        let mut value = serde_json::to_value(GhostConfig::default()).unwrap();
+        value.as_object_mut().unwrap().remove("audit");
+        let config: GhostConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(config.audit.retention_keep_last, None);
+        assert_eq!(config.audit.retention_keep_days, None);
     }
 }
 

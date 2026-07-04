@@ -132,17 +132,23 @@ labeled/gated capability whose *tier* (not whose safety) is what's paid.
 Turn the local audit log from a debug view into a record a bookkeeper or auditor
 can rely on and hand to a third party.
 
-- **Retention controls** — keep-last-N-runs / keep-N-days, user-configurable;
-  today Organizer runs persist indefinitely, so make retention explicit and
-  visible (extends `storage/executions.rs`).
-- **Tamper-evidence** — hash-chain audit entries (each run references the prior
-  run's hash) so the log is provably append-only and verifiable offline. Local,
-  no network.
+- **Retention controls** — keep-last-N-runs / keep-N-days, user-configurable.
+  **Shipped**: `config.audit` bounds (default keep-all) enforced by
+  `prune_executions` after each run (`storage/executions.rs`), with a Settings
+  control.
+- **Tamper-evidence** — hash-chained executions (each run sealed with a SHA-256
+  over its bytes + the prior run's hash) so the log is provably append-only and
+  verifiable offline. **Shipped**: migration V5 `hash`/`prev_hash`, sealing in
+  `save_execution`, `verify_chain` + the `organizer_verify_audit_chain` command,
+  and a "Verify integrity" affordance in the history view. Exports carry the
+  seal as metadata.
 - **Compliance report export** — a clean per-period / per-client report
   (summary + itemized: what moved, the rule that fired, automated vs approved),
   building on `organizer_export_audit`'s CSV/JSON rather than raw rows.
+  *Remaining §6 work.*
 - **Optional signed export** — sign an export with a local key so a third party
-  can verify it wasn't altered.
+  can verify it wasn't altered. *Remaining §6 work* (the hash chain is the
+  substrate it builds on).
 
 Why it's the first hook: the wedge persona (bookkeepers, practice admins) already
 thinks in "what moved, and can I show it" — this is a feature they understand and

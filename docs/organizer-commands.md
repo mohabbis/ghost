@@ -30,14 +30,34 @@ the filesystem.
 | `organizer_add_folder_rule` | `{ zoneId, rule: FolderRule }` | — | Persist a boundary. Rejects `can_delete: true`. `rule.trust` optional (`automate`/`ask_first`/`never`, default `ask_first`). |
 | `organizer_set_rule_trust` | `{ zoneId, path, trust }` | — | Update a rule's trust level in place. Errors if no rule at `path`. |
 | `organizer_plan` | `{ zoneId }` | `OrganizerPlan` | **Read-only** preview; mutates nothing. |
-| `organizer_execute` | `{ zoneId }` | `ExecutionResult` | Apply the approved plan; audited + undoable. |
-| `organizer_list_executions` | — | `ExecutionSummary[]` | History, newest first. |
+| `organizer_execute` | `{ zoneId }` | `ExecutionResult` | Apply the approved plan; audited + undoable. Seals the run into the hash chain and prunes per the retention policy. |
+| `organizer_list_executions` | — | `ExecutionSummary[]` | History, newest first; each row has a `sealed` flag. |
 | `organizer_undo` | `{ executionId }` | `UndoReport` | Reverse a past run. |
-| `organizer_export_audit` | `{ executionId, format }` | `string` | A past run's audit log as `json` or `csv` text; writes nothing. |
+| `organizer_export_audit` | `{ executionId, format }` | `string` | A past run's audit log as `json` or `csv` text, carrying the run's `hash`/`prev_hash` seal as metadata; writes nothing. |
 | `organizer_time_to_value` | — | `{ key, at }[]` | Local first-touch milestone timestamps for diagnostics. |
+| `organizer_verify_audit_chain` | — | `ChainVerification` | Verify the tamper-evidence chain offline. |
 
 `ExecutionResult = { execution_id, report }` where `report` is the
 `ExecutionReport` (`applied`, `skipped`, `failed`, `audit`, `undo`).
+
+`ChainVerification = { intact: bool, sealed_count, unsealed_count,
+first_break: { execution_id, reason } | null }`.
+
+## Tamper-evidence & retention
+
+Each execution is sealed as it is saved: a SHA-256 `hash` over the run's stored
+row bytes plus the previous run's hash, forming a chain ordered by SQLite
+`rowid` (reliable insertion order — `created_at` is second-granular and `id` is
+a random UUID). `organizer_verify_audit_chain` walks the chain and confirms each
+sealed run still matches its seal and links to the one before it, so altered
+history is detectable offline. Rows written before the V5 migration are
+"unsealed" (empty hash) and counted separately, never failing verification.
+
+Retention is user-set via `config.audit` (`retention_keep_last` /
+`retention_keep_days`, both default `null` = keep all); `organizer_execute`
+prunes an oldest prefix after each run, which preserves the retained suffix's
+chain contiguity. Pruning is the user deleting their own history — opt-in, never
+silent, consistent with the privacy stance.
 
 The frontend's **Guided setup** button (`organizerRunWizard` in `src/main.js`)
 composes `organizer_create_zone` + `organizer_add_folder_rule` from a short
