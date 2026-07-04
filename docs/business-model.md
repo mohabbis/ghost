@@ -124,3 +124,6 @@ level.
    to seed the network effect and author ecosystem.
 5. **Only then** publish pricing, and only with the time-to-value number earned
    from local instrumentation (`organizer_time_to_value`) — not before.
+
+The first two paid features (audit-as-compliance-artifact, Team policy templates)
+are scoped as concrete work in `docs/PRODUCT_ROADMAP.md` §6–§7.
