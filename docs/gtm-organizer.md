@@ -1,7 +1,9 @@
 # Go-to-market: Ghost Organizer
 
 Operational GTM notes for the wedge. Keep this a checklist, not a vision essay
-(per `AGENTS.md`). Update it when positioning or the beachhead changes.
+(per `AGENTS.md`). Update it when positioning or the beachhead changes. For the
+moat and how Ghost makes money as a local-first app, see
+`docs/business-model.md`.
 
 ## Beachhead persona
 
