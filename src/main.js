@@ -2698,10 +2698,36 @@ async function initExperimentalPanel() {
   try {
     if (await invoke("is_experimental_enabled")) {
       panel.hidden = false;
+      // Reveal the matching nav entry so the view is reachable.
+      document.getElementById("navExperimental")?.removeAttribute("hidden");
     }
   } catch {
     // Older/stock build without the detection command: keep it hidden.
   }
+}
+
+// Left-nav view switcher: one focused view visible at a time. Pure DOM, no
+// backend — nav buttons and view sections are paired by `data-view`.
+function initViewNav() {
+  const items = document.querySelectorAll(".nav__item");
+  const views = document.querySelectorAll(".view");
+  if (!items.length || !views.length) return;
+
+  function show(view) {
+    views.forEach((v) => {
+      v.hidden = v.dataset.view !== view;
+    });
+    items.forEach((b) => {
+      const active = b.dataset.view === view;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
+  items.forEach((b) => {
+    b.addEventListener("click", () => b.dataset.view && show(b.dataset.view));
+  });
+  show("organize");
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -2713,4 +2739,5 @@ window.addEventListener("DOMContentLoaded", () => {
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
+  initViewNav(); // left-nav view switcher
 });
