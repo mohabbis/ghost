@@ -14,6 +14,6 @@ pub mod zone;
 
 pub use capability::Capability;
 pub use decision::PolicyDecision;
-pub use engine::evaluate;
+pub use engine::{evaluate, evaluate_with_attribution, Evaluation};
 pub use risk::RiskLevel;
-pub use zone::{DefaultDecision, FolderRule, Zone};
+pub use zone::{DefaultDecision, FolderRule, TrustLevel, Zone};

@@ -16,5 +16,5 @@
 pub mod audit_log;
 pub mod undo_journal;
 
-pub use audit_log::{ActionOutcome, AuditEvent, AuditLog};
+pub use audit_log::{ActionOutcome, AuditEvent, AuditLog, Provenance};
 pub use undo_journal::{UndoJournal, UndoOp};

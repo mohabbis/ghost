@@ -184,11 +184,14 @@ plan can never reach the filesystem.
 | `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
 | `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
 | `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). Params: `name`, `description`, optional `renameDated` (default `false`). New Zones default to `Ask`; dated renaming only changes previewed destination names when explicitly enabled. |
-| `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. |
-| `organizer_plan` | stable | ✓ | – | – | – | – | – | low | **Read-only.** Scans directory metadata, classifies, detects conflicts, policy-checks every action; mutates nothing. This is the preview the user approves. |
-| `organizer_execute` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Re-plans, re-checks policy per action, never overwrites, writes undo before each mutation, records an audit event, and persists the run. Moves/renames only inside an approved Zone; never deletes. |
+| `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. Accepts an optional `trust` (`automate`/`ask_first`/`never`); defaults to `ask_first` when omitted so old frontends behave unchanged. |
+| `organizer_set_rule_trust` | stable | ✓ | – | – | – | – | – | medium | **local-mutate (DB only).** Updates an existing rule's trust level by its path within the Zone. Errors if no such rule exists. Trust is *recorded* here but *enforced* server-side by the policy engine + executor — the frontend can't bypass it. |
+| `organizer_plan` | stable | ✓ | – | – | – | – | – | low | **Read-only.** Scans directory metadata, classifies, detects conflicts, policy-checks every action (recording which rule fired); mutates nothing. This is the preview the user approves. |
+| `organizer_execute` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Re-plans, re-checks policy per action, never overwrites, writes undo before each mutation, records an audit event (with the rule that fired and automated-vs-approved provenance), and persists the run. Moves/renames only inside an approved Zone; never deletes. |
 | `organizer_list_executions` | stable | ✓ | – | – | – | – | – | low | Lists past executions for the history/undo view (DB only). |
 | `organizer_undo` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Replays a stored undo journal in reverse; never overwrites an occupied origin and never removes a non-empty folder. |
+| `organizer_export_audit` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns a past run's audit log as `json` or `csv` text (each row: action, outcome, the rule that fired, automated/user-approved provenance). Writes nothing itself — the caller saves the returned text. |
+| `organizer_time_to_value` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns local first-touch milestone timestamps (first zone/plan/run/undo) for the diagnostics view. Local-only: timestamps, no paths or content, no network. |
 
 ### `commands/experimental.rs` — experimental (gated / not default UI)
 

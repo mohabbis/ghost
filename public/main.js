@@ -212,12 +212,16 @@ function organizerDemo() {
     { name: "setup.dmg", meta: "Installer" },
     { name: "screenshot 2026-03-14.png", meta: "Image" },
   ];
+  // Every action names the rule that authorized it and whether it was
+  // automated or you-approved — the same "rule that fired / who signed off"
+  // record the desktop app writes.
+  const RULE = "~/Downloads";
   const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create", audit: "Created folder <b>Receipts</b>" },
-    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Receipts", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Receipts" },
-    { tag: "→ move", cls: "tag--move", strong: "IMG_4821.HEIC", desc: "→ Images", file: 1, audit: "Moved <b>IMG_4821.HEIC</b> → Images" },
-    { tag: "→ move", cls: "tag--move", strong: "Q1 budget.xlsx", desc: "→ Documents/Spreadsheets", file: 2, audit: "Moved <b>Q1 budget.xlsx</b> → Documents/Spreadsheets" },
-    { tag: "→ move", cls: "tag--move", strong: "screenshot 2026-03-14.png", desc: "→ Pictures/Screenshots", file: 5, audit: "Moved <b>screenshot 2026-03-14.png</b> → Pictures/Screenshots" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create", audit: "Created folder <b>Receipts</b>", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Receipts", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Receipts", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "IMG_4821.HEIC", desc: "→ Images", file: 1, audit: "Moved <b>IMG_4821.HEIC</b> → Images", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "Q1 budget.xlsx", desc: "→ Documents/Spreadsheets", file: 2, audit: "Moved <b>Q1 budget.xlsx</b> → Documents/Spreadsheets", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "screenshot 2026-03-14.png", desc: "→ Pictures/Screenshots", file: 5, audit: "Moved <b>screenshot 2026-03-14.png</b> → Pictures/Screenshots", prov: "you approved" },
     { tag: "⚠ conflict", cls: "tag--warn", strong: "setup.dmg", desc: "exists in Installers — keeps both, never overwrites", warn: true },
     { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "outside your approval", deny: true },
   ];
@@ -238,8 +242,10 @@ function organizerDemo() {
     );
     return li;
   }
-  function auditRow(html) {
-    return el("li", null, `✓ ${html}`);
+  function auditRow(html, prov) {
+    const rule = ` <span class="audit__rule">by rule <code>${RULE}</code></span>`;
+    const badge = prov ? ` <span class="audit__prov">${prov}</span>` : "";
+    return el("li", null, `✓ ${html}${badge}${rule}`);
   }
 
   function reset() {
@@ -280,7 +286,7 @@ function organizerDemo() {
       acts.map((a, i) => () => {
         planRows[i]?.classList.add("is-done");
         if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.add("is-moved");
-        auditEl.appendChild(auditRow(a.audit));
+        auditEl.appendChild(auditRow(a.audit, a.prov));
       }),
       360,
     );

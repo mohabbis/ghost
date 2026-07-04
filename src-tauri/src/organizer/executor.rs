@@ -27,11 +27,11 @@
 //! recoverable — partial progress is captured in the audit log and reversible
 //! through the journal.
 
-use crate::audit::{ActionOutcome, AuditLog, UndoJournal, UndoOp};
+use crate::audit::{ActionOutcome, AuditLog, Provenance, UndoJournal, UndoOp};
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::planner::OrganizerPlan;
 
@@ -64,23 +64,42 @@ pub fn execute_plan(plan: &OrganizerPlan, rules: &[FolderRule]) -> ExecutionRepo
     for action in &plan.actions {
         let cap = &action.capability;
 
-        // (1) Re-check policy at execution time. Deny => skip, audited, no IO.
-        if let PolicyDecision::Deny { reason } = policy::evaluate(cap, rules) {
-            report.record_skip(cap.clone(), format!("policy denied: {reason}"));
+        // (1) Re-check policy at execution time, recording which rule fired so
+        // the audit log can name the boundary that authorized (or refused) each
+        // action. Deny => skip, audited, no IO.
+        let evaluation = policy::evaluate_with_attribution(cap, rules);
+        let rule_path = evaluation.rule_path.clone();
+        if let PolicyDecision::Deny { reason } = &evaluation.decision {
+            report.record_skip(cap.clone(), format!("policy denied: {reason}"), rule_path);
             continue;
         }
+        // An `automate` rule yields Allow with no prompting; anything requiring
+        // confirmation ran only because the user approved this execution.
+        let provenance = if evaluation.decision.is_allowed() {
+            Provenance::Automated
+        } else {
+            Provenance::UserApproved
+        };
 
         match apply_one(cap, &mut report.undo) {
             Outcome::Applied => {
                 report.applied += 1;
-                report.audit.record(cap.clone(), ActionOutcome::Applied);
+                report.audit.record_attributed(
+                    cap.clone(),
+                    ActionOutcome::Applied,
+                    rule_path,
+                    Some(provenance),
+                );
             }
-            Outcome::Skipped(reason) => report.record_skip(cap.clone(), reason),
+            Outcome::Skipped(reason) => report.record_skip(cap.clone(), reason, rule_path),
             Outcome::Failed(error) => {
                 report.failed += 1;
-                report
-                    .audit
-                    .record(cap.clone(), ActionOutcome::Failed { error });
+                report.audit.record_attributed(
+                    cap.clone(),
+                    ActionOutcome::Failed { error },
+                    rule_path,
+                    Some(provenance),
+                );
             }
         }
     }
@@ -89,9 +108,10 @@ pub fn execute_plan(plan: &OrganizerPlan, rules: &[FolderRule]) -> ExecutionRepo
 }
 
 impl ExecutionReport {
-    fn record_skip(&mut self, cap: Capability, reason: String) {
+    fn record_skip(&mut self, cap: Capability, reason: String, rule_path: Option<PathBuf>) {
         self.skipped += 1;
-        self.audit.record(cap, ActionOutcome::Skipped { reason });
+        self.audit
+            .record_attributed(cap, ActionOutcome::Skipped { reason }, rule_path, None);
     }
 }
 
@@ -187,6 +207,7 @@ mod tests {
             can_move: true,
             can_copy: true,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         }
     }
 
@@ -245,6 +266,49 @@ mod tests {
         // Every applied action is in the audit log, and undo was recorded.
         assert_eq!(report.audit.len(), plan.actions.len());
         assert!(!report.undo.is_empty());
+    }
+
+    #[test]
+    fn applied_actions_record_the_rule_that_fired_and_provenance() {
+        // A default (ask_first) full-permission rule: applied moves ran only
+        // because the user approved the run -> UserApproved, attributed to the
+        // rule covering the destination.
+        let (tmp, rules) = fixture();
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+
+        let applied_moves: Vec<&crate::audit::AuditEvent> = report
+            .audit
+            .events()
+            .iter()
+            .filter(|e| {
+                matches!(e.capability, Capability::MoveFile { .. })
+                    && matches!(e.outcome, ActionOutcome::Applied)
+            })
+            .collect();
+        assert!(!applied_moves.is_empty());
+        for event in applied_moves {
+            assert_eq!(event.rule_path.as_deref(), Some(tmp.path()));
+            assert_eq!(event.provenance, Some(Provenance::UserApproved));
+        }
+    }
+
+    #[test]
+    fn automate_rule_records_automated_provenance() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![FolderRule {
+            trust: crate::policy::TrustLevel::Automate,
+            ..full_rule(tmp.path())
+        }];
+
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+        assert!(report.applied >= 1);
+        assert!(report.audit.events().iter().any(|e| {
+            matches!(e.outcome, ActionOutcome::Applied)
+                && e.provenance == Some(Provenance::Automated)
+        }));
     }
 
     #[test]

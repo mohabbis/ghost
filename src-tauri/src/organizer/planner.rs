@@ -33,6 +33,12 @@ pub struct PlanAction {
     pub capability: Capability,
     /// What the policy engine decided about this capability.
     pub decision: PolicyDecision,
+    /// The folder rule (by path) whose grant and trust level produced the
+    /// decision, when one fired — so the review UI can show which
+    /// user-approved boundary each proposal rests on. Optional and defaulted
+    /// so plans serialized before this field existed keep deserializing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule_path: Option<PathBuf>,
     /// Confidence in `0.0..=1.0` for the classification driving this action.
     /// Structural actions (folder creation) are `1.0`.
     pub confidence: f32,
@@ -179,11 +185,12 @@ pub fn plan_with_rules_and_options(
             let cap = Capability::CreateFolder {
                 path: target_dir.clone(),
             };
-            let decision = policy::evaluate(&cap, rules);
-            tally_decision(&mut summary, &decision);
+            let evaluation = policy::evaluate_with_attribution(&cap, rules);
+            tally_decision(&mut summary, &evaluation.decision);
             actions.push(PlanAction {
                 capability: cap,
-                decision,
+                decision: evaluation.decision,
+                rule_path: evaluation.rule_path,
                 confidence: 1.0,
                 reason: format!("Create destination folder {}", target_dir.display()),
                 conflict: None,
@@ -205,8 +212,8 @@ pub fn plan_with_rules_and_options(
                 to: target.clone(),
             }
         };
-        let decision = policy::evaluate(&cap, rules);
-        tally_decision(&mut summary, &decision);
+        let evaluation = policy::evaluate_with_attribution(&cap, rules);
+        tally_decision(&mut summary, &evaluation.decision);
 
         if conflict.is_some() {
             summary.conflicts += 1;
@@ -217,7 +224,8 @@ pub fn plan_with_rules_and_options(
 
         actions.push(PlanAction {
             capability: cap,
-            decision,
+            decision: evaluation.decision,
+            rule_path: evaluation.rule_path,
             confidence: class.confidence,
             reason: class.reason,
             conflict,
@@ -340,6 +348,7 @@ mod tests {
             can_move: true,
             can_copy: true,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         }
     }
 
@@ -389,6 +398,23 @@ mod tests {
                 Capability::CreateFolder { .. } => assert!(a.decision.is_allowed()),
                 other => panic!("unexpected capability {other:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn plan_actions_are_attributed_to_the_rule_that_fired() {
+        // In-place organize: every proposed action rests on the single
+        // full-permission rule, so each carries its path as attribution.
+        let (tmp, rules) = organize_in_place_fixture();
+        let plan = plan_with_rules("z", &rules);
+        assert!(!plan.actions.is_empty());
+        for action in &plan.actions {
+            assert_eq!(
+                action.rule_path.as_deref(),
+                Some(tmp.path()),
+                "action {:?} should be attributed to the covering rule",
+                action.capability
+            );
         }
     }
 
@@ -452,12 +478,12 @@ mod tests {
 
     #[test]
     fn client_filing_preset_rule_shape_plans_approvable_moves() {
-        // Pins the exact rule shape the frontend "Client filing" preset
-        // creates (organizerCreateClientFilingPreset in src/main.js): the
-        // source grants read + move-out (a read-only source would make the
-        // policy engine deny every filing move — the bug this test guards),
-        // the destination grants read/create/rename/move. Moves must come
-        // back as confirmable, never denied.
+        // Pins the exact rule shape the frontend "Client filing" guided-setup
+        // preset creates (organizerRunWizard in src/main.js): the source grants
+        // read + move-out (a read-only source would make the policy engine deny
+        // every filing move — the bug this test guards), the destination grants
+        // read/create/rename/move. Moves must come back as confirmable, never
+        // denied.
         let src = tempdir();
         src.file("acme-invoice.pdf", b"x");
         let dest = tempdir();
@@ -469,6 +495,7 @@ mod tests {
             can_move: true,
             can_copy: false,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         };
         let dest_rule = FolderRule {
             path: dest.path().to_path_buf(),
@@ -478,6 +505,7 @@ mod tests {
             can_move: true,
             can_copy: false,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         };
 
         let plan = plan_with_rules("z", &[source_rule, dest_rule]);

@@ -48,6 +48,61 @@ pub struct Zone {
     pub rename_dated: bool,
 }
 
+/// How far the user trusts mutating operations granted by a folder rule.
+///
+/// This is the user-facing trust vocabulary: `Automate` runs granted mutations
+/// without a per-action confirmation, `AskFirst` requires confirmation (the
+/// historical behavior and the serde default, so rules stored before this field
+/// existed keep their exact semantics), and `Never` refuses the rule's mutating
+/// grants outright while leaving reads usable for planning.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustLevel {
+    Automate,
+    #[default]
+    AskFirst,
+    Never,
+}
+
+impl TrustLevel {
+    /// The lowercase token stored in SQLite
+    /// (`CHECK (... IN ('automate','ask_first','never'))`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TrustLevel::Automate => "automate",
+            TrustLevel::AskFirst => "ask_first",
+            TrustLevel::Never => "never",
+        }
+    }
+
+    /// Parse the stored token back into a `TrustLevel`.
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token {
+            "automate" => Some(TrustLevel::Automate),
+            "ask_first" => Some(TrustLevel::AskFirst),
+            "never" => Some(TrustLevel::Never),
+            _ => None,
+        }
+    }
+
+    /// The more restrictive of two trust levels. Two-sided operations
+    /// (move/rename/copy) span two rules; the stricter one governs.
+    pub fn stricter(self, other: TrustLevel) -> TrustLevel {
+        fn rank(level: TrustLevel) -> u8 {
+            match level {
+                TrustLevel::Automate => 0,
+                TrustLevel::AskFirst => 1,
+                TrustLevel::Never => 2,
+            }
+        }
+        if rank(other) > rank(self) {
+            other
+        } else {
+            self
+        }
+    }
+}
+
 /// A per-folder permission grant inside a Zone. Operations are only allowed
 /// against paths contained within a rule that grants the matching permission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +114,11 @@ pub struct FolderRule {
     pub can_move: bool,
     pub can_copy: bool,
     pub can_delete: bool,
+    /// How much autonomy the user granted for mutations under this rule.
+    /// Defaults to `AskFirst` so rules persisted before this field existed
+    /// keep the behavior they were created with.
+    #[serde(default)]
+    pub trust: TrustLevel,
 }
 
 impl FolderRule {
@@ -72,6 +132,7 @@ impl FolderRule {
             can_move: false,
             can_copy: false,
             can_delete: false,
+            trust: TrustLevel::AskFirst,
         }
     }
 }
@@ -143,6 +204,62 @@ mod tests {
         let json = serde_json::to_string(&zone).unwrap();
         let back: Zone = serde_json::from_str(&json).unwrap();
         assert_eq!(zone, back);
+    }
+
+    /// `as_str` must round-trip through `from_token`, and the tokens must match
+    /// the SQLite CHECK constraint (`'automate','ask_first','never'`).
+    #[test]
+    fn trust_level_token_round_trip() {
+        for trust in [
+            TrustLevel::Automate,
+            TrustLevel::AskFirst,
+            TrustLevel::Never,
+        ] {
+            assert_eq!(TrustLevel::from_token(trust.as_str()), Some(trust));
+        }
+        assert_eq!(TrustLevel::Automate.as_str(), "automate");
+        assert_eq!(TrustLevel::AskFirst.as_str(), "ask_first");
+        assert_eq!(TrustLevel::Never.as_str(), "never");
+        assert_eq!(TrustLevel::from_token("always"), None);
+    }
+
+    /// Rules stored (or sent over IPC) before the trust field existed must keep
+    /// today's semantics: ask before mutating.
+    #[test]
+    fn folder_rule_deserializes_missing_trust_as_ask_first() {
+        let json = r#"{
+            "path": "/home/u/Downloads",
+            "can_read": true,
+            "can_create": false,
+            "can_rename": false,
+            "can_move": true,
+            "can_copy": false,
+            "can_delete": false
+        }"#;
+        let rule: FolderRule = serde_json::from_str(json).unwrap();
+        assert_eq!(rule.trust, TrustLevel::AskFirst);
+    }
+
+    /// The wire form is snake_case; pin it so the frontend contract can't drift.
+    #[test]
+    fn trust_level_serializes_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&TrustLevel::AskFirst).unwrap(),
+            "\"ask_first\""
+        );
+        let back: TrustLevel = serde_json::from_str("\"automate\"").unwrap();
+        assert_eq!(back, TrustLevel::Automate);
+    }
+
+    /// Two-sided operations use the stricter of the two rules' trust levels.
+    #[test]
+    fn stricter_picks_the_more_restrictive_level() {
+        use TrustLevel::*;
+        assert_eq!(Automate.stricter(AskFirst), AskFirst);
+        assert_eq!(AskFirst.stricter(Automate), AskFirst);
+        assert_eq!(AskFirst.stricter(Never), Never);
+        assert_eq!(Never.stricter(Automate), Never);
+        assert_eq!(Automate.stricter(Automate), Automate);
     }
 
     #[test]

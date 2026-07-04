@@ -3,7 +3,7 @@
 //! Persists the pure domain types from `crate::policy` (`Zone`, `FolderRule`)
 //! so the policy engine can be fed real, user-approved boundaries.
 
-use crate::policy::{DefaultDecision, FolderRule, Zone};
+use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use rusqlite::{params, Connection, Row};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -81,8 +81,9 @@ pub fn add_folder_rule(
     let id = Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO zone_folder_rules \
-         (id, zone_id, path, can_read, can_create, can_rename, can_move, can_copy, can_delete) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         (id, zone_id, path, can_read, can_create, can_rename, can_move, can_copy, can_delete, \
+          trust_level) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             id,
             zone_id,
@@ -93,18 +94,35 @@ pub fn add_folder_rule(
             rule.can_move as i64,
             rule.can_copy as i64,
             rule.can_delete as i64,
+            rule.trust.as_str(),
         ],
     )?;
     Ok(())
 }
 
+/// Update the trust level of a Zone's folder rule identified by its path.
+/// Returns the number of rows changed (0 if no such rule exists).
+pub fn set_rule_trust(
+    conn: &Connection,
+    zone_id: &str,
+    path: &str,
+    trust: TrustLevel,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE zone_folder_rules SET trust_level = ?1 WHERE zone_id = ?2 AND path = ?3",
+        params![trust.as_str(), zone_id, path],
+    )
+}
+
 /// List the folder rules for a Zone, ordered by path.
 pub fn list_folder_rules(conn: &Connection, zone_id: &str) -> rusqlite::Result<Vec<FolderRule>> {
     let mut stmt = conn.prepare(
-        "SELECT path, can_read, can_create, can_rename, can_move, can_copy, can_delete \
+        "SELECT path, can_read, can_create, can_rename, can_move, can_copy, can_delete, \
+         trust_level \
          FROM zone_folder_rules WHERE zone_id = ?1 ORDER BY path",
     )?;
     let rows = stmt.query_map(params![zone_id], |row| {
+        let trust_token: String = row.get(7)?;
         Ok(FolderRule {
             path: PathBuf::from(row.get::<_, String>(0)?),
             can_read: row.get::<_, i64>(1)? != 0,
@@ -113,6 +131,9 @@ pub fn list_folder_rules(conn: &Connection, zone_id: &str) -> rusqlite::Result<V
             can_move: row.get::<_, i64>(4)? != 0,
             can_copy: row.get::<_, i64>(5)? != 0,
             can_delete: row.get::<_, i64>(6)? != 0,
+            // The CHECK constraint should make this infallible; fall back to
+            // the most cautious mutating stance if a stray token appears.
+            trust: TrustLevel::from_token(&trust_token).unwrap_or(TrustLevel::AskFirst),
         })
     })?;
     rows.collect()
@@ -146,6 +167,7 @@ mod tests {
             can_move: true,
             can_copy: true,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         }
     }
 
@@ -303,6 +325,47 @@ mod tests {
 
         assert_eq!(list_folder_rules(&conn, &a.id).unwrap().len(), 1);
         assert!(list_folder_rules(&conn, &b.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_rule_trust_updates_an_existing_rule() {
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Z", None, DefaultDecision::Ask, false).unwrap();
+        add_folder_rule(&conn, &zone.id, &full_rule("/home/u/a")).unwrap();
+
+        let changed = set_rule_trust(&conn, &zone.id, "/home/u/a", TrustLevel::Automate).unwrap();
+        assert_eq!(changed, 1);
+        let rules = list_folder_rules(&conn, &zone.id).unwrap();
+        assert_eq!(rules[0].trust, TrustLevel::Automate);
+
+        // A path that doesn't match changes nothing.
+        let none = set_rule_trust(&conn, &zone.id, "/home/u/nope", TrustLevel::Never).unwrap();
+        assert_eq!(none, 0);
+    }
+
+    /// Trust levels persist and load back exactly; a rule stored without an
+    /// explicit level (pre-V4 rows get the column default) reads as ask_first.
+    #[test]
+    fn trust_level_round_trips() {
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Z", None, DefaultDecision::Ask, false).unwrap();
+        let automated = FolderRule {
+            trust: TrustLevel::Automate,
+            ..full_rule("/home/u/a")
+        };
+        let never = FolderRule {
+            trust: TrustLevel::Never,
+            ..full_rule("/home/u/b")
+        };
+        add_folder_rule(&conn, &zone.id, &automated).unwrap();
+        add_folder_rule(&conn, &zone.id, &never).unwrap();
+        add_folder_rule(&conn, &zone.id, &FolderRule::read_only("/home/u/c")).unwrap();
+
+        let rules = list_folder_rules(&conn, &zone.id).unwrap();
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[0].trust, TrustLevel::Automate);
+        assert_eq!(rules[1].trust, TrustLevel::Never);
+        assert_eq!(rules[2].trust, TrustLevel::AskFirst);
     }
 
     #[test]
