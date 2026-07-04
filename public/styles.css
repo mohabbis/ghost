@@ -399,6 +399,22 @@ ul { margin: 0; padding: 0; list-style: none; }
   color: var(--warn);
   letter-spacing: 0.02em;
 }
+/* Automated rows ran hands-free under an Automate folder; tint them the
+   move/success green to set them apart from amber you-approved rows. */
+.audit__prov--auto { background: var(--success-dim); color: var(--success); }
+
+/* Per-destination trust level on a plan row: automate / ask-first / never. */
+.trust-chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  margin-left: auto;
+}
+.trust-chip--automate { background: var(--success-dim); color: var(--success); }
+.trust-chip--askfirst { background: var(--warn-dim); color: var(--warn); }
+.trust-chip--never { background: rgba(255, 141, 160, 0.12); color: var(--danger); }
 
 .demo__controls { display: flex; align-items: center; gap: 16px; margin-top: 18px; flex-wrap: wrap; }
 .demo__hint { color: var(--faint); font-size: 13.5px; }
