@@ -1997,13 +1997,17 @@ async function showReplayHistory() {
 
   // Summarize the run's resolution trace: how each click found its target,
   // with coordinate-fallback steps called out individually — this is where
-  // "why did this run behave that way" gets answered.
+  // "why did this run behave that way" gets answered. When the run's event
+  // list is the one still loaded, fallback rows name the semantic step
+  // ("Clicked 'Send' in Mail") instead of a bare raw index.
   const traceHtml = (h) => {
     const trace = h.step_trace || [];
     if (!trace.length) return "";
+    const eventsMatch = h.events_processed === recordedEvents.length && recordedEvents.length > 0;
     const count = (kind) => trace.filter((t) => t.kind === kind).length;
     const parts = [];
     if (count("RecordedPoint")) parts.push(`${count("RecordedPoint")} found in place`);
+    if (count("WindowRelative")) parts.push(`${count("WindowRelative")} followed their window`);
     if (count("SpiralReresolved")) parts.push(`${count("SpiralReresolved")} re-resolved nearby`);
     if (count("CoordinateFallback")) parts.push(`${count("CoordinateFallback")} lost their element`);
     if (count("NoDescriptor")) parts.push(`${count("NoDescriptor")} coordinate-only`);
@@ -2012,14 +2016,41 @@ async function showReplayHistory() {
     );
     const details = risky
       .map((t) => {
+        const semantic = eventsMatch ? describeEvent(recordedEvents[t.step_index]) : null;
+        const where = semantic ? escapeHtml(semantic) : `Step ${t.step_index + 1}`;
         const label = t.target_name
           ? `"${escapeHtml(t.target_name)}" not found — clicked recorded point`
           : "no element recorded — clicked fixed point";
-        return `<div class="replay-meta replay-trace__fallback">Step ${t.step_index + 1}: ${label} (${t.point[0]}, ${t.point[1]})</div>`;
+        return `<div class="replay-meta replay-trace__fallback">${where}: ${label} (${t.point[0]}, ${t.point[1]})</div>`;
       })
       .join("");
     return `<div class="replay-meta">Targets: ${escapeHtml(parts.join(" · "))}</div>${details}`;
   };
+
+  // Cross-run reliability — the north-star metric, computed from the records
+  // already fetched (no extra command): success rate over finished runs, avg
+  // duration, and how often clicks fell back to raw coordinates.
+  const statsHtml = (() => {
+    if (!history.length) return "";
+    const finished = history.filter((h) => h.status === "Success" || h.status === "Failed");
+    const parts = [`Last ${history.length} run(s)`];
+    if (finished.length) {
+      const ok = finished.filter((h) => h.status === "Success").length;
+      parts.push(`${Math.round((ok / finished.length) * 100)}% success`);
+    }
+    const durations = history.map((h) => h.duration_ms).filter((d) => d || d === 0);
+    if (durations.length) {
+      parts.push(`avg ${fmtDur(durations.reduce((a, b) => a + b, 0) / durations.length)}`);
+    }
+    const clicks = history.flatMap((h) => h.step_trace || []);
+    if (clicks.length) {
+      const fell = clicks.filter(
+        (t) => t.kind === "CoordinateFallback" || t.kind === "NoDescriptor"
+      ).length;
+      parts.push(`${Math.round((fell / clicks.length) * 100)}% of clicks on raw coordinates`);
+    }
+    return `<div class="replay-meta replay-stats">${escapeHtml(parts.join(" · "))}</div>`;
+  })();
 
   const rows = history.length
     ? history
@@ -2041,6 +2072,7 @@ async function showReplayHistory() {
 
   content.innerHTML = `
     <h3 style="margin-top:0">Replay history</h3>
+    ${statsHtml}
     <ul class="replay-history">${rows}</ul>
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
   showModal(modal);
@@ -2065,17 +2097,35 @@ async function summarizeLastReplayResolution() {
     const [latest] = await invoke("get_replay_history", { limit: 1 });
     const trace = latest?.step_trace || [];
     if (!trace.length) return;
+    // Hand the trace to the compressed-step review timeline so it can badge
+    // the semantic steps that fell back during this run (same event list).
+    window.__ghostLastReplayTrace = {
+      eventCount: latest.events_processed,
+      trace,
+    };
     const lost = trace.filter((t) => t.kind === "CoordinateFallback").length;
     const blind = trace.filter((t) => t.kind === "NoDescriptor").length;
     const moved = trace.filter((t) => t.kind === "SpiralReresolved").length;
+    const followed = trace.filter((t) => t.kind === "WindowRelative").length;
     if (lost + blind > 0) {
+      // Name the first lost element semantically when the run matches the
+      // loaded events — "which click" beats "how many clicks".
+      const first = trace.find((t) => t.kind === "CoordinateFallback" || t.kind === "NoDescriptor");
+      const semantic =
+        latest.events_processed === recordedEvents.length && first
+          ? describeEvent(recordedEvents[first.step_index])
+          : null;
       showInsight(
         `${lost + blind} click(s) ran on raw coordinates` +
-          (lost ? ` (${lost} couldn't find their element)` : "") +
+          (semantic ? ` (first: ${semantic})` : lost ? ` (${lost} couldn't find their element)` : "") +
           ". These steps are the most likely to break — open Replay History for the per-step trace."
       );
-    } else if (moved > 0) {
-      showInsight(`Every click found its element — ${moved} had moved and were re-resolved nearby.`);
+    } else if (moved + followed > 0) {
+      showInsight(
+        `Every click found its element — ${moved + followed} had moved and were re-resolved` +
+          (followed ? ` (${followed} by following their window)` : " nearby") +
+          "."
+      );
     }
   } catch (error) {
     console.error("Could not summarize resolution trace:", error);
@@ -2087,6 +2137,8 @@ async function summarizeLastReplayResolution() {
 function resetReplayInspectionState() {
   lastFailedStep = null;
   stepReplayCursor = 0;
+  // A trace from a different workflow must not badge the new timeline.
+  window.__ghostLastReplayTrace = null;
   const el = replayProgressEl();
   if (el) {
     el.hidden = true;

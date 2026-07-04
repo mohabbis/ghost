@@ -191,3 +191,9 @@
 .btn-review-cancel {
   min-width: 100px;
 }
+
+/* Last-run resolution badge: this semantic step fell back to raw coordinates
+   during the most recent replay of the same event list. */
+.step-lastrun {
+  color: #ffb454;
+}
