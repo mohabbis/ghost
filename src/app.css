@@ -954,6 +954,42 @@
   color: #ff8da0;
 }
 
+.org-badge--automate {
+  background: rgba(131, 246, 196, 0.16);
+  color: var(--success);
+}
+
+.org-badge--never {
+  background: rgba(255, 107, 129, 0.16);
+  color: #ff8da0;
+}
+
+/* Per-rule trust selector shown on each folder chip. */
+.org-trust-select {
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+}
+
+/* The "by rule <path>" attribution line under a planned or audited action. */
+.org-rule-attr {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.org-rule-attr code {
+  word-break: break-all;
+}
+
+/* Trust dropdown in the add-folder row. */
+.organizer-trust-field {
+  min-width: 110px;
+}
+
 .org-flag {
   font-size: 11px;
   color: var(--accent-warm);

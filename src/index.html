@@ -107,7 +107,7 @@
                 <select id="organizerZoneSelect" aria-label="Select a Zone"></select>
               </label>
               <button class="btn btn--ghost btn--small" id="organizerNewZoneBtn" type="button">New Zone</button>
-              <button class="btn btn--ghost btn--small" id="organizerPresetBtn" type="button">Client filing preset</button>
+              <button class="btn btn--ghost btn--small" id="organizerPresetBtn" type="button">Guided setup</button>
             </div>
 
             <div class="organizer-rule" id="organizerRuleRow">
@@ -121,6 +121,14 @@
                 <label><input type="checkbox" id="permMove" checked /> Move</label>
                 <label><input type="checkbox" id="permRename" checked /> Rename</label>
               </fieldset>
+              <label class="organizer-field organizer-trust-field">
+                <span>Trust</span>
+                <select id="permTrust" aria-label="How much autonomy to grant in this folder" title="Automate runs without asking; Ask first requires approval per action; Never refuses changes here">
+                  <option value="ask_first" selected>Ask first</option>
+                  <option value="automate">Automate</option>
+                  <option value="never">Never</option>
+                </select>
+              </label>
               <button class="btn btn--ghost btn--small" id="organizerAddFolderBtn" type="button">Add folder</button>
             </div>
             <p class="organizer-rules-list" id="organizerRulesList" aria-live="polite"></p>

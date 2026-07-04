@@ -388,6 +388,17 @@ ul { margin: 0; padding: 0; list-style: none; }
   animation: itemin 0.35s var(--ease) forwards;
 }
 .audit li b { color: var(--success); font-weight: 600; }
+.audit__rule { color: var(--faint); }
+.audit__rule code { font-family: var(--mono); }
+.audit__prov {
+  display: inline-block;
+  font-size: 10.5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 184, 107, 0.16);
+  color: var(--warn);
+  letter-spacing: 0.02em;
+}
 
 .demo__controls { display: flex; align-items: center; gap: 16px; margin-top: 18px; flex-wrap: wrap; }
 .demo__hint { color: var(--faint); font-size: 13.5px; }

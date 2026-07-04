@@ -28,12 +28,15 @@
 use crate::organizer::executor::{execute_plan, ExecutionReport};
 use crate::organizer::planner::{plan_zone, OrganizerPlan};
 use crate::organizer::undo::{revert, UndoReport};
-use crate::policy::{DefaultDecision, FolderRule, Zone};
+use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use crate::storage::executions::{
     get_execution, list_executions, save_execution, ExecutionSummary,
 };
+use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
 use crate::storage::open_default;
-use crate::storage::zones::{add_folder_rule, create_zone, list_folder_rules, list_zones};
+use crate::storage::zones::{
+    add_folder_rule, create_zone, list_folder_rules, list_zones, set_rule_trust,
+};
 use serde::{Deserialize, Serialize};
 
 /// The result of executing a plan: the report plus the id under which it was
@@ -78,14 +81,17 @@ pub fn organizer_create_zone(
     rename_dated: Option<bool>,
 ) -> Result<Zone, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    create_zone(
+    let zone = create_zone(
         &conn,
         &name,
         description.as_deref(),
         DefaultDecision::Ask,
         rename_dated.unwrap_or(false),
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    // Local-only time-to-value bookkeeping; best-effort, never blocks the zone.
+    let _ = record_milestone(&conn, Milestone::FirstZoneCreated);
+    Ok(zone)
 }
 
 /// Attach a folder rule (a path plus per-operation permissions) to a Zone.
@@ -107,6 +113,29 @@ pub fn organizer_add_folder_rule(zone_id: String, rule: FolderRule) -> Result<()
     add_folder_rule(&conn, &zone_id, &rule).map_err(|e| e.to_string())
 }
 
+/// Set the trust level of an existing folder rule (by its path within the Zone).
+///
+/// Trust is the user-facing control over how much autonomy a boundary carries:
+/// `automate` runs its granted mutations without a per-action prompt,
+/// `ask_first` (the default) requires confirmation, `never` refuses them. This
+/// only records the preference; the policy engine and executor enforce it —
+/// the frontend can never bypass that by editing trust.
+///
+/// Risk class: local-mutate (DB only).
+#[tauri::command]
+pub fn organizer_set_rule_trust(
+    zone_id: String,
+    path: String,
+    trust: TrustLevel,
+) -> Result<(), String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let changed = set_rule_trust(&conn, &zone_id, &path, trust).map_err(|e| e.to_string())?;
+    if changed == 0 {
+        return Err(format!("no folder rule at {path} in this zone"));
+    }
+    Ok(())
+}
+
 /// Produce a reviewable plan for a Zone. **Read-only**: this scans and proposes,
 /// classifies, detects conflicts, and policy-checks every action, but mutates
 /// nothing. This is the preview the user approves before anything runs.
@@ -115,7 +144,9 @@ pub fn organizer_add_folder_rule(zone_id: String, rule: FolderRule) -> Result<()
 #[tauri::command]
 pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    plan_zone(&conn, &zone_id).map_err(|e| e.to_string())
+    let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
+    let _ = record_milestone(&conn, Milestone::FirstPlan);
+    Ok(plan)
 }
 
 /// Execute a Zone's plan after the user approved it.
@@ -135,6 +166,7 @@ pub fn organizer_execute(zone_id: String) -> Result<ExecutionResult, String> {
     let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
     let report = execute_plan(&plan, &rules);
     let execution_id = save_execution(&conn, &zone_id, &report).map_err(|e| e.to_string())?;
+    let _ = record_milestone(&conn, Milestone::FirstRun);
     Ok(ExecutionResult {
         execution_id,
         report,
@@ -162,5 +194,56 @@ pub fn organizer_undo(execution_id: String) -> Result<UndoReport, String> {
     let stored = get_execution(&conn, &execution_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
-    Ok(revert(&stored.undo))
+    let report = revert(&stored.undo);
+    let _ = record_milestone(&conn, Milestone::FirstUndo);
+    Ok(report)
+}
+
+/// Report the local, first-touch milestone timestamps used to measure
+/// time-to-first-value (first zone, plan, run, undo). Each value is epoch
+/// seconds as a string, or absent if that step hasn't happened yet.
+///
+/// This is **local-only**: it reads timestamps recorded on this machine and
+/// returns them for the diagnostics view. No file contents, paths, or network.
+///
+/// Risk class: safe-read (DB only).
+#[tauri::command]
+pub fn organizer_time_to_value() -> Result<Vec<Milestoned>, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let rows = list_milestones(&conn).map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|(key, at)| Milestoned { key, at })
+        .collect())
+}
+
+/// A recorded milestone timestamp for the diagnostics view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Milestoned {
+    /// Stable milestone key (e.g. `first_run`).
+    pub key: String,
+    /// Epoch seconds as a string.
+    pub at: String,
+}
+
+/// Export a past execution's audit log so the user has a portable record of
+/// exactly what Ghost did — every action, its outcome, the rule that fired, and
+/// whether it was automated or user-approved. `format` is `"json"` (the audit
+/// log verbatim) or `"csv"` (one row per event). The caller writes the returned
+/// text to a file it chose; this command performs no filesystem writes itself.
+///
+/// Risk class: safe-read (DB only; returns text, writes nothing).
+#[tauri::command]
+pub fn organizer_export_audit(execution_id: String, format: String) -> Result<String, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let stored = get_execution(&conn, &execution_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no execution with id {execution_id}"))?;
+    match format.as_str() {
+        "json" => serde_json::to_string_pretty(&stored.audit).map_err(|e| e.to_string()),
+        "csv" => Ok(stored.audit.to_csv()),
+        other => Err(format!(
+            "unsupported export format: {other} (use json or csv)"
+        )),
+    }
 }

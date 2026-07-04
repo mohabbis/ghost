@@ -26,15 +26,23 @@ the filesystem.
 | --- | --- | --- | --- |
 | `organizer_list_zones` | — | `Zone[]` | Read Zones. |
 | `organizer_list_folder_rules` | `{ zoneId }` | `FolderRule[]` | Read a Zone's approved folders. |
-| `organizer_create_zone` | `{ name, description? }` | `Zone` | Create a Zone (defaults to `Ask`). |
-| `organizer_add_folder_rule` | `{ zoneId, rule: FolderRule }` | — | Persist a boundary. Rejects `can_delete: true`. |
+| `organizer_create_zone` | `{ name, description?, renameDated? }` | `Zone` | Create a Zone (defaults to `Ask`). |
+| `organizer_add_folder_rule` | `{ zoneId, rule: FolderRule }` | — | Persist a boundary. Rejects `can_delete: true`. `rule.trust` optional (`automate`/`ask_first`/`never`, default `ask_first`). |
+| `organizer_set_rule_trust` | `{ zoneId, path, trust }` | — | Update a rule's trust level in place. Errors if no rule at `path`. |
 | `organizer_plan` | `{ zoneId }` | `OrganizerPlan` | **Read-only** preview; mutates nothing. |
 | `organizer_execute` | `{ zoneId }` | `ExecutionResult` | Apply the approved plan; audited + undoable. |
 | `organizer_list_executions` | — | `ExecutionSummary[]` | History, newest first. |
 | `organizer_undo` | `{ executionId }` | `UndoReport` | Reverse a past run. |
+| `organizer_export_audit` | `{ executionId, format }` | `string` | A past run's audit log as `json` or `csv` text; writes nothing. |
+| `organizer_time_to_value` | — | `{ key, at }[]` | Local first-touch milestone timestamps for diagnostics. |
 
 `ExecutionResult = { execution_id, report }` where `report` is the
 `ExecutionReport` (`applied`, `skipped`, `failed`, `audit`, `undo`).
+
+The frontend's **Guided setup** button (`organizerRunWizard` in `src/main.js`)
+composes `organizer_create_zone` + `organizer_add_folder_rule` from a short
+interview into one of three presets (Client filing, Bookkeeping inbox, Downloads
+cleanup) — no dedicated backend command; the wizard is pure UI over these two.
 
 ## JSON shapes (serde wire format)
 
@@ -50,8 +58,15 @@ the filesystem.
   `{ "outcome": "applied" }`,
   `{ "outcome": "skipped", "reason": "..." }`,
   `{ "outcome": "failed", "error": "..." }`.
+- **FolderRule** — `{ path, can_read, can_create, can_rename, can_move,
+  can_copy, can_delete, trust }`. `trust` is `automate | ask_first | never`
+  (snake_case) and serde-defaults to `ask_first` when absent, so rules and
+  frontends predating trust keep their behavior.
+- **PlanAction** carries an optional `rule_path` naming the boundary that fired.
 - **AuditLog** serializes transparently as an array of
-  `{ capability, outcome, at }` events.
+  `{ capability, outcome, at }` events, each optionally carrying `rule_path`
+  (the boundary that fired) and `provenance` (`automated` | `user_approved`).
+  Both are omitted when absent, so older logs keep their exact shape.
 - **UndoReport** = `{ reverted, skipped, failed }`.
 
 ## Registration

@@ -1667,11 +1667,57 @@ async function organizerRefreshRules() {
         ]
           .filter(Boolean)
           .join(", ");
-        return `<span class="organizer-rule-chip">${escapeHtml(r.path)} <em>(${escapeHtml(grants || "no permissions")})</em></span>`;
+        const trust = r.trust || "ask_first";
+        // A per-rule trust selector: the boundary is legible and adjustable in
+        // place. The backend re-checks policy on every action, so this only
+        // records intent — it can never widen what Ghost will actually do.
+        const trustSelect = `<select class="org-trust-select" data-rule-path="${escapeAttr(r.path)}" title="How much autonomy this folder carries">
+            <option value="automate"${trust === "automate" ? " selected" : ""}>Automate</option>
+            <option value="ask_first"${trust === "ask_first" ? " selected" : ""}>Ask first</option>
+            <option value="never"${trust === "never" ? " selected" : ""}>Never</option>
+          </select>`;
+        return `<span class="organizer-rule-chip">${escapeHtml(r.path)} <em>(${escapeHtml(grants || "no permissions")})</em> ${organizerTrustBadge(trust)}${trustSelect}</span>`;
       })
       .join("");
+    // Wire each in-place trust change to the backend.
+    list.querySelectorAll(".org-trust-select").forEach((sel) =>
+      sel.addEventListener("change", () =>
+        organizerSetRuleTrust(sel.dataset.rulePath, sel.value),
+      ),
+    );
   }
   organizerUpdateButtons(rules);
+}
+
+// The user-facing trust vocabulary, mirrored from the policy engine's
+// TrustLevel: automate runs without asking, ask-first needs approval, never
+// refuses. Shown wherever a rule or a planned action is displayed.
+function organizerTrustBadge(trust) {
+  switch (trust) {
+    case "automate":
+      return `<span class="org-badge org-badge--automate" title="Runs without asking each time">Automate</span>`;
+    case "never":
+      return `<span class="org-badge org-badge--never" title="Refuses changes in this folder">Never</span>`;
+    case "ask_first":
+    default:
+      return `<span class="org-badge org-badge--confirm" title="Asks for approval per action">Ask first</span>`;
+  }
+}
+
+async function organizerSetRuleTrust(path, trust) {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone || !path) return;
+  try {
+    await invoke("organizer_set_rule_trust", { zoneId: zone.id, path, trust });
+    // Trust changes what the next plan proposes; force a fresh review.
+    organizerHasReviewedPlan = false;
+    await organizerRefreshRules();
+    showNotification(`Trust for ${path} set to ${trust.replace("_", " ")}.`, "info");
+  } catch (err) {
+    toastError("Could not update trust: " + err);
+    await organizerRefreshRules();
+  }
 }
 
 function organizerUpdateButtons(rules) {
@@ -1696,67 +1742,158 @@ async function organizerCreateZone() {
   }
 }
 
-async function organizerCreateClientFilingPreset() {
+// The guided setup presets. Each turns a short "interview" (a few questions)
+// into a named Zone and its folder rules — Ghost's local, permission-bounded
+// answer to the "configure yourself from how the team works" onboarding, with
+// no cloud and no credentials. `mode` is "two_folder" (move OUT of a source
+// INTO a destination root) or "in_place" (organize one folder where it sits).
+const ORGANIZER_PRESETS = {
+  "Client filing": {
+    description: "File invoices, receipts, and statements into dated client folders.",
+    mode: "two_folder",
+    renameDated: true,
+    sourcePrompt: "Full path of the folder client documents arrive in",
+    sourcePlaceholder: "/Users/you/Downloads",
+    destPrompt: "Destination root for filed client documents",
+    destPlaceholder: "/Users/you/Client Files",
+  },
+  "Bookkeeping inbox": {
+    description: "Sort a bookkeeping inbox into category folders, dated for filing.",
+    mode: "in_place",
+    renameDated: true,
+    sourcePrompt: "Full path of the bookkeeping inbox to organize",
+    sourcePlaceholder: "/Users/you/Bookkeeping Inbox",
+  },
+  "Downloads cleanup": {
+    description: "Tidy a Downloads-style folder into category folders in place.",
+    mode: "in_place",
+    renameDated: false,
+    sourcePrompt: "Full path of the folder to tidy",
+    sourcePlaceholder: "/Users/you/Downloads",
+  },
+};
+
+const TRUST_CHOICES = {
+  "Ask first (recommended) — approve each change": "ask_first",
+  "Automate — run without asking each time": "automate",
+  "Never — set up the boundary but make no changes": "never",
+};
+
+// Guided wizard: pick a preset, answer a couple of questions, choose a trust
+// level, confirm the exact rules, then create the Zone and preview the plan.
+// Reuses the in-app dialog helpers; no new backend — it composes the existing
+// organizer_create_zone / organizer_add_folder_rule commands.
+async function organizerRunWizard() {
   if (!invoke) return notAvailable();
+
+  const presetName = await ghostPick(
+    "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
+    Object.keys(ORGANIZER_PRESETS),
+  );
+  if (!presetName) return;
+  const preset = ORGANIZER_PRESETS[presetName];
+
   // No "~" default: the backend never expands tildes, so a literal
   // "~/Downloads" rule would silently scan nothing. Full paths only.
-  const sourcePath = await ghostPrompt(
-    "Full path of the source folder for client documents",
-    "",
-    "/Users/you/Downloads",
-  );
+  const sourcePath = (
+    await ghostPrompt(preset.sourcePrompt, "", preset.sourcePlaceholder)
+  )?.trim();
   if (!sourcePath) return;
-  const destinationPath = await ghostPrompt(
-    "Destination root for filed client documents",
-    "",
-    "/Users/you/Client Files",
-  );
-  if (!destinationPath) return;
 
-  // The source must grant move-OUT as well as read: the policy engine denies
-  // MoveFile from a folder whose rule lacks can_move (pinned by the planner
-  // test move_from_read_only_source_is_denied), so a read-only source plans
-  // a run where every filing move is denied. Nothing is ever created back
-  // into or renamed inside the source.
-  const sourceRule = {
-    path: sourcePath.trim(),
-    can_read: true,
-    can_create: false,
-    can_rename: false,
-    can_move: true,
-    can_copy: false,
-    can_delete: false,
-  };
-  const destinationRule = {
-    path: destinationPath.trim(),
-    can_read: true,
-    can_create: true,
-    can_rename: true,
-    can_move: true,
-    can_copy: false,
-    can_delete: false,
-  };
+  let destPath = sourcePath;
+  if (preset.mode === "two_folder") {
+    destPath = (await ghostPrompt(preset.destPrompt, "", preset.destPlaceholder))?.trim();
+    if (!destPath) return;
+  }
+
+  const trustLabel = await ghostPick(
+    "How much autonomy should this Zone have? You can change it per folder later.",
+    Object.keys(TRUST_CHOICES),
+  );
+  if (!trustLabel) return;
+  const trust = TRUST_CHOICES[trustLabel];
+
+  // Build the rules this preset needs. In two-folder mode the source grants
+  // read + move-OUT (a read-only source makes the policy engine deny every
+  // filing move) and the destination grants read/create/rename/move. In-place
+  // mode is a single full-permission rule. The chosen trust rides on the
+  // mutating rules; the engine still re-checks every action at execution.
+  const rules = [];
+  if (preset.mode === "two_folder" && destPath !== sourcePath) {
+    rules.push({
+      path: sourcePath,
+      can_read: true,
+      can_create: false,
+      can_rename: false,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+    rules.push({
+      path: destPath,
+      can_read: true,
+      can_create: true,
+      can_rename: true,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+  } else {
+    rules.push({
+      path: sourcePath,
+      can_read: true,
+      can_create: true,
+      can_rename: true,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+  }
+
+  // Final review: show exactly the boundary the wizard will create before it
+  // writes anything, so the user approves the playbook, not a black box.
+  const preview = rules
+    .map((r) => `• ${r.path} — ${organizerGrantSummary(r)} · trust: ${trust.replace("_", " ")}`)
+    .join("\n");
+  const confirmed = await ghostConfirm(
+    `Create the "${presetName}" Zone with these folders?\n\n${preview}\n\nGhost will preview the plan next — nothing moves until you approve it.`,
+    "Create Zone",
+  );
+  if (!confirmed) return;
 
   try {
     const zone = await invoke("organizer_create_zone", {
-      name: "Client filing",
-      description: "File invoices receipts and statements into dated client folders.",
-      renameDated: true,
+      name: presetName,
+      description: preset.description,
+      renameDated: preset.renameDated,
     });
     organizerSelectedZoneId = zone.id;
-    if (sourceRule.path === destinationRule.path) {
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
-    } else {
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: sourceRule });
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
+    for (const rule of rules) {
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
     }
     organizerHasReviewedPlan = false;
     await organizerRefreshZones();
-    showNotification("Client filing preset created. Previewing the plan now.", "info");
+    showNotification(`"${presetName}" Zone created. Previewing the plan now.`, "info");
     await organizerScan();
   } catch (err) {
-    toastError("Could not create preset: " + err);
+    toastError("Could not create the Zone: " + err);
   }
+}
+
+// Compact grant summary for the wizard's confirmation preview.
+function organizerGrantSummary(rule) {
+  const grants = [
+    rule.can_read && "read",
+    rule.can_create && "create",
+    rule.can_move && "move",
+    rule.can_rename && "rename",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return grants || "no permissions";
 }
 
 async function organizerAddFolder() {
@@ -1774,6 +1911,7 @@ async function organizerAddFolder() {
     can_move: !!document.getElementById("permMove")?.checked,
     can_copy: false,
     can_delete: false, // Ghost never deletes through the Organizer.
+    trust: document.getElementById("permTrust")?.value || "ask_first",
   };
   try {
     await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
@@ -1811,6 +1949,40 @@ function organizerDecisionBadge(decision) {
   if (decision.decision === "require_confirmation")
     return `<span class="org-badge org-badge--confirm">Needs approval · ${escapeHtml(decision.risk || "")}</span>`;
   return "";
+}
+
+// How an executed action was authorized: automatically (an "automate" rule) or
+// under the user's explicit approval of the run.
+function organizerProvenanceBadge(provenance) {
+  if (provenance === "automated")
+    return ` <span class="org-badge org-badge--automate" title="Ran without asking (automate rule)">automated</span>`;
+  if (provenance === "user_approved")
+    return ` <span class="org-badge org-badge--confirm" title="Ran because you approved this run">you approved</span>`;
+  return "";
+}
+
+// Export a run's audit log as CSV or JSON. The backend returns the text; we
+// hand it to the user as a download so they keep a portable record of exactly
+// what Ghost did and under which rule.
+async function organizerExportAudit(executionId, format) {
+  if (!invoke) return notAvailable();
+  if (!executionId) return;
+  try {
+    const text = await invoke("organizer_export_audit", { executionId, format });
+    const mime = format === "csv" ? "text/csv" : "application/json";
+    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ghost-audit-${executionId}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showNotification(`Audit exported as ${format.toUpperCase()}.`, "info");
+  } catch (err) {
+    toastError("Export failed: " + err);
+  }
 }
 
 async function organizerScan() {
@@ -1854,8 +2026,13 @@ function organizerRenderPlan(plan) {
         typeof a.confidence === "number" && a.confidence <= 0.5
           ? `<span class="org-flag">low confidence</span>`
           : "";
+      // Name the boundary that authorized (or refused) this action, so every
+      // row answers "which rule fired?" the way an auditor would ask.
+      const rule = a.rule_path
+        ? `<div class="org-rule-attr">by rule <code>${escapeHtml(a.rule_path)}</code></div>`
+        : "";
       return `<tr>
-        <td>${organizerDescribeCapability(a.capability)} ${conflict} ${low}</td>
+        <td>${organizerDescribeCapability(a.capability)} ${conflict} ${low}${rule}</td>
         <td>${organizerDecisionBadge(a.decision)}</td>
       </tr>`;
     })
@@ -1902,7 +2079,13 @@ async function organizerRun() {
     .map((e) => {
       const outcome = e.outcome?.outcome || "?";
       const detail = e.outcome?.reason || e.outcome?.error || "";
-      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
+      // Show the rule that fired and how the action was authorized — the same
+      // "rule that fired / who signed off" record an auditor would expect.
+      const rule = e.rule_path
+        ? ` <span class="org-rule-attr">by rule <code>${escapeHtml(e.rule_path)}</code></span>`
+        : "";
+      const provenance = organizerProvenanceBadge(e.provenance);
+      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${provenance}${rule}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
     })
     .join("");
 
@@ -1914,11 +2097,19 @@ async function organizerRun() {
         <strong>${r.skipped ?? 0}</strong> skipped ·
         <strong>${r.failed ?? 0}</strong> failed
       </div>
-      <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+      <div class="btn-row">
+        <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+        <button class="btn btn--ghost btn--small" id="organizerExportCsvBtn" type="button">Export audit (CSV)</button>
+        <button class="btn btn--ghost btn--small" id="organizerExportJsonBtn" type="button">Export audit (JSON)</button>
+      </div>
       <h3 class="organizer-subhead">Audit log</h3>
       <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
     const undoBtn = document.getElementById("organizerUndoLastBtn");
     if (undoBtn) undoBtn.addEventListener("click", () => organizerUndo(res.execution_id));
+    const csvBtn = document.getElementById("organizerExportCsvBtn");
+    if (csvBtn) csvBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "csv"));
+    const jsonBtn = document.getElementById("organizerExportJsonBtn");
+    if (jsonBtn) jsonBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "json"));
   }
   organizerHasReviewedPlan = false;
   organizerUpdateButtons(await safeRules(zone.id));
@@ -2315,7 +2506,7 @@ function wireUpControls() {
 
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
-  bind("organizerPresetBtn", organizerCreateClientFilingPreset);
+  bind("organizerPresetBtn", organizerRunWizard);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
   bind("organizerRunBtn", organizerRun);

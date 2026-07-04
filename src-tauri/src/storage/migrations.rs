@@ -7,7 +7,7 @@
 use rusqlite::Connection;
 
 /// The schema version this binary produces.
-pub const LATEST_VERSION: i64 = 3;
+pub const LATEST_VERSION: i64 = 4;
 
 /// Bring `conn` up to [`LATEST_VERSION`], applying forward migrations only.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -34,6 +34,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if version < 3 {
         conn.execute_batch(MIGRATION_V3)?;
         version = 3;
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    }
+
+    if version < 4 {
+        conn.execute_batch(MIGRATION_V4)?;
+        version = 4;
         conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
     }
 
@@ -90,6 +96,20 @@ const MIGRATION_V3: &str = r#"
 ALTER TABLE zones ADD COLUMN rename_dated INTEGER NOT NULL DEFAULT 0;
 "#;
 
+/// v3 -> v4: per-rule trust levels (automate / ask_first / never) and the
+/// local-only milestone table used to measure time-to-first-value. Existing
+/// rules default to `ask_first` — exactly the behavior they had before the
+/// column existed.
+const MIGRATION_V4: &str = r#"
+ALTER TABLE zone_folder_rules ADD COLUMN trust_level TEXT NOT NULL DEFAULT 'ask_first'
+  CHECK (trust_level IN ('automate', 'ask_first', 'never'));
+
+CREATE TABLE organizer_milestones (
+  key TEXT PRIMARY KEY,
+  at TEXT NOT NULL
+);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +159,47 @@ mod tests {
             })
             .unwrap();
         assert_eq!(rename_dated, 0);
+    }
+
+    /// Upgrading a v3 database must give existing rules `ask_first` trust —
+    /// the exact behavior they had before the column existed.
+    #[test]
+    fn migration_v4_defaults_existing_rules_to_ask_first() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap();
+        conn.execute_batch("PRAGMA user_version = 3;").unwrap();
+        conn.execute(
+            "INSERT INTO zones (id, name, description, default_decision, created_at, updated_at) \
+             VALUES ('z', 'Existing', NULL, 'ask', '1', '1')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO zone_folder_rules (id, zone_id, path, can_read, can_move) \
+             VALUES ('r', 'z', '/home/u/Downloads', 1, 1)",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let trust: String = conn
+            .query_row(
+                "SELECT trust_level FROM zone_folder_rules WHERE id = 'r'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(trust, "ask_first");
+
+        // The milestone table exists and starts empty.
+        let milestones: i64 = conn
+            .query_row("SELECT count(*) FROM organizer_milestones", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(milestones, 0);
     }
 }

@@ -22,9 +22,11 @@ resulting risk classes in `docs/command-registry.md`.
 
 `executor::execute_plan(plan, rules)` walks each `PlanAction` and, for every one:
 
-1. **Re-checks policy.** It calls `policy::evaluate` again at execution time.
-   Anything the engine now refuses is recorded as `Skipped` and never touched —
-   even though it was in the plan (rules or disk state may have drifted).
+1. **Re-checks policy.** It calls `policy::evaluate_with_attribution` again at
+   execution time. Anything the engine now refuses is recorded as `Skipped` and
+   never touched — even though it was in the plan (rules or disk state may have
+   drifted). The evaluation also names the `FolderRule` that fired, which is
+   carried onto the audit event.
 2. **Verifies state.** A move/rename requires the source to still exist and the
    target to *not* exist. Ghost never silently overwrites (`AGENTS.md`
    non-negotiable): an occupied target is `Skipped`, not clobbered.
@@ -32,12 +34,25 @@ resulting risk classes in `docs/command-registry.md`.
    created folder, `UndoOp::Restore` for a move/rename) is recorded in the
    `UndoJournal` *before* the filesystem call — trust invariant 8.
 4. **Applies, verifies the result, and audits.** Each action produces exactly
-   one `AuditEvent` (`Applied` / `Skipped` / `Failed`).
+   one `AuditEvent` (`Applied` / `Skipped` / `Failed`), tagged with the rule
+   that fired (`rule_path`) and — for actions that ran — how it was authorized
+   (`provenance`: `Automated` under an `automate` rule, `UserApproved`
+   otherwise). Both attribution fields are optional and serde-defaulted, so
+   audit logs persisted before they existed still deserialize.
 
 Only the file-organization capabilities the planner emits (`CreateFolder`,
 `MoveFile`, `RenameFile`) are executable; any other capability is `Skipped`
 rather than risked. The result is an `ExecutionReport { applied, skipped,
 failed, audit, undo }`.
+
+## Export
+
+`AuditLog::to_csv()` renders a run's log as RFC-4180 CSV (one row per event:
+timestamp, action, path(s), outcome, detail, rule, provenance). The
+`organizer_export_audit` command returns either that CSV or the pretty-printed
+JSON of the audit log; it reads the stored run and returns text, writing nothing
+itself (the frontend saves the file the user picks). This is Ghost's version of
+an exportable "what the machine did, and under which rule" record.
 
 ## Undo
 

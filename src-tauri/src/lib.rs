@@ -140,10 +140,13 @@ pub fn run() {
             commands::organizer_list_folder_rules,
             commands::organizer_create_zone,
             commands::organizer_add_folder_rule,
+            commands::organizer_set_rule_trust,
             commands::organizer_plan,
             commands::organizer_execute,
             commands::organizer_list_executions,
             commands::organizer_undo,
+            commands::organizer_export_audit,
+            commands::organizer_time_to_value,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
