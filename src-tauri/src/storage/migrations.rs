@@ -7,7 +7,7 @@
 use rusqlite::Connection;
 
 /// The schema version this binary produces.
-pub const LATEST_VERSION: i64 = 4;
+pub const LATEST_VERSION: i64 = 5;
 
 /// Bring `conn` up to [`LATEST_VERSION`], applying forward migrations only.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -40,6 +40,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if version < 4 {
         conn.execute_batch(MIGRATION_V4)?;
         version = 4;
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    }
+
+    if version < 5 {
+        conn.execute_batch(MIGRATION_V5)?;
+        version = 5;
         conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
     }
 
@@ -108,6 +114,16 @@ CREATE TABLE organizer_milestones (
   key TEXT PRIMARY KEY,
   at TEXT NOT NULL
 );
+"#;
+
+/// v4 -> v5: tamper-evidence for stored Organizer executions. Each run is
+/// sealed with a SHA-256 `hash` over its own row bytes plus the previous run's
+/// hash, forming a chain that can be verified offline. Existing rows keep an
+/// empty hash (unsealed, pre-upgrade); the verifiable chain begins at the first
+/// execution written after this migration.
+const MIGRATION_V5: &str = r#"
+ALTER TABLE organizer_executions ADD COLUMN hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE organizer_executions ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';
 "#;
 
 #[cfg(test)]
@@ -201,5 +217,37 @@ mod tests {
             })
             .unwrap();
         assert_eq!(milestones, 0);
+    }
+
+    /// Upgrading a v4 database must add `hash`/`prev_hash` to existing
+    /// executions with empty defaults — they are "unsealed" pre-upgrade rows,
+    /// and the verifiable chain starts at the first execution written after.
+    #[test]
+    fn migration_v5_adds_empty_hash_columns_to_existing_executions() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap();
+        conn.execute_batch(MIGRATION_V4).unwrap();
+        conn.execute_batch("PRAGMA user_version = 4;").unwrap();
+        conn.execute(
+            "INSERT INTO organizer_executions \
+             (id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json) \
+             VALUES ('e', 'z', '1', 0, 0, 0, '[]', '[]')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let (hash, prev): (String, String) = conn
+            .query_row(
+                "SELECT hash, prev_hash FROM organizer_executions WHERE id = 'e'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(hash, "");
+        assert_eq!(prev, "");
     }
 }

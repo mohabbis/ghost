@@ -999,6 +999,29 @@
   margin-left: 4px;
 }
 
+/* Tamper-evidence: a "sealed" marker per run and the verify verdict. */
+.org-seal {
+  font-size: 11px;
+  color: var(--success);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.organizer-verify-result {
+  margin: 0 0 8px;
+  font-size: 13px;
+  min-height: 1em;
+}
+
+.org-verify--ok {
+  color: var(--success);
+}
+
+.org-verify--bad {
+  color: #ff8da0;
+  font-weight: 600;
+}
+
 .organizer-muted,
 .organizer-note {
   font-size: 12px;

@@ -25,12 +25,14 @@
 //! (`organizer_plan`) and the plan actually executed are produced by the same
 //! deterministic backend against the same persisted rules.
 
+use crate::engine::GhostEngine;
 use crate::organizer::executor::{execute_plan, ExecutionReport};
 use crate::organizer::planner::{plan_zone, OrganizerPlan};
 use crate::organizer::undo::{revert, UndoReport};
 use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use crate::storage::executions::{
-    get_execution, list_executions, save_execution, ExecutionSummary,
+    get_execution, list_executions, prune_executions, save_execution, verify_chain,
+    ChainVerification, ExecutionSummary,
 };
 use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
 use crate::storage::open_default;
@@ -38,6 +40,7 @@ use crate::storage::zones::{
     add_folder_rule, create_zone, list_folder_rules, list_zones, set_rule_trust,
 };
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
 /// The result of executing a plan: the report plus the id under which it was
 /// stored, so the UI can offer an undo for exactly this run.
@@ -157,16 +160,30 @@ pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
 /// resulting report (with its audit log and undo journal) is persisted so the
 /// run can be reviewed and undone later.
 ///
+/// The run is sealed into a tamper-evident hash chain as it is saved, and — if
+/// the user set an audit retention policy — older runs beyond the policy are
+/// pruned afterward (best-effort; a prune error never fails the run).
+///
 /// Risk class: local-mutate (filesystem). Touches: files (moves/renames inside
 /// the approved Zone). No OS input, screenshots, network, secrets.
 #[tauri::command]
-pub fn organizer_execute(zone_id: String) -> Result<ExecutionResult, String> {
+pub fn organizer_execute(
+    zone_id: String,
+    engine: State<GhostEngine>,
+) -> Result<ExecutionResult, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
     let rules = list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())?;
     let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
     let report = execute_plan(&plan, &rules);
     let execution_id = save_execution(&conn, &zone_id, &report).map_err(|e| e.to_string())?;
     let _ = record_milestone(&conn, Milestone::FirstRun);
+
+    // Enforce the user's retention policy, if any. Deleting the user's own audit
+    // history is opt-in (both bounds default to None = keep all); a prune failure
+    // must not fail an otherwise-successful run.
+    let audit = engine.get_config().audit;
+    let _ = prune_executions(&conn, audit.retention_keep_last, audit.retention_keep_days);
+
     Ok(ExecutionResult {
         execution_id,
         report,
@@ -226,11 +243,24 @@ pub struct Milestoned {
     pub at: String,
 }
 
+/// Verify the integrity of the stored execution audit chain: whether every
+/// sealed run still matches its recorded seal and links to the one before it.
+/// This is the payoff of the tamper-evidence work — a bookkeeper or auditor can
+/// prove the local audit history wasn't altered, entirely offline.
+///
+/// Risk class: safe-read (DB only). No file contents, no network.
+#[tauri::command]
+pub fn organizer_verify_audit_chain() -> Result<ChainVerification, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    verify_chain(&conn).map_err(|e| e.to_string())
+}
+
 /// Export a past execution's audit log so the user has a portable record of
 /// exactly what Ghost did — every action, its outcome, the rule that fired, and
 /// whether it was automated or user-approved. `format` is `"json"` (the audit
-/// log verbatim) or `"csv"` (one row per event). The caller writes the returned
-/// text to a file it chose; this command performs no filesystem writes itself.
+/// log plus its tamper-evidence seal) or `"csv"` (one row per event, with the
+/// seal as leading metadata lines). The caller writes the returned text to a
+/// file it chose; this command performs no filesystem writes itself.
 ///
 /// Risk class: safe-read (DB only; returns text, writes nothing).
 #[tauri::command]
@@ -240,8 +270,32 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
     match format.as_str() {
-        "json" => serde_json::to_string_pretty(&stored.audit).map_err(|e| e.to_string()),
-        "csv" => Ok(stored.audit.to_csv()),
+        "json" => {
+            // Wrap the audit log with the run's seal so the exported artifact
+            // carries its own tamper-evidence, verifiable against the chain.
+            let doc = serde_json::json!({
+                "execution_id": stored.id,
+                "created_at": stored.created_at,
+                "hash": stored.hash,
+                "prev_hash": stored.prev_hash,
+                "audit": stored.audit,
+            });
+            serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+        }
+        "csv" => {
+            // Two leading metadata lines carry the seal; the audit table follows.
+            let mut out = String::new();
+            out.push_str(&format!(
+                "# execution_id={},created_at={}\n",
+                stored.id, stored.created_at
+            ));
+            out.push_str(&format!(
+                "# hash={},prev_hash={}\n",
+                stored.hash, stored.prev_hash
+            ));
+            out.push_str(&stored.audit.to_csv());
+            Ok(out)
+        }
         other => Err(format!(
             "unsupported export format: {other} (use json or csv)"
         )),

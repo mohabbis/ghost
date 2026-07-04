@@ -147,6 +147,7 @@ pub fn run() {
             commands::organizer_undo,
             commands::organizer_export_audit,
             commands::organizer_time_to_value,
+            commands::organizer_verify_audit_chain,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
