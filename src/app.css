@@ -148,9 +148,9 @@
 }
 
 .btn--primary {
-  background: var(--accent);
-  color: var(--text);
-  border: 1px solid var(--accent);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  color: #0b0a18;
+  border: 1px solid transparent;
 }
 
 .speed-picker {
@@ -200,7 +200,12 @@
 
 .insight-icon {
   font-size: 1.25rem;
+  color: var(--accent-strong);
 }
+.insight-icon .i { width: 1.4rem; height: 1.4rem; }
+.onboarding__glyph .i { width: 2.6rem; height: 2.6rem; stroke-width: 1.5; color: var(--accent-strong); }
+.flow-step__icon .i { width: 1.5rem; height: 1.5rem; color: var(--accent-strong); }
+.onboarding__privacy .i { width: 1rem; height: 1rem; vertical-align: -2px; margin-right: 4px; }
 
 .notifications {
   display: flex;
@@ -322,9 +327,9 @@
   margin: 0 0 4px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(131, 246, 196, 0.12);
-  border: 1px solid rgba(131, 246, 196, 0.3);
-  color: var(--accent-mint, #83f6c4);
+  background: rgba(73, 211, 160, 0.12);
+  border: 1px solid rgba(73, 211, 160, 0.3);
+  color: var(--success);
   font-size: 0.85rem;
 }
 
@@ -480,7 +485,7 @@
   top: 0;
   z-index: 20;
   padding-top: 18px;
-  background: linear-gradient(180deg, rgba(7, 8, 19, 0.94), rgba(7, 8, 19, 0.72));
+  background: linear-gradient(180deg, rgba(6, 6, 11, 0.92), rgba(6, 6, 11, 0.66));
   backdrop-filter: blur(18px);
 }
 
@@ -489,12 +494,12 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #070813;
-  font-size: 1.25rem;
-  font-weight: 950;
-  box-shadow: 0 18px 38px rgba(141, 123, 255, 0.28);
+  border-radius: 13px;
+  background: linear-gradient(140deg, var(--accent-strong), var(--accent));
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 800;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 10px 26px -12px rgba(139, 124, 246, 0.7);
 }
 
 .app-header__brand h1 {
@@ -1238,15 +1243,32 @@
 }
 
 .nav__item.is-active {
-  background: rgba(141, 123, 255, 0.16);
+  background: rgba(139, 124, 246, 0.16);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(141, 123, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(139, 124, 246, 0.34);
 }
 
 .nav__ico {
+  display: inline-grid;
+  place-items: center;
   font-size: 1.05rem;
   line-height: 1;
+  color: var(--muted);
 }
+.nav__item.is-active .nav__ico { color: var(--accent-strong); }
+
+/* Inline line-icon system shared with the marketing site. */
+.i {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.btn .i { width: 1.05rem; height: 1.05rem; }
 
 .nav__foot {
   margin-top: auto;

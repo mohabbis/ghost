@@ -586,11 +586,21 @@ function replayDemo() {
   reset();
 }
 
+/* ---------- nav hairline appears once the page scrolls ---------- */
+function setupStickyNav() {
+  const nav = $(".nav");
+  if (!nav) return;
+  const onScroll = () => nav.classList.toggle("is-stuck", window.scrollY > 8);
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+}
+
 /* ---------- boot ---------- */
 window.addEventListener("DOMContentLoaded", () => {
   platformDetection();
   revealOnScroll();
   setupGhostEyes();
+  setupStickyNav();
   setupMobileNav();
   setupTabs();
   setupScrollSpy();
