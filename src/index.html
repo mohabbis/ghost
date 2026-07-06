@@ -12,6 +12,24 @@
   </head>
 
   <body class="app-body">
+    <!-- ── Icon sprite: shared line set with the marketing site, no emoji ── -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+        <symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/></symbol>
+        <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3"/><path d="M7.5 14h9"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+        <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 6.8 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 4.6a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.5 1h.1a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+        <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M17 6l2 2M14 9l2 2"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.9-7 10-4-2.1-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+        <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9.5 4a2.5 2.5 0 0 0-2.4 1.8A2.5 2.5 0 0 0 5 10c0 .5.1 1 .4 1.4A2.5 2.5 0 0 0 6 16a2.5 2.5 0 0 0 3.5 2.3V4.5A2.5 2.5 0 0 0 9.5 4z"/><path d="M14.5 4a2.5 2.5 0 0 1 2.4 1.8A2.5 2.5 0 0 1 19 10c0 .5-.1 1-.4 1.4A2.5 2.5 0 0 1 18 16a2.5 2.5 0 0 1-3.5 2.3V4.5A2.5 2.5 0 0 1 14.5 4z"/></symbol>
+        <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></symbol>
+      </defs>
+    </svg>
+
     <div class="app-shell">
       <nav class="nav" aria-label="Primary">
         <div class="nav__brand">
@@ -21,16 +39,16 @@
 
         <div class="nav__items" role="tablist" aria-label="Views">
           <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button">
-            <span class="nav__ico" aria-hidden="true">🗂️</span><span>Organize</span>
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span><span>Organize</span>
           </button>
           <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button">
-            <span class="nav__ico" aria-hidden="true">⏺️</span><span>Record &amp; Replay</span>
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span><span>Record &amp; Replay</span>
           </button>
           <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button">
-            <span class="nav__ico" aria-hidden="true">🧩</span><span>Workflows</span>
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Workflows</span>
           </button>
           <button class="nav__item" id="navExperimental" data-view="experimental" role="tab" aria-selected="false" type="button" hidden>
-            <span class="nav__ico" aria-hidden="true">🧪</span><span>Experimental</span>
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-flask"/></svg></span><span>Experimental</span>
           </button>
         </div>
 
@@ -39,8 +57,8 @@
             <span class="pulse" aria-hidden="true" style="display:none"></span>
             Ready to record
           </div>
-          <button class="btn btn--ghost btn--small" id="lockBtn" type="button" hidden>🔒 Lock</button>
-          <button class="btn btn--ghost btn--small" id="settingsBtn" type="button">⚙️ Settings</button>
+          <button class="btn btn--ghost btn--small" id="lockBtn" type="button" hidden><svg class="i"><use href="#i-lock"/></svg> Lock</button>
+          <button class="btn btn--ghost btn--small" id="settingsBtn" type="button"><svg class="i"><use href="#i-gear"/></svg> Settings</button>
         </div>
       </nav>
 
@@ -189,7 +207,7 @@
 
           <aside class="app-sidebar" aria-label="Live activity">
             <div class="insight-card">
-              <span class="insight-icon" aria-hidden="true">🦜</span>
+              <span class="insight-icon" aria-hidden="true"><svg class="i"><use href="#i-sparkle"/></svg></span>
               <span class="insight-text" id="insight-text">Ready when you are. Start with a short, low-risk workflow.</span>
             </div>
             <section class="status-stack" aria-label="Automation readiness">
@@ -241,7 +259,7 @@
     <!-- Lock screen (shown on launch when a local password is configured) -->
     <div id="lock-screen" class="onboarding" hidden>
       <div class="onboarding__card" role="dialog" aria-modal="true" aria-labelledby="lock-title">
-        <span class="onboarding__glyph" aria-hidden="true">🔒</span>
+        <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-lock"/></svg></span>
         <h2 id="lock-title">Ghost is locked</h2>
         <p class="onboarding__lead">Enter your password to unlock your workflows.</p>
         <input type="password" id="lockPassword" class="auth-input" placeholder="Password"
@@ -272,13 +290,13 @@
 
         <!-- Step 1: Welcome -->
         <section class="onboarding__step" data-step="0">
-          <span class="onboarding__glyph" aria-hidden="true">🦜</span>
+          <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span>
           <h2 id="onboarding-title">Welcome to Ghost</h2>
           <p class="onboarding__lead">
             Ghost watches the repetitive things you do on screen, then replays them
             for you — record a task once, run it forever.
           </p>
-          <p class="onboarding__privacy">🔒 Ghost Guard blocks sensitive text-field capture and suppresses secret-like keystrokes.</p>
+          <p class="onboarding__privacy"><svg class="i"><use href="#i-lock"/></svg>Ghost Guard blocks sensitive text-field capture and suppresses secret-like keystrokes.</p>
           <div class="onboarding__actions">
             <button class="btn btn--ghost" id="onboardingIgnore" type="button">Not now</button>
             <button class="btn btn--primary" id="onboardingStart" type="button">Show me how it works</button>
@@ -287,23 +305,23 @@
 
         <!-- Step 2: How Ghost helps (workflow demo) -->
         <section class="onboarding__step" data-step="1" hidden>
-          <span class="onboarding__glyph" aria-hidden="true">✨</span>
+          <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-sparkle"/></svg></span>
           <h2>How Ghost helps</h2>
           <div class="onboarding__flow" aria-hidden="false">
             <div class="flow-step">
-              <span class="flow-step__icon">⏺️</span>
+              <span class="flow-step__icon"><svg class="i"><use href="#i-record"/></svg></span>
               <strong>1. Record</strong>
               <p>Do your task once while Ghost watches.</p>
             </div>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <div class="flow-step">
-              <span class="flow-step__icon">🧠</span>
+              <span class="flow-step__icon"><svg class="i"><use href="#i-brain"/></svg></span>
               <strong>2. Learn</strong>
               <p>Ghost understands what you clicked and typed.</p>
             </div>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <div class="flow-step">
-              <span class="flow-step__icon">▶️</span>
+              <span class="flow-step__icon"><svg class="i"><use href="#i-play"/></svg></span>
               <strong>3. Replay</strong>
               <p>One click repeats the whole thing for you.</p>
             </div>
@@ -323,7 +341,7 @@
 
         <!-- Step 3: Accessibility permission -->
         <section class="onboarding__step" data-step="2" hidden>
-          <span class="onboarding__glyph" aria-hidden="true">🔑</span>
+          <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-key"/></svg></span>
           <h2>Grant recording permissions</h2>
           <p class="onboarding__lead">
             To watch and replay clicks and keystrokes, macOS needs you to allow Ghost
@@ -347,7 +365,7 @@
 
         <!-- Step 4: Secure your data (optional local password) -->
         <section class="onboarding__step" data-step="3" hidden>
-          <span class="onboarding__glyph" aria-hidden="true">🛡️</span>
+          <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span>
           <h2>Secure your data</h2>
           <p class="onboarding__lead">
             Optionally protect Ghost with a password. Your recorded workflows are then
@@ -373,7 +391,7 @@
 
         <!-- Step 5: Ready -->
         <section class="onboarding__step" data-step="4" hidden>
-          <span class="onboarding__glyph" aria-hidden="true">✅</span>
+          <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-check-circle"/></svg></span>
           <h2>You're all set</h2>
           <p class="onboarding__lead">Three steps to your first automation:</p>
           <ol class="onboarding__list">
