@@ -51,6 +51,8 @@ pub fn run() {
             commands::request_accessibility,
             commands::check_input_monitoring,
             commands::request_input_monitoring,
+            // Relaunch so macOS re-evaluates permission grants (banner CTA).
+            commands::restart_app,
             // Deterministic workflow compression for review timeline.
             commands::compress_workflow,
             // Signed auto-update: a read-only check plus a user-approved install.

@@ -5,6 +5,10 @@
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
 
+// Inline line-icon helper for HTML built in JS — references the SVG sprite in
+// index.html so dynamic UI uses the same icon set as the static markup (no emoji).
+const icon = (id, cls = "i") => `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+
 function notAvailable() {
   toastError("Tauri not available — running in static mode");
 }
@@ -51,8 +55,8 @@ function showNotification(text, kind = "info") {
 
   const notification = document.createElement("div");
   notification.className = `notification notification--${kind}`;
-  const icon = kind === "error" ? "⚠️" : "✓";
-  notification.innerHTML = `<p class="notification__text">${icon} ${escapeHtml(text)}</p>`;
+  const glyph = kind === "error" ? icon("i-alert") : icon("i-check-circle");
+  notification.innerHTML = `<p class="notification__text">${glyph} ${escapeHtml(text)}</p>`;
   notificationsEl.appendChild(notification);
 
   setTimeout(() => notification.remove(), kind === "error" ? 8000 : 5000);
@@ -168,7 +172,7 @@ async function refreshPermissionBanner() {
       const missing = [];
       if (!accessibility) missing.push("Accessibility");
       if (!inputMonitoring) missing.push("Input Monitoring");
-      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes.`;
+      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes. Enable it in System Settings, then Quit & Reopen so macOS applies it.`;
     }
   } catch (error) {
     console.error("Failed to check permissions:", error);
@@ -176,7 +180,10 @@ async function refreshPermissionBanner() {
 }
 
 async function requestAccessibility() {
-  if (!invoke) return;
+  if (!invoke) {
+    notAvailable();
+    return;
+  }
   try {
     const { accessibility, inputMonitoring } = await checkPermissions();
     // macOS shows each permission prompt only once per app; afterwards the
@@ -186,14 +193,33 @@ async function requestAccessibility() {
 
     const after = await checkPermissions();
     if (!after.accessibility || !after.inputMonitoring) {
+      // The grant only takes effect after a relaunch. Point the user at the
+      // "Quit & Reopen" button rather than leaving a dead-end instruction.
       showNotification(
-        "Enable Ghost in System Settings → Privacy & Security (Accessibility + Input Monitoring), then quit and reopen Ghost.",
+        "Enable Ghost under System Settings → Privacy & Security (Accessibility + Input Monitoring), then use Quit & Reopen so macOS applies it.",
       );
     }
   } catch (error) {
     console.error("Failed to request permissions:", error);
+    showNotification("Couldn't open the permission settings automatically. Open System Settings → Privacy & Security → Accessibility and enable Ghost.", "error");
   } finally {
     refreshPermissionBanner();
+  }
+}
+
+// macOS only re-evaluates permission trust at launch, so after the user flips
+// the switch the running process still reads "not granted". Relaunching applies
+// it. See restart_app in src-tauri/src/commands/core.rs.
+async function restartApp() {
+  if (!invoke) {
+    notAvailable();
+    return;
+  }
+  try {
+    await invoke("restart_app");
+  } catch (error) {
+    console.error("Failed to restart:", error);
+    showNotification("Couldn't relaunch automatically — quit Ghost and open it again to apply the permission.", "error");
   }
 }
 
@@ -663,7 +689,8 @@ async function inspectElementAtCursor() {
 // ===== Ghost Guard local audit =====
 
 function severityIcon(severity) {
-  return { low: "ℹ️", medium: "⚠️", high: "🛡️", critical: "🚨" }[severity] || "•";
+  const id = { low: "i-info", medium: "i-alert", high: "i-shield", critical: "i-siren" }[severity];
+  return id ? icon(id, `i sev sev--${severity}`) : "•";
 }
 
 function renderGuardReport(report) {
@@ -1012,7 +1039,7 @@ async function openSettings() {
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
 
   content.innerHTML = `
-    <h3>⚙️ Settings</h3>
+    <h3>${icon("i-gear")} Settings</h3>
 
     <h4 style="color: #8d7bff; margin-bottom: 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1314,6 +1341,14 @@ function updateRecordingUI() {
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
+
+  // Contextual control groups: replay actions appear once a workflow exists;
+  // live playback controls appear only while a replay is running.
+  const replayControls = document.getElementById("replayControls");
+  if (replayControls) replayControls.hidden = recordedEvents.length === 0;
+  const playbackControls = document.getElementById("playbackControls");
+  if (playbackControls) playbackControls.hidden = !isPlaying;
+
   updateWorkflowHealth();
   updateMissionProgress();
 }
@@ -1451,7 +1486,7 @@ function displaySuggestions(suggestions) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>🤖 Proactive Automation Suggestions</h3>
+    <h3>${icon("i-robot")} Proactive Automation Suggestions</h3>
     ${suggestions.map((s, i) => `
       <div style="margin: 12px 0; padding: 12px; background: rgba(139, 123, 255, 0.1); border-radius: 8px; border-left: 3px solid #8d7bff;">
         <p><strong>${i + 1}. ${escapeHtml(s.suggestion)}</strong></p>
@@ -1486,7 +1521,7 @@ function displayGeekInsights(insights, appName) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>🔧 Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
+    <h3>${icon("i-wrench")} Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
     <div style="margin: 12px 0;">
       <h4 style="color: #8d7bff;">Performance Metrics</h4>
       <p>Total Duration: ${insights.performance_metrics.total_duration_ms}ms</p>
@@ -2173,7 +2208,7 @@ async function organizerShowHistory() {
     ? history
         .map(
           (h) => `<li>
-            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed ${h.sealed ? `<span class="org-seal" title="This run is sealed into the tamper-evident audit chain">🔏 sealed</span>` : ""}</div>
+            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed ${h.sealed ? `<span class="org-seal" title="This run is sealed into the tamper-evident audit chain">${icon("i-seal")} sealed</span>` : ""}</div>
             <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
           </li>`,
         )
@@ -2215,11 +2250,11 @@ async function organizerVerifyIntegrity() {
   const unsealed =
     v.unsealed_count > 0 ? ` (${v.unsealed_count} older unsealed run(s) predate this feature)` : "";
   if (v.intact) {
-    out.innerHTML = `<span class="org-verify org-verify--ok">✓ Chain intact — ${v.sealed_count} run(s) sealed${escapeHtml(unsealed)}</span>`;
+    out.innerHTML = `<span class="org-verify org-verify--ok">${icon("i-check-circle")} Chain intact — ${v.sealed_count} run(s) sealed${escapeHtml(unsealed)}</span>`;
   } else {
     const at = v.first_break ? ` at run ${escapeHtml(v.first_break.execution_id)}` : "";
     const why = v.first_break ? ` — ${escapeHtml(v.first_break.reason)}` : "";
-    out.innerHTML = `<span class="org-verify org-verify--bad">✗ Tampering detected${at}${why}</span>`;
+    out.innerHTML = `<span class="org-verify org-verify--bad">${icon("i-x-circle")} Tampering detected${at}${why}</span>`;
   }
 }
 
@@ -2610,8 +2645,18 @@ function wireUpControls() {
   bind("loadVariablesBtn", loadVariablesFromSource);
 
   bind("perm-grant", requestAccessibility);
+  bind("perm-recheck", refreshPermissionBanner);
+  bind("perm-restart", restartApp);
   bind("settingsBtn", openSettings);
   bind("lockBtn", lockApp);
+
+  // Returning from System Settings should re-check permissions automatically, so
+  // the banner clears the moment the OS reflects a grant (no relaunch needed when
+  // macOS already picked it up).
+  window.addEventListener("focus", refreshPermissionBanner);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshPermissionBanner();
+  });
 
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
@@ -2648,6 +2693,7 @@ function wireUpControls() {
   bind("onboardingDemoNext", () => showOnboardingStep(2));
   bind("onboardingBack2", () => showOnboardingStep(1));
   bind("onboardingGrant", onboardingGrant);
+  bind("onboardingRestart", restartApp);
   bind("onboardingPermNext", () => showOnboardingStep(3));
   bind("onboardingBack3", () => showOnboardingStep(2));
   bind("onboardingSkipPassword", () => showOnboardingStep(4));
@@ -2771,6 +2817,8 @@ function initViewNav() {
   if (!items.length || !views.length) return;
 
   function show(view) {
+    // Expose the active view so the sidebar can show only what's relevant to it.
+    document.body.dataset.view = view;
     views.forEach((v) => {
       v.hidden = v.dataset.view !== view;
     });

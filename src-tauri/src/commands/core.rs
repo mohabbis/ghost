@@ -348,6 +348,21 @@ pub fn request_input_monitoring() -> bool {
     }
 }
 
+/// Relaunch the app.
+///
+/// macOS only re-evaluates Accessibility / Input Monitoring trust for a process
+/// at launch: after the user flips the switch in System Settings, the running
+/// process keeps seeing the old (untrusted) answer until it restarts. This gives
+/// the permission banner a deterministic "Quit & Reopen" action so the grant
+/// actually takes effect.
+///
+/// Risk class: touches app/window state only — no files, OS input, screen
+/// contents, network, or secrets. Does not return (the process is replaced).
+#[tauri::command]
+pub fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
