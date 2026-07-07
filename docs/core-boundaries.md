@@ -26,7 +26,7 @@ Stable core capabilities may define the product contract.
 
 Allowed stable areas:
 
-- permission checks and permission requests;
+- permission checks and permission requests (including app relaunch so macOS applies a fresh grant);
 - explicit user-approved recording;
 - replay with cancellation, pause, resume, and playback speed controls;
 - workflow save/load/list/delete;

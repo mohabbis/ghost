@@ -98,10 +98,63 @@
 }
 
 .banner--warn {
-  background: rgba(255, 184, 107, 0.12);
-  border: 1px solid rgba(255, 184, 107, 0.4);
+  background: rgba(242, 180, 92, 0.12);
+  border: 1px solid rgba(242, 180, 92, 0.38);
   color: var(--accent-warm);
 }
+
+.banner__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Record & replay: contextual control groups keep one clear action at rest. */
+.record-panel .btn-row { margin-top: 12px; }
+.record-panel .record-primary { margin-top: 14px; }
+.record-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.record-group[hidden] { display: none; }
+
+.advanced-tools {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.advanced-tools > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  user-select: none;
+}
+.advanced-tools > summary::-webkit-details-marker { display: none; }
+.advanced-tools > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.advanced-tools[open] > summary::before { transform: rotate(90deg); }
+.advanced-tools > summary:hover { color: var(--text); }
+.advanced-tools .btn-row { margin-top: 8px; }
+
+/* Contextual sidebar: recording-specific rail sections (Ghost Guard, workflow
+   health, event timeline) belong to Record/Workflows, not the Organize wedge. */
+body[data-view="organize"] .rail-record { display: none; }
 
 .app-grid {
   display: grid;
@@ -1269,6 +1322,28 @@
   stroke-linejoin: round;
 }
 .btn .i { width: 1.05rem; height: 1.05rem; }
+
+/* Inline icons inside JS-rendered HTML size to their surrounding text. */
+h3 .i,
+.notification__text .i,
+.org-seal .i,
+.org-verify .i,
+#guardSummary .i {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.15em;
+}
+/* Ghost Guard severity, tinted by level (matches the audit risk language). */
+.sev { width: 1em; height: 1em; vertical-align: -0.15em; }
+.sev--low { color: var(--accent-strong); }
+.sev--medium { color: var(--accent-warm); }
+.sev--high { color: var(--accent); }
+.sev--critical { color: #f47a8f; }
+.org-verify--ok .i { color: var(--success); }
+.org-verify--bad .i { color: #f47a8f; }
+.notification--error .i { color: var(--accent-warm); }
+.notification--info .i,
+.notification--success .i { color: var(--success); }
 
 .nav__foot {
   margin-top: auto;

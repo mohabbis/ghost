@@ -143,6 +143,7 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `request_accessibility` | stable | – | – | – | – | – | ~ | medium | Triggers the OS accessibility-permission prompt. |
 | `check_input_monitoring` | stable | – | – | – | – | – | ~ | low | Reports OS input-monitoring permission state. |
 | `request_input_monitoring` | stable | – | – | – | – | – | ~ | medium | Triggers the OS input-monitoring prompt. |
+| `restart_app` | stable | – | – | – | – | – | ✓ | medium | Relaunches the app so macOS re-evaluates a fresh permission grant. App/window state only; no data touched. |
 
 ### `commands/auth.rs` — auth / at-rest protection (stable)
 
