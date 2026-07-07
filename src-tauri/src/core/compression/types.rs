@@ -145,10 +145,37 @@ pub struct CompressionReport {
     pub redacted_fields: usize,
     pub warnings: Vec<CompressionWarning>,
     pub steps: Vec<CompressedStep>,
+    /// Per-step `(raw_start, raw_len)` spans into the original event list,
+    /// aligned index-for-index with `steps`. Spans are **not contiguous**:
+    /// dropped sub-threshold delays and standalone mouse releases consume raw
+    /// events without emitting a step, so never prefix-sum `raw_event_count`
+    /// to reconstruct positions — use these spans (or
+    /// [`CompressionReport::step_for_raw_index`]). `#[serde(default)]` so
+    /// reports produced by older builds still deserialize.
+    #[serde(default)]
+    pub raw_spans: Vec<(usize, usize)>,
 }
 
 impl CompressionReport {
-    pub fn new(original_event_count: usize, steps: Vec<CompressedStep>) -> Self {
+    /// Map a raw-event index (e.g. a replay trace's `StepResolution::step_index`)
+    /// to the compressed step that consumed it. `None` when the index fell in
+    /// a gap (dropped delay, standalone release) or spans are absent.
+    pub fn step_for_raw_index(&self, raw_index: usize) -> Option<usize> {
+        self.raw_spans
+            .iter()
+            .position(|&(start, len)| start <= raw_index && raw_index < start + len)
+    }
+
+    pub fn new(
+        original_event_count: usize,
+        steps: Vec<CompressedStep>,
+        raw_spans: Vec<(usize, usize)>,
+    ) -> Self {
+        debug_assert_eq!(
+            steps.len(),
+            raw_spans.len(),
+            "raw_spans must stay aligned with steps"
+        );
         let compressed_step_count = steps.len();
         let reduction_ratio = if original_event_count == 0 {
             0.0
@@ -191,6 +218,7 @@ impl CompressionReport {
             redacted_fields,
             warnings,
             steps,
+            raw_spans,
         }
     }
 }

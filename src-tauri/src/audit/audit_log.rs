@@ -7,6 +7,7 @@
 
 use crate::policy::Capability;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// What happened when the executor handled one capability.
@@ -22,13 +23,33 @@ pub enum ActionOutcome {
     Failed { error: String },
 }
 
-/// One row in the audit log: the capability, its outcome, and when it happened.
+/// How an executed action was authorized: without prompting (an `automate`
+/// rule) or under the user's explicit approval of the run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Provenance {
+    Automated,
+    UserApproved,
+}
+
+/// One row in the audit log: the capability, its outcome, the rule that fired,
+/// how the action was authorized, and when it happened.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditEvent {
     /// The action that was considered, expressed as a policy capability.
     pub capability: Capability,
     /// The result of considering it.
     pub outcome: ActionOutcome,
+    /// The folder rule (by path) that authorized or refused this action, when
+    /// one fired. Absent on rows written before rule attribution existed and
+    /// on plain deny-by-default refusals (no rule matched). Optional and
+    /// default so old persisted logs keep deserializing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule_path: Option<PathBuf>,
+    /// How the action was authorized. Recorded for actions that were actually
+    /// attempted; absent on skips and on rows written before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<Provenance>,
     /// Epoch-seconds timestamp, as a string (matches the storage convention and
     /// avoids pulling in a date crate). Best-effort; never panics on clock skew.
     pub at: String,
@@ -48,13 +69,65 @@ impl AuditLog {
         Self::default()
     }
 
-    /// Append one event, stamped with the current time.
+    /// Append one event, stamped with the current time, with no rule
+    /// attribution or provenance (kept for callers predating those fields).
     pub fn record(&mut self, capability: Capability, outcome: ActionOutcome) {
+        self.record_attributed(capability, outcome, None, None);
+    }
+
+    /// Append one event with the rule that fired and how it was authorized.
+    pub fn record_attributed(
+        &mut self,
+        capability: Capability,
+        outcome: ActionOutcome,
+        rule_path: Option<PathBuf>,
+        provenance: Option<Provenance>,
+    ) {
         self.events.push(AuditEvent {
             capability,
             outcome,
+            rule_path,
+            provenance,
             at: now_ts(),
         });
+    }
+
+    /// Render the log as CSV for export: one row per event, with the rule that
+    /// fired and the approval provenance alongside the action and outcome.
+    pub fn to_csv(&self) -> String {
+        let mut out = String::from("at,action,path,target,outcome,detail,rule,provenance\n");
+        for event in &self.events {
+            let (kind, path, target) = describe_capability(&event.capability);
+            let (outcome, detail) = match &event.outcome {
+                ActionOutcome::Applied => ("applied", String::new()),
+                ActionOutcome::Skipped { reason } => ("skipped", reason.clone()),
+                ActionOutcome::Failed { error } => ("failed", error.clone()),
+            };
+            let rule = event
+                .rule_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            let provenance = match event.provenance {
+                Some(Provenance::Automated) => "automated",
+                Some(Provenance::UserApproved) => "user_approved",
+                None => "",
+            };
+            let row = [
+                event.at.as_str(),
+                kind,
+                &path,
+                &target,
+                outcome,
+                &detail,
+                &rule,
+                provenance,
+            ];
+            let escaped: Vec<String> = row.iter().map(|f| csv_field(f)).collect();
+            out.push_str(&escaped.join(","));
+            out.push('\n');
+        }
+        out
     }
 
     /// The recorded events, in the order they happened.
@@ -80,6 +153,47 @@ fn now_ts() -> String {
         .unwrap_or_default()
         .as_secs()
         .to_string()
+}
+
+/// A short action name plus the capability's path(s) for tabular export.
+fn describe_capability(cap: &Capability) -> (&'static str, String, String) {
+    match cap {
+        Capability::ReadFolder { path } => {
+            ("read_folder", path.display().to_string(), String::new())
+        }
+        Capability::CreateFolder { path } => {
+            ("create_folder", path.display().to_string(), String::new())
+        }
+        Capability::RenameFile { from, to } => (
+            "rename_file",
+            from.display().to_string(),
+            to.display().to_string(),
+        ),
+        Capability::MoveFile { from, to } => (
+            "move_file",
+            from.display().to_string(),
+            to.display().to_string(),
+        ),
+        Capability::CopyFile { from, to } => (
+            "copy_file",
+            from.display().to_string(),
+            to.display().to_string(),
+        ),
+        Capability::DeleteFile { path } => {
+            ("delete_file", path.display().to_string(), String::new())
+        }
+        other => ("other", format!("{other:?}"), String::new()),
+    }
+}
+
+/// Quote a CSV field per RFC 4180: wrap in quotes when it contains a comma,
+/// quote, or newline, doubling embedded quotes.
+fn csv_field(field: &str) -> String {
+    if field.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -129,6 +243,82 @@ mod tests {
             .unwrap(),
             serde_json::json!({ "outcome": "failed", "error": "boom" })
         );
+    }
+
+    /// Audit rows persisted before rule attribution and provenance existed
+    /// must keep deserializing (the fields are optional and defaulted).
+    #[test]
+    fn old_persisted_events_without_attribution_still_deserialize() {
+        let old_json = r#"[{
+            "capability": { "kind": "move_file", "from": "/z/a.pdf", "to": "/z/Documents/a.pdf" },
+            "outcome": { "outcome": "applied" },
+            "at": "1700000000"
+        }]"#;
+        let log: AuditLog = serde_json::from_str(old_json).unwrap();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log.events()[0].rule_path, None);
+        assert_eq!(log.events()[0].provenance, None);
+    }
+
+    /// Attribution fields serialize only when present, so rows without them
+    /// keep the exact pre-existing wire shape.
+    #[test]
+    fn attribution_serializes_only_when_present() {
+        let mut log = AuditLog::new();
+        log.record(
+            Capability::CreateFolder {
+                path: PathBuf::from("/z/Documents"),
+            },
+            ActionOutcome::Applied,
+        );
+        log.record_attributed(
+            Capability::MoveFile {
+                from: PathBuf::from("/z/a.pdf"),
+                to: PathBuf::from("/z/Documents/a.pdf"),
+            },
+            ActionOutcome::Applied,
+            Some(PathBuf::from("/z")),
+            Some(Provenance::UserApproved),
+        );
+        let value = serde_json::to_value(&log).unwrap();
+        let rows = value.as_array().unwrap();
+        assert!(rows[0].get("rule_path").is_none());
+        assert!(rows[0].get("provenance").is_none());
+        assert_eq!(rows[1]["rule_path"], serde_json::json!("/z"));
+        assert_eq!(rows[1]["provenance"], serde_json::json!("user_approved"));
+    }
+
+    #[test]
+    fn to_csv_renders_one_row_per_event_with_escaping() {
+        let mut log = AuditLog::new();
+        log.record_attributed(
+            Capability::MoveFile {
+                from: PathBuf::from("/z/a, with comma.pdf"),
+                to: PathBuf::from("/z/Documents/a.pdf"),
+            },
+            ActionOutcome::Skipped {
+                reason: "he said \"no\"".into(),
+            },
+            Some(PathBuf::from("/z")),
+            None,
+        );
+        let csv = log.to_csv();
+        let mut lines = csv.lines();
+        assert_eq!(
+            lines.next().unwrap(),
+            "at,action,path,target,outcome,detail,rule,provenance"
+        );
+        let row = lines.next().unwrap();
+        assert!(row.contains("move_file"));
+        assert!(
+            row.contains("\"/z/a, with comma.pdf\""),
+            "comma field must be quoted: {row}"
+        );
+        assert!(
+            row.contains("\"he said \"\"no\"\"\""),
+            "quotes must be doubled: {row}"
+        );
+        assert!(lines.next().is_none());
     }
 
     /// The log serializes transparently as a bare array of events.

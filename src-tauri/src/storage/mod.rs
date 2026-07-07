@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 pub mod executions;
 pub mod migrations;
+pub mod milestones;
 pub mod zones;
 
 /// Resolve the on-disk database path, creating the parent directory.

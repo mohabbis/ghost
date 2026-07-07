@@ -15,6 +15,7 @@ export class CompressionReview {
 
   async compress(events) {
     try {
+      this.eventCount = events.length;
       this.report = await window.__TAURI__.invoke('compress_workflow', { events });
       this.render();
       return this.report;
@@ -27,6 +28,7 @@ export class CompressionReview {
 
   render() {
     if (!this.report || !this.container) return;
+    const lastRun = this.lastRunOutcomes();
 
     const html = `
       <div class="compression-review">
@@ -53,7 +55,7 @@ export class CompressionReview {
         ` : ''}
 
         <div class="compression-steps">
-          ${this.report.steps.map((step, idx) => this.renderStep(step, idx)).join('')}
+          ${this.report.steps.map((step, idx) => this.renderStep(step, idx, lastRun.get(idx))).join('')}
         </div>
       </div>
     `;
@@ -61,11 +63,39 @@ export class CompressionReview {
     this.container.innerHTML = html;
   }
 
-  renderStep(step, idx) {
+  // Map the last replay's per-click resolution outcomes onto compressed steps
+  // via the report's raw-event spans (spans are non-contiguous — dropped
+  // delays and standalone releases consume events without emitting a step,
+  // so never prefix-sum raw_event_count). Empty unless a replay of this exact
+  // event list ran this session (handoff set by main.js after each run).
+  lastRunOutcomes() {
+    const outcomes = new Map();
+    const handoff = window.__ghostLastReplayTrace;
+    const spans = this.report?.raw_spans;
+    if (!handoff || !Array.isArray(spans) || spans.length === 0) return outcomes;
+    if (handoff.eventCount !== this.eventCount) return outcomes;
+    for (const t of handoff.trace || []) {
+      if (t.kind !== 'CoordinateFallback' && t.kind !== 'NoDescriptor') continue;
+      const stepIdx = spans.findIndex(
+        ([start, len]) => start <= t.step_index && t.step_index < start + len
+      );
+      if (stepIdx >= 0 && !outcomes.has(stepIdx)) {
+        outcomes.set(
+          stepIdx,
+          t.kind === 'CoordinateFallback'
+            ? 'lost its element last run — clicked recorded coordinates'
+            : 'ran on raw coordinates last run'
+        );
+      }
+    }
+    return outcomes;
+  }
+
+  renderStep(step, idx, lastRunNote) {
     const icon = this.getStepIcon(step.kind);
     const description = this.getStepDescription(step);
     const riskClass = this.getRiskClass(step);
-    const confidence = step.confidence !== undefined ? 
+    const confidence = step.confidence !== undefined ?
       (step.confidence * 100).toFixed(0) + '%' : '';
 
     return `
@@ -74,6 +104,7 @@ export class CompressionReview {
         <div class="step-content">
           <div class="step-text">${description}</div>
           ${confidence ? `<div class="step-confidence">confidence: ${confidence}</div>` : ''}
+          ${lastRunNote ? `<div class="step-confidence step-lastrun">⚠ ${lastRunNote}</div>` : ''}
         </div>
       </div>
     `;

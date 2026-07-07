@@ -5,6 +5,10 @@
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
 
+// Inline line-icon helper for HTML built in JS — references the SVG sprite in
+// index.html so dynamic UI uses the same icon set as the static markup (no emoji).
+const icon = (id, cls = "i") => `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+
 function notAvailable() {
   toastError("Tauri not available — running in static mode");
 }
@@ -51,8 +55,8 @@ function showNotification(text, kind = "info") {
 
   const notification = document.createElement("div");
   notification.className = `notification notification--${kind}`;
-  const icon = kind === "error" ? "⚠️" : "✓";
-  notification.innerHTML = `<p class="notification__text">${icon} ${escapeHtml(text)}</p>`;
+  const glyph = kind === "error" ? icon("i-alert") : icon("i-check-circle");
+  notification.innerHTML = `<p class="notification__text">${glyph} ${escapeHtml(text)}</p>`;
   notificationsEl.appendChild(notification);
 
   setTimeout(() => notification.remove(), kind === "error" ? 8000 : 5000);
@@ -168,7 +172,7 @@ async function refreshPermissionBanner() {
       const missing = [];
       if (!accessibility) missing.push("Accessibility");
       if (!inputMonitoring) missing.push("Input Monitoring");
-      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes.`;
+      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes. Enable it in System Settings, then Quit & Reopen so macOS applies it.`;
     }
   } catch (error) {
     console.error("Failed to check permissions:", error);
@@ -176,7 +180,10 @@ async function refreshPermissionBanner() {
 }
 
 async function requestAccessibility() {
-  if (!invoke) return;
+  if (!invoke) {
+    notAvailable();
+    return;
+  }
   try {
     const { accessibility, inputMonitoring } = await checkPermissions();
     // macOS shows each permission prompt only once per app; afterwards the
@@ -186,14 +193,33 @@ async function requestAccessibility() {
 
     const after = await checkPermissions();
     if (!after.accessibility || !after.inputMonitoring) {
+      // The grant only takes effect after a relaunch. Point the user at the
+      // "Quit & Reopen" button rather than leaving a dead-end instruction.
       showNotification(
-        "Enable Ghost in System Settings → Privacy & Security (Accessibility + Input Monitoring), then quit and reopen Ghost.",
+        "Enable Ghost under System Settings → Privacy & Security (Accessibility + Input Monitoring), then use Quit & Reopen so macOS applies it.",
       );
     }
   } catch (error) {
     console.error("Failed to request permissions:", error);
+    showNotification("Couldn't open the permission settings automatically. Open System Settings → Privacy & Security → Accessibility and enable Ghost.", "error");
   } finally {
     refreshPermissionBanner();
+  }
+}
+
+// macOS only re-evaluates permission trust at launch, so after the user flips
+// the switch the running process still reads "not granted". Relaunching applies
+// it. See restart_app in src-tauri/src/commands/core.rs.
+async function restartApp() {
+  if (!invoke) {
+    notAvailable();
+    return;
+  }
+  try {
+    await invoke("restart_app");
+  } catch (error) {
+    console.error("Failed to restart:", error);
+    showNotification("Couldn't relaunch automatically — quit Ghost and open it again to apply the permission.", "error");
   }
 }
 
@@ -663,7 +689,8 @@ async function inspectElementAtCursor() {
 // ===== Ghost Guard local audit =====
 
 function severityIcon(severity) {
-  return { low: "ℹ️", medium: "⚠️", high: "🛡️", critical: "🚨" }[severity] || "•";
+  const id = { low: "i-info", medium: "i-alert", high: "i-shield", critical: "i-siren" }[severity];
+  return id ? icon(id, `i sev sev--${severity}`) : "•";
 }
 
 function renderGuardReport(report) {
@@ -1005,12 +1032,14 @@ async function openSettings() {
   if (!content) return;
 
   const { replay, ai } = settingsConfig;
+  // `audit` may be absent in configs written before the retention feature.
+  const audit = settingsConfig.audit || {};
   const providers = ["local", "openai", "anthropic"];
   const fieldStyle =
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
 
   content.innerHTML = `
-    <h3>⚙️ Settings</h3>
+    <h3>${icon("i-gear")} Settings</h3>
 
     <h4 style="color: #8d7bff; margin-bottom: 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1054,6 +1083,17 @@ async function openSettings() {
     </label>
     <p class="panel__hint" style="margin: 4px 0 12px;">API keys come from environment variables (OPENAI_API_KEY / ANTHROPIC_API_KEY), never stored here.</p>
 
+    <h4 style="color: #8d7bff; margin: 12px 0 4px;">Audit retention</h4>
+    <label>Keep only the most recent N runs
+      <input id="cfg-audit-keep-last" type="number" step="1" min="1" placeholder="keep all"
+             value="${escapeAttr(audit.retention_keep_last ?? "")}" style="${fieldStyle}">
+    </label>
+    <label>Delete runs older than N days
+      <input id="cfg-audit-keep-days" type="number" step="1" min="1" placeholder="keep all"
+             value="${escapeAttr(audit.retention_keep_days ?? "")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 4px 0 12px;">Leave blank to keep all audit history (the default). Pruning deletes your own past runs — sealed history you remove can't be recovered.</p>
+
     <div style="display: flex; gap: 8px; margin-top: 8px;">
       <button class="btn btn--primary btn--small" data-save-config>Save</button>
       <button class="btn btn--ghost btn--small" data-close-modal="settings-modal">Cancel</button>
@@ -1083,6 +1123,19 @@ async function saveSettings() {
   settingsConfig.ai.model = document.getElementById("cfg-ai-model")?.value || settingsConfig.ai.model;
   const endpoint = document.getElementById("cfg-ai-endpoint")?.value?.trim();
   settingsConfig.ai.api_endpoint = endpoint ? endpoint : null;
+
+  // Audit retention: a blank field means "keep all" (null); a positive integer
+  // sets the bound. Anything invalid falls back to null rather than 0, which the
+  // backend rejects (0 would wipe history on the next run).
+  const posIntOrNull = (id) => {
+    const raw = document.getElementById(id)?.value?.trim();
+    if (!raw) return null;
+    const n = Math.round(parseFloat(raw));
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  };
+  if (!settingsConfig.audit) settingsConfig.audit = {};
+  settingsConfig.audit.retention_keep_last = posIntOrNull("cfg-audit-keep-last");
+  settingsConfig.audit.retention_keep_days = posIntOrNull("cfg-audit-keep-days");
 
   try {
     await invoke("update_config", { config: settingsConfig });
@@ -1288,6 +1341,14 @@ function updateRecordingUI() {
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
+
+  // Contextual control groups: replay actions appear once a workflow exists;
+  // live playback controls appear only while a replay is running.
+  const replayControls = document.getElementById("replayControls");
+  if (replayControls) replayControls.hidden = recordedEvents.length === 0;
+  const playbackControls = document.getElementById("playbackControls");
+  if (playbackControls) playbackControls.hidden = !isPlaying;
+
   updateWorkflowHealth();
   updateMissionProgress();
 }
@@ -1425,7 +1486,7 @@ function displaySuggestions(suggestions) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>🤖 Proactive Automation Suggestions</h3>
+    <h3>${icon("i-robot")} Proactive Automation Suggestions</h3>
     ${suggestions.map((s, i) => `
       <div style="margin: 12px 0; padding: 12px; background: rgba(139, 123, 255, 0.1); border-radius: 8px; border-left: 3px solid #8d7bff;">
         <p><strong>${i + 1}. ${escapeHtml(s.suggestion)}</strong></p>
@@ -1460,7 +1521,7 @@ function displayGeekInsights(insights, appName) {
   if (!content) return;
 
   content.innerHTML = `
-    <h3>🔧 Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
+    <h3>${icon("i-wrench")} Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
     <div style="margin: 12px 0;">
       <h4 style="color: #8d7bff;">Performance Metrics</h4>
       <p>Total Duration: ${insights.performance_metrics.total_duration_ms}ms</p>
@@ -1667,11 +1728,57 @@ async function organizerRefreshRules() {
         ]
           .filter(Boolean)
           .join(", ");
-        return `<span class="organizer-rule-chip">${escapeHtml(r.path)} <em>(${escapeHtml(grants || "no permissions")})</em></span>`;
+        const trust = r.trust || "ask_first";
+        // A per-rule trust selector: the boundary is legible and adjustable in
+        // place. The backend re-checks policy on every action, so this only
+        // records intent — it can never widen what Ghost will actually do.
+        const trustSelect = `<select class="org-trust-select" data-rule-path="${escapeAttr(r.path)}" title="How much autonomy this folder carries">
+            <option value="automate"${trust === "automate" ? " selected" : ""}>Automate</option>
+            <option value="ask_first"${trust === "ask_first" ? " selected" : ""}>Ask first</option>
+            <option value="never"${trust === "never" ? " selected" : ""}>Never</option>
+          </select>`;
+        return `<span class="organizer-rule-chip">${escapeHtml(r.path)} <em>(${escapeHtml(grants || "no permissions")})</em> ${organizerTrustBadge(trust)}${trustSelect}</span>`;
       })
       .join("");
+    // Wire each in-place trust change to the backend.
+    list.querySelectorAll(".org-trust-select").forEach((sel) =>
+      sel.addEventListener("change", () =>
+        organizerSetRuleTrust(sel.dataset.rulePath, sel.value),
+      ),
+    );
   }
   organizerUpdateButtons(rules);
+}
+
+// The user-facing trust vocabulary, mirrored from the policy engine's
+// TrustLevel: automate runs without asking, ask-first needs approval, never
+// refuses. Shown wherever a rule or a planned action is displayed.
+function organizerTrustBadge(trust) {
+  switch (trust) {
+    case "automate":
+      return `<span class="org-badge org-badge--automate" title="Runs without asking each time">Automate</span>`;
+    case "never":
+      return `<span class="org-badge org-badge--never" title="Refuses changes in this folder">Never</span>`;
+    case "ask_first":
+    default:
+      return `<span class="org-badge org-badge--confirm" title="Asks for approval per action">Ask first</span>`;
+  }
+}
+
+async function organizerSetRuleTrust(path, trust) {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone || !path) return;
+  try {
+    await invoke("organizer_set_rule_trust", { zoneId: zone.id, path, trust });
+    // Trust changes what the next plan proposes; force a fresh review.
+    organizerHasReviewedPlan = false;
+    await organizerRefreshRules();
+    showNotification(`Trust for ${path} set to ${trust.replace("_", " ")}.`, "info");
+  } catch (err) {
+    toastError("Could not update trust: " + err);
+    await organizerRefreshRules();
+  }
 }
 
 function organizerUpdateButtons(rules) {
@@ -1696,60 +1803,158 @@ async function organizerCreateZone() {
   }
 }
 
-async function organizerCreateClientFilingPreset() {
-  if (!invoke) return notAvailable();
-  const sourcePath = await ghostPrompt(
-    "Source folder for client documents",
-    "~/Downloads",
-    "/Users/you/Downloads",
-  );
-  if (!sourcePath) return;
-  const destinationPath = await ghostPrompt(
-    "Destination root for filed client documents",
-    "",
-    "/Users/you/Client Files",
-  );
-  if (!destinationPath) return;
+// The guided setup presets. Each turns a short "interview" (a few questions)
+// into a named Zone and its folder rules — Ghost's local, permission-bounded
+// answer to the "configure yourself from how the team works" onboarding, with
+// no cloud and no credentials. `mode` is "two_folder" (move OUT of a source
+// INTO a destination root) or "in_place" (organize one folder where it sits).
+const ORGANIZER_PRESETS = {
+  "Client filing": {
+    description: "File invoices, receipts, and statements into dated client folders.",
+    mode: "two_folder",
+    renameDated: true,
+    sourcePrompt: "Full path of the folder client documents arrive in",
+    sourcePlaceholder: "/Users/you/Downloads",
+    destPrompt: "Destination root for filed client documents",
+    destPlaceholder: "/Users/you/Client Files",
+  },
+  "Bookkeeping inbox": {
+    description: "Sort a bookkeeping inbox into category folders, dated for filing.",
+    mode: "in_place",
+    renameDated: true,
+    sourcePrompt: "Full path of the bookkeeping inbox to organize",
+    sourcePlaceholder: "/Users/you/Bookkeeping Inbox",
+  },
+  "Downloads cleanup": {
+    description: "Tidy a Downloads-style folder into category folders in place.",
+    mode: "in_place",
+    renameDated: false,
+    sourcePrompt: "Full path of the folder to tidy",
+    sourcePlaceholder: "/Users/you/Downloads",
+  },
+};
 
-  const readOnlyRule = {
-    path: sourcePath.trim(),
-    can_read: true,
-    can_create: false,
-    can_rename: false,
-    can_move: false,
-    can_copy: false,
-    can_delete: false,
-  };
-  const destinationRule = {
-    path: destinationPath.trim(),
-    can_read: true,
-    can_create: true,
-    can_rename: true,
-    can_move: true,
-    can_copy: false,
-    can_delete: false,
-  };
+const TRUST_CHOICES = {
+  "Ask first (recommended) — approve each change": "ask_first",
+  "Automate — run without asking each time": "automate",
+  "Never — set up the boundary but make no changes": "never",
+};
+
+// Guided wizard: pick a preset, answer a couple of questions, choose a trust
+// level, confirm the exact rules, then create the Zone and preview the plan.
+// Reuses the in-app dialog helpers; no new backend — it composes the existing
+// organizer_create_zone / organizer_add_folder_rule commands.
+async function organizerRunWizard() {
+  if (!invoke) return notAvailable();
+
+  const presetName = await ghostPick(
+    "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
+    Object.keys(ORGANIZER_PRESETS),
+  );
+  if (!presetName) return;
+  const preset = ORGANIZER_PRESETS[presetName];
+
+  // No "~" default: the backend never expands tildes, so a literal
+  // "~/Downloads" rule would silently scan nothing. Full paths only.
+  const sourcePath = (
+    await ghostPrompt(preset.sourcePrompt, "", preset.sourcePlaceholder)
+  )?.trim();
+  if (!sourcePath) return;
+
+  let destPath = sourcePath;
+  if (preset.mode === "two_folder") {
+    destPath = (await ghostPrompt(preset.destPrompt, "", preset.destPlaceholder))?.trim();
+    if (!destPath) return;
+  }
+
+  const trustLabel = await ghostPick(
+    "How much autonomy should this Zone have? You can change it per folder later.",
+    Object.keys(TRUST_CHOICES),
+  );
+  if (!trustLabel) return;
+  const trust = TRUST_CHOICES[trustLabel];
+
+  // Build the rules this preset needs. In two-folder mode the source grants
+  // read + move-OUT (a read-only source makes the policy engine deny every
+  // filing move) and the destination grants read/create/rename/move. In-place
+  // mode is a single full-permission rule. The chosen trust rides on the
+  // mutating rules; the engine still re-checks every action at execution.
+  const rules = [];
+  if (preset.mode === "two_folder" && destPath !== sourcePath) {
+    rules.push({
+      path: sourcePath,
+      can_read: true,
+      can_create: false,
+      can_rename: false,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+    rules.push({
+      path: destPath,
+      can_read: true,
+      can_create: true,
+      can_rename: true,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+  } else {
+    rules.push({
+      path: sourcePath,
+      can_read: true,
+      can_create: true,
+      can_rename: true,
+      can_move: true,
+      can_copy: false,
+      can_delete: false,
+      trust,
+    });
+  }
+
+  // Final review: show exactly the boundary the wizard will create before it
+  // writes anything, so the user approves the playbook, not a black box.
+  const preview = rules
+    .map((r) => `• ${r.path} — ${organizerGrantSummary(r)} · trust: ${trust.replace("_", " ")}`)
+    .join("\n");
+  const confirmed = await ghostConfirm(
+    `Create the "${presetName}" Zone with these folders?\n\n${preview}\n\nGhost will preview the plan next — nothing moves until you approve it.`,
+    "Create Zone",
+  );
+  if (!confirmed) return;
 
   try {
     const zone = await invoke("organizer_create_zone", {
-      name: "Client filing",
-      description: "File invoices receipts and statements into dated client folders.",
-      renameDated: true,
+      name: presetName,
+      description: preset.description,
+      renameDated: preset.renameDated,
     });
     organizerSelectedZoneId = zone.id;
-    if (readOnlyRule.path === destinationRule.path) {
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
-    } else {
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: readOnlyRule });
-      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule: destinationRule });
+    for (const rule of rules) {
+      await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
     }
     organizerHasReviewedPlan = false;
     await organizerRefreshZones();
-    showNotification("Client filing preset created. Previewing the plan now.", "info");
+    showNotification(`"${presetName}" Zone created. Previewing the plan now.`, "info");
     await organizerScan();
   } catch (err) {
-    toastError("Could not create preset: " + err);
+    toastError("Could not create the Zone: " + err);
   }
+}
+
+// Compact grant summary for the wizard's confirmation preview.
+function organizerGrantSummary(rule) {
+  const grants = [
+    rule.can_read && "read",
+    rule.can_create && "create",
+    rule.can_move && "move",
+    rule.can_rename && "rename",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return grants || "no permissions";
 }
 
 async function organizerAddFolder() {
@@ -1767,6 +1972,7 @@ async function organizerAddFolder() {
     can_move: !!document.getElementById("permMove")?.checked,
     can_copy: false,
     can_delete: false, // Ghost never deletes through the Organizer.
+    trust: document.getElementById("permTrust")?.value || "ask_first",
   };
   try {
     await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
@@ -1804,6 +2010,40 @@ function organizerDecisionBadge(decision) {
   if (decision.decision === "require_confirmation")
     return `<span class="org-badge org-badge--confirm">Needs approval · ${escapeHtml(decision.risk || "")}</span>`;
   return "";
+}
+
+// How an executed action was authorized: automatically (an "automate" rule) or
+// under the user's explicit approval of the run.
+function organizerProvenanceBadge(provenance) {
+  if (provenance === "automated")
+    return ` <span class="org-badge org-badge--automate" title="Ran without asking (automate rule)">automated</span>`;
+  if (provenance === "user_approved")
+    return ` <span class="org-badge org-badge--confirm" title="Ran because you approved this run">you approved</span>`;
+  return "";
+}
+
+// Export a run's audit log as CSV or JSON. The backend returns the text; we
+// hand it to the user as a download so they keep a portable record of exactly
+// what Ghost did and under which rule.
+async function organizerExportAudit(executionId, format) {
+  if (!invoke) return notAvailable();
+  if (!executionId) return;
+  try {
+    const text = await invoke("organizer_export_audit", { executionId, format });
+    const mime = format === "csv" ? "text/csv" : "application/json";
+    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ghost-audit-${executionId}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showNotification(`Audit exported as ${format.toUpperCase()}.`, "info");
+  } catch (err) {
+    toastError("Export failed: " + err);
+  }
 }
 
 async function organizerScan() {
@@ -1847,8 +2087,13 @@ function organizerRenderPlan(plan) {
         typeof a.confidence === "number" && a.confidence <= 0.5
           ? `<span class="org-flag">low confidence</span>`
           : "";
+      // Name the boundary that authorized (or refused) this action, so every
+      // row answers "which rule fired?" the way an auditor would ask.
+      const rule = a.rule_path
+        ? `<div class="org-rule-attr">by rule <code>${escapeHtml(a.rule_path)}</code></div>`
+        : "";
       return `<tr>
-        <td>${organizerDescribeCapability(a.capability)} ${conflict} ${low}</td>
+        <td>${organizerDescribeCapability(a.capability)} ${conflict} ${low}${rule}</td>
         <td>${organizerDecisionBadge(a.decision)}</td>
       </tr>`;
     })
@@ -1895,7 +2140,13 @@ async function organizerRun() {
     .map((e) => {
       const outcome = e.outcome?.outcome || "?";
       const detail = e.outcome?.reason || e.outcome?.error || "";
-      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
+      // Show the rule that fired and how the action was authorized — the same
+      // "rule that fired / who signed off" record an auditor would expect.
+      const rule = e.rule_path
+        ? ` <span class="org-rule-attr">by rule <code>${escapeHtml(e.rule_path)}</code></span>`
+        : "";
+      const provenance = organizerProvenanceBadge(e.provenance);
+      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${provenance}${rule}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
     })
     .join("");
 
@@ -1907,11 +2158,19 @@ async function organizerRun() {
         <strong>${r.skipped ?? 0}</strong> skipped ·
         <strong>${r.failed ?? 0}</strong> failed
       </div>
-      <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+      <div class="btn-row">
+        <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+        <button class="btn btn--ghost btn--small" id="organizerExportCsvBtn" type="button">Export audit (CSV)</button>
+        <button class="btn btn--ghost btn--small" id="organizerExportJsonBtn" type="button">Export audit (JSON)</button>
+      </div>
       <h3 class="organizer-subhead">Audit log</h3>
       <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
     const undoBtn = document.getElementById("organizerUndoLastBtn");
     if (undoBtn) undoBtn.addEventListener("click", () => organizerUndo(res.execution_id));
+    const csvBtn = document.getElementById("organizerExportCsvBtn");
+    if (csvBtn) csvBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "csv"));
+    const jsonBtn = document.getElementById("organizerExportJsonBtn");
+    if (jsonBtn) jsonBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "json"));
   }
   organizerHasReviewedPlan = false;
   organizerUpdateButtons(await safeRules(zone.id));
@@ -1949,7 +2208,7 @@ async function organizerShowHistory() {
     ? history
         .map(
           (h) => `<li>
-            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed</div>
+            <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed ${h.sealed ? `<span class="org-seal" title="This run is sealed into the tamper-evident audit chain">${icon("i-seal")} sealed</span>` : ""}</div>
             <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
           </li>`,
         )
@@ -1957,6 +2216,10 @@ async function organizerShowHistory() {
     : "<li>No runs yet.</li>";
   content.innerHTML = `
     <h3 style="margin-top:0">Organizer history</h3>
+    <div class="btn-row" style="margin-bottom:10px">
+      <button class="btn btn--ghost btn--small" id="organizerVerifyBtn" type="button">Verify integrity</button>
+    </div>
+    <p class="organizer-verify-result" id="organizerVerifyResult" aria-live="polite"></p>
     <ul class="organizer-history">${rows}</ul>
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
   content.querySelectorAll("[data-undo-exec]").forEach((btn) =>
@@ -1965,7 +2228,34 @@ async function organizerShowHistory() {
       closeModal("analysis-modal");
     }),
   );
+  const verifyBtn = document.getElementById("organizerVerifyBtn");
+  if (verifyBtn) verifyBtn.addEventListener("click", organizerVerifyIntegrity);
   showModal(modal);
+}
+
+// Verify the tamper-evident audit chain and render the verdict — the payoff of
+// sealing each run: you can prove the local history wasn't altered, offline.
+async function organizerVerifyIntegrity() {
+  if (!invoke) return notAvailable();
+  const out = document.getElementById("organizerVerifyResult");
+  if (out) out.textContent = "Verifying…";
+  let v;
+  try {
+    v = await invoke("organizer_verify_audit_chain");
+  } catch (err) {
+    if (out) out.textContent = "";
+    return toastError("Verify failed: " + err);
+  }
+  if (!out) return;
+  const unsealed =
+    v.unsealed_count > 0 ? ` (${v.unsealed_count} older unsealed run(s) predate this feature)` : "";
+  if (v.intact) {
+    out.innerHTML = `<span class="org-verify org-verify--ok">${icon("i-check-circle")} Chain intact — ${v.sealed_count} run(s) sealed${escapeHtml(unsealed)}</span>`;
+  } else {
+    const at = v.first_break ? ` at run ${escapeHtml(v.first_break.execution_id)}` : "";
+    const why = v.first_break ? ` — ${escapeHtml(v.first_break.reason)}` : "";
+    out.innerHTML = `<span class="org-verify org-verify--bad">${icon("i-x-circle")} Tampering detected${at}${why}</span>`;
+  }
 }
 
 // Replay history: surface past replay runs (status, duration, failure reason)
@@ -1990,13 +2280,17 @@ async function showReplayHistory() {
 
   // Summarize the run's resolution trace: how each click found its target,
   // with coordinate-fallback steps called out individually — this is where
-  // "why did this run behave that way" gets answered.
+  // "why did this run behave that way" gets answered. When the run's event
+  // list is the one still loaded, fallback rows name the semantic step
+  // ("Clicked 'Send' in Mail") instead of a bare raw index.
   const traceHtml = (h) => {
     const trace = h.step_trace || [];
     if (!trace.length) return "";
+    const eventsMatch = h.events_processed === recordedEvents.length && recordedEvents.length > 0;
     const count = (kind) => trace.filter((t) => t.kind === kind).length;
     const parts = [];
     if (count("RecordedPoint")) parts.push(`${count("RecordedPoint")} found in place`);
+    if (count("WindowRelative")) parts.push(`${count("WindowRelative")} followed their window`);
     if (count("SpiralReresolved")) parts.push(`${count("SpiralReresolved")} re-resolved nearby`);
     if (count("CoordinateFallback")) parts.push(`${count("CoordinateFallback")} lost their element`);
     if (count("NoDescriptor")) parts.push(`${count("NoDescriptor")} coordinate-only`);
@@ -2005,14 +2299,41 @@ async function showReplayHistory() {
     );
     const details = risky
       .map((t) => {
+        const semantic = eventsMatch ? describeEvent(recordedEvents[t.step_index]) : null;
+        const where = semantic ? escapeHtml(semantic) : `Step ${t.step_index + 1}`;
         const label = t.target_name
           ? `"${escapeHtml(t.target_name)}" not found — clicked recorded point`
           : "no element recorded — clicked fixed point";
-        return `<div class="replay-meta replay-trace__fallback">Step ${t.step_index + 1}: ${label} (${t.point[0]}, ${t.point[1]})</div>`;
+        return `<div class="replay-meta replay-trace__fallback">${where}: ${label} (${t.point[0]}, ${t.point[1]})</div>`;
       })
       .join("");
     return `<div class="replay-meta">Targets: ${escapeHtml(parts.join(" · "))}</div>${details}`;
   };
+
+  // Cross-run reliability — the north-star metric, computed from the records
+  // already fetched (no extra command): success rate over finished runs, avg
+  // duration, and how often clicks fell back to raw coordinates.
+  const statsHtml = (() => {
+    if (!history.length) return "";
+    const finished = history.filter((h) => h.status === "Success" || h.status === "Failed");
+    const parts = [`Last ${history.length} run(s)`];
+    if (finished.length) {
+      const ok = finished.filter((h) => h.status === "Success").length;
+      parts.push(`${Math.round((ok / finished.length) * 100)}% success`);
+    }
+    const durations = history.map((h) => h.duration_ms).filter((d) => d || d === 0);
+    if (durations.length) {
+      parts.push(`avg ${fmtDur(durations.reduce((a, b) => a + b, 0) / durations.length)}`);
+    }
+    const clicks = history.flatMap((h) => h.step_trace || []);
+    if (clicks.length) {
+      const fell = clicks.filter(
+        (t) => t.kind === "CoordinateFallback" || t.kind === "NoDescriptor"
+      ).length;
+      parts.push(`${Math.round((fell / clicks.length) * 100)}% of clicks on raw coordinates`);
+    }
+    return `<div class="replay-meta replay-stats">${escapeHtml(parts.join(" · "))}</div>`;
+  })();
 
   const rows = history.length
     ? history
@@ -2034,6 +2355,7 @@ async function showReplayHistory() {
 
   content.innerHTML = `
     <h3 style="margin-top:0">Replay history</h3>
+    ${statsHtml}
     <ul class="replay-history">${rows}</ul>
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
   showModal(modal);
@@ -2058,17 +2380,35 @@ async function summarizeLastReplayResolution() {
     const [latest] = await invoke("get_replay_history", { limit: 1 });
     const trace = latest?.step_trace || [];
     if (!trace.length) return;
+    // Hand the trace to the compressed-step review timeline so it can badge
+    // the semantic steps that fell back during this run (same event list).
+    window.__ghostLastReplayTrace = {
+      eventCount: latest.events_processed,
+      trace,
+    };
     const lost = trace.filter((t) => t.kind === "CoordinateFallback").length;
     const blind = trace.filter((t) => t.kind === "NoDescriptor").length;
     const moved = trace.filter((t) => t.kind === "SpiralReresolved").length;
+    const followed = trace.filter((t) => t.kind === "WindowRelative").length;
     if (lost + blind > 0) {
+      // Name the first lost element semantically when the run matches the
+      // loaded events — "which click" beats "how many clicks".
+      const first = trace.find((t) => t.kind === "CoordinateFallback" || t.kind === "NoDescriptor");
+      const semantic =
+        latest.events_processed === recordedEvents.length && first
+          ? describeEvent(recordedEvents[first.step_index])
+          : null;
       showInsight(
         `${lost + blind} click(s) ran on raw coordinates` +
-          (lost ? ` (${lost} couldn't find their element)` : "") +
+          (semantic ? ` (first: ${semantic})` : lost ? ` (${lost} couldn't find their element)` : "") +
           ". These steps are the most likely to break — open Replay History for the per-step trace."
       );
-    } else if (moved > 0) {
-      showInsight(`Every click found its element — ${moved} had moved and were re-resolved nearby.`);
+    } else if (moved + followed > 0) {
+      showInsight(
+        `Every click found its element — ${moved + followed} had moved and were re-resolved` +
+          (followed ? ` (${followed} by following their window)` : " nearby") +
+          "."
+      );
     }
   } catch (error) {
     console.error("Could not summarize resolution trace:", error);
@@ -2080,6 +2420,8 @@ async function summarizeLastReplayResolution() {
 function resetReplayInspectionState() {
   lastFailedStep = null;
   stepReplayCursor = 0;
+  // A trace from a different workflow must not badge the new timeline.
+  window.__ghostLastReplayTrace = null;
   const el = replayProgressEl();
   if (el) {
     el.hidden = true;
@@ -2303,12 +2645,22 @@ function wireUpControls() {
   bind("loadVariablesBtn", loadVariablesFromSource);
 
   bind("perm-grant", requestAccessibility);
+  bind("perm-recheck", refreshPermissionBanner);
+  bind("perm-restart", restartApp);
   bind("settingsBtn", openSettings);
   bind("lockBtn", lockApp);
 
+  // Returning from System Settings should re-check permissions automatically, so
+  // the banner clears the moment the OS reflects a grant (no relaunch needed when
+  // macOS already picked it up).
+  window.addEventListener("focus", refreshPermissionBanner);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshPermissionBanner();
+  });
+
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
-  bind("organizerPresetBtn", organizerCreateClientFilingPreset);
+  bind("organizerPresetBtn", organizerRunWizard);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
   bind("organizerRunBtn", organizerRun);
@@ -2341,6 +2693,7 @@ function wireUpControls() {
   bind("onboardingDemoNext", () => showOnboardingStep(2));
   bind("onboardingBack2", () => showOnboardingStep(1));
   bind("onboardingGrant", onboardingGrant);
+  bind("onboardingRestart", restartApp);
   bind("onboardingPermNext", () => showOnboardingStep(3));
   bind("onboardingBack3", () => showOnboardingStep(2));
   bind("onboardingSkipPassword", () => showOnboardingStep(4));
@@ -2448,10 +2801,38 @@ async function initExperimentalPanel() {
   try {
     if (await invoke("is_experimental_enabled")) {
       panel.hidden = false;
+      // Reveal the matching nav entry so the view is reachable.
+      document.getElementById("navExperimental")?.removeAttribute("hidden");
     }
   } catch {
     // Older/stock build without the detection command: keep it hidden.
   }
+}
+
+// Left-nav view switcher: one focused view visible at a time. Pure DOM, no
+// backend — nav buttons and view sections are paired by `data-view`.
+function initViewNav() {
+  const items = document.querySelectorAll(".nav__item");
+  const views = document.querySelectorAll(".view");
+  if (!items.length || !views.length) return;
+
+  function show(view) {
+    // Expose the active view so the sidebar can show only what's relevant to it.
+    document.body.dataset.view = view;
+    views.forEach((v) => {
+      v.hidden = v.dataset.view !== view;
+    });
+    items.forEach((b) => {
+      const active = b.dataset.view === view;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
+  items.forEach((b) => {
+    b.addEventListener("click", () => b.dataset.view && show(b.dataset.view));
+  });
+  show("organize");
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -2463,4 +2844,5 @@ window.addEventListener("DOMContentLoaded", () => {
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
+  initViewNav(); // left-nav view switcher
 });

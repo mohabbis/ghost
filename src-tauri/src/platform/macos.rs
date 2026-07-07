@@ -8,7 +8,7 @@ use crate::core::replay_support::{
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_void};
+use std::os::raw::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -71,6 +71,7 @@ const kAXDescriptionAttribute: &str = "AXDescription";
 const kAXIdentifierAttribute: &str = "AXIdentifier";
 const kAXRoleDescriptionAttribute: &str = "AXRoleDescription";
 const kAXWindowAttribute: &str = "AXWindow";
+const kAXWindowsAttribute: &str = "AXWindows";
 const kAXPositionAttribute: &str = "AXPosition";
 
 // AXValue wrapper types (AXValue.h) — AXPosition/AXSize come back as AXValue
@@ -158,8 +159,20 @@ extern "C" {
     ) -> Boolean;
     fn CFStringGetCStringPtr(theString: CFStringRef, encoding: CFStringEncoding) -> *const c_char;
     fn CFRelease(cf: CFTypeRef);
+    fn CFArrayGetCount(theArray: CFTypeRef) -> isize;
+    fn CFArrayGetValueAtIndex(theArray: CFTypeRef, idx: isize) -> *const c_void;
 
     static kCFRunLoopCommonModes: CFStringRef;
+}
+
+// libproc (part of libSystem, linked into every binary — no framework link
+// needed): permission-free process enumeration, used to find the pid owning
+// a recorded window so its AXWindows can be walked under the Accessibility
+// permission replay already requires. Deliberately NOT CGWindowList, which
+// would demand the Screen Recording permission.
+extern "C" {
+    fn proc_listallpids(buffer: *mut c_void, buffersize: c_int) -> c_int;
+    fn proc_name(pid: c_int, buffer: *mut c_void, buffersize: u32) -> c_int;
 }
 
 // IOKit HID access (Input Monitoring permission — required for keyboard
@@ -683,32 +696,140 @@ unsafe fn window_info_for(
     let window_el = window as AXUIElementRef;
 
     let title = get_ax_string_attribute(window_el, kAXTitleAttribute).filter(|t| !t.is_empty());
-
-    // Window origin arrives as an AXValue-boxed CGPoint, not a CFString, so
-    // it must be unpacked with AXValueGetValue rather than the string helper.
-    let mut rel = None;
-    let pos_attr = str_to_cfstring(kAXPositionAttribute);
-    if !pos_attr.is_null() {
-        let mut pos_value: CFTypeRef = std::ptr::null();
-        if AXUIElementCopyAttributeValue(window_el, pos_attr, &mut pos_value) == kAXErrorSuccess
-            && !pos_value.is_null()
-        {
-            let mut origin = CGPoint { x: 0.0, y: 0.0 };
-            if AXValueGetValue(
-                pos_value,
-                kAXValueCGPointType,
-                &mut origin as *mut CGPoint as *mut c_void,
-            ) != 0
-            {
-                rel = Some((x - origin.x as i32, y - origin.y as i32));
-            }
-            CFRelease(pos_value);
-        }
-        CFRelease(pos_attr);
-    }
+    let rel = ax_element_origin(window_el).map(|(ox, oy)| (x - ox, y - oy));
 
     CFRelease(window);
     (title, rel)
+}
+
+/// Read an element's AXPosition — an AXValue-boxed CGPoint, not a CFString,
+/// so it must be unpacked with AXValueGetValue rather than the string helper.
+/// Best-effort: `None` on any failure.
+unsafe fn ax_element_origin(element: AXUIElementRef) -> Option<(i32, i32)> {
+    let pos_attr = str_to_cfstring(kAXPositionAttribute);
+    if pos_attr.is_null() {
+        return None;
+    }
+    let mut pos_value: CFTypeRef = std::ptr::null();
+    let got = AXUIElementCopyAttributeValue(element, pos_attr, &mut pos_value);
+    CFRelease(pos_attr);
+    if got != kAXErrorSuccess || pos_value.is_null() {
+        return None;
+    }
+    let mut origin = CGPoint { x: 0.0, y: 0.0 };
+    let ok = AXValueGetValue(
+        pos_value,
+        kAXValueCGPointType,
+        &mut origin as *mut CGPoint as *mut c_void,
+    ) != 0;
+    CFRelease(pos_value);
+    ok.then_some((origin.x as i32, origin.y as i32))
+}
+
+/// Does a live process name match the recorded app name? `proc_name` output
+/// truncates at 32 bytes (2 × MAXCOMLEN), so a long recorded app name also
+/// matches its 32-byte prefix.
+fn proc_name_matches_app(proc_name: &str, app: &str) -> bool {
+    if proc_name.is_empty() || app.is_empty() {
+        return false;
+    }
+    if proc_name.eq_ignore_ascii_case(app) {
+        return true;
+    }
+    proc_name.len() >= 32
+        && app.len() > proc_name.len()
+        && app.as_bytes()[..proc_name.len()].eq_ignore_ascii_case(proc_name.as_bytes())
+}
+
+/// Find the current top-left corner of the recorded element's window,
+/// permission-free: enumerate pids via libproc, match the process name
+/// against the recorded app, then walk that app's AXWindows (covered by the
+/// Accessibility permission replay already requires) for a title match.
+/// Best-effort at every step — any failure returns `None` and the resolution
+/// chain falls through to the spiral / recorded coordinates.
+fn find_window_origin(target: &ElementInfo) -> Option<(i32, i32)> {
+    let title = target.window_title.as_deref().filter(|t| !t.is_empty())?;
+    let app = match target.app.as_str() {
+        "" | "Unknown" => return None,
+        a => a,
+    };
+
+    unsafe {
+        // First call sizes the pid list; slack absorbs processes spawned
+        // between the two calls.
+        let bytes = proc_listallpids(std::ptr::null_mut(), 0);
+        if bytes <= 0 {
+            return None;
+        }
+        let pid_size = std::mem::size_of::<c_int>();
+        let mut pids = vec![0 as c_int; bytes as usize / pid_size + 16];
+        let bytes = proc_listallpids(
+            pids.as_mut_ptr() as *mut c_void,
+            (pids.len() * pid_size) as c_int,
+        );
+        if bytes <= 0 {
+            return None;
+        }
+        pids.truncate(bytes as usize / pid_size);
+
+        for &pid in &pids {
+            if pid <= 0 {
+                continue;
+            }
+            let mut name_buf = [0u8; 64];
+            let len = proc_name(pid, name_buf.as_mut_ptr() as *mut c_void, 64);
+            if len <= 0 {
+                continue;
+            }
+            let Ok(pname) = std::str::from_utf8(&name_buf[..len as usize]) else {
+                continue;
+            };
+            if !proc_name_matches_app(pname, app) {
+                continue;
+            }
+            if let Some(origin) = app_window_origin_by_title(pid, title) {
+                return Some(origin);
+            }
+        }
+    }
+    None
+}
+
+/// Walk one app's AXWindows for a window whose AXTitle equals `title`
+/// (case-insensitive) and return its origin.
+unsafe fn app_window_origin_by_title(pid: c_int, title: &str) -> Option<(i32, i32)> {
+    let app_el = AXUIElementCreateApplication(pid);
+    if app_el.is_null() {
+        return None;
+    }
+    let attr = str_to_cfstring(kAXWindowsAttribute);
+    if attr.is_null() {
+        CFRelease(app_el as *const c_void);
+        return None;
+    }
+    let mut windows: CFTypeRef = std::ptr::null();
+    let got = AXUIElementCopyAttributeValue(app_el, attr, &mut windows);
+    CFRelease(attr);
+
+    let mut origin = None;
+    if got == kAXErrorSuccess && !windows.is_null() {
+        let count = CFArrayGetCount(windows);
+        for i in 0..count {
+            // Array values follow the CF get-rule (borrowed): never released.
+            let win = CFArrayGetValueAtIndex(windows, i) as AXUIElementRef;
+            if win.is_null() {
+                continue;
+            }
+            let win_title = get_ax_string_attribute(win, kAXTitleAttribute).unwrap_or_default();
+            if win_title.eq_ignore_ascii_case(title) {
+                origin = ax_element_origin(win);
+                break;
+            }
+        }
+        CFRelease(windows);
+    }
+    CFRelease(app_el as *const c_void);
+    origin
 }
 
 /// AX exposes secure inputs as `AXSecureTextField` (casing has varied
@@ -734,18 +855,12 @@ fn try_resolve_click_point_traced(
     rx: i32,
     ry: i32,
 ) -> Option<((i32, i32), replay_support::ResolutionKind)> {
-    // No live window-origin lookup on macOS yet: finding a window by title
-    // needs either process enumeration + per-app AXWindows traversal or
-    // CGWindowList (which requires the Screen Recording permission — off the
-    // table under the privacy defaults). Until a permission-free design
-    // lands, the window-relative strategy is inert here and the spiral
-    // covers moderate moves.
     replay_support::try_resolve_click_point_traced(
         target,
         rx,
         ry,
         |x, y| unsafe { ax_info_at(x, y) },
-        |_| None,
+        find_window_origin,
     )
 }
 
@@ -1280,6 +1395,47 @@ mod tests {
     fn utf16_capture_len_clamps_overflow_to_buffer() {
         let buf = [0x0041u16; 8];
         assert_eq!(utf16_capture_len(&buf, 20), 8);
+    }
+
+    // ── window lookup: process-name matching ─────────────────────────────
+
+    #[test]
+    fn proc_name_matches_app_exact_and_case_insensitive() {
+        assert!(proc_name_matches_app("Notes", "Notes"));
+        assert!(proc_name_matches_app("notes", "Notes"));
+        assert!(!proc_name_matches_app("Notes", "Numbers"));
+        assert!(!proc_name_matches_app("", "Notes"));
+        assert!(!proc_name_matches_app("Notes", ""));
+    }
+
+    #[test]
+    fn proc_name_matches_app_accepts_32_byte_truncation() {
+        // proc_name truncates at 32 bytes; a longer recorded app name must
+        // still match its truncated prefix…
+        let long_app = "An Extremely Long Application Name";
+        let truncated = &long_app[..32];
+        assert_eq!(truncated.len(), 32);
+        assert!(proc_name_matches_app(truncated, long_app));
+
+        // …but a SHORT process name must not prefix-match a longer app name
+        // ("Note" is not "Notes Helper").
+        assert!(!proc_name_matches_app("Note", "Notes Helper"));
+    }
+
+    #[test]
+    fn find_window_origin_bails_without_title_or_usable_app() {
+        // Pure gate before any FFI runs: missing title or an unusable app
+        // name must return None without touching process enumeration.
+        let mut el = element_with_role("AXButton").unwrap();
+        el.app = "Notes".into();
+        el.window_title = None;
+        assert_eq!(find_window_origin(&el), None);
+
+        el.window_title = Some("Report".into());
+        el.app = "Unknown".into();
+        assert_eq!(find_window_origin(&el), None);
+        el.app = String::new();
+        assert_eq!(find_window_origin(&el), None);
     }
 
     #[test]

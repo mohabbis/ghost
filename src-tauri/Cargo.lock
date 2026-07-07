@@ -1727,7 +1727,7 @@ dependencies = [
 
 [[package]]
 name = "ghost"
-version = "1.0.13"
+version = "1.1.0"
 dependencies = [
  "accessibility-sys",
  "aes-gcm",
@@ -1746,6 +1746,7 @@ dependencies = [
  "rusttype",
  "serde",
  "serde_json",
+ "sha2",
  "ssim",
  "tauri",
  "tauri-build",

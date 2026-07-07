@@ -115,6 +115,70 @@ Required principles:
 
 Privacy should be part of the brand, not buried below a footer link nobody reads because apparently that is how software earns trust now.
 
+## Monetization path: first paid features
+
+The moat and tiered model live in `docs/business-model.md`; the business
+lives in the **Team/Business** tier, sold on control, compliance, and support —
+never on cloud lock-in. These are the first two paid features, both built on the
+already-shipped Organizer trust pipeline (rule-attributed, exportable audit
+landed in #96). Both stay **local-first**: policy packs and compliance exports
+are files the user owns, distributed however the firm likes — no cloud required.
+
+Neither crosses a privacy boundary in this doc or `CLAUDE.md`; each ships as a
+labeled/gated capability whose *tier* (not whose safety) is what's paid.
+
+### 6. Audit as a compliance artifact (first paid hook)
+
+Turn the local audit log from a debug view into a record a bookkeeper or auditor
+can rely on and hand to a third party.
+
+- **Retention controls** — keep-last-N-runs / keep-N-days, user-configurable.
+  **Shipped**: `config.audit` bounds (default keep-all) enforced by
+  `prune_executions` after each run (`storage/executions.rs`), with a Settings
+  control.
+- **Tamper-evidence** — hash-chained executions (each run sealed with a SHA-256
+  over its bytes + the prior run's hash) so the log is provably append-only and
+  verifiable offline. **Shipped**: migration V5 `hash`/`prev_hash`, sealing in
+  `save_execution`, `verify_chain` + the `organizer_verify_audit_chain` command,
+  and a "Verify integrity" affordance in the history view. Exports carry the
+  seal as metadata.
+- **Compliance report export** — a clean per-period / per-client report
+  (summary + itemized: what moved, the rule that fired, automated vs approved),
+  building on `organizer_export_audit`'s CSV/JSON rather than raw rows.
+  *Remaining §6 work.*
+- **Optional signed export** — sign an export with a local key so a third party
+  can verify it wasn't altered. *Remaining §6 work* (the hash chain is the
+  substrate it builds on).
+
+Why it's the first hook: the wedge persona (bookkeepers, practice admins) already
+thinks in "what moved, and can I show it" — this is a feature they understand and
+pay for, and it can't be pirated the way a binary can.
+
+### 7. Team policy templates (the per-seat entry point)
+
+The first thing a bookkeeping *firm* pays per-seat for: define a boundary once,
+distribute it to the team, and keep it from being silently weakened.
+
+- **Policy packs** — exportable/importable Zone + folder-rule + trust bundles
+  (composes the existing `organizer_create_zone` / `organizer_add_folder_rule`
+  surface into a portable file).
+- **Managed / locked policy** — an admin-authored pack members apply but can't
+  silently loosen; trust levels and rules stay as the firm set them (the policy
+  engine already enforces trust server-side, so this is distribution + a lock
+  flag, not a new trust mechanism).
+- **Shared playbook library** — an internal, curated set of packs; the seed of
+  the later public marketplace, team-first.
+
+Distribution is local-first (a file over a shared drive or MDM); a Team tier can
+*offer* an optional E2E-encrypted sync/relay add-on, but never require it.
+
+### Sequencing (from `docs/business-model.md`)
+
+Deepen switching cost (routines/Zones as the user's IP) → **§6 audit as
+compliance artifact** → **§7 Team policy templates** → marketplace → only then
+publish pricing, and only with a real time-to-value number from the local
+`organizer_time_to_value` instrumentation.
+
 ## Product modes
 
 ### Record Mode
@@ -209,13 +273,20 @@ Minimum guardrails:
 
 Avoid these until the core replay loop is reliable:
 
-- Team workspaces.
-- Enterprise cloud sync.
-- Marketplace.
+- Enterprise **cloud** sync (the local-first, file-based policy packs and
+  compliance exports in §6–§7 are fine and are the paid path; a cloud relay is
+  an *optional* add-on, never a requirement).
 - Fully autonomous agent mode.
 - Browser extension.
 - Mobile app.
 - Overbuilt dashboards.
+
+Note the distinction from §6–§7: those "team" and "compliance" features are
+scoped to the **Organizer wedge, which is already shipping**, and are local-first
+(files the user owns), so they are not the deferred "enterprise cloud" work.
+Team *workspaces* and a public *marketplace* as networked, hosted products still
+wait — the internal shared-playbook library in §7 is the local-first precursor,
+not the hosted marketplace.
 
 These may be useful later, but right now they distract from the thing that matters: can Ghost watch a task, understand enough of it, and run it back without embarrassing itself?
 

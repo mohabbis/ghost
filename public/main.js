@@ -212,12 +212,16 @@ function organizerDemo() {
     { name: "setup.dmg", meta: "Installer" },
     { name: "screenshot 2026-03-14.png", meta: "Image" },
   ];
+  // Every action names the rule that authorized it and whether it was
+  // automated or you-approved — the same "rule that fired / who signed off"
+  // record the desktop app writes.
+  const RULE = "~/Downloads";
   const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create", audit: "Created folder <b>Receipts</b>" },
-    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Receipts", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Receipts" },
-    { tag: "→ move", cls: "tag--move", strong: "IMG_4821.HEIC", desc: "→ Images", file: 1, audit: "Moved <b>IMG_4821.HEIC</b> → Images" },
-    { tag: "→ move", cls: "tag--move", strong: "Q1 budget.xlsx", desc: "→ Documents/Spreadsheets", file: 2, audit: "Moved <b>Q1 budget.xlsx</b> → Documents/Spreadsheets" },
-    { tag: "→ move", cls: "tag--move", strong: "screenshot 2026-03-14.png", desc: "→ Pictures/Screenshots", file: 5, audit: "Moved <b>screenshot 2026-03-14.png</b> → Pictures/Screenshots" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create", audit: "Created folder <b>Receipts</b>", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "receipt-final(2).pdf", desc: "→ Receipts", file: 0, audit: "Moved <b>receipt-final(2).pdf</b> → Receipts", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "IMG_4821.HEIC", desc: "→ Images", file: 1, audit: "Moved <b>IMG_4821.HEIC</b> → Images", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "Q1 budget.xlsx", desc: "→ Documents/Spreadsheets", file: 2, audit: "Moved <b>Q1 budget.xlsx</b> → Documents/Spreadsheets", prov: "you approved" },
+    { tag: "→ move", cls: "tag--move", strong: "screenshot 2026-03-14.png", desc: "→ Pictures/Screenshots", file: 5, audit: "Moved <b>screenshot 2026-03-14.png</b> → Pictures/Screenshots", prov: "you approved" },
     { tag: "⚠ conflict", cls: "tag--warn", strong: "setup.dmg", desc: "exists in Installers — keeps both, never overwrites", warn: true },
     { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "outside your approval", deny: true },
   ];
@@ -238,8 +242,10 @@ function organizerDemo() {
     );
     return li;
   }
-  function auditRow(html) {
-    return el("li", null, `✓ ${html}`);
+  function auditRow(html, prov) {
+    const rule = ` <span class="audit__rule">by rule <code>${RULE}</code></span>`;
+    const badge = prov ? ` <span class="audit__prov">${prov}</span>` : "";
+    return el("li", null, `✓ ${html}${badge}${rule}`);
   }
 
   function reset() {
@@ -280,7 +286,7 @@ function organizerDemo() {
       acts.map((a, i) => () => {
         planRows[i]?.classList.add("is-done");
         if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.add("is-moved");
-        auditEl.appendChild(auditRow(a.audit));
+        auditEl.appendChild(auditRow(a.audit, a.prov));
       }),
       360,
     );
@@ -341,15 +347,20 @@ function clientFilingDemo() {
     { name: "acme-invoice-march.pdf", meta: "Duplicate" },
     { name: "notes.txt", meta: "Doc" },
   ];
+  // Each category folder carries a trust level (the desktop app's per-folder
+  // Automate / AskFirst / Never). Filing into a category you set to automate
+  // runs hands-free; the ambiguous duplicate is held ask-first; deletes and
+  // uploads are never allowed. Every executed row names the rule (category)
+  // that authorized it and whether it ran automated or you-approved.
   const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Invoices", desc: "create category folder", audit: "Created folder <b>Invoices</b>" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Statements", desc: "create category folder", audit: "Created folder <b>Statements</b>" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create category folder", audit: "Created folder <b>Receipts</b>" },
-    { tag: "→ move", cls: "tag--move", strong: "acme-invoice-march.pdf", desc: "→ Invoices/2026-03 acme-invoice-march.pdf", file: 0, audit: "Moved <b>2026-03 acme-invoice-march.pdf</b> → Invoices" },
-    { tag: "→ move", cls: "tag--move", strong: "chase_stmt.pdf", desc: "→ Statements/2026-03 chase_stmt.pdf", file: 1, audit: "Moved <b>2026-03 chase_stmt.pdf</b> → Statements" },
-    { tag: "→ move", cls: "tag--move", strong: "stripe-receipt.pdf", desc: "→ Receipts/2026-03 stripe-receipt.pdf", file: 2, audit: "Moved <b>2026-03 stripe-receipt.pdf</b> → Receipts" },
-    { tag: "⚠ conflict", cls: "tag--warn", strong: "acme-invoice-march.pdf", desc: "keeps both as 2026-03 acme-invoice-march (2).pdf", file: 3, warn: true, audit: "Kept both: <b>2026-03 acme-invoice-march (2).pdf</b>" },
-    { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "client files stay local", deny: true },
+    { tag: "＋ folder", cls: "tag--new", strong: "Invoices", desc: "create category folder", audit: "Created folder <b>Invoices</b>", prov: "you approved", rule: "Client filing preset" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Statements", desc: "create category folder", audit: "Created folder <b>Statements</b>", prov: "you approved", rule: "Client filing preset" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create category folder", audit: "Created folder <b>Receipts</b>", prov: "you approved", rule: "Client filing preset" },
+    { tag: "→ move", cls: "tag--move", strong: "acme-invoice-march.pdf", desc: "→ Invoices/2026-03 acme-invoice-march.pdf", file: 0, audit: "Moved <b>2026-03 acme-invoice-march.pdf</b> → Invoices", prov: "automated", rule: "Invoices", trust: "automate" },
+    { tag: "→ move", cls: "tag--move", strong: "chase_stmt.pdf", desc: "→ Statements/2026-03 chase_stmt.pdf", file: 1, audit: "Moved <b>2026-03 chase_stmt.pdf</b> → Statements", prov: "automated", rule: "Statements", trust: "automate" },
+    { tag: "→ move", cls: "tag--move", strong: "stripe-receipt.pdf", desc: "→ Receipts/2026-03 stripe-receipt.pdf", file: 2, audit: "Moved <b>2026-03 stripe-receipt.pdf</b> → Receipts", prov: "automated", rule: "Receipts", trust: "automate" },
+    { tag: "⚠ conflict", cls: "tag--warn", strong: "acme-invoice-march.pdf", desc: "duplicate — held for you, keeps both as 2026-03 acme-invoice-march (2).pdf", file: 3, warn: true, audit: "Kept both: <b>2026-03 acme-invoice-march (2).pdf</b>", prov: "you approved", rule: "Invoices", trust: "ask-first" },
+    { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "client files stay local", deny: true, trust: "never" },
   ];
 
   let state = "idle";
@@ -362,15 +373,21 @@ function clientFilingDemo() {
   }
 
   function planRow(a) {
+    const trust = a.trust
+      ? ` <span class="trust-chip trust-chip--${a.trust.replace("-", "")}">${a.trust}</span>`
+      : "";
     return el(
       "li",
       a.warn ? "is-warn" : a.deny ? "is-deny" : null,
-      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>`,
+      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>${trust}`,
     );
   }
 
-  function auditRow(html) {
-    return el("li", null, `✓ ${html}`);
+  function auditRow(html, prov, rule) {
+    const auto = prov === "automated";
+    const badge = prov ? ` <span class="audit__prov${auto ? " audit__prov--auto" : ""}">${prov}</span>` : "";
+    const ruleTag = rule ? ` <span class="audit__rule">by rule <code>${rule}</code></span>` : "";
+    return el("li", null, `✓ ${html}${badge}${ruleTag}`);
   }
 
   function reset() {
@@ -395,7 +412,7 @@ function clientFilingDemo() {
       240,
     );
     planHead.textContent = "Client filing plan — preview only";
-    hint.textContent = "Review the dated destinations, then approve. Nothing has moved yet.";
+    hint.textContent = "Trust levels: automate files hands-free · ask-first holds the duplicate for you · never blocks deletes. Approve to run.";
     btn.textContent = "Approve filing";
     btn.disabled = false;
     state = "planned";
@@ -411,11 +428,11 @@ function clientFilingDemo() {
       acts.map((a, i) => () => {
         planRows[i]?.classList.add("is-done");
         if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.add("is-moved");
-        auditEl.appendChild(auditRow(a.audit));
+        auditEl.appendChild(auditRow(a.audit, a.prov, a.rule));
       }),
       320,
     );
-    hint.textContent = "Filed with an audit log. No deletes, no uploads, conflicts preserved.";
+    hint.textContent = "Filed with an audit log — every row names the rule and who signed off. No deletes, no uploads, conflicts preserved.";
     btn.textContent = "↩︎ Undo filing";
     btn.disabled = false;
     state = "done";
@@ -431,7 +448,7 @@ function clientFilingDemo() {
         .reverse()
         .map((a) => () => {
           if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.remove("is-moved");
-          auditEl.appendChild(auditRow(`Reverted: ${a.audit}`));
+          auditEl.appendChild(auditRow(`Reverted: ${a.audit}`, null, a.rule));
         }),
       260,
     );
@@ -569,11 +586,21 @@ function replayDemo() {
   reset();
 }
 
+/* ---------- nav hairline appears once the page scrolls ---------- */
+function setupStickyNav() {
+  const nav = $(".nav");
+  if (!nav) return;
+  const onScroll = () => nav.classList.toggle("is-stuck", window.scrollY > 8);
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+}
+
 /* ---------- boot ---------- */
 window.addEventListener("DOMContentLoaded", () => {
   platformDetection();
   revealOnScroll();
   setupGhostEyes();
+  setupStickyNav();
   setupMobileNav();
   setupTabs();
   setupScrollSpy();

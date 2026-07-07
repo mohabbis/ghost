@@ -16,6 +16,10 @@ pub fn compress(events: &[InputEvent]) -> CompressionReport {
 
 pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> CompressionReport {
     let mut steps: Vec<CompressedStep> = Vec::new();
+    // (raw_start, raw_len) per step, aligned with `steps`. Gaps are real:
+    // dropped short delays and standalone releases consume events without
+    // emitting a step.
+    let mut raw_spans: Vec<(usize, usize)> = Vec::new();
     let mut current_focus: Option<ElementInfo> = None;
 
     let mut i = 0;
@@ -35,6 +39,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                         }
                         let target = element.as_ref().map(Target::from_element);
                         let raw_event_count = if next_is_release(events, i) { 2 } else { 1 };
+                        raw_spans.push((i, raw_event_count));
                         steps.push(CompressedStep::Click(ClickStep {
                             button: btn,
                             target,
@@ -47,10 +52,13 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                         }
                     }
                     Some(MouseKind::Release(_)) => {}
-                    None => steps.push(CompressedStep::Unknown(UnknownStep {
-                        description: format!("Unrecognized mouse event (button {button})"),
-                        raw_event_count: 1,
-                    })),
+                    None => {
+                        raw_spans.push((i, 1));
+                        steps.push(CompressedStep::Unknown(UnknownStep {
+                            description: format!("Unrecognized mouse event (button {button})"),
+                            raw_event_count: 1,
+                        }));
+                    }
                 }
                 i += 1;
             }
@@ -69,6 +77,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                     let secure = is_secure_target(current_focus.as_ref());
                     let typed = collect_typed_text(events, i, consumed);
                     let (redacted, text) = resolve(&typed, secure, keep_text);
+                    raw_spans.push((i, consumed));
                     steps.push(CompressedStep::TypeText(TypeTextStep {
                         char_count: count,
                         redacted,
@@ -81,6 +90,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                     i += consumed;
                 } else if is_shortcut(chars, *modifiers) {
                     let consumed = 1 + usize::from(next_is_key_up(events, i));
+                    raw_spans.push((i, consumed));
                     steps.push(CompressedStep::Shortcut(ShortcutStep {
                         combo: combo_label(chars, *modifiers),
                         action: known_action(chars, *modifiers).map(str::to_string),
@@ -89,6 +99,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                     i += consumed;
                 } else {
                     let consumed = 1 + usize::from(next_is_key_up(events, i));
+                    raw_spans.push((i, consumed));
                     steps.push(CompressedStep::Unknown(UnknownStep {
                         description: describe_special_key(chars),
                         raw_event_count: consumed,
@@ -99,6 +110,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
             InputEvent::Scroll { .. } => {
                 let (dx, dy, consumed) = consume_scroll_burst(events, i);
                 let (direction, magnitude) = scroll_bucket(dx, dy);
+                raw_spans.push((i, consumed));
                 steps.push(CompressedStep::Scroll(ScrollStep {
                     direction,
                     magnitude,
@@ -109,6 +121,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
             InputEvent::Delay { .. } => {
                 let (total_ms, consumed) = consume_delay_run(events, i);
                 if total_ms >= MIN_MEANINGFUL_WAIT_MS {
+                    raw_spans.push((i, consumed));
                     steps.push(CompressedStep::Wait(WaitStep {
                         ms: total_ms,
                         raw_event_count: consumed,
@@ -117,6 +130,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
                 i += consumed;
             }
             other => {
+                raw_spans.push((i, 1));
                 steps.push(CompressedStep::Unknown(UnknownStep {
                     description: describe_other(other),
                     raw_event_count: 1,
@@ -126,7 +140,7 @@ pub fn compress_with_options(events: &[InputEvent], keep_text: bool) -> Compress
         }
     }
 
-    CompressionReport::new(events.len(), steps)
+    CompressionReport::new(events.len(), steps, raw_spans)
 }
 
 fn next_is_release(events: &[InputEvent], i: usize) -> bool {

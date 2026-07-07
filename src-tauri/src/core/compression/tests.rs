@@ -225,3 +225,63 @@ fn empty_stream_is_an_empty_report() {
     assert_eq!(report.reduction_ratio, 0.0);
     assert!(report.warnings.is_empty());
 }
+
+// ── raw-event spans (trace → semantic-step mapping) ─────────────────────────
+
+#[test]
+fn raw_spans_align_with_steps_and_cover_consumed_events() {
+    // click(press+release) · short delay (dropped, no step) · type "hi" ·
+    // scroll — spans must be aligned per step and start at the true raw index.
+    let mut events = vec![left_press(None), left_release(), delay(50)];
+    events.extend(typed("hi"));
+    events.push(scroll(0, -30));
+
+    let report = compress(&events);
+    assert_eq!(report.raw_spans.len(), report.steps.len());
+    // Click consumed events 0..2; the dropped delay (index 2) emits no step;
+    // typing spans 3..7; scroll is index 7.
+    assert_eq!(report.raw_spans[0], (0, 2));
+    assert_eq!(report.raw_spans[1], (3, 4));
+    assert_eq!(report.raw_spans[2], (7, 1));
+}
+
+#[test]
+fn step_for_raw_index_maps_clicks_and_reports_gaps_as_none() {
+    let mut events = vec![left_press(None), left_release(), delay(50)];
+    events.extend(typed("hi"));
+
+    let report = compress(&events);
+    // Both halves of the click pair map to the Click step.
+    assert_eq!(report.step_for_raw_index(0), Some(0));
+    assert_eq!(report.step_for_raw_index(1), Some(0));
+    // The dropped sub-threshold delay belongs to no step: a naive
+    // prefix-sum of raw_event_count would misattribute it.
+    assert_eq!(report.step_for_raw_index(2), None);
+    assert_eq!(report.step_for_raw_index(3), Some(1));
+    // Out of range.
+    assert_eq!(report.step_for_raw_index(99), None);
+}
+
+#[test]
+fn standalone_release_leaves_a_span_gap() {
+    // A release with no preceding press (mid-recording start) is consumed
+    // silently; the following click's span must still be exact.
+    let events = vec![left_release(), left_press(None), left_release()];
+    let report = compress(&events);
+    assert_eq!(report.steps.len(), 1);
+    assert_eq!(report.raw_spans[0], (1, 2));
+    assert_eq!(report.step_for_raw_index(0), None);
+    assert_eq!(report.step_for_raw_index(1), Some(0));
+}
+
+#[test]
+fn meaningful_wait_gets_its_own_span() {
+    let events = vec![
+        left_press(None),
+        left_release(),
+        delay(1_000),
+        scroll(0, 30),
+    ];
+    let report = compress(&events);
+    assert_eq!(report.raw_spans, vec![(0, 2), (2, 1), (3, 1)]);
+}

@@ -8,9 +8,9 @@
 }
 
 .app-shell {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px 28px 40px;
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
 }
 
 .app-header {
@@ -98,10 +98,63 @@
 }
 
 .banner--warn {
-  background: rgba(255, 184, 107, 0.12);
-  border: 1px solid rgba(255, 184, 107, 0.4);
+  background: rgba(242, 180, 92, 0.12);
+  border: 1px solid rgba(242, 180, 92, 0.38);
   color: var(--accent-warm);
 }
+
+.banner__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Record & replay: contextual control groups keep one clear action at rest. */
+.record-panel .btn-row { margin-top: 12px; }
+.record-panel .record-primary { margin-top: 14px; }
+.record-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.record-group[hidden] { display: none; }
+
+.advanced-tools {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.advanced-tools > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  user-select: none;
+}
+.advanced-tools > summary::-webkit-details-marker { display: none; }
+.advanced-tools > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.advanced-tools[open] > summary::before { transform: rotate(90deg); }
+.advanced-tools > summary:hover { color: var(--text); }
+.advanced-tools .btn-row { margin-top: 8px; }
+
+/* Contextual sidebar: recording-specific rail sections (Ghost Guard, workflow
+   health, event timeline) belong to Record/Workflows, not the Organize wedge. */
+body[data-view="organize"] .rail-record { display: none; }
 
 .app-grid {
   display: grid;
@@ -148,9 +201,9 @@
 }
 
 .btn--primary {
-  background: var(--accent);
-  color: var(--text);
-  border: 1px solid var(--accent);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  color: #0b0a18;
+  border: 1px solid transparent;
 }
 
 .speed-picker {
@@ -200,7 +253,12 @@
 
 .insight-icon {
   font-size: 1.25rem;
+  color: var(--accent-strong);
 }
+.insight-icon .i { width: 1.4rem; height: 1.4rem; }
+.onboarding__glyph .i { width: 2.6rem; height: 2.6rem; stroke-width: 1.5; color: var(--accent-strong); }
+.flow-step__icon .i { width: 1.5rem; height: 1.5rem; color: var(--accent-strong); }
+.onboarding__privacy .i { width: 1rem; height: 1rem; vertical-align: -2px; margin-right: 4px; }
 
 .notifications {
   display: flex;
@@ -322,9 +380,9 @@
   margin: 0 0 4px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(131, 246, 196, 0.12);
-  border: 1px solid rgba(131, 246, 196, 0.3);
-  color: var(--accent-mint, #83f6c4);
+  background: rgba(73, 211, 160, 0.12);
+  border: 1px solid rgba(73, 211, 160, 0.3);
+  color: var(--success);
   font-size: 0.85rem;
 }
 
@@ -472,7 +530,7 @@
 }
 
 .app-shell {
-  max-width: 1180px;
+  max-width: none;
 }
 
 .app-header {
@@ -480,7 +538,7 @@
   top: 0;
   z-index: 20;
   padding-top: 18px;
-  background: linear-gradient(180deg, rgba(7, 8, 19, 0.94), rgba(7, 8, 19, 0.72));
+  background: linear-gradient(180deg, rgba(6, 6, 11, 0.92), rgba(6, 6, 11, 0.66));
   backdrop-filter: blur(18px);
 }
 
@@ -489,12 +547,12 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  color: #070813;
-  font-size: 1.25rem;
-  font-weight: 950;
-  box-shadow: 0 18px 38px rgba(141, 123, 255, 0.28);
+  border-radius: 13px;
+  background: linear-gradient(140deg, var(--accent-strong), var(--accent));
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 800;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 10px 26px -12px rgba(139, 124, 246, 0.7);
 }
 
 .app-header__brand h1 {
@@ -954,6 +1012,42 @@
   color: #ff8da0;
 }
 
+.org-badge--automate {
+  background: rgba(131, 246, 196, 0.16);
+  color: var(--success);
+}
+
+.org-badge--never {
+  background: rgba(255, 107, 129, 0.16);
+  color: #ff8da0;
+}
+
+/* Per-rule trust selector shown on each folder chip. */
+.org-trust-select {
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+}
+
+/* The "by rule <path>" attribution line under a planned or audited action. */
+.org-rule-attr {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.org-rule-attr code {
+  word-break: break-all;
+}
+
+/* Trust dropdown in the add-folder row. */
+.organizer-trust-field {
+  min-width: 110px;
+}
+
 .org-flag {
   font-size: 11px;
   color: var(--accent-warm);
@@ -961,6 +1055,29 @@
   border-radius: 999px;
   padding: 0 6px;
   margin-left: 4px;
+}
+
+/* Tamper-evidence: a "sealed" marker per run and the verify verdict. */
+.org-seal {
+  font-size: 11px;
+  color: var(--success);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.organizer-verify-result {
+  margin: 0 0 8px;
+  font-size: 13px;
+  min-height: 1em;
+}
+
+.org-verify--ok {
+  color: var(--success);
+}
+
+.org-verify--bad {
+  color: #ff8da0;
+  font-weight: 600;
 }
 
 .organizer-muted,
@@ -1097,4 +1214,227 @@
 /* Per-step resolution trace inside replay history: fallback steps stand out. */
 .replay-trace__fallback {
   color: #ffb454;
+}
+
+/* Cross-run reliability summary at the top of the replay-history modal. */
+.replay-stats {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+/* ===== Opinionated restyle: sidebar shell + focused views =====
+   The app moved from a single-scroll stack of panels to a left nav that
+   swaps one focused view at a time, with a persistent live-activity rail.
+   This section is authoritative for the shell frame; component styles above
+   (panels, organizer, timeline, status cards) are reused unchanged. */
+
+.nav {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: 0 0 236px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(18px);
+}
+
+.nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 14px;
+}
+
+.nav__glyph {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+  border-radius: 11px;
+  box-shadow: 0 12px 26px rgba(141, 123, 255, 0.28);
+}
+
+.nav__wordmark {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.nav__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.nav__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.nav__item.is-active {
+  background: rgba(139, 124, 246, 0.16);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(139, 124, 246, 0.34);
+}
+
+.nav__ico {
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.nav__item.is-active .nav__ico { color: var(--accent-strong); }
+
+/* Inline line-icon system shared with the marketing site. */
+.i {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.btn .i { width: 1.05rem; height: 1.05rem; }
+
+/* Inline icons inside JS-rendered HTML size to their surrounding text. */
+h3 .i,
+.notification__text .i,
+.org-seal .i,
+.org-verify .i,
+#guardSummary .i {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.15em;
+}
+/* Ghost Guard severity, tinted by level (matches the audit risk language). */
+.sev { width: 1em; height: 1em; vertical-align: -0.15em; }
+.sev--low { color: var(--accent-strong); }
+.sev--medium { color: var(--accent-warm); }
+.sev--high { color: var(--accent); }
+.sev--critical { color: #f47a8f; }
+.org-verify--ok .i { color: var(--success); }
+.org-verify--bad .i { color: #f47a8f; }
+.notification--error .i { color: var(--accent-warm); }
+.notification--info .i,
+.notification--success .i { color: var(--success); }
+
+.nav__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.nav__foot .recording-status {
+  justify-content: center;
+}
+
+.nav__foot .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.workspace {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 24px 28px 40px;
+}
+
+.workspace__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.95fr);
+  gap: 22px;
+  align-items: start;
+}
+
+/* One view visible at a time; each view stacks its own panels. */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.view[hidden] {
+  display: none;
+}
+
+.app-main {
+  gap: 0;
+}
+
+.app-sidebar {
+  top: 24px;
+}
+
+@media (max-width: 1040px) {
+  .workspace__body {
+    grid-template-columns: 1fr;
+  }
+  .app-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .nav {
+    position: static;
+    height: auto;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav__items {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+  }
+  .nav__foot {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .nav__foot .btn,
+  .nav__foot .recording-status {
+    width: auto;
+  }
+  .nav__item span:not(.nav__ico) {
+    display: none;
+  }
 }

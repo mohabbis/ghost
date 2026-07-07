@@ -48,6 +48,39 @@
   <body data-platform="other">
     <a class="skip-link" href="#main">Skip to content</a>
 
+    <!-- ── Icon sprite: one consistent line set, no emoji ── -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49v-1.9c-2.78.62-3.37-1.2-3.37-1.2-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 4 5-4M5 21h14"/></symbol>
+        <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.9-7 10-4-2.1-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/></symbol>
+        <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 12h6"/></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+        <symbol id="i-folder-open" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 10h18l-2 9a1 1 0 0 1-1 .9H5a1 1 0 0 1-1-.9z"/></symbol>
+        <symbol id="i-record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/></symbol>
+        <symbol id="i-camera-off" viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h5L15 7h1"/><path d="M20 7a1 1 0 0 1 1 1v10"/><path d="M4 9v8a1 1 0 0 0 1 1h11"/><path d="M9.5 11.5a3 3 0 0 0 4 4"/><path d="M3 3l18 18"/></symbol>
+        <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.6 6.2A9.6 9.6 0 0 1 12 6c5 0 9 6 9 6a15 15 0 0 1-2.7 3.2M6.6 6.6A15 15 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.5-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></symbol>
+        <symbol id="i-mail-off" viewBox="0 0 24 24"><path d="M4 5h14a2 2 0 0 1 2 2v9M20 19H6a2 2 0 0 1-2-2V7"/><path d="M4.5 6.5L12 12l3-2.2"/><path d="M3 3l18 18"/></symbol>
+        <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M17 6l2 2M14 9l2 2"/></symbol>
+        <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M8 19h9a4 4 0 0 0 1.5-7.7A6 6 0 0 0 8.2 8.2"/><path d="M7 10a4 4 0 0 0-.5 8"/><path d="M3 3l18 18"/></symbol>
+        <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M17 10h.01M7 14h10"/></symbol>
+        <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M17.05 12.6c-.03-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3-.79-1.55.02-2.97.9-3.77 2.28-1.6 2.79-.41 6.92 1.15 9.19.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.13 2.76-2.25.87-1.29 1.23-2.54 1.25-2.6-.03-.02-2.4-.92-2.42-3.64zM14.8 5.7c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.68 1.37-.59.68-1.1 1.77-.96 2.81 1.02.08 2.06-.52 2.7-1.28z"/></symbol>
+        <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v6.7L3 18.2zM11.3 12.5H21V21l-9.7-1.3z"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4.5 4.5L19 7"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+        <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+      </defs>
+    </svg>
+
     <header class="nav" id="top">
       <a class="brand" href="#top" aria-label="Ghost home">
         <span class="brand__mark" aria-hidden="true">
@@ -81,8 +114,8 @@
       </nav>
 
       <div class="nav__end">
-        <a class="btn btn--ghost btn--sm" href="https://github.com/mohabbis/ghost">GitHub</a>
-        <a class="btn btn--sm" href="#download">Download</a>
+        <a class="btn btn--ghost btn--sm" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github"/></svg> GitHub</a>
+        <a class="btn btn--sm" href="#download"><svg class="i"><use href="#i-download"/></svg> Download</a>
       </div>
 
       <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
@@ -103,21 +136,21 @@
             act on their own. Ghost is the opposite.
           </p>
           <div class="hero__actions">
-            <a class="btn btn--lg" href="#download" data-download-primary>Download for your computer</a>
-            <a class="btn btn--secondary btn--lg" href="#demo">See it work ↓</a>
+            <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg> Download for your computer</a>
+            <a class="btn btn--secondary btn--lg" href="#demo">See it work <svg class="i"><use href="#i-arrow-down"/></svg></a>
           </div>
-          <p class="hero__note">Free technical preview · Your data never leaves your device.</p>
+          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> Free technical preview · Your data never leaves your device.</p>
         </div>
 
         <!-- Hero mockup: a proposed plan awaiting approval -->
         <aside class="mock" aria-hidden="true">
           <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — proposed plan</em></div>
           <div class="mock__body">
-            <div class="mock__row"><span class="tag tag--new">＋ folder</span> Receipts</div>
-            <div class="mock__row"><span class="tag tag--move">→ move</span> receipt-final(2).pdf → Receipts</div>
-            <div class="mock__row"><span class="tag tag--rename">✎ rename</span> invoice-acme.pdf → 2026-03 invoice-acme.pdf</div>
-            <div class="mock__row mock__row--warn"><span class="tag tag--warn">⚠ conflict</span> keeps both — never overwrites</div>
-            <div class="mock__row mock__row--deny"><span class="tag tag--deny">✕ 0</span> deletes · 0 uploads</div>
+            <div class="mock__row"><span class="tag tag--new"><svg class="i"><use href="#i-plus"/></svg> folder</span> Receipts</div>
+            <div class="mock__row"><span class="tag tag--move"><svg class="i"><use href="#i-arrow-right"/></svg> move</span> receipt-final(2).pdf → Receipts</div>
+            <div class="mock__row"><span class="tag tag--rename"><svg class="i"><use href="#i-pencil"/></svg> rename</span> invoice-acme.pdf → 2026-03 invoice-acme.pdf</div>
+            <div class="mock__row mock__row--warn"><span class="tag tag--warn"><svg class="i"><use href="#i-alert"/></svg> conflict</span> keeps both — never overwrites</div>
+            <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-ban"/></svg> 0</span> deletes · 0 uploads</div>
             <div class="mock__foot">
               <button class="btn btn--sm" type="button" tabindex="-1">Approve</button>
               <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Undo</button>
@@ -136,10 +169,10 @@
       </section>
 
       <div class="trust-strip reveal">
-        <span>🔒 Runs on your machine</span>
-        <span>✅ You approve every action</span>
-        <span>🧾 Every change audited</span>
-        <span>↩︎ One-click undo</span>
+        <span><svg class="i"><use href="#i-lock"/></svg> Runs on your machine</span>
+        <span><svg class="i"><use href="#i-sliders"/></svg> Automate, ask-first, or never — you set the level</span>
+        <span><svg class="i"><use href="#i-receipt"/></svg> Every change names the rule that fired</span>
+        <span><svg class="i"><use href="#i-undo"/></svg> Never overwrites · one-click undo</span>
       </div>
 
       <!-- ───────────────────────── Interactive demo ───────────────────────── -->
@@ -156,13 +189,13 @@
         <div class="demo">
           <div class="demo__tabs" role="tablist" aria-label="Demos">
             <button class="demo__tab is-active" role="tab" aria-selected="true" data-tab="organizer" id="tab-organizer">
-              🗂️ Organizer
+              <svg class="i"><use href="#i-folder"/></svg> Organizer
             </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="replay" id="tab-replay">
-              ⏺️ Record → Replay
+              <svg class="i"><use href="#i-record"/></svg> Record → Replay
             </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="client-filing" id="tab-client-filing">
-              📁 Client filing
+              <svg class="i"><use href="#i-folder-open"/></svg> Client filing
             </button>
           </div>
 
@@ -177,7 +210,7 @@
                 <div class="demo__screentitle" id="org-planhead">Proposed plan</div>
                 <ul class="planlist" id="org-plan" aria-live="polite"></ul>
                 <div class="audit" id="org-audit" hidden>
-                  <div class="audit__title">🧾 Audit log</div>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Audit log</div>
                   <ul id="org-auditlist"></ul>
                 </div>
               </div>
@@ -199,7 +232,7 @@
                 <div class="demo__screentitle">Review &amp; audit</div>
                 <ul class="planlist" id="rep-review" aria-live="polite"></ul>
                 <div class="audit" id="rep-audit" hidden>
-                  <div class="audit__title">🧾 Audit log</div>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Audit log</div>
                   <ul id="rep-auditlist"></ul>
                 </div>
               </div>
@@ -221,7 +254,7 @@
                 <div class="demo__screentitle" id="client-planhead">Client filing plan</div>
                 <ul class="planlist" id="client-plan" aria-live="polite"></ul>
                 <div class="audit" id="client-audit" hidden>
-                  <div class="audit__title">🧾 Audit log</div>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Audit log</div>
                   <ul id="client-auditlist"></ul>
                 </div>
               </div>
@@ -245,17 +278,17 @@
         </div>
         <div class="niche-grid">
           <article class="niche-card">
-            <span class="tag tag--move">Audit</span>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
             <h3>Every move has a receipt.</h3>
             <p>Ghost records what moved, where it went, and why the policy allowed it, so weekly filing does not become a mystery later.</p>
           </article>
           <article class="niche-card">
-            <span class="tag tag--rename">Undo</span>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-undo"/></svg></span>
             <h3>One click puts it back.</h3>
             <p>The undo journal is written before file mutations, so a bad client drop or naming mistake can be reversed without guesswork.</p>
           </article>
           <article class="niche-card">
-            <span class="tag tag--new">Local</span>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-lock"/></svg></span>
             <h3>Client files stay on your machine.</h3>
             <p>No account, no cloud inbox, no upload step. Ghost reads local folder metadata and works inside the boundaries you approved.</p>
           </article>
@@ -273,9 +306,9 @@
           <li><span class="pipeline__n">1</span><h3>Record / Select</h3><p>Record a task, or pick a folder. Explicit and visible — never in the background.</p></li>
           <li><span class="pipeline__n">2</span><h3>Inspect</h3><p>Raw input compresses into readable steps. Typed text redacted; secrets dropped.</p></li>
           <li><span class="pipeline__n">3</span><h3>Plan</h3><p>Ghost proposes exact changes and flags conflicts. The plan mutates nothing.</p></li>
-          <li><span class="pipeline__n">4</span><h3>Approve</h3><p>You review and approve. Deny-by-default: risky actions need explicit consent.</p></li>
+          <li><span class="pipeline__n">4</span><h3>Approve</h3><p>Set each folder to automate, ask-first, or never. Deny-by-default: risky actions need explicit consent.</p></li>
           <li><span class="pipeline__n">5</span><h3>Execute</h3><p>Deterministic code runs the approved plan — no silent delete, no overwrite.</p></li>
-          <li><span class="pipeline__n">6</span><h3>Audit</h3><p>Every change is written to a durable local log you can read back.</p></li>
+          <li><span class="pipeline__n">6</span><h3>Audit</h3><p>Every change names the rule that fired and whether it was automated or you-approved. Export to CSV or JSON.</p></li>
           <li><span class="pipeline__n">7</span><h3>Undo</h3><p>Reversible steps record undo data first, so one click puts things back.</p></li>
         </ol>
       </section>
@@ -291,9 +324,9 @@
             <h3>Cloud AI agents</h3>
             <ul>
               <li>Read your email, chat, calendar, and files in the cloud</li>
-              <li>Decide and act on their own</li>
+              <li>Sign in to your systems and act on their own</li>
               <li>Raw model output drives actions</li>
-              <li>Your data leaves your machine</li>
+              <li>Your data — and your logins — live on their servers</li>
               <li>Hard to see exactly what happened</li>
             </ul>
           </div>
@@ -301,10 +334,10 @@
             <h3><span class="brand__mark brand__mark--sm" aria-hidden="true">G</span> Ghost</h3>
             <ul>
               <li>Runs on your Mac or PC — nothing uploaded</li>
-              <li>Acts only on the plan you approved</li>
+              <li>Acts only on the plan you approved, at the trust level you set</li>
               <li>Deterministic code executes, not the model</li>
-              <li>Local-first storage, no account</li>
-              <li>Every run audited, every change reversible</li>
+              <li>Local-first storage, no account, no vendor holds your logins</li>
+              <li>Every change names the rule that fired — audited and reversible</li>
             </ul>
           </div>
         </div>
@@ -320,12 +353,12 @@
           <h2>What Ghost will never do.</h2>
         </div>
         <div class="privacy">
-          <div class="privacy__card"><span>🚫📷</span><p>No camera or microphone access.</p></div>
-          <div class="privacy__card"><span>🙈</span><p>No hidden screen capture or background recording.</p></div>
-          <div class="privacy__card"><span>📭</span><p>No background email, browser, or tab reading.</p></div>
-          <div class="privacy__card"><span>🔑</span><p>No raw secret capture — password &amp; payment fields are suppressed.</p></div>
-          <div class="privacy__card"><span>☁️</span><p>No cloud-first storage. Workflows stay on your device.</p></div>
-          <div class="privacy__card"><span>⌨️</span><p>Keyboard &amp; pointer captured only while you record or an approved replay runs.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-camera-off"/></svg></span><p>No camera or microphone access.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-eye-off"/></svg></span><p>No hidden screen capture or background recording.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-mail-off"/></svg></span><p>No background email, browser, or tab reading.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-key"/></svg></span><p>No raw secret capture — password &amp; payment fields are suppressed.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-cloud-off"/></svg></span><p>No cloud-first storage. Workflows stay on your device.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-keyboard"/></svg></span><p>Keyboard &amp; pointer captured only while you record or an approved replay runs.</p></div>
         </div>
       </section>
 
@@ -340,7 +373,7 @@
           <div class="roadmap__col roadmap__col--now">
             <span class="pill pill--now">Shipping now</span>
             <h3>Ghost Organizer + inspectable replay</h3>
-            <p>Safe file cleanup: scan, propose, approve, move/rename, audit, undo — never a silent delete or overwrite. Plus record &amp; replay you can see through: preview every step before it runs, watch live per-step status, retry from a failed step, and read a per-click trace of how every target was found.</p>
+            <p>Safe file cleanup: scan, propose, approve, move/rename, audit, undo — never a silent delete or overwrite. Set each folder to automate, ask-first, or never; every change names the rule that fired, and you can export the audit log to CSV or JSON. Guided setup turns a few questions into a ready boundary. Plus record &amp; replay you can see through: preview every step before it runs, watch live per-step status, retry from a failed step, and read a per-click trace of how every target was found.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Next</span>
@@ -362,10 +395,10 @@
           <p class="download__sub" id="download-sub">Free technical preview for macOS and Windows.</p>
           <div class="download__actions">
             <a class="btn btn--lg" id="dl-mac" href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg">
-              ⌘ Download for macOS
+              <svg class="i"><use href="#i-apple"/></svg> Download for macOS
             </a>
             <a class="btn btn--lg" id="dl-win" href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe">
-              ⊞ Download for Windows
+              <svg class="i"><use href="#i-windows"/></svg> Download for Windows
             </a>
           </div>
           <p class="download__note">

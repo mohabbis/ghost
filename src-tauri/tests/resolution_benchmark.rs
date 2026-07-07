@@ -65,7 +65,11 @@ fn run(scenario: &Scenario) -> Result<(), String> {
                 .find(|(p, _)| *p == (x, y))
                 .map(|(_, el)| el.clone())
         },
-        |title| windows.get(title).copied(),
+        |el| {
+            el.window_title
+                .as_deref()
+                .and_then(|title| windows.get(title).copied())
+        },
     );
     if outcome == scenario.expect {
         Ok(())

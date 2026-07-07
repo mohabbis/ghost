@@ -52,6 +52,17 @@ Steps at or below `LOW_CONFIDENCE` (0.5) and coordinate-only / secure-field step
 - `compress(&[InputEvent]) -> CompressionReport` — default, text redacted.
 - `compress_with_options(&[InputEvent], keep_text) -> CompressionReport` — retain literal text for non-secure fields. Secure fields are always redacted.
 
+## Raw-event spans (trace mapping)
+
+`CompressionReport.raw_spans` carries one `(raw_start, raw_len)` per step,
+aligned with `steps`, so a replay's per-click resolution trace (raw-event
+indices) can be mapped onto semantic steps
+(`CompressionReport::step_for_raw_index`). Spans are **not contiguous**:
+dropped sub-threshold delays and standalone mouse releases consume raw events
+without emitting a step — never prefix-sum `raw_event_count` to reconstruct
+positions. An index falling in such a gap maps to no step; render it as a raw
+index instead.
+
 ## Status
 
 Sprint 1 is backend module + tests only, following the repo's backend-first pattern: no Tauri command yet. The `compress_workflow` command and compressed-step timeline UI are Sprint 2; routing Ghost Guard through compressed steps is Sprint 3.

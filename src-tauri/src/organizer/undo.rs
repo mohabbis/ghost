@@ -100,6 +100,7 @@ mod tests {
             can_move: true,
             can_copy: true,
             can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
         }
     }
 

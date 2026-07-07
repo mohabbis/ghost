@@ -1,6 +1,6 @@
 [package]
 name = "ghost"
-version = "1.0.13"
+version = "1.1.0"
 edition = "2021"
 
 [lib]
@@ -37,6 +37,9 @@ regex = "1.10"
 dirs = "5"
 argon2 = "0.5"
 aes-gcm = "0.10"
+# SHA-256 for the tamper-evident audit hash chain over Organizer executions
+# (see storage/executions.rs). RustCrypto, MIT/Apache-2.0 (passes deny.toml).
+sha2 = "0.10"
 # Local trust-boundary storage (Zones + folder rules). `bundled` compiles
 # SQLite from source so there is no system-library dependency and it builds on
 # the headless Linux CI leg. MIT-licensed (passes deny.toml).
