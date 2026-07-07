@@ -1,122 +1,150 @@
-# macOS signing & notarization — one-page checklist
+# macOS Code Signing Checklist
 
-A focused, do-it-once runbook for turning the macOS release from an ad-hoc
-build (which still trips Gatekeeper) into a **Developer ID–signed, notarized**
-build that opens with no warning. This condenses the macOS portion of
-[`RELEASING.md`](../RELEASING.md) into an ordered checklist.
+This checklist covers the steps needed to code-sign and notarize Ghost for macOS distribution.
 
-> **Scope:** macOS only. It is fully independent of Windows signing (Azure
-> Trusted Signing) and needs **no workflow-file changes** — `release.yml`
-> auto-detects the secrets and switches from ad-hoc to full signing on its own.
-> You do **not** need the GitHub `workflow` scope for any of this.
+## Phase 1: Developer Account & Certificates (Before Release)
 
-## Pre-flight — already verified in this repo
+- [ ] Apple Developer Account (if not already created)
+  - Cost: $99/year
+  - Create at: https://developer.apple.com/account
+  - Verify organization/identity
 
-These are confirmed in `main`/`master`, so you only have to do the account side:
+- [ ] Request Developer ID certificate
+  - Type: Developer ID Application (for signing)
+  - Request via: https://developer.apple.com/account/resources/certificates/list
+  - Download and install locally: `~/Library/Keychains/login.keychain`
+  - Verify: `security find-identity -v -p codesigning`
 
-- `release.yml` reads exactly the six secret names below (no name mismatch).
-- `src-tauri/Ghost.entitlements` exists and is hardened-runtime-compatible
-  (minimal: only `com.apple.security.automation.apple-events`).
-- `src-tauri/icons/icon.icns` is present; bundle `identifier` is set
-  (`com.muhammadrafiq.ghost`).
-- `tauri.conf.json` and `Cargo.toml` versions match.
-- No signing identity is hardcoded — it comes from the injected env vars.
+- [ ] Create App-Specific Password (for notarization)
+  - https://appleid.apple.com/account/manage
+  - Store securely (this is what we'll use in CI)
+  - Create a unique password for "notarization"
 
-## What you need
+- [ ] Enroll in Developer ID Notarization
+  - https://developer.apple.com/account/resources/certificates/notarization
+  - Notarization is now free (as of 2024)
 
-- A paid **Apple Developer** membership ($99/yr flat — no per-build billing).
-- A Mac (to create/export the certificate and to verify the result).
+## Phase 2: Local Testing (During Development)
 
-## The six GitHub secrets
+- [ ] Test code signing locally
+  ```bash
+  codesign -s "Developer ID Application: Your Name (TEAM_ID)" \
+    --deep --strict \
+    Ghost.app
+  ```
 
-Set under **GitHub → repo Settings → Secrets and variables → Actions**:
+- [ ] Verify signature
+  ```bash
+  codesign -v -v Ghost.app
+  ```
 
-| Secret | What it is |
-| --- | --- |
-| `BUILD_CERTIFICATE_BASE64` | base64 of your Developer ID Application `.p12` |
-| `P12_PASSWORD` | the password you set when exporting the `.p12` |
-| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Your Name (AB12CD34EF)` |
-| `APPLE_TEAM_ID` | your 10-character Team ID (the code in the parens) |
-| `APPLE_ID` | your Apple ID email |
-| `APPLE_PASSWORD` | an **app-specific** password (NOT your Apple ID login password) |
+- [ ] Test Gatekeeper acceptance
+  ```bash
+  spctl -a -v Ghost.app
+  # Should report: "accepted"
+  ```
 
-## Steps
+## Phase 3: Notarization Setup (Before First Release)
 
-### A. Certificate → `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`
+- [ ] Request Apple ID used for notarization
+  - Should be Developer ID holder, or Admin
+  - Will use App-Specific Password in CI
 
-1. Apple Developer → Certificates, IDs & Profiles → Certificates → **+** →
-   **Developer ID Application**. Use the CSR prompt (Keychain Access →
-   Certificate Assistant → *Request a Certificate from a Certificate
-   Authority*, "Saved to disk").
-   - ⚠️ It must be **Developer ID Application** — *not* "Apple Development" or
-     "Mac App Distribution". Those cannot notarize a DMG.
-2. Download the `.cer`, double-click to add it to your **login** keychain.
-3. Keychain Access → find the cert → **expand it so the private key is
-   included** → right-click → **Export** → `.p12`, set a strong password.
-   - That password is **`P12_PASSWORD`**.
-   - Base64-encode the file (this value is **`BUILD_CERTIFICATE_BASE64`**):
+- [ ] Create notarization service account
+  - Store credentials securely
+  - Add to GitHub Secrets: `MACOS_APPLE_ID`, `MACOS_APPLE_PASSWORD`, `MACOS_TEAM_ID`
 
-     ```bash
-     base64 -i DeveloperID.p12 | pbcopy   # macOS, copies to clipboard
-     ```
+- [ ] Test notarization locally
+  ```bash
+  xcrun altool --notarize-app \
+    -f Ghost.dmg \
+    -t osx \
+    --file-type dmg \
+    -u $APPLE_ID \
+    -p $APPLE_PASSWORD \
+    --team-id $TEAM_ID
+  ```
 
-### B. Identity + Team ID → `APPLE_SIGNING_IDENTITY`, `APPLE_TEAM_ID`
+- [ ] Check notarization status
+  ```bash
+  xcrun altool --notarization-info <request-uuid> \
+    -u $APPLE_ID \
+    -p $APPLE_PASSWORD
+  ```
 
+- [ ] Staple notarization ticket
+  ```bash
+  xcrun stapler staple Ghost.dmg
+  ```
+
+## Phase 4: CI/CD Integration
+
+Configured in `.github/workflows/release.yml`:
+
+- [ ] Build creates .dmg
+- [ ] Notarize via `altool` (API call with credentials)
+- [ ] Poll for notarization completion (5 min timeout)
+- [ ] Staple ticket to .dmg
+- [ ] Create release with signed/notarized build
+- [ ] Publish SHA256 checksums
+
+## Phase 5: Post-Release Verification
+
+- [ ] Download .dmg from release
+- [ ] Verify code signature
+  ```bash
+  codesign -v -v Ghost.app
+  ```
+- [ ] Verify Gatekeeper acceptance
+  ```bash
+  spctl -a -v Ghost.app
+  ```
+- [ ] Verify notarization ticket
+  ```bash
+  xcrun stapler validate Ghost.dmg
+  ```
+
+## Troubleshooting
+
+### "Developer ID is not installed"
 ```bash
 security find-identity -v -p codesigning
+# If empty, download cert from Apple Developer portal
 ```
 
-- Copy the full quoted string, e.g. `Developer ID Application: Jane Doe
-  (AB12CD34EF)` → **`APPLE_SIGNING_IDENTITY`**.
-- The 10-char code in parens → **`APPLE_TEAM_ID`** (also shown top-right in the
-  Developer portal).
-
-### C. Notarization login → `APPLE_ID`, `APPLE_PASSWORD`
-
-1. appleid.apple.com → Sign-In & Security → **App-Specific Passwords** → **+** →
-   name it "ghost-notarytool". Copy the generated password → **`APPLE_PASSWORD`**.
-2. Your Apple ID email → **`APPLE_ID`**.
-
-### D. Add all six secrets
-
-GitHub → repo **Settings → Secrets and variables → Actions → New repository
-secret**, once per secret above.
-
-### E. Release
-
-1. Bump the version if needed in **both** `src-tauri/tauri.conf.json`
-   (`"version"`) and `src-tauri/Cargo.toml` (`[package] version`).
-2. Tag and push:
-
-   ```bash
-   git tag v1.0.12
-   git push origin v1.0.12
-   ```
-
-The macOS job detects the secrets and switches from ad-hoc to full Developer-ID
-signing + notarization automatically — no YAML change required.
-
-### F. Verify (don't trust a green check — confirm on a Mac)
-
+### "Notarization failed"
+Check status:
 ```bash
-spctl -a -vvv -t install Ghost.dmg      # expect "accepted", source=Developer ID
-stapler validate Ghost.dmg              # expect a stapled ticket
-codesign -dvvv /Volumes/Ghost/Ghost.app # expect your Developer ID identity
+xcrun altool --notarization-info <uuid> -u $APPLE_ID -p $APPLE_PASSWORD
+```
+Common issues: disk image too large, developer ID not recognized, expired credentials
+
+### "Gatekeeper rejects the app"
+Verify notarization was stapled:
+```bash
+xcrun stapler validate Ghost.dmg
 ```
 
-If `spctl` says **rejected** or `stapler` reports no ticket, the job almost
-certainly fell back to ad-hoc signing because a secret was missing or the
-certificate was the wrong type. Re-check the six secrets and that the cert is
-**Developer ID Application**.
+## Resources
 
-## Notes
+- [Apple Developer ID Documentation](https://developer.apple.com/support/developer-id/)
+- [Notarizing macOS Software](https://developer.apple.com/documentation/notaryapi/notarizing_macos_software_before_distribution)
+- [Gatekeeper Utilities](https://support.apple.com/en-us/106254)
+- [codesign(1) Manual](https://www.unix.com/man-page/osx/1/codesign/)
 
-- **Lead time:** the certificate is the only step with any delay — create it
-  early even if you plan to release later.
-- **Why notarization matters here specifically:** Accessibility / Input
-  Monitoring grants (which a recorder app needs) only *persist across updates*
-  when the app keeps a stable Developer ID signature. Ad-hoc builds lose those
-  grants on every update.
-- **Windows / auto-updater** are separate and intentionally out of scope here.
-  See `RELEASING.md` for the Azure Trusted Signing and updater-keypair steps
-  when you choose to tackle them.
+## Timeline
+
+| Step | Owner | Estimated Time | Deadline |
+|------|-------|-----------------|----------|
+| Get Developer Account | Founder | 1 day | Week 6 |
+| Request Developer ID Cert | Founder | 1-3 days | Week 6 |
+| Set up notarization credentials | Founder | 2 hours | Week 6 |
+| Test locally | Founder | 2 hours | Week 6 |
+| Integrate into release.yml | Engineer | 4 hours | Week 7 |
+| Test full release pipeline | Engineer | 2 hours | Week 7 |
+| First public notarized build | Release | 1 hour | Week 8 |
+
+---
+
+**Last updated**: 2026-07-06  
+**Status**: Ready for Phase 3 (Week 6)

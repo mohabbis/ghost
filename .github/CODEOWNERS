@@ -1,0 +1,26 @@
+# GitHub Code Owners
+# This file specifies who must review changes to critical parts of Ghost
+
+# Default reviewers
+* @mohabbis
+
+# Core trust pipeline (always requires review)
+src-tauri/src/core/ @mohabbis
+src-tauri/src/policy/ @mohabbis
+src-tauri/src/audit/ @mohabbis
+src-tauri/src/organizer/ @mohabbis
+
+# Security-critical code
+SECURITY.md @mohabbis
+docs/threat-model.md @mohabbis
+src-tauri/src/core/security.rs @mohabbis
+.github/workflows/security.yml @mohabbis
+
+# Release & signing process
+RELEASING.md @mohabbis
+docs/macos-signing-checklist.md @mohabbis
+.github/workflows/release.yml @mohabbis
+
+# Documentation
+docs/ @mohabbis
+README.md @mohabbis
