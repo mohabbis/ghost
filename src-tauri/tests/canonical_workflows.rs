@@ -8,6 +8,27 @@
 
 #[cfg(test)]
 mod canonical_workflows {
+    /// Build a [`ghost_lib::organizer::scanner::ScannedFile`] from just a
+    /// filename, for feeding the real classifier in these tests without
+    /// touching a real filesystem.
+    fn scanned_file(filename: &str) -> ghost_lib::organizer::scanner::ScannedFile {
+        let path = std::path::Path::new(filename);
+        ghost_lib::organizer::scanner::ScannedFile {
+            path: path.to_path_buf(),
+            file_name: filename.to_string(),
+            stem: path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| filename.to_string()),
+            extension: path
+                .extension()
+                .map(|e| e.to_string_lossy().to_ascii_lowercase()),
+            size: 0,
+            modified: None,
+            created: None,
+        }
+    }
+
     /// Test 1: Invoice Filing Workflow
     ///
     /// Scenario:
@@ -15,29 +36,34 @@ mod canonical_workflows {
     /// - Goal: Move invoices to client folders
     ///
     /// Success criteria:
-    /// - ≥95% of test invoices correctly classified
-    /// - Zero false positives (non-invoices moved)
-    /// - Zero overwrites without approval
-    /// - Undo journal written before execution
-    /// - 100% of operations audited
+    /// - 100% of test invoices correctly classified by the real classifier
+    /// - Zero false positives (non-invoices classified as Invoices)
     #[test]
     fn test_canonical_invoice_filing_workflow() {
-        // Test: Filename pattern matching for invoice detection
+        use ghost_lib::organizer::classifier::{classify, Category};
+
         let test_files = [
-            ("invoice_acme_2026_06.pdf", true),
-            ("invoice_acme_2026_07.pdf", true),
-            ("INVOICE_CLIENT.pdf", true),
-            ("receipt_uber.pdf", false),
-            ("statement_chase.pdf", false),
-            ("IMG_4921.png", false),
-            ("screenshot_2026.png", false),
+            ("invoice_acme_2026_06.pdf", Category::Invoices),
+            ("invoice_acme_2026_07.pdf", Category::Invoices),
+            ("INVOICE_CLIENT.pdf", Category::Invoices),
+            ("receipt_uber.pdf", Category::Receipts),
+            ("statement_chase.pdf", Category::Statements),
+            ("IMG_4921.png", Category::Images),
+            ("screenshot_2026.png", Category::Images),
         ];
 
         let mut correct_classifications = 0;
-        for (filename, should_be_invoice) in test_files.iter() {
-            let is_invoice = filename.to_lowercase().contains("invoice");
-            if is_invoice == *should_be_invoice {
+        for (filename, expected_category) in test_files.iter() {
+            let classification = classify(&scanned_file(filename));
+            if classification.category == *expected_category {
                 correct_classifications += 1;
+            }
+            if *expected_category != Category::Invoices {
+                assert_ne!(
+                    classification.category,
+                    Category::Invoices,
+                    "false positive: {filename} classified as an invoice"
+                );
             }
         }
 
@@ -49,109 +75,62 @@ mod canonical_workflows {
         );
     }
 
-    /// Test 2: Client File Renaming Determinism
+    /// Test 2: Dated Rename Determinism
     ///
-    /// Scenario: Rename files with date and client prefix
-    ///
-    /// Expected format: `2026-07_Acme_Invoice.pdf`
+    /// Scenario: the opt-in "rename_dated" Zone setting prefixes a proposed
+    /// filename with its file's `YYYY-MM` filing period (see
+    /// `organizer::naming::dated_prefix`; there is no client-name component —
+    /// that was never a real Ghost feature, only an illustrative label in the
+    /// original version of this test).
     ///
     /// Success criteria:
-    /// - 100% correct rename format
-    /// - Deterministic: same input → same output every time
+    /// - Correct `YYYY-MM name` format
+    /// - Deterministic: same input -> same output every time
+    /// - Idempotent: re-prefixing an already-prefixed name is a no-op (so
+    ///   replanning never stacks date prefixes)
     #[test]
     fn test_canonical_client_file_renaming() {
-        // Determinism check: same input should always produce same output
-        fn rename_with_prefix(filename: &str, client: &str, year: u32, month: u32) -> String {
-            let base = filename.split('.').next().unwrap_or(filename);
-            let ext = if let Some(pos) = filename.rfind('.') {
-                &filename[pos..]
-            } else {
-                ""
-            };
-            format!(
-                "{:04}-{:02}_{}_{}{}",
-                year,
-                month,
-                client.to_uppercase(),
-                base.to_uppercase(),
-                ext
-            )
-        }
+        use ghost_lib::organizer::naming::dated_prefix;
+        use std::time::{Duration, UNIX_EPOCH};
 
-        let test_cases = [
-            ("invoice.pdf", "acme", 2026, 7),
-            ("statement.pdf", "acme", 2026, 7),
-            ("receipt.pdf", "acme", 2026, 7),
-        ];
+        // 2026-07-04T00:00:00Z
+        let july_2026 = UNIX_EPOCH + Duration::from_secs(1_783_123_200);
 
-        for (filename, client, year, month) in test_cases.iter() {
-            // Run rename logic 5 times and verify all results are identical
-            let mut results = Vec::new();
-            for _ in 0..5 {
-                results.push(rename_with_prefix(filename, client, *year, *month));
-            }
+        let test_cases = ["invoice.pdf", "statement.pdf", "receipt.pdf"];
 
-            // All results should be identical (determinism)
+        for filename in test_cases.iter() {
+            // Run 5 times and verify all results are identical (determinism).
+            let results: Vec<String> = (0..5).map(|_| dated_prefix(filename, july_2026)).collect();
             for i in 1..results.len() {
                 assert_eq!(
                     results[0], results[i],
-                    "Rename is not deterministic for {}: got {} and {}",
+                    "dated_prefix is not deterministic for {}: got {} and {}",
                     filename, results[0], results[i]
                 );
             }
 
-            // Verify format
-            assert!(
-                results[0].starts_with("2026-07_"),
-                "Invalid date format in rename"
+            assert_eq!(results[0], format!("2026-07 {filename}"));
+
+            // Re-prefixing the already-prefixed name must not stack a second one.
+            let twice = dated_prefix(&results[0], july_2026);
+            assert_eq!(
+                twice, results[0],
+                "dated_prefix must be idempotent on an already-prefixed name"
             );
-            assert!(results[0].contains("ACME"), "Client name missing in rename");
         }
     }
 
-    /// Test 3: CSV Export Organization
-    ///
-    /// Scenario:
-    /// - User downloads CSV exports from portal
-    /// - Ghost detects CSVs with clear patterns
-    /// - Moves them to reporting folders by pattern
-    ///
-    /// Success criteria:
-    /// - Identifies export patterns (sales_*, inventory_*)
-    /// - Skips ambiguous CSVs
-    /// - Accuracy ≥90%
-    #[test]
-    fn test_canonical_csv_export_organization() {
-        fn should_organize_csv(filename: &str) -> bool {
-            let lower = filename.to_lowercase();
-            (lower.starts_with("sales_")
-                || lower.starts_with("inventory_")
-                || lower.starts_with("report_"))
-                && lower.ends_with(".csv")
-        }
-
-        let test_csvs = [
-            ("sales_2026_06.csv", true),
-            ("inventory_2026_06.csv", true),
-            ("report_monthly_2026_06.csv", true),
-            ("random_export.csv", false),
-            ("data.csv", false),
-            ("notes.txt", false),
-        ];
-
-        let mut correct_classifications = 0;
-        for (filename, should_organize) in test_csvs.iter() {
-            let would_organize = should_organize_csv(filename);
-            if would_organize == *should_organize {
-                correct_classifications += 1;
-            }
-        }
-
-        assert!(
-            correct_classifications as f64 / test_csvs.len() as f64 >= 0.90,
-            "CSV organization accuracy < 90%"
-        );
-    }
+    // Test 3 ("CSV Export Organization": routing `sales_*`/`inventory_*`/
+    // `report_*` CSVs into distinct reporting folders) and Test 5 ("Project
+    // Archival by Date": archiving files older than 365 days) were removed.
+    // Neither scenario is implemented anywhere in `organizer::classifier` or
+    // `organizer::planner` — the real classifier routes every `.csv` to the
+    // same `Category::Spreadsheets` regardless of filename prefix, and there
+    // is no age-based archival logic in the codebase at all. Both tests
+    // asserted a private mock function against itself and passed
+    // unconditionally, giving the false impression that Ghost already ships
+    // these two behaviors. If/when either becomes a real feature, it should
+    // get a test wired to that real code, not a revived mock.
 
     /// Test 4: Desktop Cleanup Categorization
     ///
@@ -160,83 +139,45 @@ mod canonical_workflows {
     /// - Ghost categorizes by file type
     ///
     /// Success criteria:
-    /// - Groups files into clear categories
-    /// - Skips ambiguous files
-    /// - ≥75% files clearly categorized
+    /// - The real classifier groups files into clear categories
+    /// - An unknown extension is flagged low-confidence for review, not
+    ///   silently guessed
     #[test]
     fn test_canonical_desktop_cleanup() {
-        fn categorize_file(filename: &str) -> &'static str {
-            let lower = filename.to_lowercase();
-            if lower.contains("screenshot") || filename.starts_with("IMG_") {
-                "image"
-            } else if lower.ends_with(".pdf") || lower.ends_with(".txt") || lower.ends_with(".md") {
-                "document"
-            } else if lower.ends_with(".xlsx") || lower.ends_with(".csv") {
-                "spreadsheet"
-            } else {
-                "unknown"
-            }
-        }
+        use ghost_lib::organizer::classifier::{classify, Category, LOW_CONFIDENCE};
 
         let desktop_files = [
-            ("screenshot_2026-07-01.png", "image"),
-            ("screenshot_2026-07-02.png", "image"),
-            ("notes.txt", "document"),
-            ("report.pdf", "document"),
-            ("data.xlsx", "spreadsheet"),
-            ("README.md", "document"),
-            ("IMG_0001.jpg", "image"),
-            ("random_file_no_ext", "unknown"),
+            ("screenshot_2026-07-01.png", Category::Images),
+            ("screenshot_2026-07-02.png", Category::Images),
+            ("notes.txt", Category::Documents),
+            ("report.pdf", Category::Documents),
+            ("data.xlsx", Category::Spreadsheets),
+            ("README.md", Category::Documents),
+            ("IMG_0001.jpg", Category::Images),
         ];
 
         let mut categorized = 0;
         for (filename, expected_category) in desktop_files.iter() {
-            let category = categorize_file(filename);
-            if category != "unknown" && category == *expected_category {
+            let classification = classify(&scanned_file(filename));
+            if classification.category == *expected_category {
                 categorized += 1;
             }
         }
-
-        assert!(
-            categorized as f64 / desktop_files.len() as f64 >= 0.75,
-            "Desktop cleanup categorization < 75%"
+        assert_eq!(
+            categorized,
+            desktop_files.len(),
+            "every file with a known extension should classify correctly"
         );
-    }
 
-    /// Test 5: Project Archival by Date
-    ///
-    /// Scenario:
-    /// - Project folder has files with varying modification dates
-    /// - Archive files older than 365 days
-    ///
-    /// Success criteria:
-    /// - Correctly identifies old files (> 1 year)
-    /// - Skips recent files (< 1 year)
-    /// - 100% accuracy on date logic
-    #[test]
-    fn test_canonical_old_project_archival() {
-        fn should_archive(age_days: u64) -> bool {
-            age_days > 365
-        }
-
-        let test_ages = [
-            (10, false),  // 10 days old: keep
-            (30, false),  // 30 days old: keep
-            (180, false), // 6 months old: keep
-            (365, false), // 1 year: keep (not older than)
-            (366, true),  // 1+ year: archive
-            (730, true),  // 2 years: archive
-        ];
-
-        let mut correct_decisions = 0;
-        for (age_days, should_be_archived) in test_ages.iter() {
-            let would_archive = should_archive(*age_days);
-            if would_archive == *should_be_archived {
-                correct_decisions += 1;
-            }
-        }
-
-        assert_eq!(correct_decisions, test_ages.len(), "Archive logic error");
+        // A file with no extension at all must not be silently guessed into a
+        // real category — it should fall back to `Other` at low confidence so
+        // the plan flags it for manual review.
+        let unknown = classify(&scanned_file("random_file_no_ext"));
+        assert_eq!(unknown.category, Category::Other);
+        assert!(
+            unknown.confidence <= LOW_CONFIDENCE,
+            "an unclassifiable file must be flagged low-confidence, not guessed"
+        );
     }
 
     /// Integration test: Organizer Trust Pipeline Stages
@@ -380,128 +321,153 @@ mod canonical_workflows {
 
     /// Reliability benchmark: Deterministic classification
     ///
-    /// Verify same input → same output across 100 runs
-    /// This is the foundation of auditability
+    /// Verify same input → same output across 100 runs, against the real
+    /// classifier. This is the foundation of auditability: a plan preview and
+    /// the plan actually executed must agree, which only holds if
+    /// classification is a pure function of the file's metadata.
     #[test]
     fn test_invoice_filing_determinism_benchmark() {
-        fn classify_filename(filename: &str) -> &'static str {
-            let lower = filename.to_lowercase();
-            if lower.contains("invoice") {
-                "invoice"
-            } else if lower.contains("receipt") {
-                "receipt"
-            } else if lower.contains("statement") {
-                "statement"
-            } else {
-                "unknown"
-            }
-        }
+        use ghost_lib::organizer::classifier::{classify, Category};
 
-        let test_input = "invoice_acme_2026_june.pdf";
+        let file = scanned_file("invoice_acme_2026_june.pdf");
 
-        // Run classification 100 times
-        let results: Vec<_> = (0..100).map(|_| classify_filename(test_input)).collect();
+        // Run classification 100 times.
+        let results: Vec<Category> = (0..100).map(|_| classify(&file).category).collect();
 
-        // All results should be identical
-        for i in 1..results.len() {
+        // All results should be identical.
+        for (i, category) in results.iter().enumerate() {
             assert_eq!(
-                results[0], results[i],
-                "Classification is not deterministic (run 0 vs run {})",
-                i
+                results[0], *category,
+                "Classification is not deterministic (run 0 vs run {i})",
             );
         }
 
-        assert_eq!(
-            results[0], "invoice",
-            "Expected classification to be 'invoice'"
-        );
+        assert_eq!(results[0], Category::Invoices);
     }
 
     /// Undo structure correctness
     ///
-    /// Verify UndoOp enum handles both move and folder removal
+    /// Verify the real `UndoJournal` reverses recorded steps newest-first, so
+    /// a move into a folder is undone before that folder's own removal is
+    /// attempted (the folder must be empty by the time `RemoveFolder` runs).
     #[test]
     fn test_undo_operation_correctness() {
+        use ghost_lib::audit::{UndoJournal, UndoOp};
         use std::path::PathBuf;
 
-        // Simulate undo operations
-        let _restore_op = ("restore", PathBuf::from("/source"), PathBuf::from("/dest"));
-        let _remove_op = ("remove_folder", PathBuf::from("/archive/2026"));
+        let mut journal = UndoJournal::new();
+        journal.record(UndoOp::RemoveFolder {
+            path: PathBuf::from("/archive/2026"),
+        });
+        journal.record(UndoOp::Restore {
+            from: PathBuf::from("/archive/2026/move_file_1"),
+            to: PathBuf::from("/move_file_1"),
+        });
+        journal.record(UndoOp::Restore {
+            from: PathBuf::from("/archive/2026/move_file_2"),
+            to: PathBuf::from("/move_file_2"),
+        });
 
-        // Journal should preserve order: newest first for reversal
-        let operations_in_execution_order = ["create_folder", "move_file_1", "move_file_2"];
+        let reversed: Vec<&UndoOp> = journal.reversed().collect();
 
-        let reversed: Vec<_> = operations_in_execution_order.iter().rev().collect();
-
-        // Last operation undone first
-        assert_eq!(
-            reversed[0], &"move_file_2",
-            "Reversal should undo moves first"
+        assert!(
+            matches!(reversed[0], UndoOp::Restore { from, .. } if from.ends_with("move_file_2")),
+            "reversal should undo moves first (newest first): {:?}",
+            reversed[0]
         );
-        assert_eq!(
-            reversed[1], &"move_file_1",
-            "Reversal should undo moves first"
+        assert!(
+            matches!(reversed[1], UndoOp::Restore { from, .. } if from.ends_with("move_file_1")),
+            "reversal should undo moves first: {:?}",
+            reversed[1]
         );
-        assert_eq!(
-            reversed[2], &"create_folder",
-            "Reversal should remove folders last"
+        assert!(
+            matches!(reversed[2], UndoOp::RemoveFolder { .. }),
+            "reversal should remove folders last, once empty: {:?}",
+            reversed[2]
         );
     }
 
     /// Policy engine: Deny by default
     ///
-    /// Test that Ghost Guard blocks operations outside Zone
+    /// Test that the real policy engine denies operations outside the
+    /// approved Zone, regardless of trust level.
     #[test]
     fn test_policy_deny_by_default() {
-        fn is_inside_zone(path: &str, zone: &str) -> bool {
-            path.starts_with(zone)
-        }
+        use ghost_lib::policy::{evaluate, Capability, FolderRule, PolicyDecision, TrustLevel};
+        use std::path::PathBuf;
 
-        let zone = "/Users/alice/Downloads";
-        let test_paths = vec![
+        let rules = vec![FolderRule {
+            path: PathBuf::from("/Users/alice/Downloads"),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::AskFirst,
+        }];
+
+        let test_paths = [
             ("/Users/alice/Downloads/file.pdf", true),
             ("/Users/alice/Downloads/subfolder/file.pdf", true),
             ("/Users/alice/Documents/file.pdf", false),
             ("/System/Library/file.pdf", false),
         ];
 
-        for (path, should_be_allowed) in test_paths {
-            let is_allowed = is_inside_zone(path, zone);
+        for (path, inside_zone) in test_paths {
+            let cap = Capability::MoveFile {
+                from: PathBuf::from(path),
+                to: PathBuf::from(format!("{path}.moved")),
+            };
+            let decision = evaluate(&cap, &rules);
+            let denied = matches!(decision, PolicyDecision::Deny { .. });
             assert_eq!(
-                is_allowed, should_be_allowed,
-                "Policy check failed for {}",
-                path
+                !denied, inside_zone,
+                "policy check failed for {path}: {decision:?}"
             );
         }
     }
 
     /// Approval requirement: No execution without review
     ///
-    /// Simulate the approval gate
+    /// The real policy engine expresses "approval required" structurally: a
+    /// granted mutation under the default `AskFirst` trust comes back as
+    /// `RequireConfirmation`, never a bare `Allow` — the executor cannot treat
+    /// it as pre-approved. Only explicit `Automate` trust removes the prompt.
     #[test]
     fn test_approval_gate_required_before_execution() {
-        struct PlanWithApproval {
-            actions: usize,
-            approved: bool,
-        }
+        use ghost_lib::policy::{evaluate, Capability, FolderRule, PolicyDecision, TrustLevel};
+        use std::path::PathBuf;
 
-        let plan = PlanWithApproval {
-            actions: 5,
-            approved: false,
+        let cap = Capability::MoveFile {
+            from: PathBuf::from("/Users/alice/Downloads/report.pdf"),
+            to: PathBuf::from("/Users/alice/Downloads/Documents/report.pdf"),
         };
 
-        // Execution should require approval
-        assert!(!plan.approved, "Plan should not be approved yet");
-
-        let approved_plan = PlanWithApproval {
-            actions: plan.actions,
-            approved: true,
+        let ask_first_rule = FolderRule {
+            path: PathBuf::from("/Users/alice/Downloads"),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::AskFirst,
         };
-
-        // Now execution can proceed
+        let decision = evaluate(&cap, std::slice::from_ref(&ask_first_rule));
         assert!(
-            approved_plan.approved,
-            "Approved plan should allow execution"
+            matches!(decision, PolicyDecision::RequireConfirmation { .. }),
+            "a granted move must still require confirmation under AskFirst trust, got {decision:?}"
+        );
+
+        let automate_rule = FolderRule {
+            trust: TrustLevel::Automate,
+            ..ask_first_rule
+        };
+        let automate_decision = evaluate(&cap, &[automate_rule]);
+        assert!(
+            automate_decision.is_allowed(),
+            "Automate trust should be the only way to skip the prompt, got {automate_decision:?}"
         );
     }
 }
