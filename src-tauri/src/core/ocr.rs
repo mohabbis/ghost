@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrResult {
@@ -84,6 +83,8 @@ try? requestHandler.perform([request])
 
     fs::write(&script_path, script_content)?;
 
+    use std::process::Command;
+
     let output = Command::new("swift")
         .arg(&script_path)
         .arg(img_path)
@@ -164,6 +165,8 @@ ConvertTo-Json $out
 "#;
 
     fs::write(&script_path, script_content)?;
+
+    use std::process::Command;
 
     let output = Command::new("powershell")
         .arg("-NoProfile")
