@@ -72,7 +72,11 @@ fn describe_selector(selector: &ElementSelector) -> String {
             None => format!("{} \"{}\"", role, name),
         },
         ElementSelector::OCR { text, fuzzy } => {
-            format!("on-screen text \"{}\"{}", text, if *fuzzy { " (fuzzy)" } else { "" })
+            format!(
+                "on-screen text \"{}\"{}",
+                text,
+                if *fuzzy { " (fuzzy)" } else { "" }
+            )
         }
     }
 }
