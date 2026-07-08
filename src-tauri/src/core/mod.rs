@@ -9,11 +9,11 @@ pub mod events;
 pub mod execution;
 pub mod knowledge;
 pub mod llm;
+pub mod ocr;
 pub mod replay_support;
 pub mod security;
 pub mod traits;
 pub mod vision;
-pub mod ocr;
 pub mod wait;
 pub mod workflow_schema;
 
@@ -23,11 +23,11 @@ pub use events::*;
 pub use execution::*;
 pub use knowledge::*;
 pub use llm::*;
+pub use ocr::*;
 pub use replay_support::*;
 pub use security::*;
 pub use traits::*;
 pub use vision::*;
-pub use ocr::*;
 pub use wait::*;
 pub use workflow_schema::*;
 

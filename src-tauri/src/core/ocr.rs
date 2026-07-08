@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::process::Command;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrResult {
@@ -16,15 +16,15 @@ pub fn run_ocr(screenshot_bytes: &[u8]) -> anyhow::Result<Vec<OcrResult>> {
     let temp_dir = std::env::temp_dir();
     let uuid = uuid::Uuid::new_v4();
     let img_path = temp_dir.join(format!("ghost_ocr_screenshot_{}.png", uuid));
-    
+
     // Write image bytes to a temp file
     fs::write(&img_path, screenshot_bytes)?;
-    
+
     let result = run_platform_ocr(&img_path);
-    
+
     // Clean up screenshot file
     let _ = fs::remove_file(&img_path);
-    
+
     result
 }
 
@@ -33,7 +33,7 @@ fn run_platform_ocr(img_path: &std::path::Path) -> anyhow::Result<Vec<OcrResult>
     let temp_dir = std::env::temp_dir();
     let uuid = uuid::Uuid::new_v4();
     let script_path = temp_dir.join(format!("ghost_ocr_script_{}.swift", uuid));
-    
+
     let script_content = r#"
 import Foundation
 import Vision
@@ -83,25 +83,25 @@ try? requestHandler.perform([request])
 "#;
 
     fs::write(&script_path, script_content)?;
-    
+
     let output = Command::new("swift")
         .arg(&script_path)
         .arg(img_path)
         .output();
-        
+
     let _ = fs::remove_file(&script_path);
-    
+
     let output = output?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("OCR Swift script execution failed: {}", stderr);
     }
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.trim().is_empty() {
         return Ok(Vec::new());
     }
-    
+
     let results: Vec<OcrResult> = serde_json::from_str(&stdout)?;
     Ok(results)
 }
@@ -111,7 +111,7 @@ fn run_platform_ocr(img_path: &std::path::Path) -> anyhow::Result<Vec<OcrResult>
     let temp_dir = std::env::temp_dir();
     let uuid = uuid::Uuid::new_v4();
     let script_path = temp_dir.join(format!("ghost_ocr_script_{}.ps1", uuid));
-    
+
     let script_content = r#"
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $imagePath = $args[0]
@@ -164,7 +164,7 @@ ConvertTo-Json $out
 "#;
 
     fs::write(&script_path, script_content)?;
-    
+
     let output = Command::new("powershell")
         .arg("-NoProfile")
         .arg("-NonInteractive")
@@ -174,20 +174,20 @@ ConvertTo-Json $out
         .arg(&script_path)
         .arg(img_path)
         .output();
-        
+
     let _ = fs::remove_file(&script_path);
-    
+
     let output = output?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("OCR PowerShell script execution failed: {}", stderr);
     }
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.trim().is_empty() {
         return Ok(Vec::new());
     }
-    
+
     let results: Vec<OcrResult> = serde_json::from_str(&stdout)?;
     Ok(results)
 }
