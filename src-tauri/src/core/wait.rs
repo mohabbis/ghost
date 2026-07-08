@@ -6,6 +6,11 @@ use crate::core::traits::ElementLocator;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+thread_local! {
+    pub static MOCK_OCR_RESULTS: std::cell::RefCell<Option<Vec<crate::core::ocr::OcrResult>>> = std::cell::RefCell::new(None);
+}
+
 /// Default timeout for wait conditions (5 seconds)
 pub const DEFAULT_TIMEOUT_MS: u64 = 5000;
 
@@ -282,17 +287,53 @@ pub fn resolve_selector(
 
             found.ok_or_else(|| anyhow::anyhow!("Element not found: {} {:?}", name, role))
         }
-        ElementSelector::OCR { text: _, fuzzy: _ } => {
-            // Not yet implemented, see https://github.com/mohabbis/ghost/issues/87.
-            // OCR targeting is intentionally off the near-term roadmap: Phase 2
-            // (docs/PRODUCT_ROADMAP.md) invests in semantic + fallback locator
-            // strategies instead. Nothing in the default UI offers OCR selectors;
-            // a workflow carrying one fails here with an explicit error rather
-            // than silently resolving to wrong coordinates.
-            Err(anyhow::anyhow!(
-                "OCR element selectors are not implemented in this build (see \
-                 https://github.com/mohabbis/ghost/issues/87)"
-            ))
+        ElementSelector::OCR { text, fuzzy } => {
+            let ocr_results = {
+                #[cfg(test)]
+                {
+                    MOCK_OCR_RESULTS.with(|m| m.borrow().clone())
+                }
+                #[cfg(not(test))]
+                None
+            };
+
+            let ocr_results = match ocr_results {
+                Some(results) => results,
+                None => {
+                    let screenshot_bytes = crate::core::vision::capture_screenshot()?;
+                    crate::core::ocr::run_ocr(&screenshot_bytes)?
+                }
+            };
+
+            let matched_result = ocr_results.iter().find(|res| {
+                if *fuzzy {
+                    res.text.trim().to_lowercase().contains(&text.trim().to_lowercase())
+                } else {
+                    res.text.trim() == text.trim()
+                }
+            });
+
+            match matched_result {
+                Some(res) => {
+                    let (display_w, display_h) = crate::core::vision::display_bounds();
+                    #[cfg(target_os = "macos")]
+                    let center_y = (1.0 - (res.y + res.h / 2.0)) * display_h as f32;
+
+                    #[cfg(not(target_os = "macos"))]
+                    let center_y = (res.y + res.h / 2.0) * display_h as f32;
+
+                    let center_x = (res.x + res.w / 2.0) * display_w as f32;
+
+                    Ok((center_x.round() as i32, center_y.round() as i32))
+                }
+                None => {
+                    let all_text: Vec<String> = ocr_results.iter().map(|res| res.text.clone()).collect();
+                    anyhow::bail!(
+                        "OCR selector target '{}' (fuzzy: {}) not found on screen. Recognized text: {:?}",
+                        text, fuzzy, all_text
+                    );
+                }
+            }
         }
     }
 }
@@ -607,13 +648,110 @@ mod tests {
     }
 
     #[test]
-    fn resolve_selector_ocr_not_implemented() {
+    fn resolve_selector_ocr_exact_match_success() {
         let locator = MockLocator::empty();
+        
+        let mock_results = vec![
+            crate::core::ocr::OcrResult {
+                text: "Login Button".to_string(),
+                x: 0.1,
+                y: 0.2,
+                w: 0.1,
+                h: 0.05,
+            },
+            crate::core::ocr::OcrResult {
+                text: "Cancel".to_string(),
+                x: 0.3,
+                y: 0.4,
+                w: 0.05,
+                h: 0.02,
+            },
+        ];
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        
         let selector = ElementSelector::OCR {
-            text: "Hello".to_string(),
+            text: "Cancel".to_string(),
+            fuzzy: false,
+        };
+        
+        let (display_w, display_h) = crate::core::vision::display_bounds();
+        
+        #[cfg(target_os = "macos")]
+        let expected_y = ((1.0 - (0.4 + 0.02 / 2.0)) * display_h as f32).round() as i32;
+        #[cfg(not(target_os = "macos"))]
+        let expected_y = ((0.4 + 0.02 / 2.0) * display_h as f32).round() as i32;
+        
+        let expected_x = ((0.3 + 0.05 / 2.0) * display_w as f32).round() as i32;
+        
+        let result = resolve_selector(&selector, &locator).unwrap();
+        assert_eq!(result, (expected_x, expected_y));
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
+    }
+
+    #[test]
+    fn resolve_selector_ocr_fuzzy_match_success() {
+        let locator = MockLocator::empty();
+        
+        let mock_results = vec![
+            crate::core::ocr::OcrResult {
+                text: "Submit Query".to_string(),
+                x: 0.5,
+                y: 0.5,
+                w: 0.2,
+                h: 0.1,
+            },
+        ];
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        
+        let selector = ElementSelector::OCR {
+            text: "submit".to_string(),
             fuzzy: true,
         };
-        assert!(resolve_selector(&selector, &locator).is_err());
+        
+        let (display_w, display_h) = crate::core::vision::display_bounds();
+        let expected_x = ((0.5 + 0.2 / 2.0) * display_w as f32).round() as i32;
+        #[cfg(target_os = "macos")]
+        let expected_y = ((1.0 - (0.5 + 0.1 / 2.0)) * display_h as f32).round() as i32;
+        #[cfg(not(target_os = "macos"))]
+        let expected_y = ((0.5 + 0.1 / 2.0) * display_h as f32).round() as i32;
+        
+        let result = resolve_selector(&selector, &locator).unwrap();
+        assert_eq!(result, (expected_x, expected_y));
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
+    }
+
+    #[test]
+    fn resolve_selector_ocr_not_found_errors_actionably() {
+        let locator = MockLocator::empty();
+        
+        let mock_results = vec![
+            crate::core::ocr::OcrResult {
+                text: "Open File".to_string(),
+                x: 0.1,
+                y: 0.1,
+                w: 0.1,
+                h: 0.1,
+            },
+        ];
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        
+        let selector = ElementSelector::OCR {
+            text: "Save".to_string(),
+            fuzzy: false,
+        };
+        
+        let result = resolve_selector(&selector, &locator);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Save"));
+        assert!(err_msg.contains("Open File"));
+        
+        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
     }
 
     // --- check_wait_condition / wait_for_condition / smart_wait ---
