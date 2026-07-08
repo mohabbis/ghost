@@ -161,6 +161,17 @@ impl GhostEngine {
         Arc::clone(&self.auth)
     }
 
+    /// Test-only engine with its `AuthManager` rooted at `auth_path` instead
+    /// of the real OS data directory, so auth command tests can call
+    /// `auth_setup`/`auth_unlock` without ever touching a developer's real
+    /// local password file.
+    #[cfg(test)]
+    pub(crate) fn with_auth_path(auth_path: PathBuf) -> Self {
+        let mut engine = Self::new();
+        engine.auth = Arc::new(AuthManager::with_path(auth_path));
+        engine
+    }
+
     /// Start recording input events. Events will be sent through the provided channel.
     pub fn start_recording(&self, tx: mpsc::Sender<InputEvent>) -> anyhow::Result<()> {
         // Refuse to start a second session while one is active. Overwriting the

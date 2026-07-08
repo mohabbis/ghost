@@ -241,54 +241,141 @@ mod canonical_workflows {
 
     /// Integration test: Organizer Trust Pipeline Stages
     ///
-    /// Verify all 7 stages work without mutations during planning:
-    /// Intent → Plan → Policy → Approval → Execute → Audit → Undo
+    /// Drives the real backend through the same sequence
+    /// `commands/organizer.rs` runs — Intent -> Plan -> Policy -> Approval ->
+    /// Execute -> Audit -> Undo — against a real temp filesystem and a real
+    /// SQLite schema (in-memory). This replaces a previous version of this
+    /// test that only asserted hardcoded local variables against themselves
+    /// and could not fail no matter what the pipeline did.
+    ///
+    /// It stops one layer short of the `#[tauri::command]` wrappers
+    /// themselves: those call `storage::open_default()`, which is hardcoded
+    /// to the OS data directory and has no test seam for an in-memory DB. The
+    /// commands are thin (open a connection, delegate to exactly these
+    /// functions), so this covers the real risk — the trust pipeline logic —
+    /// without touching a developer's real `ghost.db`.
     #[test]
     fn test_organizer_trust_pipeline_stages() {
-        // Stage 1: Intent
-        // User selects a folder (mocked as folder path)
-        let _intent = "organize_downloads";
+        use ghost_lib::organizer::executor::execute_plan;
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::organizer::undo::revert;
+        use ghost_lib::policy::{DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::executions::{get_execution, save_execution, verify_chain};
+        use ghost_lib::storage::migrations::migrate;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use rusqlite::Connection;
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
 
-        // Stage 2: Plan
-        // Scan → Classify → Propose (mocked: 2 proposed actions)
-        let proposed_actions = 2;
-        assert_eq!(proposed_actions, 2, "Plan should propose 2 actions");
+        /// Self-contained temp dir (the organizer crate's own `testutil` is
+        /// `#[cfg(test)]`-gated inside the lib and isn't visible to an
+        /// external integration-test binary).
+        struct TrustPipelineTempDir(PathBuf);
+        impl TrustPipelineTempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_trust_pipeline_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TrustPipelineTempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+        }
+        impl Drop for TrustPipelineTempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
 
-        // Stage 3: Policy Check
-        // All actions should be evaluated for risk
-        let policy_evaluations = 2;
-        assert_eq!(
-            policy_evaluations, 2,
-            "Policy should evaluate all 2 actions"
-        );
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
 
-        // Stage 4: Approval
-        // User must approve before execution
-        let approved_actions = 2;
-        assert!(approved_actions > 0, "At least one action must be approved");
+        let dir = TrustPipelineTempDir::new();
+        let report_pdf = dir.file("report.pdf", b"report body");
+        dir.file("photo.JPG", b"photo body");
+        dir.file("song.mp3", b"song body");
 
-        // Stage 5: Undo Journal
-        // Must be written BEFORE execution
-        let undo_journal_exists = true;
+        // Stage 1 (Intent) + boundary: the user approves a Zone and grants a
+        // folder rule. New Zones default to Ask; delete is never granted.
+        let zone = create_zone(&conn, "Downloads", None, DefaultDecision::Ask, false)
+            .expect("create_zone");
+        let rule = FolderRule {
+            path: dir.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::AskFirst,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).expect("add_folder_rule");
+
+        // Stage 2-3 (Plan + Policy): plan_zone loads the persisted rule,
+        // scans, classifies, and policy-checks every action. Read-only.
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
         assert!(
-            undo_journal_exists,
-            "Undo journal must exist before execution"
+            !plan.actions.is_empty(),
+            "plan should propose organizing the loose files"
+        );
+        assert!(
+            report_pdf.exists(),
+            "planning must not mutate the filesystem"
         );
 
-        // Stage 6: Execution
-        // Only execute approved actions
-        let executed_actions = approved_actions;
-        assert_eq!(executed_actions, 2, "Should execute 2 approved actions");
+        // Stage 4 (Approval) is implicit here: calling execute_plan below *is*
+        // the approved-execution path in the real command
+        // (`organizer_execute`) too — a plan is never applied without this
+        // explicit step.
+        let rules = vec![rule];
 
-        // Stage 7: Audit
-        // Log all operations
-        let audit_entries = executed_actions;
-        assert_eq!(audit_entries, 2, "Should audit 2 operations");
+        // Stage 5-6 (Undo-journal-before-execute, then Execute): the executor
+        // writes undo data before each mutation and independently re-checks
+        // policy per action.
+        let report = execute_plan(&plan, &rules);
+        assert_eq!(
+            report.failed, 0,
+            "no action should fail against an approved rule"
+        );
+        assert!(
+            report.applied > 0,
+            "at least one action should have applied"
+        );
+        assert!(
+            !report_pdf.exists(),
+            "the executor should have actually moved the file on disk"
+        );
 
-        // Stage 8: Undo
-        // Undo must be available for all reversible operations
-        let can_undo = !undo_journal_exists;
-        assert!(!can_undo || undo_journal_exists, "Undo requires journal");
+        // Stage 7 (Audit): the run is persisted and sealed into the
+        // tamper-evident hash chain.
+        let execution_id = save_execution(&conn, &zone.id, &report).expect("save_execution");
+        let verification = verify_chain(&conn).expect("verify_chain");
+        assert!(verification.intact, "a freshly sealed run must verify");
+        assert_eq!(verification.sealed_count, 1);
+
+        // Stage 8 (Undo): replaying the stored journal must restore the file.
+        let stored = get_execution(&conn, &execution_id)
+            .expect("get_execution")
+            .expect("execution was saved");
+        let undo_report = revert(&stored.undo);
+        assert_eq!(undo_report.failed, 0);
+        assert!(undo_report.reverted > 0);
+        assert!(
+            report_pdf.exists(),
+            "undo should restore the moved file to its original path"
+        );
     }
 
     /// Reliability benchmark: Deterministic classification

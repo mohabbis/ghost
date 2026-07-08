@@ -45,6 +45,12 @@ sha2 = "0.11"
 # the headless Linux CI leg. MIT-licensed (passes deny.toml).
 rusqlite = { version = "0.40", features = ["bundled"] }
 
+[dev-dependencies]
+# `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
+# way to build a real `tauri::State<T>` for command-layer tests, since
+# `State`'s constructor is private outside the Tauri runtime machinery.
+tauri = { version = "2", features = ["test"] }
+
 [features]
 default = []
 profiling = ["tracing-chrome"]
