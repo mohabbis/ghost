@@ -71,7 +71,9 @@ fn describe_selector(selector: &ElementSelector) -> String {
             Some(app) => format!("{} \"{}\" in {}", role, name, app),
             None => format!("{} \"{}\"", role, name),
         },
-        ElementSelector::OCR { text, .. } => format!("on-screen text \"{}\" (unsupported)", text),
+        ElementSelector::OCR { text, fuzzy } => {
+            format!("on-screen text \"{}\"{}", text, if *fuzzy { " (fuzzy)" } else { "" })
+        }
     }
 }
 
