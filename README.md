@@ -343,6 +343,21 @@ No. Replay runs when you start it and stays interruptible. Unattended execution 
 **Why not just use a macro recorder?**
 Raw macros replay coordinates and break when windows move—and they'll happily type your password into the wrong field. Ghost reviews, guards, re-resolves targets semantically, and leaves an audit trail.
 
+## Kubernetes Deployment
+
+To support scaling out marketing landing nodes (Y Combinator scale preparation), Ghost includes containerization and Kubernetes orchestration configs:
+
+* **Dockerfile:** Uses a lightweight Nginx base to package and serve the static marketing site.
+* **k8s-deployment.yaml:** Spawns a 3-replica LoadBalancer-backed service of marketing nodes with strict CPU/Memory resource bounds and liveness/readiness check probes.
+
+```bash
+# Build the Docker container
+docker build -t mohabbis/ghost-marketing:latest .
+
+# Deploy to a Kubernetes cluster (Minikube or GKE)
+kubectl apply -f k8s-deployment.yaml
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
