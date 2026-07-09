@@ -266,6 +266,7 @@ Notes:
 - local Linux builds need the GTK/webkit system deps listed in `AGENTS.md`; the `platform/headless.rs` backend is what Linux CI exercises;
 - CI (`rust.yml`) runs check/test/clippy on ubuntu/macos/windows, fmt on ubuntu, and a `cargo tauri build --no-bundle` smoke test on macos/windows — it does not run `--features experimental`;
 - for a single test, use `cargo test --manifest-path src-tauri/Cargo.toml <test_name>` (add `--features experimental` if the test lives behind the gate).
+- **Connected Hardware Environment:** Flipper Zero with Momentum custom firmware is connected via USB/WiFi for hardware keystroke injection (BadUSB style replay testing) and physical security key simulation.
 
 If checks cannot run, report that directly.
 
