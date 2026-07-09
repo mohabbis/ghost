@@ -2835,6 +2835,320 @@ function initViewNav() {
   show("organize");
 }
 
+// ===== PLS AI Desk Custom Demo Workflow =====
+
+const PLS_SCENARIOS = {
+  john_doe: {
+    number: "1042",
+    payee: "John Doe",
+    amount: "1,450.00",
+    memo: "Weekly Payroll",
+    date: "2026-07-09",
+    routing: "121000248",
+    account: "987654321",
+    signature: "J. R. Reynolds",
+    idName: "JOHN DOE",
+    idDob: "1992-08-14",
+    idNumber: "DL-98234812",
+    idExpiry: "2029-12-15",
+    rules: [
+      { text: "Payee matches ID Name", status: "pass" },
+      { text: "ID Expiration Validity (Expires 2029)", status: "pass" },
+      { text: "Check Date within 90 days limit", status: "pass" },
+      { text: "Fraud & Signature Verification (Match: 98.4%)", status: "pass" },
+      { text: "Store cashing limit check (< $3,000)", status: "pass" }
+    ],
+    verdict: "APPROVED",
+    verdictClass: "success",
+    recommendation: "<strong>AI Recommendation:</strong> Check matches all compliance criteria. Payee identity verified. Safe to cash. Click <em>Auto-Fill POS</em> to auto-fill variables into the terminal.",
+    code: "PLS-OK-88294"
+  },
+  jane_smith: {
+    number: "5082",
+    payee: "Jane Smith",
+    amount: "4,500.00",
+    memo: "Contractor Fee",
+    date: "2026-07-08",
+    routing: "021000021",
+    account: "112233445",
+    signature: "Sarah Jenkins",
+    idName: "JANE SMITH",
+    idDob: "1985-11-23",
+    idNumber: "NY-88219421",
+    idExpiry: "2030-05-18",
+    rules: [
+      { text: "Payee matches ID Name", status: "pass" },
+      { text: "ID Expiration Validity (Expires 2030)", status: "pass" },
+      { text: "Check Date within 90 days limit", status: "pass" },
+      { text: "Fraud & Signature Verification (Match: 95.1%)", status: "pass" },
+      { text: "Store cashing limit check (> $3,000 threshold)", status: "warn" }
+    ],
+    verdict: "MANAGER REVIEW",
+    verdictClass: "warn",
+    recommendation: "<strong>AI Recommendation:</strong> Check amount ($4,500.00) exceeds teller authority limit of $3,000. Out-of-state routing number detected. Verify company credentials and request Manager override code.",
+    code: "PLS-PENDING-LIMIT"
+  },
+  bad_check: {
+    number: "1104",
+    payee: "John Smith",
+    amount: "850.00",
+    memo: "Car Purchase",
+    date: "2025-09-12",
+    routing: "321070010",
+    account: "556677889",
+    signature: "Unknown Scribble",
+    idName: "JOHN S. SMITH",
+    idDob: "1978-04-02",
+    idNumber: "IL-10492842",
+    idExpiry: "2026-02-14",
+    rules: [
+      { text: "Payee Name mismatch (ID shows John S. Smith)", status: "warn" },
+      { text: "ID EXPIRED (Expired 2026-02-14)", status: "fail" },
+      { text: "Check Date EXPIRED (> 90 days limit, Date: 2025-09-12)", status: "fail" },
+      { text: "Signature mismatch (Match: 12.3% - Alert)", status: "fail" },
+      { text: "Store cashing limit check", status: "pass" }
+    ],
+    verdict: "REJECTED",
+    verdictClass: "error",
+    recommendation: "<strong>AI Recommendation:</strong> ❌ DO NOT CASH. Check is stale-dated (over 9 months old), ID is expired, and signature verification has failed. Potential fraud flag raised.",
+    code: "PLS-REJECT-BLOCKED"
+  }
+};
+
+function plsInit() {
+  const scanBtn = document.getElementById("plsScanCheckBtn");
+  const selectEl = document.getElementById("plsSampleCheckSelect");
+  const visualContainer = document.getElementById("plsVisualContainer");
+  const analysisResult = document.getElementById("plsAnalysisResult");
+  const autofillBtn = document.getElementById("plsAutofillBtn");
+  const resetBtn = document.getElementById("plsResetBtn");
+  
+  if (!scanBtn) return;
+  
+  scanBtn.addEventListener("click", () => {
+    // 1. Reset POS and visual state
+    plsResetPOSForm();
+    analysisResult.style.display = "none";
+    autofillBtn.disabled = true;
+    
+    // 2. Load selected scenario
+    const scenarioKey = selectEl.value;
+    const data = PLS_SCENARIOS[scenarioKey];
+    
+    // Update Mock Check elements
+    document.getElementById("chkNumber").textContent = data.number;
+    document.getElementById("chkPayee").textContent = data.payee;
+    document.getElementById("chkAmount").textContent = data.amount;
+    document.getElementById("chkMemo").textContent = data.memo;
+    document.getElementById("chkDate").textContent = data.date;
+    document.getElementById("chkRouting").textContent = data.routing;
+    document.getElementById("chkAccount").textContent = data.account;
+    document.getElementById("chkSignature").textContent = data.signature;
+    
+    // Update Mock ID elements
+    document.getElementById("idName").textContent = data.idName;
+    document.getElementById("idDob").textContent = data.idDob;
+    document.getElementById("idNumber").textContent = data.idNumber;
+    document.getElementById("idExpiry").textContent = data.idExpiry;
+    
+    // 3. Show visual container
+    visualContainer.style.display = "flex";
+    
+    // 4. Run scan animations
+    const checkBar = document.getElementById("plsCheckScanBar");
+    const idBar = document.getElementById("plsIdScanBar");
+    
+    checkBar.style.display = "block";
+    idBar.style.display = "block";
+    
+    checkBar.style.top = "-4px";
+    idBar.style.top = "-4px";
+    
+    // Trigger transition Reflow
+    checkBar.offsetHeight;
+    idBar.offsetHeight;
+    
+    checkBar.style.top = "100%";
+    idBar.style.top = "100%";
+    
+    setTimeout(() => {
+      checkBar.style.display = "none";
+      idBar.style.display = "none";
+      
+      // 5. Show compliance results
+      plsShowComplianceResults(data);
+    }, 2000);
+  });
+  
+  autofillBtn.addEventListener("click", () => {
+    const scenarioKey = selectEl.value;
+    const data = PLS_SCENARIOS[scenarioKey];
+    plsRunAutofillReplay(data);
+  });
+  
+  resetBtn.addEventListener("click", () => {
+    plsResetPOSForm();
+    visualContainer.style.display = "none";
+    analysisResult.style.display = "none";
+    document.getElementById("plsReplayLogContainer").style.display = "none";
+    autofillBtn.disabled = true;
+  });
+}
+
+function plsShowComplianceResults(data) {
+  const resultPanel = document.getElementById("plsAnalysisResult");
+  const verdictEl = document.getElementById("plsVerdict");
+  const recEl = document.getElementById("plsAiRecommendation");
+  const autofillBtn = document.getElementById("plsAutofillBtn");
+  
+  verdictEl.textContent = data.verdict;
+  
+  // Clear styles
+  verdictEl.style.backgroundColor = "transparent";
+  verdictEl.style.color = "#fff";
+  
+  if (data.verdictClass === "success") {
+    verdictEl.style.backgroundColor = "rgba(131, 246, 196, 0.15)";
+    verdictEl.style.color = "var(--success)";
+    verdictEl.style.borderColor = "var(--success)";
+  } else if (data.verdictClass === "warn") {
+    verdictEl.style.backgroundColor = "rgba(255, 184, 107, 0.15)";
+    verdictEl.style.color = "var(--accent-warm)";
+    verdictEl.style.borderColor = "var(--accent-warm)";
+  } else {
+    verdictEl.style.backgroundColor = "rgba(239, 68, 68, 0.15)";
+    verdictEl.style.color = "#ef4444";
+    verdictEl.style.borderColor = "#ef4444";
+  }
+  
+  recEl.innerHTML = data.recommendation;
+  
+  // Fill rules
+  for (let i = 0; i < 5; i++) {
+    const li = document.getElementById(`chkRule${i+1}`);
+    const rule = data.rules[i];
+    if (rule) {
+      li.textContent = "";
+      const icon = document.createElement("span");
+      if (rule.status === "pass") {
+        icon.innerHTML = "✅";
+        li.style.color = "var(--text)";
+      } else if (rule.status === "warn") {
+        icon.innerHTML = "⚠️";
+        li.style.color = "var(--accent-warm)";
+      } else {
+        icon.innerHTML = "❌";
+        li.style.color = "#ef4444";
+      }
+      li.appendChild(icon);
+      li.appendChild(document.createTextNode(" " + rule.text));
+    }
+  }
+  
+  resultPanel.style.display = "block";
+  
+  // Only enable autofill if not rejected
+  if (data.verdict !== "REJECTED") {
+    autofillBtn.disabled = false;
+  } else {
+    autofillBtn.disabled = true;
+  }
+}
+
+function plsResetPOSForm() {
+  document.getElementById("posPayeeName").value = "";
+  document.getElementById("posIdNumber").value = "";
+  document.getElementById("posCheckAmount").value = "";
+  document.getElementById("posRoutingNumber").value = "";
+  document.getElementById("posAccountNumber").value = "";
+  document.getElementById("posVerifyStatus").value = "";
+  
+  document.getElementById("posPayeeName").style.borderColor = "var(--border)";
+  document.getElementById("posIdNumber").style.borderColor = "var(--border)";
+  document.getElementById("posCheckAmount").style.borderColor = "var(--border)";
+  document.getElementById("posRoutingNumber").style.borderColor = "var(--border)";
+  document.getElementById("posAccountNumber").style.borderColor = "var(--border)";
+  document.getElementById("posVerifyStatus").style.borderColor = "var(--border)";
+  
+  document.getElementById("plsMockPOSForm").style.opacity = "0.8";
+}
+
+async function plsRunAutofillReplay(data) {
+  const autofillBtn = document.getElementById("plsAutofillBtn");
+  const logContainer = document.getElementById("plsReplayLogContainer");
+  const logBox = document.getElementById("plsReplayLog");
+  
+  autofillBtn.disabled = true;
+  logContainer.style.display = "block";
+  logBox.innerHTML = "";
+  
+  document.getElementById("plsMockPOSForm").style.opacity = "1";
+  
+  const appendLog = (msg) => {
+    const div = document.createElement("div");
+    div.textContent = msg;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+  };
+  
+  const typeField = (inputId, value) => {
+    return new Promise((resolve) => {
+      const input = document.getElementById(inputId);
+      input.style.borderColor = "var(--accent)";
+      appendLog(`[GHOST] Replaying click at target: #${inputId}`);
+      
+      let index = 0;
+      const timer = setInterval(() => {
+        if (index < value.length) {
+          input.value += value.charAt(index);
+          index++;
+        } else {
+          clearInterval(timer);
+          input.style.borderColor = "var(--border)";
+          appendLog(`[GHOST] Keystrokes complete for #${inputId}`);
+          resolve();
+        }
+      }, 40);
+    });
+  };
+  
+  appendLog("[GHOST] Initiating PLS POS Auto-Fill Routine...");
+  await sleep(600);
+  
+  // Field 1: Payee Name
+  await typeField("posPayeeName", data.idName);
+  await sleep(400);
+  
+  // Field 2: ID Number
+  await typeField("posIdNumber", data.idNumber);
+  await sleep(400);
+  
+  // Field 3: Check Amount
+  await typeField("posCheckAmount", data.amount);
+  await sleep(400);
+  
+  // Field 4: Routing Number
+  await typeField("posRoutingNumber", data.routing);
+  await sleep(400);
+  
+  // Field 5: Account Number
+  await typeField("posAccountNumber", data.account);
+  await sleep(500);
+  
+  // Field 6: Verification Code
+  const statusInput = document.getElementById("posVerifyStatus");
+  statusInput.style.borderColor = "var(--accent)";
+  appendLog(`[GHOST] Ghost Guard checking transaction integrity...`);
+  await sleep(800);
+  appendLog(`[GHOST] Compliance integrity check PASSED.`);
+  await typeField("posVerifyStatus", data.code);
+  statusInput.style.borderColor = "var(--success)";
+  
+  appendLog("[GHOST] Replay finished successfully.");
+  showNotification("Ghost Auto-Fill completed successfully!", "info");
+  autofillBtn.disabled = false;
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
@@ -2845,4 +3159,5 @@ window.addEventListener("DOMContentLoaded", () => {
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
   initViewNav(); // left-nav view switcher
+  plsInit(); // initialize PLS AI compliance desk simulator
 });
