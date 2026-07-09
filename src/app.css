@@ -524,8 +524,7 @@ body[data-view="organize"] .rail-record { display: none; }
 /* ===== YC-demo polish pass ===== */
 .app-body {
   background:
-    radial-gradient(circle at top left, rgba(141, 123, 255, 0.18), transparent 34rem),
-    radial-gradient(circle at 85% 0%, rgba(131, 246, 196, 0.08), transparent 28rem),
+    linear-gradient(180deg, rgba(141, 123, 255, 0.06), transparent 28rem),
     var(--bg);
 }
 
@@ -556,7 +555,7 @@ body[data-view="organize"] .rail-record { display: none; }
 }
 
 .app-header__brand h1 {
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .panel,
@@ -573,7 +572,7 @@ body[data-view="organize"] .rail-record { display: none; }
 
 .panel h2,
 .sidebar__heading {
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .btn:disabled {
@@ -749,7 +748,7 @@ body[data-view="organize"] .rail-record { display: none; }
 .mission-panel h2 {
   max-width: 16ch;
   margin: 0 0 12px;
-  font-size: clamp(1.5rem, 3vw, 2.4rem);
+  font-size: 2.1rem;
   line-height: 1.02;
 }
 
@@ -1264,7 +1263,7 @@ body[data-view="organize"] .rail-record { display: none; }
 .nav__wordmark {
   font-size: 1.2rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 .nav__items {
@@ -1395,6 +1394,94 @@ h3 .i,
   top: 24px;
 }
 
+/* ===== Focused polish layer ===== */
+.panel,
+.app-sidebar,
+.mission-panel,
+.onboarding__card {
+  border-radius: 12px;
+}
+
+.panel,
+.app-sidebar {
+  background: rgba(14, 14, 24, 0.88);
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.28);
+}
+
+.btn,
+.nav__item,
+.organizer-field select,
+.organizer-field input,
+.auth-input,
+.speed-picker select {
+  border-radius: 8px;
+}
+
+.btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.organizer-panel {
+  border-color: rgba(139, 124, 246, 0.28);
+}
+
+.organizer-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.organizer-head h2 {
+  font-size: 1.35rem;
+}
+
+.organizer-pipeline {
+  color: var(--success);
+}
+
+.organizer-zone,
+.organizer-rule {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(7, 8, 19, 0.36);
+}
+
+.organizer-field select,
+.organizer-field input,
+.speed-picker select,
+.auth-input {
+  min-height: 38px;
+  background: #080812;
+}
+
+.organizer-perms {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.organizer-table {
+  table-layout: fixed;
+}
+
+.organizer-table th,
+.organizer-table td {
+  overflow-wrap: anywhere;
+}
+
+.status-card,
+.workflow-health div,
+.events-timeline {
+  border-radius: 10px;
+}
+
+.notification__text strong {
+  color: var(--text);
+}
+
 @media (max-width: 1040px) {
   .workspace__body {
     grid-template-columns: 1fr;
@@ -1436,5 +1523,18 @@ h3 .i,
   }
   .nav__item span:not(.nav__ico) {
     display: none;
+  }
+  .workspace {
+    padding: 18px 16px 32px;
+  }
+  .organizer-zone,
+  .organizer-rule,
+  .btn-row {
+    align-items: stretch;
+  }
+  .organizer-zone > *,
+  .organizer-rule > *,
+  .btn-row > * {
+    flex: 1 1 100%;
   }
 }

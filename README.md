@@ -7,292 +7,124 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Ghost is the deterministic trust layer for desktop automation.**
+> **Desktop automation you approve before it acts.**
 
-<p align="center">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="100%" height="auto" style="background:#070813; border-radius:12px; border:1px solid #1f2033; font-family:system-ui, -apple-system, sans-serif;">
-    <defs>
-      <linearGradient id="violet-glow" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#8d7bff" stop-opacity="0.2"/>
-        <stop offset="50%" stop-color="#ab9dff" stop-opacity="1"/>
-        <stop offset="100%" stop-color="#8d7bff" stop-opacity="0.2"/>
-      </linearGradient>
-      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="6" result="blur" />
-        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-      </filter>
-    </defs>
-    <style>
-      @keyframes pulse-glow {
-        0%, 100% { opacity: 0.3; }
-        50% { opacity: 0.9; }
-      }
-      @keyframes flow-line {
-        to { stroke-dashoffset: -40; }
-      }
-      .flow-path {
-        stroke: #8d7bff;
-        stroke-width: 2.5;
-        stroke-dasharray: 8 4;
-        animation: flow-line 2s linear infinite;
-      }
-      .flow-bg {
-        stroke: #1f2033;
-        stroke-width: 2.5;
-      }
-      .node-border {
-        stroke: #1f2033;
-        stroke-width: 1.5;
-        fill: #0c0d21;
-      }
-      .node-border.active-violet {
-        stroke: #8d7bff;
-        fill: #11132a;
-      }
-      .node-border.active-warn {
-        stroke: #ffb86b;
-        fill: #1a1622;
-      }
-      .node-border.active-success {
-        stroke: #83f6c4;
-        fill: #0d1e21;
-      }
-      .pulse-dot {
-        fill: #8d7bff;
-        animation: pulse-glow 2s infinite ease-in-out;
-      }
-      .step-text {
-        font-size: 11px;
-        font-weight: 600;
-        fill: #b9b3cc;
-        text-anchor: middle;
-      }
-      .step-title {
-        font-size: 13px;
-        font-weight: bold;
-        fill: #f7f4ff;
-        text-anchor: middle;
-      }
-    </style>
-    <!-- Connective flow lines -->
-    <line x1="130" y1="110" x2="310" y2="110" class="flow-bg" />
-    <line x1="310" y1="110" x2="490" y2="110" class="flow-bg" />
-    <line x1="490" y1="110" x2="670" y2="110" class="flow-bg" />
-    <line x1="130" y1="110" x2="310" y2="110" class="flow-path" />
-    <line x1="310" y1="110" x2="490" y2="110" class="flow-path" style="animation-delay: -0.66s; stroke:#ffb86b;" />
-    <line x1="490" y1="110" x2="670" y2="110" class="flow-path" style="animation-delay: -1.33s; stroke:#83f6c4;" />
-    <!-- Node 1: Record / Scan -->
-    <g transform="translate(130, 110)">
-      <circle r="42" class="node-border active-violet" style="filter: drop-shadow(0 0 10px rgba(141,123,255,0.15));" />
-      <circle r="4" cy="-18" class="pulse-dot" />
-      <text y="5" class="step-title">1. RECORD</text>
-      <text y="20" class="step-text">Scan &amp; Parse</text>
-    </g>
-    <!-- Node 2: Guard Policy Check -->
-    <g transform="translate(310, 110)">
-      <circle r="42" class="node-border active-warn" style="filter: drop-shadow(0 0 10px rgba(255,184,107,0.15));" />
-      <circle r="4" cy="-18" class="pulse-dot" style="fill:#ffb86b;" />
-      <text y="5" class="step-title" style="fill:#ffb86b;">2. GUARD</text>
-      <text y="20" class="step-text">Policy Checks</text>
-    </g>
-    <!-- Node 3: Human Approval -->
-    <g transform="translate(490, 110)">
-      <circle r="42" class="node-border active-success" style="filter: drop-shadow(0 0 10px rgba(131,246,196,0.15));" />
-      <circle r="4" cy="-18" class="pulse-dot" style="fill:#83f6c4;" />
-      <text y="5" class="step-title" style="fill:#83f6c4;">3. APPROVE</text>
-      <text y="20" class="step-text">Dry-Run Preview</text>
-    </g>
-    <!-- Node 4: Replay / Execute -->
-    <g transform="translate(670, 110)">
-      <circle r="42" class="node-border active-violet" style="filter: drop-shadow(0 0 15px rgba(141,123,255,0.2));" />
-      <circle r="4" cy="-18" class="pulse-dot" />
-      <text y="5" class="step-title">4. REPLAY</text>
-      <text y="20" class="step-text">Audit &amp; Undo</text>
-    </g>
-  </svg>
-</p>
+Ghost is a local-first desktop automation product for macOS and Windows. It turns repeated file and desktop work into reviewable routines: scan or record, inspect the plan, approve the exact actions, execute inside policy boundaries, audit every change, and undo when needed.
 
-Ghost lets users automate sensitive desktop file workflows by recording once, reviewing exactly what happens, approving within policy boundaries, auditing every operation, and undoing changes when needed.
+Ghost is not a cloud agent and not a silent macro recorder. The product is built around a simple constraint:
 
-## The Problem
-
-Bookkeepers, practice admins, and operations teams spend hours every week organizing invoices, receipts, statements, and exports across local folders and desktop apps. This work is repetitive, high-frequency, and painful — but it is also too sensitive for black-box AI agents, too desktop-specific for Zapier or Make, and too small-business-oriented for enterprise RPA.
-
-Existing tools don't fit:
-
-- **Macro recorders** replay blind coordinates; they break when windows move.
-- **Zapier/Make** excel at cloud APIs, not local file workflows.
-- **UiPath/Enterprise RPA** are powerful but expensive and overbuilt for SMBs.
-- **AI agents** are unpredictable and hard to audit—terrifying with financial files.
-- **Manual scripts** require technical skill.
-- **Keyboard Maestro/BetterTouchTool** don't offer audit trails, policy enforcement, or undo.
-
-## Ghost's Answer
-
-Ghost is not an autonomous agent. Ghost is a **deterministic, auditable automation engine** built around a simple pipeline:
-
-```
-Intent → Plan → Policy Check → Human Approval → Execution → Audit → Undo
+```text
+Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 ```
 
-**Deterministic**: Same input always produces the same output. No hallucination. No surprise behavior.
+## Why Ghost Exists
 
-**Auditable**: Every operation is logged with full context. Workflows are reviewable before execution.
+Bookkeepers, practice admins, students, and small operations teams spend hours cleaning up downloads, renaming client documents, filing statements, and repeating the same desktop chores. That work is repetitive enough to automate, but too sensitive for black-box automation.
 
-**Policy-enforced**: Users define Zones (folders Ghost may touch) and Capabilities (what Ghost may do). Everything else is denied by default.
+Common tools miss the shape of the problem:
 
-**Undoable**: Reversible operations write undo data before execution. Users can recover from mistakes.
+| Tool | Why it falls short |
+| --- | --- |
+| Macro recorders | Replay blind coordinates and break when the UI moves. |
+| Cloud automation | Works well for APIs, not local folders and desktop apps. |
+| Enterprise RPA | Powerful, expensive, and too heavy for weekly SMB workflows. |
+| AI agents | Hard to inspect, hard to bound, and risky around client files. |
+| Scripts | Useful for engineers, brittle for non-technical users. |
 
-## Get Ghost
+Ghost focuses on the missing middle: local workflows that need preview, approval, audit logs, and recovery.
 
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
-| Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
+## Start Here: Ghost Organizer
 
-> **Note:** current builds are developer-preview quality. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings → Privacy & Security**. Notarized releases are in progress.
+The current wedge is **Ghost Organizer**, a safe file-organization flow for invoices, receipts, exports, statements, screenshots, and messy download folders.
 
-## How It Works: Ghost Organizer
+```text
+Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo
+```
 
-The starting workflow is **Ghost Organizer**: safe, reviewable file organization with audit and undo.
+What makes it different:
 
-### Step-by-Step Flow
+- **Preview before mutation**: every move and rename is shown before it runs.
+- **Deny by default**: Ghost only works inside Zones and capabilities you choose.
+- **No silent deletes or overwrites**: conflicts are held for review.
+- **Undo-first execution**: reversible operations write undo data before changing files.
+- **Local audit trail**: each run records what happened, why it was allowed, and how to recover.
 
-1. **Select Zone** — Choose a folder Ghost may access (e.g., Downloads, Desktop).
-2. **Scan Files** — Ghost analyzes filenames, extensions, and patterns.
-3. **Classify** — Deterministic rules categorize files (invoices, receipts, statements, etc.).
-4. **Propose Plan** — Ghost suggests moves and renames, with confidence scores and matched rules.
-5. **Review & Approve** — User sees before/after preview. Can edit destinations, deselect actions, or cancel.
-6. **Policy Check** — Ghost Guard flags conflicts, overwrites, and out-of-Zone operations.
-7. **Write Undo Journal** — Before touching anything, Ghost writes a local undo record.
-8. **Execute** — Only approved actions run. Progress is shown step-by-step.
-9. **Audit** — Every operation logged with timestamps, decisions, and hashes.
-10. **Undo** — One-click recovery of the entire run.
-
-### Demo: Five Minutes
+## Five-Minute Demo Flow
 
 1. Open Ghost Organizer.
-2. Select `~/Downloads`.
-3. Click "Scan."
-4. Ghost proposes: "Move `invoice_acme.pdf` to `/Clients/Acme/Invoices/2026/`" with matched rule shown.
-5. Review the before/after tree. Click "Approve."
-6. Ghost executes and audits. Shows: "43 moved, 31 renamed, 5 folders created, 7 skipped, 0 blocked."
-7. Undo is available.
+2. Select a folder such as `~/Downloads`.
+3. Scan the folder. Nothing changes during scan.
+4. Review the proposed plan: created folders, moves, renames, conflicts, denied actions.
+5. Approve the plan.
+6. Ghost executes the approved actions and writes an audit log plus undo journal.
+7. Use Undo to restore the original state when needed.
 
-That's the product. Boring. Trustworthy.
+That is the product: boring, inspectable, and reversible.
 
-## Who Ghost Is For
+## Trust Model
 
-- **Bookkeepers and practice admins** organizing client invoices, receipts, statements, and exports.
-- **Office managers** and small business operations teams drowning in downloads and attachments.
-- **Students and nonprofits** managing financial or operational workflows that require audit trails.
+Ghost enforces the same pipeline for meaningful operations:
 
-Ghost is deliberately **not** for:
-
-- Autonomous agents you launch and forget about.
-- Unattended, scheduled automation.
-- Workflows that don't need review before execution.
-
-Every meaningful action requires your approval.
-
-## The Trust Pipeline
-
-Ghost's architecture enforces one principle:
-
-> **Ghost may suggest anything, but it only does what you have explicitly approved, inside boundaries you control.**
-
-Every operation flows through the same pipeline — no exceptions:
-
-```
-Intent → Plan → Policy Check → Human Approval → Execution → Audit Log → Undo Path
+```text
+Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Undo path
 ```
 
-### Core Guarantees
+| Stage | Purpose |
+| --- | --- |
+| Intent | Capture what the user is trying to do. |
+| Plan | Produce exact proposed actions before mutation. |
+| Policy check | Classify risk, scope, conflicts, and denied operations. |
+| User approval | Require explicit approval for the final plan. |
+| Execution | Run deterministic code, not raw model output. |
+| Audit log | Persist what changed and why it was allowed. |
+| Undo path | Store recovery data where reversal is possible. |
 
-- **Deny by default** — Operations are blocked unless explicitly allowed by your Zones and Capabilities.
-- **Deterministic execution** — Suggestions (including any AI-assisted ones) never execute directly; only reviewed, approved plans do.
-- **Suppressed secrets** — Secure-field input is never retained—not in logs, not in recordings, not in previews.
-- **Local-first** — Workflows, logs, and settings live on your machine. No account. No cloud dependency. No telemetry unless you opt in.
-- **Auditable** — Every run leaves a tamper-evident audit log and undo journal.
+The hard boundary is intentional: experimental features may suggest; only the trusted core may mutate.
 
 ## Current Status
 
-**Early-stage but functional.** Working now:
+Ghost is an early technical preview. Treat it as useful, inspectable software under active development, not a production-grade unattended automation platform.
 
-- ✅ **Ghost Organizer** — Safe file organization with preview, policy checks, audit, and undo
-- ✅ **Deterministic compression** — Semantic steps from raw events
-- ✅ **Ghost Guard policy engine** — Deny-by-default rules engine
-- ✅ **Zones and Capabilities** — Local boundary enforcement
-- ✅ **Audit logs and undo journals** — Full operation history with recovery
-- ✅ **macOS and Windows** — Desktop builds for both platforms
+Working now:
 
-**Not yet production-ready:**
+- Ghost Organizer scan, preview, approval, execution, audit, and undo surfaces.
+- Zones and capabilities for local folder boundaries.
+- Ghost Guard policy checks for risky workflows.
+- Deterministic event compression for readable replay timelines.
+- Local workflow storage and run history.
+- macOS and Windows desktop packaging paths.
 
-- ⚠️ **Release signing** — macOS notarization and Windows code signing in progress
-- ⚠️ **Cross-app reliability** — Some workflows still depend on screen coordinates (fallback for robustness)
-- ⚠️ **Richer target resolution** — Window-title awareness and window-relative positioning in development
+Still being hardened:
 
-## The Wedge: Ghost Organizer
+- Release signing and notarization.
+- Cross-app replay reliability where semantic targeting falls back to coordinates.
+- Richer target resolution for windows, controls, and app-specific UI.
+- Installer and update polish.
 
-Why start with file organization?
+## Download
 
-1. **High frequency** — Bookkeepers and admins do this every week.
-2. **Sensitive** — Files contain financial and client data. Black-box automation is unacceptable.
-3. **Audit-heavy** — These users need compliance trails anyway.
-4. **Measurable ROI** — 2–3 hours/week saved per user is easy to quantify.
-5. **Clear UX** — Folder preview and file list are familiar patterns.
+| Platform | Download |
+| --- | --- |
+| macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
+| Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Ghost Organizer proves the trust pipeline works for a real, painful workflow. Then we expand.
-
-## Roadmap
-
-### Phase 1: Scope Reduction (Weeks 1–2)
-- Remove AI language and experimental features from public UI
-- Publish formal trust pipeline spec
-- Define canonical workflows and success metrics
-
-### Phase 2: Reliability Foundation (Weeks 3–5)
-- Build benchmark suite with ≥99.5% success target for canonical workflows
-- Add comprehensive unit and integration tests
-- Publish reliability metrics
-
-### Phase 3: Production Hardening (Weeks 6–8)
-- Apple Developer ID signing and notarization
-- Windows code signing
-- Security documentation and threat model
-
-### Phase 4: Organizer UX Polish (Weeks 9–10)
-- First-run onboarding flow
-- Improved preview and policy UI
-- Dark mode and keyboard shortcuts
-
-### Phase 5–8: Traction and YC (Months 4–6)
-- Private beta with 10 users
-- 3 paid pilots from SMB firms
-- Public beta launch
-- YC application with metrics and testimonials
+Current builds are developer-preview quality. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Notarized releases are in progress.
 
 ## Architecture
 
-**Stack**: Rust backend (Tauri 2), vanilla HTML/CSS/JS frontend, local SQLite storage.
+Ghost is a Tauri 2 desktop app with a Rust backend and a vanilla HTML/CSS/JS frontend.
 
-**Core Modules**:
-- `organizer/` — File scanner, classifier, planner, executor, undo
-- `policy/` — Deny-by-default capability engine
-- `audit/` — Append-only audit logs and undo journals
-- `core/compression/` — Event compression to semantic steps
-- `platform/` — macOS and Windows capture/replay backends
+| Area | Responsibility |
+| --- | --- |
+| `src-tauri/src/organizer/` | File scanning, planning, execution, audit, and undo. |
+| `src-tauri/src/policy/` | Deny-by-default capability checks and risk boundaries. |
+| `src-tauri/src/core/` | Compression, guard review, dry-run, workflow handling. |
+| `src-tauri/src/platform/` | macOS and Windows capture/replay backends. |
+| `src/` | Desktop app UI packaged by Tauri. |
+| `public/` | Hosted product/marketing site. |
+| `docs/` | Operational specs, command registry, roadmap, and security notes. |
 
-See [`IMPLEMENTATION.md`](IMPLEMENTATION.md) for detailed status and [`docs/`](docs/) for architecture specs.
-
-## Security & Privacy
-
-- **Local-first by default** — No cloud, no account, no telemetry unless opted in.
-- **No camera, no microphone** — Input capture only during explicit recording/approved replay.
-- **Suppress secrets** — Secure fields are never stored, logged, or transmitted.
-- **Signed releases** — Code signing and notarization for safe installation.
-
-See [`SECURITY.md`](SECURITY.md) for threat model and responsible disclosure.
+The command surface is intentionally classified by risk. Before changing Tauri commands, read [`AGENTS.md`](AGENTS.md), [`docs/command-registry.md`](docs/command-registry.md), and [`docs/core-boundaries.md`](docs/core-boundaries.md).
 
 ## Development
 
@@ -300,68 +132,80 @@ See [`SECURITY.md`](SECURITY.md) for threat model and responsible disclosure.
 # Install Rust and Tauri CLI
 cargo install tauri-cli --version "^2.0" --locked
 
-# Run checks
-make ci         # fmt + test + clippy
-make check      # cargo check
-make test       # cargo test
-make dev        # cargo tauri dev
+# Run the main gates
+make ci
+make check
+make test
 
-# Build
-make build      # cargo tauri build --no-bundle
+# Run or build the desktop app
+make dev
+make build
 ```
 
-See [`AGENTS.md`](AGENTS.md) for contribution guidelines, architecture details, and the binding contract for humans and AI agents working on Ghost.
+Equivalent direct commands:
+
+```bash
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo tauri build --no-bundle
+```
+
+## Privacy Defaults
+
+- No camera.
+- No microphone.
+- No hidden screen capture.
+- No background email, browser, or document reading.
+- No cloud-first storage.
+- No unapproved network calls.
+- Keyboard and pointer capture only during explicit recording or approved replay.
+
+Workflow data, logs, settings, audit history, and undo journals stay local by default.
+
+## Roadmap
+
+1. Keep CI green and command surfaces classified.
+2. Harden Ghost Organizer planning, review, execution, audit, and undo.
+3. Improve target resolution and replay reliability.
+4. Finish release signing and installer quality.
+5. Add suggestion-only intelligence behind clear gates after the trusted core is reliable.
 
 ## Contributing
 
-Contributions are focused on:
-- Replay reliability and semantic target resolution
-- Ghost Organizer UX and correctness
-- Safety and policy hardening
-- Docs and examples
-- Bug fixes
+Good contributions make Ghost more predictable:
 
-Not accepting:
-- Feature bloat or experimental half-finished work
-- Cloud-dependent features (local-first is non-negotiable)
-- Autonomous execution modes (user approval is the product)
+- Organizer correctness and edge-case handling.
+- Policy and security hardening.
+- Replay reliability and target resolution.
+- Accessibility and UX improvements that preserve explicit approval.
+- Clear docs, examples, and tests.
+
+Avoid contributions that move Ghost toward unbounded autonomy, hidden observation, cloud dependency, or silent mutation. User approval is not a speed bump; it is the product.
 
 ## FAQ
 
 **Does my data leave my machine?**
-No. Workflows, logs, and settings are local. No account. No server. Telemetry is off by default.
+
+No by default. Workflows, logs, settings, audit history, and undo journals are local.
 
 **Can Ghost delete files?**
-Not in Ghost Organizer—delete is blocked by default. All mutations are previewed, approved, audited, and undoable.
 
-**What about passwords?**
-Secure-field input is suppressed at capture time and never retained. Ghost Guard blocks replay of workflows containing secrets.
+Ghost Organizer blocks silent deletion. Mutations are previewed, approved, audited, and reversible where possible.
 
-**Can it run while I'm away?**
-No. Replay runs when you start it and stays interruptible. Unattended execution is deliberately not a current feature.
+**Can AI execute actions?**
 
-**Why not just use a macro recorder?**
-Raw macros replay coordinates and break when windows move—and they'll happily type your password into the wrong field. Ghost reviews, guards, re-resolves targets semantically, and leaves an audit trail.
+No. AI or heuristics may suggest plans in gated surfaces, but deterministic Ghost code executes only approved plans.
 
-## Kubernetes Deployment
+**Can Ghost run while I am away?**
 
-To support scaling out marketing landing nodes (Y Combinator scale preparation), Ghost includes containerization and Kubernetes orchestration configs:
+Not as a default product behavior. Ghost is designed for explicit, reviewable, interruptible work.
 
-* **Dockerfile:** Uses a lightweight Nginx base to package and serve the static marketing site.
-* **k8s-deployment.yaml:** Spawns a 3-replica LoadBalancer-backed service of marketing nodes with strict CPU/Memory resource bounds and liveness/readiness check probes.
+**Why not use a macro recorder?**
 
-```bash
-# Build the Docker container
-docker build -t mohabbis/ghost-marketing:latest .
-
-# Deploy to a Kubernetes cluster (Minikube or GKE)
-kubectl apply -f k8s-deployment.yaml
-```
+Macro recorders replay coordinates. Ghost is built around inspection, policy checks, semantic targeting, audit logs, and undo.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
----
-
-**Ghost is boring. That is the point.** Trust means predictability, auditability, and control. Ghost is built to earn your trust by showing exactly what it does—before, during, and after.
+MIT - see [LICENSE](LICENSE).

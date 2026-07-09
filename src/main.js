@@ -2500,7 +2500,7 @@ async function showDryRunPreview() {
 
   const fallbackCount = steps.filter((s) => s.coordinate_fallback).length;
   const summary = fallbackCount
-    ? `<p class="dry-run__warning">⚠️ ${fallbackCount} step(s) will click raw coordinates with no element to re-resolve — they break if the UI moves.</p>`
+    ? `<p class="dry-run__warning"><strong>Needs review:</strong> ${fallbackCount} step(s) will click raw coordinates with no element to re-resolve — they break if the UI moves.</p>`
     : `<p class="dry-run__ok">Every click has an element target or replays a recorded release point.</p>`;
 
   const rows = steps

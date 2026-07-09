@@ -43,10 +43,10 @@ function platformDetection() {
   if (platform === "mac" && sub) sub.textContent = "Detected macOS — free technical preview.";
   if (platform === "windows" && sub) sub.textContent = "Detected Windows — free technical preview.";
 
-  const primary = $("[data-download-primary]");
-  if (primary) {
-    if (platform === "mac") primary.textContent = "Download for macOS";
-    else if (platform === "windows") primary.textContent = "Download for Windows";
+  const primaryLabel = $("[data-download-label]");
+  if (primaryLabel) {
+    if (platform === "mac") primaryLabel.textContent = "Download for macOS";
+    else if (platform === "windows") primaryLabel.textContent = "Download for Windows";
   }
 }
 
