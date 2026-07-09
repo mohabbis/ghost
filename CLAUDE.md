@@ -185,6 +185,8 @@ Also built: replay inspectability. Platform replay loops advance a shared `Repla
 
 Also built: target resilience. Capture stores window-level locator context on `ElementInfo` (`window_title`, `window_rel` — both optional and serde-defaulted for old recordings): macOS reads the AXWindow ancestor's title and frame, Windows the GA_ROOT window's text and rect. Every replayed click records how its target resolved (`ResolutionKind`: recorded point / window-relative / spiral re-resolution / coordinate fallback / no descriptor) into the run's `step_trace`, persisted on `ExecutionRecord` and rendered in the replay-history view; a post-replay insight summarizes fallback usage. The resolution chain and matcher live in `core/replay_support.rs` and are gated by the scenario benchmark in `tests/resolution_benchmark.rs` — read `docs/target-resolution.md` before changing either. Window-title-aware matching only discriminates when both sides carry titles (old recordings keep the permissive match); live window-relative re-resolution is wired on Windows (`FindWindowA`) and on macOS (libproc pid enumeration + AXWindows walk under the existing Accessibility permission — never CGWindowList, which needs Screen Recording).
 
+Also built: AI Copilot view (data-view="pls"). This view houses the financial compliance check and legacy POS terminal auto-fill simulators, displaying modern glassmorphic document representations and typing replay logs. It is initialized via plsInit() on DOMContentLoaded.
+
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
 
 ## Replay invariants

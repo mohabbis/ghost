@@ -9,6 +9,109 @@
 
 > **Ghost is the deterministic trust layer for desktop automation.**
 
+<p align="center">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="100%" height="auto" style="background:#070813; border-radius:12px; border:1px solid #1f2033; font-family:system-ui, -apple-system, sans-serif;">
+    <defs>
+      <linearGradient id="violet-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#8d7bff" stop-opacity="0.2"/>
+        <stop offset="50%" stop-color="#ab9dff" stop-opacity="1"/>
+        <stop offset="100%" stop-color="#8d7bff" stop-opacity="0.2"/>
+      </linearGradient>
+      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="6" result="blur" />
+        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+      </filter>
+    </defs>
+    <style>
+      @keyframes pulse-glow {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.9; }
+      }
+      @keyframes flow-line {
+        to { stroke-dashoffset: -40; }
+      }
+      .flow-path {
+        stroke: #8d7bff;
+        stroke-width: 2.5;
+        stroke-dasharray: 8 4;
+        animation: flow-line 2s linear infinite;
+      }
+      .flow-bg {
+        stroke: #1f2033;
+        stroke-width: 2.5;
+      }
+      .node-border {
+        stroke: #1f2033;
+        stroke-width: 1.5;
+        fill: #0c0d21;
+      }
+      .node-border.active-violet {
+        stroke: #8d7bff;
+        fill: #11132a;
+      }
+      .node-border.active-warn {
+        stroke: #ffb86b;
+        fill: #1a1622;
+      }
+      .node-border.active-success {
+        stroke: #83f6c4;
+        fill: #0d1e21;
+      }
+      .pulse-dot {
+        fill: #8d7bff;
+        animation: pulse-glow 2s infinite ease-in-out;
+      }
+      .step-text {
+        font-size: 11px;
+        font-weight: 600;
+        fill: #b9b3cc;
+        text-anchor: middle;
+      }
+      .step-title {
+        font-size: 13px;
+        font-weight: bold;
+        fill: #f7f4ff;
+        text-anchor: middle;
+      }
+    </style>
+    <!-- Connective flow lines -->
+    <line x1="130" y1="110" x2="310" y2="110" class="flow-bg" />
+    <line x1="310" y1="110" x2="490" y2="110" class="flow-bg" />
+    <line x1="490" y1="110" x2="670" y2="110" class="flow-bg" />
+    <line x1="130" y1="110" x2="310" y2="110" class="flow-path" />
+    <line x1="310" y1="110" x2="490" y2="110" class="flow-path" style="animation-delay: -0.66s; stroke:#ffb86b;" />
+    <line x1="490" y1="110" x2="670" y2="110" class="flow-path" style="animation-delay: -1.33s; stroke:#83f6c4;" />
+    <!-- Node 1: Record / Scan -->
+    <g transform="translate(130, 110)">
+      <circle r="42" class="node-border active-violet" style="filter: drop-shadow(0 0 10px rgba(141,123,255,0.15));" />
+      <circle r="4" cy="-18" class="pulse-dot" />
+      <text y="5" class="step-title">1. RECORD</text>
+      <text y="20" class="step-text">Scan &amp; Parse</text>
+    </g>
+    <!-- Node 2: Guard Policy Check -->
+    <g transform="translate(310, 110)">
+      <circle r="42" class="node-border active-warn" style="filter: drop-shadow(0 0 10px rgba(255,184,107,0.15));" />
+      <circle r="4" cy="-18" class="pulse-dot" style="fill:#ffb86b;" />
+      <text y="5" class="step-title" style="fill:#ffb86b;">2. GUARD</text>
+      <text y="20" class="step-text">Policy Checks</text>
+    </g>
+    <!-- Node 3: Human Approval -->
+    <g transform="translate(490, 110)">
+      <circle r="42" class="node-border active-success" style="filter: drop-shadow(0 0 10px rgba(131,246,196,0.15));" />
+      <circle r="4" cy="-18" class="pulse-dot" style="fill:#83f6c4;" />
+      <text y="5" class="step-title" style="fill:#83f6c4;">3. APPROVE</text>
+      <text y="20" class="step-text">Dry-Run Preview</text>
+    </g>
+    <!-- Node 4: Replay / Execute -->
+    <g transform="translate(670, 110)">
+      <circle r="42" class="node-border active-violet" style="filter: drop-shadow(0 0 15px rgba(141,123,255,0.2));" />
+      <circle r="4" cy="-18" class="pulse-dot" />
+      <text y="5" class="step-title">4. REPLAY</text>
+      <text y="20" class="step-text">Audit &amp; Undo</text>
+    </g>
+  </svg>
+</p>
+
 Ghost lets users automate sensitive desktop file workflows by recording once, reviewing exactly what happens, approving within policy boundaries, auditing every operation, and undoing changes when needed.
 
 ## The Problem
