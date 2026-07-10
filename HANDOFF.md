@@ -19,9 +19,9 @@ You are inheriting **Ghost**, a Tauri-based local-first desktop automation tool.
    * Redesigned the UI cards for scanned checks and IDs using a high-end, **glassmorphic dark-mode** style.
 2. **Vulnerability Patches (Cargo.lock):**
    * Updated `crossbeam-epoch`, `quick-xml`, and `anyhow` to resolve critical vulnerabilities.
-3. **Windows CI Test DLL Crash Resolved:**
-   * Changed `crate-type` of `ghost_lib` from `["staticlib", "cdylib", "rlib"]` to strictly `["rlib"]` in `src-tauri/Cargo.toml`.
-   * This prevents Cargo tests on Windows from looking for/loading a dynamically compiled `ghost_lib.dll` which lacks test symbols and causing `0xc0000139` crashes.
+3. **Windows CI Test Crash (`0xc0000139`) Resolved:**
+   * Root cause: Tauri links the `Microsoft.Windows.Common-Controls` v6 manifest only into the shipped app binary, not into cargo's `--lib` unit-test harness. Without it the test exe falls back to the legacy ComCtl32 v5.82 and the loader aborts with `STATUS_ENTRYPOINT_NOT_FOUND` before any test runs. (The earlier `crate-type = ["rlib"]` change in `src-tauri/Cargo.toml` did not address this and is retained only because desktop builds do not need the mobile `staticlib`/`cdylib` outputs.)
+   * Fix: `src-tauri/build.rs` emits a Windows-only `cargo:rustc-link-arg=/MANIFESTDEPENDENCY:...Common-Controls 6.0.0.0...` so the v6 manifest is embedded into the test binary too. The fragile PowerShell-based `is_cargo_test()` skip of `tauri_build::build()` was removed. See tauri-apps/tauri#13419 / #14580.
 4. **Version Bump:**
    * Bumped package version from `1.1.0` to `1.2.0` in both `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`.
 5. **Kubernetes & Containerization (Y Combinator Scale Prep):**
