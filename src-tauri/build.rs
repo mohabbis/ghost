@@ -64,9 +64,11 @@ fn is_cargo_test() -> bool {
 fn main() {
     // Running tauri_build::build() while compiling the `cargo test` harness produces a
     // Windows test binary that crashes on load (STATUS_ENTRYPOINT_NOT_FOUND, 0xc0000139),
-    // so the test build must skip it. Build scripts cannot see the `test` cfg, so CI sets
-    // GHOST_SKIP_TAURI_BUILD on the test step (see .github/workflows/rust.yml) as the
-    // deterministic signal; is_cargo_test() is a best-effort fallback for local `cargo test`.
+    // so the test build must skip it. Build scripts can't see the `test` cfg, so the skip
+    // is driven by is_cargo_test(), which walks the process ancestry for the cargo
+    // test/bench invocation. Setting GHOST_SKIP_TAURI_BUILD=1 forces the skip without any
+    // inspection — a deterministic override for CI test steps or any environment where the
+    // ancestry walk is unavailable.
     println!("cargo:rerun-if-env-changed=GHOST_SKIP_TAURI_BUILD");
     if std::env::var_os("GHOST_SKIP_TAURI_BUILD").is_some() || is_cargo_test() {
         return;
