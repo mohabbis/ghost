@@ -907,6 +907,82 @@ body[data-view="organize"] .rail-record { display: none; }
   font-size: 14px;
 }
 
+/* "What is Ghost?" modal: a scannable statement of what it is, does, can't do,
+   and will never do. Green / amber / red bullets separate capabilities from
+   limits from hard boundaries at a glance. */
+.about-lead {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+  color: var(--text);
+}
+
+.about-section {
+  margin: 16px 0;
+}
+
+.about-h {
+  color: #8d7bff;
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.about-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.about-flow span:not([aria-hidden]) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.about-flow span[aria-hidden] {
+  color: var(--muted);
+}
+
+.about-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.about-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.about-list li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.about-list--cant li::before {
+  background: var(--accent-warm, #ffb86b);
+}
+
+.about-list--never li::before {
+  background: #ff8da0;
+}
+
 /* Plan Filing view: name paste box + savings input grid. Reuses the
    .organizer-field control styling; only the layout is new here. */
 .filing-names-field {
