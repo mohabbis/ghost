@@ -487,6 +487,65 @@ fn generate_compliance_signature(report: &str) -> String {
     hex
 }
 
+/// A portable, serializable representation of a Zone and all its folder rules.
+/// Used to share boundary definitions across team members' devices.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyPack {
+    pub name: String,
+    pub description: Option<String>,
+    pub default_decision: DefaultDecision,
+    pub rename_dated: bool,
+    pub rules: Vec<FolderRule>,
+}
+
+/// Export a Zone and all its folder rules as a portable JSON policy pack.
+///
+/// Risk class: safe-read (DB read only, returns serialized pack text).
+#[tauri::command]
+pub fn organizer_export_policy_pack(zone_id: String) -> Result<String, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+
+    let zone = crate::storage::zones::get_zone(&conn, &zone_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no zone with id {zone_id}"))?;
+
+    let rules = list_folder_rules(&conn, &zone_id)
+        .map_err(|e| e.to_string())?;
+
+    let pack = PolicyPack {
+        name: zone.name,
+        description: zone.description,
+        default_decision: zone.default_decision,
+        rename_dated: zone.rename_dated,
+        rules,
+    };
+
+    serde_json::to_string_pretty(&pack).map_err(|e| e.to_string())
+}
+
+/// Import a policy pack JSON string, creating the Zone and its rules.
+/// Returns the imported Zone on success.
+///
+/// Risk class: local-mutate (DB only; inserts zone and rules).
+#[tauri::command]
+pub fn organizer_import_policy_pack(pack_json: String) -> Result<Zone, String> {
+    let pack: PolicyPack = serde_json::from_str(&pack_json)
+        .map_err(|e| format!("invalid policy pack JSON: {e}"))?;
+
+    let mut conn = open_default().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let zone = create_zone(&tx, &pack.name, pack.description.as_deref(), pack.default_decision, pack.rename_dated)
+        .map_err(|e| e.to_string())?;
+
+    for rule in &pack.rules {
+        add_folder_rule(&tx, &zone.id, rule).map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(zone)
+}
+
 /// Verify the signature at the bottom of a signed compliance report against
 /// the machine-local signing key. Returns true if verification succeeds,
 /// false if the content has been tampered with or signature does not match.
@@ -529,5 +588,31 @@ mod tests {
         let tampered_report = signed_report.replace("compliance", "malicious");
         let verified_tampered = organizer_verify_signed_report(tampered_report).unwrap();
         assert!(!verified_tampered);
+    }
+
+    #[test]
+    fn test_policy_pack_serialization() {
+        use std::path::PathBuf;
+        let pack = PolicyPack {
+            name: "Test Zone".to_string(),
+            description: Some("Test Desc".to_string()),
+            default_decision: DefaultDecision::Ask,
+            rename_dated: true,
+            rules: vec![FolderRule {
+                path: PathBuf::from("/test/path"),
+                can_read: true,
+                can_create: false,
+                can_rename: true,
+                can_move: false,
+                can_copy: true,
+                can_delete: false,
+                trust: TrustLevel::AskFirst,
+            }],
+        };
+        let serialized = serde_json::to_string(&pack).unwrap();
+        let deserialized: PolicyPack = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.name, "Test Zone");
+        assert_eq!(deserialized.rules.len(), 1);
+        assert_eq!(deserialized.rules[0].path, PathBuf::from("/test/path"));
     }
 }

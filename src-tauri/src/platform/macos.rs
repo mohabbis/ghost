@@ -276,13 +276,30 @@ impl MacosBackend {
     }
 
     /// Open System Settings → Privacy & Security at the given anchor.
+    ///
+    /// macOS 13+ (Ventura through Tahoe) uses the `com.apple.settings` scheme;
+    /// older releases use `com.apple.preference.security`. We try the modern
+    /// scheme first and fall back if it fails.
     fn open_privacy_pane(anchor: &str) {
-        let url = format!(
+        // Modern macOS 13+ scheme
+        let modern_url = format!(
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?{}",
+            anchor
+        );
+        // Legacy macOS 12- scheme
+        let legacy_url = format!(
             "x-apple.systempreferences:com.apple.preference.security?{}",
             anchor
         );
-        if let Err(e) = std::process::Command::new("open").arg(&url).spawn() {
-            eprintln!("Failed to open System Settings ({}): {}", anchor, e);
+
+        if std::process::Command::new("open")
+            .arg(&modern_url)
+            .spawn()
+            .is_err()
+        {
+            if let Err(e) = std::process::Command::new("open").arg(&legacy_url).spawn() {
+                eprintln!("Failed to open System Settings ({}): {}", anchor, e);
+            }
         }
     }
 }

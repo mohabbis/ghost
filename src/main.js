@@ -177,6 +177,8 @@ async function checkPermissions() {
   return { accessibility, inputMonitoring };
 }
 
+let _permAutoPrompted = false;
+
 async function refreshPermissionBanner() {
   if (!invoke) return;
 
@@ -185,15 +187,32 @@ async function refreshPermissionBanner() {
 
   try {
     const { accessibility, inputMonitoring } = await checkPermissions();
-    banner.hidden = accessibility && inputMonitoring;
-    updateMissionProgress({ permissionsGranted: accessibility && inputMonitoring });
+    const allGranted = accessibility && inputMonitoring;
+    banner.hidden = allGranted;
+    updateMissionProgress({ permissionsGranted: allGranted });
 
-    const text = document.getElementById("perm-text");
-    if (text && !banner.hidden) {
+    if (!allGranted) {
       const missing = [];
       if (!accessibility) missing.push("Accessibility");
       if (!inputMonitoring) missing.push("Input Monitoring");
-      text.textContent = `Recording needs ${missing.join(" and ")}. Organizer works without it. Enable under System Settings → Privacy & Security, then Quit & Reopen.`;
+
+      const text = document.getElementById("perm-text");
+      if (text) {
+        text.textContent = `Ghost needs ${missing.join(" and ")} permission${missing.length > 1 ? "s" : ""}. Click "Grant Access" below, enable Ghost in System Settings, then click "Quit & Reopen".`;
+      }
+
+      // On the very first detection of missing permissions (app startup),
+      // automatically trigger the system permission prompt + open Settings.
+      // This removes the dead-end where users can't figure out what to do.
+      if (!_permAutoPrompted) {
+        _permAutoPrompted = true;
+        if (!accessibility) {
+          await invoke("request_accessibility").catch(() => {});
+        }
+        if (!inputMonitoring) {
+          await invoke("request_input_monitoring").catch(() => {});
+        }
+      }
     }
   } catch (error) {
     console.error("Failed to check permissions:", error);

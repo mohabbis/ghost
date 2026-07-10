@@ -19,12 +19,17 @@ echo "=== 5. Copying cleanly to /Applications/ ==="
 rm -rf /Applications/Ghost.app
 cp -a "$APP_PATH" /Applications/
 
-echo "=== 6. Resetting TCC permissions database ==="
-tccutil reset Accessibility com.muhammadrafiq.ghost || true
-tccutil reset ListenEvent com.muhammadrafiq.ghost || true
-tccutil reset PostEvent com.muhammadrafiq.ghost || true
+# NOTE: We intentionally do NOT reset TCC permissions here.
+# The designated requirement is pinned to the bundle identifier
+# (com.muhammadrafiq.ghost), not the binary hash. This means
+# macOS will honour any existing Accessibility / Input Monitoring
+# grants across rebuilds without requiring the user to re-grant.
+#
+# If you need to force a fresh permission prompt (rare), run:
+#   tccutil reset Accessibility com.muhammadrafiq.ghost
+#   tccutil reset ListenEvent com.muhammadrafiq.ghost
 
-echo "=== 7. Relaunching Ghost ==="
+echo "=== 6. Relaunching Ghost ==="
 open /Applications/Ghost.app
 
-echo "=== Done! Please grant Accessibility and Input Monitoring permissions in System Settings when prompted, then restart the app. ==="
+echo "=== Done! If this is a fresh install, grant Accessibility and Input Monitoring in System Settings → Privacy & Security when prompted. ==="
