@@ -5,6 +5,7 @@ pub mod config;
 pub mod core;
 pub mod engine;
 pub mod error;
+pub mod filing;
 pub mod organizer;
 pub mod performance;
 mod platform;
@@ -156,6 +157,10 @@ pub fn run() {
             commands::organizer_export_audit,
             commands::organizer_time_to_value,
             commands::organizer_verify_audit_chain,
+            // Read-only, audience-aware filing preview + savings estimate.
+            // Name-only planning; no filesystem/network access.
+            commands::preview_file_filing,
+            commands::estimate_filing_savings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

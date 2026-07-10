@@ -198,6 +198,21 @@ plan can never reach the filesystem.
 | `organizer_time_to_value` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns local first-touch milestone timestamps (first zone/plan/run/undo) for the diagnostics view. Local-only: timestamps, no paths or content, no network. |
 | `organizer_verify_audit_chain` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Recomputes the execution hash chain and reports whether every sealed run still matches its seal and links to the previous run (`intact`, `sealed_count`, `unsealed_count`, `first_break`). Offline tamper-evidence check; no network. |
 
+### `commands/filing.rs` — audience-aware filing preview (stable)
+
+Read-only, name-only planning that proposes where recurring files belong, per
+audience profile (`Finance`, `Student`; see `docs/filing-profiles.md` and
+`docs/audiences.md`). These commands touch **nothing** — no filesystem, no
+network, no OS input, no secrets. They reason purely over the file *names*
+passed in, so they are safe to run on a paste-in list before any folder access
+is granted. The actual move/rename still flows through the Organizer's audited,
+undoable executor.
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `preview_file_filing` | stable | – | – | – | – | – | – | low | **safe-read.** Classifies each provided file name by the chosen `audience` profile and proposes a destination directory (report type/coursework type + reporting period/term), plus counts and per-item review flags. Deterministic; unrecognized files are surfaced for review, never guessed or mutated. `root` optional (audience default when empty). |
+| `estimate_filing_savings` | stable | – | – | – | – | – | – | low | **safe-read.** Pure arithmetic: turns filing volume/cadence/time inputs into annual hours (and, with an hourly rate, cost) saved by an assisted workflow. Inputs are clamped defensively; the estimate echoes back every default applied. |
+
 ### `commands/experimental.rs` — experimental (gated / not default UI)
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
