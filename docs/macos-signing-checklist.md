@@ -52,7 +52,13 @@ This checklist covers the steps needed to code-sign and notarize Ghost for macOS
 
 - [ ] Create notarization service account
   - Store credentials securely
-  - Add to GitHub Secrets: `MACOS_APPLE_ID`, `MACOS_APPLE_PASSWORD`, `MACOS_TEAM_ID`
+  - Add to GitHub Secrets using the **exact names `.github/workflows/release.yml` reads** (these are the source of truth — the workflow enters full signing mode only when `BUILD_CERTIFICATE_BASE64` is present):
+    - `BUILD_CERTIFICATE_BASE64` — Developer ID Application cert exported as `.p12`, base64-encoded
+    - `P12_PASSWORD` — password for that `.p12`
+    - `APPLE_SIGNING_IDENTITY` — e.g. `Developer ID Application: Your Name (TEAMID)`
+    - `APPLE_ID` — Apple ID used for notarization
+    - `APPLE_PASSWORD` — app-specific password for that Apple ID
+    - `APPLE_TEAM_ID` — 10-character team ID
 
 - [ ] Test notarization locally
   ```bash
@@ -79,14 +85,17 @@ This checklist covers the steps needed to code-sign and notarize Ghost for macOS
 
 ## Phase 4: CI/CD Integration
 
-Configured in `.github/workflows/release.yml`:
+Configured in `.github/workflows/release.yml`. Signing and notarization are handled
+by the Tauri v2 bundler, not manual `altool` calls: the `Configure macOS signing`
+step exports the secrets above as the env vars Tauri expects (`APPLE_CERTIFICATE`,
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`,
+`APPLE_TEAM_ID`), then `cargo tauri build --target universal-apple-darwin --bundles dmg`
+imports the cert into a temp keychain, signs the app, and notarizes + staples the DMG.
 
-- [ ] Build creates .dmg
-- [ ] Notarize via `altool` (API call with credentials)
-- [ ] Poll for notarization completion (5 min timeout)
-- [ ] Staple ticket to .dmg
-- [ ] Create release with signed/notarized build
-- [ ] Publish SHA256 checksums
+- [ ] `BUILD_CERTIFICATE_BASE64` present → the run logs `SIGNING_MODE=full` (absent → `adhoc`, unsigned preview)
+- [ ] Build creates a signed universal `.dmg`
+- [ ] Tauri notarizes and staples the DMG when `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` are set
+- [ ] `softprops/action-gh-release` publishes the DMG to the GitHub release
 
 ## Phase 5: Post-Release Verification
 
