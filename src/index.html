@@ -8,6 +8,9 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ghost</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script type="module" src="/main.js" defer></script>
   </head>
 
@@ -56,8 +59,8 @@
           <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Workflows</span>
           </button>
-          <button class="nav__item" data-view="pls" role="tab" aria-selected="false" type="button">
-            <span class="nav__ico" aria-hidden="true">✨</span><span>AI Copilot</span>
+          <button class="nav__item" data-view="guard-desk" role="tab" aria-selected="false" type="button">
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span><span>Guard Desk</span>
           </button>
           <button class="nav__item" id="navExperimental" data-view="experimental" role="tab" aria-selected="false" type="button" hidden>
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-flask"/></svg></span><span>Experimental</span>
@@ -77,7 +80,7 @@
       <div class="workspace">
         <!-- Accessibility permission gate -->
         <section id="perm-banner" class="banner banner--warn" hidden>
-          <span id="perm-text">Ghost needs Accessibility and Input Monitoring permission to watch and replay your actions.</span>
+          <span id="perm-text">Recording needs Accessibility and Input Monitoring. Organizer file filing works without them.</span>
           <div class="banner__actions">
             <button id="perm-grant" class="btn btn--small">Grant Access</button>
             <button id="perm-recheck" class="btn btn--ghost btn--small" type="button"><svg class="i"><use href="#i-refresh"/></svg> Re-check</button>
@@ -108,8 +111,9 @@
                 <div class="organizer-rule" id="organizerRuleRow">
                   <label class="organizer-field organizer-field--grow">
                     <span>Folder</span>
-                    <input type="text" id="organizerFolderPath" placeholder="/Users/you/Downloads" autocomplete="off" spellcheck="false" />
+                    <input type="text" id="organizerFolderPath" placeholder="Choose a folder on this Mac" autocomplete="off" spellcheck="false" />
                   </label>
+                  <button class="btn btn--ghost btn--small" id="organizerBrowseBtn" type="button" title="Pick a folder">Browse</button>
                   <label class="organizer-field organizer-trust-field">
                     <span>Trust</span>
                     <select id="permTrust" aria-label="How much autonomy to grant in this folder" title="Automate runs without asking; Ask first requires approval per action; Never refuses changes here">
@@ -218,37 +222,37 @@
               </section>
             </section>
 
-            <!-- View: AI Copilot -->
-            <section class="view" data-view="pls" role="tabpanel" aria-label="AI Copilot" hidden>
+            <!-- View: Guard Desk -->
+            <section class="view" data-view="guard-desk" role="tabpanel" aria-label="Guard Desk" hidden>
               <div class="app-grid">
                 <!-- Left Side: Check Compliance and AI OCR -->
                 <div class="app-main">
                   <section class="panel">
                     <div class="organizer-head">
-                      <h2>AI Verification &amp; Compliance</h2>
-                      <span class="organizer-pipeline" aria-hidden="true" style="color:var(--success)">Scan → Parse → Verify → Compliance Audit</span>
+                      <h2>Guard Desk</h2>
+                      <span class="organizer-pipeline" aria-hidden="true" style="color:var(--success)">Scan → Verify → Approve → POS Bridge</span>
                     </div>
                     <p class="panel__hint">Select an AI automation preset, or upload check &amp; ID images for local OCR (macOS/Windows). Scan verifies payees, limits, and signature authenticity on-device — nothing leaves your machine.</p>
                     
                     <div class="btn-row" style="margin-bottom:16px; align-items: center; gap: 12px; flex-wrap: wrap;">
-                      <button class="btn btn--primary" id="plsScanCheckBtn" type="button">📸 Scan Documents</button>
-                      <button class="btn btn--ghost btn--small" id="plsUploadCheckBtn" type="button" title="Upload a check image for local OCR">Upload Check</button>
-                      <button class="btn btn--ghost btn--small" id="plsUploadIdBtn" type="button" title="Upload an ID image for local OCR">Upload ID</button>
-                      <input type="file" id="plsCheckImageInput" accept="image/*" hidden />
-                      <input type="file" id="plsIdImageInput" accept="image/*" hidden />
-                      <span id="plsUploadStatus" style="font-size:0.75rem; color:var(--muted); min-width:120px;"></span>
+                      <button class="btn btn--primary" id="guardScanBtn" type="button">Scan documents</button>
+                      <button class="btn btn--ghost btn--small" id="guardUploadCheckBtn" type="button" title="Upload a check image for local OCR">Upload Check</button>
+                      <button class="btn btn--ghost btn--small" id="guardUploadIdBtn" type="button" title="Upload an ID image for local OCR">Upload ID</button>
+                      <input type="file" id="guardCheckImageInput" accept="image/*" hidden />
+                      <input type="file" id="guardIdImageInput" accept="image/*" hidden />
+                      <span id="guardUploadStatus" style="font-size:0.75rem; color:var(--muted); min-width:120px;"></span>
                       <label style="font-size:0.8rem; color:var(--muted); margin-left: 8px;">Select Preset:</label>
-                      <select id="plsSampleCheckSelect" style="height:36px; padding: 6px 12px; background:var(--bg-soft); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:0.85rem;" aria-label="Select preset scenario">
-                        <option value="john_doe">Financial Preset: Weekly Payroll Check (Valid)</option>
-                        <option value="jane_smith">Financial Preset: Out of State Check (Warning)</option>
-                        <option value="bad_check">Financial Preset: Signature Mismatch (Fail)</option>
+                      <select id="guardScenarioSelect" style="height:36px; padding: 6px 12px; background:var(--bg-soft); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:0.85rem;" aria-label="Select preset scenario">
+                        <option value="john_doe">Weekly payroll check (valid)</option>
+                        <option value="jane_smith">Over-limit check (manager review)</option>
+                        <option value="bad_check">Signature / ID mismatch (reject)</option>
                       </select>
                     </div>
                     
                     <!-- Simulated Check and ID Container (Glassmorphic) -->
-                    <div id="plsVisualContainer" style="display:none; flex-direction:column; gap:20px; margin:20px 0;">
+                    <div id="guardVisualContainer" style="display:none; flex-direction:column; gap:20px; margin:20px 0;">
                       <!-- Check Graphic (Glassmorphic) -->
-                      <div id="plsMockCheck" style="background: rgba(255, 255, 255, 0.03); color: var(--text); border: 1px solid var(--border); border-radius:12px; padding:20px; font-family:var(--mono); box-shadow:0 8px 32px rgba(0,0,0,0.3); position:relative; overflow:hidden; transition: all 0.3s ease; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+                      <div id="guardMockCheck" style="background: rgba(255, 255, 255, 0.03); color: var(--text); border: 1px solid var(--border); border-radius:12px; padding:20px; font-family:var(--mono); box-shadow:0 8px 32px rgba(0,0,0,0.3); position:relative; overflow:hidden; transition: all 0.3s ease; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
                         <!-- Routing lines & text -->
                         <div style="display:flex; justify-content:space-between; font-size:0.75rem; font-weight:bold; border-bottom:1px solid var(--border); padding-bottom:8px; color: var(--muted);">
                           <span>✨ DIGITAL FINANCIAL DOCUMENT</span>
@@ -274,11 +278,11 @@
                           </div>
                         </div>
                         <!-- Laser scanning overlay -->
-                        <div id="plsCheckScanBar" style="position:absolute; left:0; right:0; top:-4px; height:6px; background:var(--accent); box-shadow:0 0 14px var(--accent); opacity: 0.85; transition: top 0.05s linear;"></div>
+                        <div id="guardCheckScanBar" style="position:absolute; left:0; right:0; top:-4px; height:6px; background:var(--accent); box-shadow:0 0 14px var(--accent); opacity: 0.85; transition: top 0.05s linear;"></div>
                       </div>
                       
                       <!-- ID Graphic (Glassmorphic) -->
-                      <div id="plsMockId" style="background: rgba(255, 255, 255, 0.03); color: var(--text); border: 1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3); position:relative; overflow:hidden; transition: all 0.3s ease; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+                      <div id="guardMockId" style="background: rgba(255, 255, 255, 0.03); color: var(--text); border: 1px solid var(--border); border-radius:12px; padding:16px; display:flex; gap:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3); position:relative; overflow:hidden; transition: all 0.3s ease; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
                         <!-- Photo -->
                         <div style="width:85px; height:105px; background: rgba(255,255,255,0.05); border-radius:6px; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color: var(--text); font-size:2.4rem; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">👤</div>
                         <!-- Details -->
@@ -290,15 +294,15 @@
                           <div>EXPIRES: <span id="idExpiry" style="color:var(--success); font-weight:bold;">2029-12-15</span></div>
                         </div>
                         <!-- Laser scanning overlay -->
-                        <div id="plsIdScanBar" style="position:absolute; left:0; right:0; top:-4px; height:6px; background:var(--accent); box-shadow:0 0 14px var(--accent); opacity: 0.85; transition: top 0.05s linear;"></div>
+                        <div id="guardIdScanBar" style="position:absolute; left:0; right:0; top:-4px; height:6px; background:var(--accent); box-shadow:0 0 14px var(--accent); opacity: 0.85; transition: top 0.05s linear;"></div>
                       </div>
                     </div>
                     
                     <!-- Compliance Checklists and Analysis Results -->
-                    <div id="plsAnalysisResult" class="panel" style="display:none; background:var(--bg); border:1px solid var(--border); margin-top:20px;">
+                    <div id="guardAnalysisResult" class="panel" style="display:none; background:var(--bg); border:1px solid var(--border); margin-top:20px;">
                       <h3 style="margin-top:0; font-size:1rem; color:var(--text); display:flex; justify-content:space-between; align-items: center; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px;">
                         <span>AI Compliance Verification</span>
-                        <strong id="plsVerdict" style="padding:4px 10px; border-radius:6px; font-size:0.8rem; letter-spacing: 0.5px; border: 1px solid transparent;">VERIFYING...</strong>
+                        <strong id="guardVerdict" style="padding:4px 10px; border-radius:6px; font-size:0.8rem; letter-spacing: 0.5px; border: 1px solid transparent;">VERIFYING...</strong>
                       </h3>
                       <ul style="list-style:none; padding:0; margin:0; font-size:0.9rem; display:flex; flex-direction:column; gap:10px;">
                         <li id="chkRule1" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ Payee matches ID Name</li>
@@ -307,7 +311,7 @@
                         <li id="chkRule4" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ Fraud &amp; Signature Verification</li>
                         <li id="chkRule5" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ Store cashing limit check</li>
                       </ul>
-                      <div id="plsAiRecommendation" style="margin-top:14px; padding:10px 14px; border-radius:8px; font-size:0.85rem; background: rgba(141,123,255,0.08); border-left: 4px solid var(--accent); line-height: 1.4;">
+                      <div id="guardRecommendation" style="margin-top:14px; padding:10px 14px; border-radius:8px; font-size:0.85rem; background: rgba(46, 196, 162, 0.08); border-left: 4px solid var(--accent); line-height: 1.4;">
                       </div>
                     </div>
                   </section>
@@ -316,11 +320,11 @@
                 <!-- Right Side: POS and Replay Controls -->
                 <div class="app-sidebar" style="position:relative; top:0;">
                   <h2 style="margin:0 0 6px; font-size:1.05rem; display:flex; align-items:center; gap:8px;">
-                    <span>🖥️</span> Legacy Terminal (POS)
+                    <span><svg class="i"><use href="#i-layers"/></svg></span> POS Bridge
                   </h2>
-                  <p class="panel__hint">Simulates data entry into legacy banking software (e.g. PLS POS). Ghost's replay engine automates this field-by-field entry.</p>
+                  <p class="panel__hint">Mock legacy terminal. After you approve Guard Desk’s plan, Ghost types field-by-field.</p>
                   
-                  <div id="plsMockPOSForm" style="background:#101226; border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:12px; transition: all 0.3s ease;">
+                  <div id="guardPosForm" style="background:#101226; border:1px solid var(--border); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:12px; transition: all 0.3s ease;">
                     <label style="display:flex; flex-direction:column; gap:4px; font-size:0.8rem;">
                       <span style="color:var(--muted)">Payee Full Name</span>
                       <input type="text" id="posPayeeName" style="background:#070813; border:1px solid var(--border); border-radius:6px; padding:8px 12px; color:#fff; font-size:0.85rem; transition: border-color 0.2s;" disabled />
@@ -350,14 +354,15 @@
                   </div>
                   
                   <div class="btn-row" style="margin-top:12px;">
-                    <button class="btn btn--primary" id="plsAutofillBtn" type="button" disabled>⚡ Auto-Fill POS via Ghost</button>
-                    <button class="btn btn--ghost btn--small" id="plsResetBtn" type="button">🔄 Clear Form</button>
+                    <button class="btn btn--ghost" id="guardApproveBtn" type="button" disabled style="display:none">Approve plan</button>
+                    <button class="btn btn--primary" id="guardAutofillBtn" type="button" disabled>Auto-fill POS</button>
+                    <button class="btn btn--ghost btn--small" id="guardResetBtn" type="button">Clear</button>
                   </div>
                   
                   <!-- Replay Audit Log -->
-                  <div id="plsReplayLogContainer" style="display:none; margin-top:16px; width: 100%;">
+                  <div id="guardReplayLogContainer" style="display:none; margin-top:16px; width: 100%;">
                     <h3 style="margin:0 0 6px; font-size:0.85rem; color:var(--muted);">Ghost Replay Log</h3>
-                    <div id="plsReplayLog" style="background:#070813; border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--mono); font-size:0.8rem; height:130px; overflow-y:auto; color:var(--success); display:flex; flex-direction:column; gap:6px;">
+                    <div id="guardReplayLog" style="background:#070813; border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--mono); font-size:0.8rem; height:130px; overflow-y:auto; color:var(--success); display:flex; flex-direction:column; gap:6px;">
                     </div>
                   </div>
                 </div>
@@ -465,8 +470,8 @@
           <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span>
           <h2 id="onboarding-title">Welcome to Ghost</h2>
           <p class="onboarding__lead">
-            Ghost helps you turn repeated desktop work into routines you can inspect,
-            approve, audit, and undo.
+            Clean a messy folder, run a compliance check, or record a routine —
+            Ghost shows the plan, waits for your approval, then keeps an audit trail you can undo.
           </p>
           <p class="onboarding__privacy"><svg class="i"><use href="#i-lock"/></svg>Ghost Guard blocks sensitive text-field capture and suppresses secret-like keystrokes.</p>
           <div class="onboarding__actions">
@@ -536,14 +541,13 @@
           </div>
         </section>
 
-        <!-- Step 4: Secure your data (optional local password) -->
+        <!-- Step 4: Local unlock password (recommended) -->
         <section class="onboarding__step" data-step="3" hidden>
           <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span>
-          <h2>Secure your data</h2>
+          <h2>Protect this Mac (recommended)</h2>
           <p class="onboarding__lead">
-            Optionally protect Ghost with a password. Your recorded workflows are then
-            <strong>encrypted on this device</strong> and Ghost asks for the password
-            on launch.
+            Add a <strong>local unlock password</strong> so workflows stay encrypted at rest
+            (Argon2id + AES-256-GCM). Nothing is uploaded. You can skip — Organizer still works.
           </p>
           <input type="password" id="setupPassword" class="auth-input"
                  placeholder="Password (min 8 characters)" autocomplete="new-password"
@@ -566,11 +570,11 @@
         <section class="onboarding__step" data-step="4" hidden>
           <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-check-circle"/></svg></span>
           <h2>You're all set</h2>
-          <p class="onboarding__lead">Three steps to your first automation:</p>
+          <p class="onboarding__lead">Start with what you need today:</p>
           <ol class="onboarding__list">
-            <li><strong>Start Recording</strong>, then do your task once.</li>
-            <li>Hit <strong>Stop</strong> when you're done.</li>
-            <li>Review and approve before Ghost replays anything.</li>
+            <li><strong>Organizer</strong> — Browse Downloads, scan, approve, undo.</li>
+            <li><strong>Guard Desk</strong> — Scan (or upload), approve, Auto-fill POS.</li>
+            <li><strong>Record</strong> — Capture once, review every step, replay only what you approve.</li>
           </ol>
           <div class="onboarding__actions">
             <button class="btn btn--ghost btn--small" id="onboardingBack4" type="button">Back</button>
