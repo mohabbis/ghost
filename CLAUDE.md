@@ -147,6 +147,7 @@ src-tauri/src/
     compression.rs       # compress_workflow (event compression -> review timeline)
     diagnostics.rs       # config, telemetry export, performance, is_experimental_enabled
     organizer.rs         # organizer_plan / organizer_execute / organizer_list_executions / organizer_undo
+    filing.rs            # preview_file_filing / estimate_filing_savings (read-only, audience-aware filing preview)
     updates.rs           # updater surface
     experimental.rs      # AI, observer, cloud sync, analytics, visual checks (feature-gated)
   core/
@@ -166,6 +167,8 @@ src-tauri/src/
     migrations.rs, zones.rs, executions.rs, milestones.rs   # milestones.rs: local-only first-touch timing (no network)
   organizer/
     scanner.rs, classifier.rs, naming.rs, conflict.rs, planner.rs, executor.rs, undo.rs
+  filing/
+    mod.rs, finance.rs, academic.rs, period.rs, preview.rs, savings.rs   # read-only filing preview + savings estimate (see docs/filing-profiles.md)
   audit/
     audit_log.rs, undo_journal.rs
 ```
@@ -228,7 +231,7 @@ Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 - `commands/compression.rs` for the `compress_workflow` event-compression command;
 - `commands/diagnostics.rs` for config, telemetry export, performance summaries, and `is_experimental_enabled`;
 - `commands/organizer.rs` for the Organizer plan/execute/history/undo surface;
-- `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; see `src/filing/` and `docs/filing-profiles.md`);
+- `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; see `src-tauri/src/filing/` and `docs/filing-profiles.md`);
 - `commands/updates.rs` for the updater;
 - `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
