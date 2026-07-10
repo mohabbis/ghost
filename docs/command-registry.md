@@ -135,6 +135,7 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `inspect_element` | stable | – | – | ✓ | – | – | ✓ | high | Reads the UI element at coordinates via the accessibility API; returns app/window metadata. |
 | `inspect_element_at_cursor` | stable | – | – | ✓ | – | – | ✓ | high | Same, at the current cursor position. |
 | `run_ocr_on_image` | stable | – | – | ✓ | – | – | – | high | Runs local OCR (macOS Vision / Windows OCR) on user-supplied image bytes; returns text blocks with normalized bounds. No network. |
+| `parse_id_document` | stable | – | – | – | – | – | – | low | Deterministic ID-document parsing (`core/id_scan.rs`) over already-OCR'd text; returns structured fields + derived signals (age, expiry state, review flags). Pure text, no image/IO/network. |
 | `save_workflow` | stable | ✓ | – | – | – | ~ | – | medium | Writes workflow JSON to the data dir; encrypted when local auth is configured. Name sanitized. |
 | `load_workflow` | stable | ✓ | – | – | – | ~ | – | medium | Reads workflow JSON; decryption requires unlock. |
 | `delete_workflow` | stable | ✓ | – | – | – | – | – | medium | Deletes a *workflow file* in app data (never a user file). Name sanitized. |

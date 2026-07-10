@@ -45,6 +45,8 @@ pub fn run() {
             commands::inspect_element_at_cursor,
             // Local OCR on user-selected images (macOS Vision / Windows OCR).
             commands::run_ocr_on_image,
+            // Deterministic ID-document parsing over OCR'd text (no image, no IO).
+            commands::parse_id_document,
             commands::save_workflow,
             commands::load_workflow,
             commands::delete_workflow,

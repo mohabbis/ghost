@@ -383,6 +383,30 @@ pub fn run_ocr_on_image(image_bytes: Vec<u8>) -> Result<Vec<crate::core::ocr::Oc
     crate::core::ocr::run_ocr(&image_bytes).map_err(|e| e.to_string())
 }
 
+/// Parse an identity document (driver's license / state ID / passport) from
+/// OCR-extracted text into structured, reviewable fields plus derived
+/// compliance signals (age, expiry state, review flags).
+///
+/// Risk class: `safe-read` — pure, deterministic text parsing. Touches no
+/// files, no network, no OS input, no screen contents, and no secrets. The
+/// image OCR that produced `text` is a separate `sensitive-read` step
+/// ([`run_ocr_on_image`]); this command only sees the resulting text. It never
+/// decides an outcome — it extracts and annotates so the operator can review.
+#[tauri::command]
+pub fn parse_id_document(text: String) -> Result<crate::core::id_scan::IdScan, String> {
+    const MAX_TEXT_BYTES: usize = 100 * 1024;
+    if text.trim().is_empty() {
+        return Err("No text to parse".into());
+    }
+    if text.len() > MAX_TEXT_BYTES {
+        return Err(format!(
+            "Text exceeds {MAX_TEXT_BYTES} byte limit ({} bytes)",
+            text.len()
+        ));
+    }
+    Ok(crate::core::id_scan::scan_id(&text))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +454,21 @@ mod tests {
     fn run_ocr_on_image_rejects_empty_and_oversized() {
         assert!(run_ocr_on_image(vec![]).is_err());
         assert!(run_ocr_on_image(vec![0u8; 20 * 1024 * 1024 + 1]).is_err());
+    }
+
+    #[test]
+    fn parse_id_document_rejects_empty_and_oversized() {
+        assert!(parse_id_document("   ".into()).is_err());
+        assert!(parse_id_document("x".repeat(100 * 1024 + 1)).is_err());
+    }
+
+    #[test]
+    fn parse_id_document_returns_structured_fields() {
+        let scan = parse_id_document(
+            "DRIVER LICENSE\nNAME: JOHN DOE\nDL NO: D1234567\nEXP: 2030-01-01".into(),
+        )
+        .expect("valid text parses");
+        assert_eq!(scan.name.as_deref(), Some("JOHN DOE"));
+        assert_eq!(scan.id_number.as_deref(), Some("D1234567"));
     }
 }
