@@ -31,19 +31,51 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
+      # Accept the signing secrets under either naming convention: the names this
+      # workflow historically used, or the MACOS_*/alternate names documented in
+      # docs/macos-signing-checklist.md. Missing secrets resolve to "" so the
+      # `${A:-$B}` fallbacks pick whichever set the maintainer actually added.
       - name: Configure macOS signing
+        env:
+          CERT_A: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          CERT_B: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERT_C: ${{ secrets.MACOS_CERTIFICATE }}
+          CERT_PW_A: ${{ secrets.P12_PASSWORD }}
+          CERT_PW_B: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CERT_PW_C: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          IDENTITY_A: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          IDENTITY_B: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID_A: ${{ secrets.APPLE_ID }}
+          APPLE_ID_B: ${{ secrets.MACOS_APPLE_ID }}
+          APPLE_PW_A: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_PW_B: ${{ secrets.MACOS_APPLE_PASSWORD }}
+          APPLE_PW_C: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TEAM_A: ${{ secrets.APPLE_TEAM_ID }}
+          TEAM_B: ${{ secrets.MACOS_TEAM_ID }}
         run: |
-          if [ -n "${{ secrets.BUILD_CERTIFICATE_BASE64 }}" ]; then
+          CERT="${CERT_A:-${CERT_B:-$CERT_C}}"
+          CERT_PW="${CERT_PW_A:-${CERT_PW_B:-$CERT_PW_C}}"
+          IDENTITY="${IDENTITY_A:-$IDENTITY_B}"
+          A_ID="${APPLE_ID_A:-$APPLE_ID_B}"
+          A_PW="${APPLE_PW_A:-${APPLE_PW_B:-$APPLE_PW_C}}"
+          TEAM="${TEAM_A:-$TEAM_B}"
+          if [ -n "$CERT" ]; then
             echo "SIGNING_MODE=full" >> "$GITHUB_ENV"
-            echo "APPLE_CERTIFICATE=${{ secrets.BUILD_CERTIFICATE_BASE64 }}" >> "$GITHUB_ENV"
-            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.P12_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> "$GITHUB_ENV"
-            echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> "$GITHUB_ENV"
-            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> "$GITHUB_ENV"
-            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> "$GITHUB_ENV"
+            printf 'APPLE_CERTIFICATE<<__GHOST_EOF__\n%s\n__GHOST_EOF__\n' "$CERT" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PW" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=${IDENTITY:--}" >> "$GITHUB_ENV"
+            if [ -n "$A_ID" ] && [ -n "$A_PW" ] && [ -n "$TEAM" ]; then
+              echo "APPLE_ID=$A_ID" >> "$GITHUB_ENV"
+              echo "APPLE_PASSWORD=$A_PW" >> "$GITHUB_ENV"
+              echo "APPLE_TEAM_ID=$TEAM" >> "$GITHUB_ENV"
+              echo "macOS signing: FULL (Developer ID cert found); notarization: ENABLED"
+            else
+              echo "macOS signing: FULL (Developer ID cert found); notarization: SKIPPED (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID not all set under any known name)"
+            fi
           else
             echo "SIGNING_MODE=adhoc" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "macOS signing: ADHOC (no Developer ID cert secret found — unsigned preview build)"
           fi
 
       - name: Build universal macOS DMG
