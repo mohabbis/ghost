@@ -130,6 +130,100 @@ impl AuditLog {
         out
     }
 
+    /// Render the log as a Markdown compliance report: an executive summary
+    /// with metrics followed by an itemized tabular ledger of every event,
+    /// complete with the run's tamper-evident seal and link.
+    pub fn to_compliance_report(
+        &self,
+        execution_id: &str,
+        created_at: &str,
+        hash: &str,
+        prev_hash: &str,
+    ) -> String {
+        let mut out = String::new();
+        out.push_str("# Ghost Organizer Compliance Report\n\n");
+
+        out.push_str("## Executive Summary\n\n");
+
+        let mut applied = 0;
+        let mut skipped = 0;
+        let mut failed = 0;
+        let mut automated = 0;
+        let mut user_approved = 0;
+
+        for event in &self.events {
+            match &event.outcome {
+                ActionOutcome::Applied => applied += 1,
+                ActionOutcome::Skipped { .. } => skipped += 1,
+                ActionOutcome::Failed { .. } => failed += 1,
+            }
+            match event.provenance {
+                Some(Provenance::Automated) => automated += 1,
+                Some(Provenance::UserApproved) => user_approved += 1,
+                None => {}
+            }
+        }
+
+        let total = self.events.len();
+
+        out.push_str(&format!("* **Execution ID**: `{}`\n", execution_id));
+        out.push_str(&format!("* **Timestamp**: `{}`\n", created_at));
+        out.push_str(&format!("* **Tamper-Evident Seal (SHA-256)**: `{}`\n", hash));
+        out.push_str(&format!("* **Prior Execution Link**: `{}`\n\n", prev_hash));
+
+        out.push_str("### Run Outcome Stats\n\n");
+        out.push_str(&format!("* **Total Actions Processed**: {}\n", total));
+        out.push_str(&format!("* **Successfully Applied (Moved/Renamed)**: {}\n", applied));
+        out.push_str(&format!("* **Skipped**: {}\n", skipped));
+        out.push_str(&format!("* **Failed**: {}\n", failed));
+        
+        let total_prov = automated + user_approved;
+        if total_prov > 0 {
+            let auto_rate = (automated as f64 / total_prov as f64) * 100.0;
+            out.push_str(&format!("* **Automation Rate**: {:.1}%\n\n", auto_rate));
+        } else {
+            out.push_str("* **Automation Rate**: N/A\n\n");
+        }
+
+        out.push_str("## Itemized Audit Ledger\n\n");
+        out.push_str("| Timestamp | Action | Source Path | Target / Details | Outcome | Rule | Authorization |\n");
+        out.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+
+        let escape_md = |s: &str| s.replace('|', "\\|");
+
+        for event in &self.events {
+            let (kind, path, target) = describe_capability(&event.capability);
+            let outcome_str = match &event.outcome {
+                ActionOutcome::Applied => "✅ Applied".to_string(),
+                ActionOutcome::Skipped { reason } => format!("⚠️ Skipped ({})", reason),
+                ActionOutcome::Failed { error } => format!("❌ Failed ({})", error),
+            };
+            let rule = event
+                .rule_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "N/A".to_string());
+            let auth = match event.provenance {
+                Some(Provenance::Automated) => "Automated",
+                Some(Provenance::UserApproved) => "Approved",
+                None => "N/A",
+            };
+
+            out.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                escape_md(&event.at),
+                escape_md(kind),
+                escape_md(&path),
+                escape_md(&target),
+                escape_md(&outcome_str),
+                escape_md(&rule),
+                escape_md(auth)
+            ));
+        }
+
+        out
+    }
+
     /// The recorded events, in the order they happened.
     pub fn events(&self) -> &[AuditEvent] {
         &self.events
@@ -337,5 +431,43 @@ mod tests {
 
         let back: AuditLog = serde_json::from_value(value).unwrap();
         assert_eq!(back, log);
+    }
+
+    #[test]
+    fn compliance_report_formatting_and_stats() {
+        let mut log = AuditLog::new();
+        log.record_attributed(
+            Capability::MoveFile {
+                from: PathBuf::from("/z/a.pdf"),
+                to: PathBuf::from("/z/Documents/a.pdf"),
+            },
+            ActionOutcome::Applied,
+            Some(PathBuf::from("/z")),
+            Some(Provenance::UserApproved),
+        );
+        log.record_attributed(
+            Capability::DeleteFile {
+                path: PathBuf::from("/z/b.pdf"),
+            },
+            ActionOutcome::Skipped {
+                reason: "policy denied".into(),
+            },
+            None,
+            None,
+        );
+
+        let report = log.to_compliance_report("test-exec-id", "1700000000", "hash123", "prev456");
+        assert!(report.contains("# Ghost Organizer Compliance Report"));
+        assert!(report.contains("**Execution ID**: `test-exec-id`"));
+        assert!(report.contains("**Timestamp**: `1700000000`"));
+        assert!(report.contains("**Tamper-Evident Seal (SHA-256)**: `hash123`"));
+        assert!(report.contains("**Prior Execution Link**: `prev456`"));
+        assert!(report.contains("Successfully Applied (Moved/Renamed)**: 1"));
+        assert!(report.contains("Skipped**: 1"));
+        assert!(report.contains("Failed**: 0"));
+        assert!(report.contains("a.pdf"));
+        assert!(report.contains("b.pdf"));
+        assert!(report.contains("Approved"));
+        assert!(report.contains("N/A"));
     }
 }

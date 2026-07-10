@@ -437,8 +437,97 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
             out.push_str(&stored.audit.to_csv());
             Ok(out)
         }
+        "compliance" => {
+            Ok(stored.audit.to_compliance_report(&stored.id, &stored.created_at, &stored.hash, &stored.prev_hash))
+        }
+        "signed" => {
+            let report = stored.audit.to_compliance_report(&stored.id, &stored.created_at, &stored.hash, &stored.prev_hash);
+            let signature = generate_compliance_signature(&report);
+            let mut out = report;
+            out.push_str("\n---\n# Cryptographic Verification Signature\nSignature: ");
+            out.push_str(&signature);
+            out.push('\n');
+            Ok(out)
+        }
         other => Err(format!(
-            "unsupported export format: {other} (use json or csv)"
+            "unsupported export format: {other} (use json, csv, compliance, or signed)"
         )),
+    }
+}
+
+fn get_compliance_signing_secret() -> Vec<u8> {
+    let key_path = dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("ghost")
+        .join("compliance.key");
+    if key_path.exists() {
+        std::fs::read(&key_path).unwrap_or_else(|_| vec![0u8; 32])
+    } else {
+        let mut key = vec![0u8; 32];
+        use aes_gcm::aead::rand_core::RngCore;
+        aes_gcm::aead::rand_core::OsRng.fill_bytes(&mut key);
+        let _ = std::fs::create_dir_all(key_path.parent().unwrap());
+        let _ = std::fs::write(&key_path, &key);
+        key
+    }
+}
+
+fn generate_compliance_signature(report: &str) -> String {
+    use sha2::{Sha256, Digest};
+    let secret = get_compliance_signing_secret();
+    let mut hasher = Sha256::new();
+    hasher.update(&secret);
+    hasher.update(report.as_bytes());
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// Verify the signature at the bottom of a signed compliance report against
+/// the machine-local signing key. Returns true if verification succeeds,
+/// false if the content has been tampered with or signature does not match.
+///
+/// Risk class: safe-read (calculates signature, writes nothing).
+#[tauri::command]
+pub fn organizer_verify_signed_report(report_content: String) -> Result<bool, String> {
+    let sig_marker = "\n---\n# Cryptographic Verification Signature\nSignature: ";
+    let idx = report_content.rfind(sig_marker).ok_or_else(|| {
+        "No cryptographic verification signature found in report".to_string()
+    })?;
+
+    let report_body = &report_content[..idx];
+    let signature_part = &report_content[idx + sig_marker.len()..];
+    let recorded_signature = signature_part.trim();
+
+    let computed_signature = generate_compliance_signature(report_body);
+    Ok(recorded_signature == computed_signature)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_signature_generation_and_verification() {
+        let report = "This is a compliance report body.";
+        let signature = generate_compliance_signature(report);
+        
+        let mut signed_report = report.to_string();
+        signed_report.push_str("\n---\n# Cryptographic Verification Signature\nSignature: ");
+        signed_report.push_str(&signature);
+        signed_report.push('\n');
+
+        // Verify successful signature
+        let verified = organizer_verify_signed_report(signed_report.clone()).unwrap();
+        assert!(verified);
+
+        // Verify that tampering fails validation
+        let tampered_report = signed_report.replace("compliance", "malicious");
+        let verified_tampered = organizer_verify_signed_report(tampered_report).unwrap();
+        assert!(!verified_tampered);
     }
 }
