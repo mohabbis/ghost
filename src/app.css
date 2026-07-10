@@ -907,6 +907,31 @@ body[data-view="organize"] .rail-record { display: none; }
   font-size: 14px;
 }
 
+/* Plan Filing view: name paste box + savings input grid. Reuses the
+   .organizer-field control styling; only the layout is new here. */
+.filing-names-field {
+  margin-top: 12px;
+}
+
+.filing-names-field textarea {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  resize: vertical;
+  min-height: 96px;
+}
+
+.filing-savings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .organizer-perms {
   border: 1px solid var(--border);
   border-radius: 8px;

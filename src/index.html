@@ -53,6 +53,9 @@
           <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span><span>Organize</span>
           </button>
+          <button class="nav__item" data-view="filing" role="tab" aria-selected="false" type="button">
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Plan Filing</span>
+          </button>
           <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span><span>Record &amp; Replay</span>
           </button>
@@ -142,6 +145,61 @@
                 </div>
 
                 <div class="organizer-result" id="organizerResult" aria-live="polite"></div>
+              </section>
+            </section>
+
+            <!-- View: Plan Filing (audience-aware, read-only filing preview + savings) -->
+            <section class="view" data-view="filing" role="tabpanel" aria-label="Plan filing" hidden>
+              <section class="panel" aria-labelledby="filing-heading">
+                <div class="organizer-head">
+                  <h2 id="filing-heading">Plan Filing</h2>
+                  <span class="organizer-pipeline" aria-hidden="true">Paste names → Preview → Approve in Organizer</span>
+                </div>
+                <p class="panel__hint">Preview how a batch of files would be filed by type and reporting period — for finance reports or student coursework. This reads only the file <em>names</em> you paste; it never touches your disk. To actually move files, use the Organizer, which adds approval, audit, and undo.</p>
+
+                <div class="organizer-zone">
+                  <label class="organizer-field">
+                    <span>Profile</span>
+                    <select id="filingAudience" aria-label="Filing profile">
+                      <option value="finance" selected>Finance &amp; operations</option>
+                      <option value="student">Student coursework</option>
+                    </select>
+                  </label>
+                  <label class="organizer-field organizer-field--grow">
+                    <span>Destination root (optional)</span>
+                    <input type="text" id="filingRoot" placeholder="Defaults to the profile's folder" autocomplete="off" spellcheck="false" />
+                  </label>
+                </div>
+
+                <label class="organizer-field organizer-field--grow filing-names-field">
+                  <span>File names (one per line)</span>
+                  <textarea id="filingNames" rows="6" spellcheck="false" placeholder="Q2 2026 Income Statement.xlsx&#10;Balance Sheet 2026-06.xlsx"></textarea>
+                </label>
+
+                <div class="btn-row">
+                  <button class="btn btn--primary" id="filingPreviewBtn" type="button">Preview Filing</button>
+                  <button class="btn btn--ghost btn--small" id="filingSampleBtn" type="button">Load sample</button>
+                  <button class="btn btn--ghost btn--small" id="filingClearBtn" type="button">Clear</button>
+                </div>
+
+                <div class="organizer-result" id="filingResult" aria-live="polite"></div>
+              </section>
+
+              <section class="panel" aria-labelledby="savings-heading">
+                <h2 id="savings-heading">Savings estimate</h2>
+                <p class="panel__hint">A transparent, arithmetic estimate of the time — and, with an hourly rate, the cost — a reviewed filing workflow saves per year. Every assumption is shown, and nothing is sent anywhere.</p>
+                <div class="filing-savings-grid">
+                  <label class="organizer-field"><span>Files per period</span><input type="number" id="savingsFiles" min="0" step="1" value="20" /></label>
+                  <label class="organizer-field"><span>Periods per year</span><input type="number" id="savingsPeriods" min="0" step="1" value="12" /></label>
+                  <label class="organizer-field"><span>Minutes per file (by hand)</span><input type="number" id="savingsManual" min="0" step="0.5" value="5" /></label>
+                  <label class="organizer-field"><span>Minutes per file (assisted)</span><input type="number" id="savingsAssisted" min="0" step="0.5" placeholder="0.5 default" /></label>
+                  <label class="organizer-field"><span>Hourly rate (optional)</span><input type="number" id="savingsRate" min="0" step="1" placeholder="e.g. 40" /></label>
+                  <label class="organizer-field"><span>Manual error rate % (optional)</span><input type="number" id="savingsErrorRate" min="0" max="100" step="1" placeholder="0" /></label>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn--primary" id="savingsEstimateBtn" type="button">Estimate savings</button>
+                </div>
+                <div class="organizer-result" id="savingsResult" aria-live="polite"></div>
               </section>
             </section>
 

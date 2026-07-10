@@ -47,6 +47,16 @@ See `docs/audiences.md` for who each profile serves.
 - `estimate_filing_savings(inputs)` → `SavingsEstimate`. Pure arithmetic; the
   estimate lists every default it applied so the figure is auditable.
 
+## UI surface
+
+Both commands are wired into the app's **Plan Filing** view (`data-view="filing"`
+in `src/index.html`, `filingInit` in `src/main.js`). The user picks a profile,
+pastes a list of file names (nothing is read from disk), and previews the
+proposed folders with per-file confidence/review badges; a second panel runs the
+savings estimator over volume/cadence/time inputs and shows every assumption.
+The view is read-only by design and points users to the Organizer to actually
+apply changes with approval, audit, and undo.
+
 ## Savings model
 
 ```text

@@ -3640,6 +3640,162 @@ async function guardRunAutofillReplay(data) {
   autofillBtn.disabled = false;
 }
 
+// ===== Plan Filing (audience-aware, read-only filing preview + savings) =====
+// Wires the safe-read `preview_file_filing` and `estimate_filing_savings`
+// commands. Preview reasons only over the file *names* the user pastes — it
+// never reads the disk. Applying changes still goes through the Organizer's
+// approve -> audit -> undo pipeline.
+
+const FILING_SAMPLES = {
+  finance: [
+    "Q2 2026 Income Statement.xlsx",
+    "Balance Sheet 2026-06.xlsx",
+    "Cash Flow Statement Q1 2026.xlsx",
+    "Trial Balance 2026-06.csv",
+    "Invoice 10432 Acme 2026-05-14.pdf",
+    "vacation.jpg",
+  ],
+  student: [
+    "CS101 Fall 2026 homework 3.pdf",
+    "MATH204 midterm study guide.docx",
+    "final project proposal.docx",
+    "ENG210 essay draft 2026-03.docx",
+    "lab report week 5.pdf",
+  ],
+};
+
+function filingParseNames(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function filingNum(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const raw = el.value.trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function filingMoney(v) {
+  if (v == null) return null;
+  return `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function filingConfidenceBadge(item) {
+  if (!item.recognized) return `<span class="org-badge org-badge--deny">unsorted</span>`;
+  if (item.needs_review) return `<span class="org-badge org-badge--confirm">review</span>`;
+  return `<span class="org-badge org-badge--allow">${Math.round((item.confidence || 0) * 100)}%</span>`;
+}
+
+async function filingPreview() {
+  if (!invoke) return notAvailable();
+  const audience = document.getElementById("filingAudience")?.value || "finance";
+  const root = document.getElementById("filingRoot")?.value || "";
+  const fileNames = filingParseNames(document.getElementById("filingNames")?.value);
+  const result = document.getElementById("filingResult");
+  if (!result) return;
+  if (!fileNames.length) {
+    result.innerHTML = `<div class="organizer-summary">Paste one or more file names above to preview how they would be filed.</div>`;
+    return;
+  }
+  let preview;
+  try {
+    preview = await invoke("preview_file_filing", { audience, root, fileNames });
+  } catch (err) {
+    return toastError("Filing preview failed: " + err);
+  }
+  const rows = (preview.items || [])
+    .map(
+      (it) => `<tr>
+        <td><code>${escapeHtml(it.file_name)}</code></td>
+        <td>${escapeHtml(it.category)}${it.period ? ` <span style="color:var(--muted)">· ${escapeHtml(it.period)}</span>` : ""}</td>
+        <td><code>${escapeHtml(it.relative_dir)}</code></td>
+        <td>${filingConfidenceBadge(it)}</td>
+      </tr>`,
+    )
+    .join("");
+  const cats = `${preview.distinct_categories} categor${preview.distinct_categories === 1 ? "y" : "ies"}`;
+  const periods = `${preview.distinct_periods} period${preview.distinct_periods === 1 ? "" : "s"}`;
+  result.innerHTML = `
+    <div class="organizer-summary">
+      Filing under <code>${escapeHtml(preview.root)}</code> ·
+      <strong>${preview.recognized}</strong> recognized ·
+      <strong>${preview.needs_review}</strong> need review ·
+      <strong>${preview.unrecognized}</strong> unsorted · ${cats}, ${periods}
+    </div>
+    <table class="organizer-table">
+      <thead><tr><th>File</th><th>Category</th><th>Proposed folder</th><th>Confidence</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="panel__hint">Preview only — no files were moved. Apply changes in the Organizer, which requires approval and writes an undo journal.</p>`;
+}
+
+async function filingEstimateSavings() {
+  if (!invoke) return notAvailable();
+  const result = document.getElementById("savingsResult");
+  if (!result) return;
+  const errorPct = filingNum("savingsErrorRate");
+  const inputs = {
+    files_per_period: filingNum("savingsFiles") ?? 0,
+    periods_per_year: filingNum("savingsPeriods") ?? 0,
+    minutes_per_file_manual: filingNum("savingsManual") ?? 0,
+    minutes_per_file_assisted: filingNum("savingsAssisted"),
+    hourly_rate: filingNum("savingsRate"),
+    manual_error_rate: errorPct == null ? null : errorPct / 100,
+    minutes_per_error_rework: null,
+  };
+  let est;
+  try {
+    est = await invoke("estimate_filing_savings", { inputs });
+  } catch (err) {
+    return toastError("Savings estimate failed: " + err);
+  }
+  const costLine =
+    est.cost_saved_per_year != null
+      ? ` · <strong>${filingMoney(est.cost_saved_per_year)}</strong>/yr saved`
+      : "";
+  const manualCost = est.manual_cost_per_year != null ? ` (${filingMoney(est.manual_cost_per_year)})` : "";
+  const assistedCost =
+    est.assisted_cost_per_year != null ? ` (${filingMoney(est.assisted_cost_per_year)})` : "";
+  const assumptions = (est.assumptions || []).map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+  result.innerHTML = `
+    <div class="organizer-summary organizer-summary--done">
+      ✓ <strong>${est.hours_saved_per_year}</strong> hours/yr saved (${est.reduction_pct}% less time)${costLine}
+    </div>
+    <table class="organizer-table">
+      <tbody>
+        <tr><th>Files per year</th><td>${est.files_per_year}</td></tr>
+        <tr><th>Manual time</th><td>${est.manual_hours_per_year} h/yr${manualCost}</td></tr>
+        <tr><th>Assisted time</th><td>${est.assisted_hours_per_year} h/yr${assistedCost}</td></tr>
+        <tr><th>Rework hours avoided</th><td>${est.rework_hours_avoided_per_year} h/yr</td></tr>
+      </tbody>
+    </table>
+    <h3 class="organizer-subhead">Assumptions</h3>
+    <ul class="organizer-audit">${assumptions}</ul>`;
+}
+
+function filingInit() {
+  const previewBtn = document.getElementById("filingPreviewBtn");
+  if (!previewBtn) return;
+  previewBtn.addEventListener("click", filingPreview);
+  document.getElementById("filingSampleBtn")?.addEventListener("click", () => {
+    const audience = document.getElementById("filingAudience")?.value || "finance";
+    const ta = document.getElementById("filingNames");
+    if (ta) ta.value = (FILING_SAMPLES[audience] || []).join("\n");
+  });
+  document.getElementById("filingClearBtn")?.addEventListener("click", () => {
+    const ta = document.getElementById("filingNames");
+    if (ta) ta.value = "";
+    const result = document.getElementById("filingResult");
+    if (result) result.innerHTML = "";
+  });
+  document.getElementById("savingsEstimateBtn")?.addEventListener("click", filingEstimateSavings);
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   wireUpControls();
   updateRecordingUI();
@@ -3651,4 +3807,5 @@ window.addEventListener("DOMContentLoaded", () => {
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
   initViewNav(); // left-nav view switcher
   guardDeskInit(); // Guard Desk + POS Bridge
+  filingInit(); // Plan Filing: read-only filing preview + savings estimate
 });
