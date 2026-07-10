@@ -79,7 +79,22 @@ jobs:
           fi
 
       - name: Build universal macOS DMG
-        run: cargo tauri build --target universal-apple-darwin --bundles dmg
+        env:
+          # When the updater signing key is configured, Tauri also emits the
+          # signed updater tarball (.app.tar.gz + .sig). Signing runs over the
+          # already-signed .app, so the order is correct. Without the key, the
+          # build is exactly the previous DMG-only build.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "Updater signing key present -> producing signed updater artifacts"
+            cargo tauri build --target universal-apple-darwin --bundles dmg \
+              --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "No updater signing key -> DMG only, skipping updater artifacts"
+            cargo tauri build --target universal-apple-darwin --bundles dmg
+          fi
 
       - name: Stage macOS asset
         run: |
@@ -93,12 +108,35 @@ jobs:
           cp Ghost.dmg public/downloads/Ghost.dmg
           echo "Built $DMG -> Ghost.dmg"
 
+      # The updater downloads the .app tarball (not the DMG); publish it and its
+      # signature under stable names the manifest job references. No-op unless
+      # the signing key produced the artifacts above.
+      - name: Stage macOS updater artifacts
+        run: |
+          TARBALL=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app.tar.gz" -print -quit || true)
+          if [ -n "$TARBALL" ] && [ -f "$TARBALL.sig" ]; then
+            cp "$TARBALL" Ghost.app.tar.gz
+            cp "$TARBALL.sig" Ghost.app.tar.gz.sig
+            echo "Staged updater artifacts: $TARBALL -> Ghost.app.tar.gz(.sig)"
+          else
+            echo "No macOS updater artifacts (updater signing key not configured)"
+          fi
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: Ghost.dmg
           fail_on_unmatched_files: true
+
+      - name: Upload macOS updater artifacts
+        if: ${{ hashFiles('Ghost.app.tar.gz') != '' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            Ghost.app.tar.gz
+            Ghost.app.tar.gz.sig
+          fail_on_unmatched_files: false
 
       - name: Upload website artifact
         uses: actions/upload-artifact@v7
@@ -127,7 +165,21 @@ jobs:
         run: choco install nsis -y --no-progress
 
       - name: Build Windows NSIS installer
-        run: cargo tauri build --bundles nsis
+        shell: pwsh
+        env:
+          # With the updater signing key set, Tauri emits the installer's .sig
+          # (computed over the exact installer bytes we publish). Without it,
+          # this is the previous plain installer build.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Host "Updater signing key present -> producing signed updater artifacts"
+            cargo tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          } else {
+            Write-Host "No updater signing key -> installer only, skipping updater artifacts"
+            cargo tauri build --bundles nsis
+          }
 
       - name: Stage Windows asset
         shell: pwsh
@@ -141,6 +193,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path public\downloads | Out-Null
           Copy-Item Ghost_Setup.exe public\downloads\Ghost_Setup.exe
           Write-Host "Built: $($installer.FullName) -> Ghost_Setup.exe"
+          # The updater downloads Ghost_Setup.exe and verifies it against this
+          # signature; publish it under a stable name for the manifest job.
+          $sig = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe.sig -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($sig) {
+            Copy-Item $sig.FullName Ghost_Setup.exe.sig
+            Write-Host "Staged updater signature: $($sig.FullName) -> Ghost_Setup.exe.sig"
+          } else {
+            Write-Host "No Windows updater signature (updater signing key not configured)"
+          }
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
@@ -149,9 +210,63 @@ jobs:
           files: Ghost_Setup.exe
           fail_on_unmatched_files: true
 
+      - name: Upload Windows updater signature
+        if: ${{ hashFiles('Ghost_Setup.exe.sig') != '' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Ghost_Setup.exe.sig
+          fail_on_unmatched_files: false
+
       - name: Upload website artifact
         uses: actions/upload-artifact@v7
         with:
           name: windows-website-binary
           path: public/downloads/Ghost_Setup.exe
           retention-days: 7
+
+  # Assemble and publish latest.json — the manifest the updater reads. Runs
+  # after both builds; a no-op unless the signing key produced updater
+  # signatures (so downloads keep working before auto-update is configured).
+  publish-manifest:
+    name: Publish updater manifest
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Assemble and upload latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          base="https://github.com/${REPO}/releases/download/${TAG}"
+          mkdir -p sigs
+          gh release download "$TAG" --repo "$REPO" --dir sigs \
+            --pattern 'Ghost.app.tar.gz.sig' --pattern 'Ghost_Setup.exe.sig' || true
+          if [ ! -f sigs/Ghost.app.tar.gz.sig ] || [ ! -f sigs/Ghost_Setup.exe.sig ]; then
+            echo "Updater signatures not published -> skipping latest.json (auto-update not configured)"
+            exit 0
+          fi
+          pub_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          jq -n \
+            --arg version "$version" \
+            --arg pub_date "$pub_date" \
+            --arg notes "See the release notes: https://github.com/${REPO}/releases/tag/${TAG}" \
+            --arg mac_url "${base}/Ghost.app.tar.gz" \
+            --arg win_url "${base}/Ghost_Setup.exe" \
+            --rawfile mac_sig sigs/Ghost.app.tar.gz.sig \
+            --rawfile win_sig sigs/Ghost_Setup.exe.sig \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": { signature: $mac_sig, url: $mac_url },
+                "darwin-x86_64":  { signature: $mac_sig, url: $mac_url },
+                "windows-x86_64": { signature: $win_sig, url: $win_url }
+              }
+            }' > latest.json
+          cat latest.json
+          gh release upload "$TAG" latest.json --repo "$REPO" --clobber
