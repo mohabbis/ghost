@@ -2913,6 +2913,11 @@ const GUARD_SCENARIOS = {
     idDob: "1992-08-14",
     idNumber: "DL-98234812",
     idExpiry: "2029-12-15",
+    idIssue: "2021-12-15",
+    idSex: "M",
+    idClass: "C",
+    idJurisdiction: "California",
+    idDocType: "drivers_license",
     rules: [
       { text: "Payee matches ID Name", status: "pass" },
       { text: "ID Expiration Validity (Expires 2029)", status: "pass" },
@@ -2938,6 +2943,11 @@ const GUARD_SCENARIOS = {
     idDob: "1985-11-23",
     idNumber: "NY-88219421",
     idExpiry: "2030-05-18",
+    idIssue: "2022-05-18",
+    idSex: "F",
+    idClass: "D",
+    idJurisdiction: "New York",
+    idDocType: "state_id",
     rules: [
       { text: "Payee matches ID Name", status: "pass" },
       { text: "ID Expiration Validity (Expires 2030)", status: "pass" },
@@ -2963,6 +2973,11 @@ const GUARD_SCENARIOS = {
     idDob: "1978-04-02",
     idNumber: "IL-10492842",
     idExpiry: "2026-02-14",
+    idIssue: "2018-02-14",
+    idSex: "M",
+    idClass: "C",
+    idJurisdiction: "Illinois",
+    idDocType: "drivers_license",
     rules: [
       { text: "Payee Name mismatch (ID shows John S. Smith)", status: "warn" },
       { text: "ID EXPIRED (Expired 2026-02-14)", status: "fail" },
@@ -3083,6 +3098,9 @@ function guardParseCheckText(text) {
   };
 }
 
+// Fallback ID parser used only when the deterministic Rust scanner
+// (`parse_id_document`) is unavailable (e.g. running outside the desktop app).
+// The backend `guardScanId` is the primary, unit-tested path.
 function guardParseIdText(text) {
   const idName = guardFirstMatch(text, [
     /NAME\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
@@ -3105,6 +3123,55 @@ function guardParseIdText(text) {
     idNumber: idNumber || "—",
     idExpiry: idExpiry || "—",
   };
+}
+
+// Human-readable label for the backend `documentType` enum value.
+function guardDocTypeLabel(docType) {
+  switch (docType) {
+    case "drivers_license":
+      return "Driver License";
+    case "state_id":
+      return "State ID";
+    case "passport":
+      return "Passport";
+    default:
+      return "ID Document";
+  }
+}
+
+// Map the backend IdScan (camelCase) onto the flat fields the Guard Desk UI and
+// compliance evaluator use.
+function guardIdScanToFields(scan) {
+  return {
+    idName: scan.name || "UNKNOWN",
+    idDob: scan.dob || "—",
+    idNumber: scan.idNumber || "—",
+    idExpiry: scan.expiry || "—",
+    idIssue: scan.issueDate || "—",
+    idAddress: scan.address || "—",
+    idSex: scan.sex || "—",
+    idClass: scan.class || "—",
+    idJurisdiction: scan.jurisdiction || "—",
+    idDocType: scan.documentType || "unknown",
+    idAge: typeof scan.age === "number" ? scan.age : null,
+    idExpired: typeof scan.expired === "boolean" ? scan.expired : null,
+    idExpiresSoon: typeof scan.expiresSoon === "boolean" ? scan.expiresSoon : null,
+    idFlags: Array.isArray(scan.flags) ? scan.flags : [],
+  };
+}
+
+// Run the deterministic backend ID scanner over OCR text, falling back to the
+// in-page JS parser if the command is missing or errors.
+async function guardScanId(idText) {
+  if (invoke) {
+    try {
+      const scan = await invoke("parse_id_document", { text: idText });
+      return guardIdScanToFields(scan);
+    } catch (err) {
+      console.warn("parse_id_document failed, using JS fallback:", err);
+    }
+  }
+  return guardParseIdText(idText);
 }
 
 function guardSignatureScore(payee, signature) {
@@ -3134,14 +3201,43 @@ function guardEvaluateCompliance(raw) {
   }
 
   const expiry = guardParseDate(raw.idExpiry);
-  if (expiry && expiry >= today) {
-    rules.push({ text: `ID Expiration Validity (Expires ${raw.idExpiry})`, status: "pass" });
-  } else if (expiry) {
+  const backendExpired = raw.idExpired === true;
+  const backendExpiresSoon = raw.idExpiresSoon === true;
+  if (backendExpired || (expiry && expiry < today)) {
     rules.push({ text: `ID EXPIRED (Expired ${raw.idExpiry})`, status: "fail" });
     failCount += 1;
+  } else if (expiry) {
+    if (backendExpiresSoon) {
+      rules.push({ text: `ID expires soon (${raw.idExpiry})`, status: "warn" });
+      warnCount += 1;
+    } else {
+      rules.push({ text: `ID Expiration Validity (Expires ${raw.idExpiry})`, status: "pass" });
+    }
   } else {
     rules.push({ text: "ID Expiration Validity (date not detected)", status: "warn" });
     warnCount += 1;
+  }
+
+  // Age check from the ID scan: cashing to a minor is a hard stop.
+  if (typeof raw.idAge === "number") {
+    if (raw.idAge < 18) {
+      rules.push({ text: `Cardholder age check (MINOR — age ${raw.idAge})`, status: "fail" });
+      failCount += 1;
+    } else {
+      rules.push({ text: `Cardholder age check (age ${raw.idAge})`, status: "pass" });
+    }
+  }
+
+  // Surface any remaining scanner review flags (low-confidence / missing fields)
+  // that did not already map to a specific rule above.
+  if (Array.isArray(raw.idFlags)) {
+    const covered = /expired|expires within|minor/i;
+    raw.idFlags
+      .filter((f) => !covered.test(f))
+      .forEach((f) => {
+        rules.push({ text: `ID scan: ${f}`, status: "warn" });
+        warnCount += 1;
+      });
   }
 
   const checkDate = guardParseDate(raw.date);
@@ -3218,16 +3314,18 @@ async function guardScanFromImages(checkFile, idFile) {
     checkText = guardOcrResultsToText(results);
     if (!checkText) throw new Error("No text recognized on check image");
   }
+  let idFields = null;
   if (idFile) {
     const bytes = await guardFileToBytes(idFile);
     const results = await invoke("run_ocr_on_image", { imageBytes: bytes });
     idText = guardOcrResultsToText(results);
     if (!idText) throw new Error("No text recognized on ID image");
+    idFields = await guardScanId(idText);
   }
 
   const parsed = {
     ...guardParseCheckText(checkText),
-    ...guardParseIdText(idText),
+    ...(idFields || guardParseIdText(idText)),
   };
   return guardEvaluateCompliance(parsed);
 }
@@ -3245,6 +3343,26 @@ function guardPopulateVisuals(data) {
   document.getElementById("idDob").textContent = data.idDob;
   document.getElementById("idNumber").textContent = data.idNumber;
   document.getElementById("idExpiry").textContent = data.idExpiry;
+
+  // Extended ID-scan fields (present on OCR scans and enriched presets; older
+  // preset data leaves them undefined, so default to an em dash).
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val || "—";
+  };
+  setText("idIssue", data.idIssue);
+  setText("idSex", data.idSex);
+  setText("idClass", data.idClass);
+  setText("idJurisdiction", data.idJurisdiction);
+  const docTypeEl = document.getElementById("idDocType");
+  if (docTypeEl) docTypeEl.textContent = guardDocTypeLabel(data.idDocType);
+
+  const flagsEl = document.getElementById("guardIdFlags");
+  if (flagsEl) {
+    const flags = Array.isArray(data.idFlags) ? data.idFlags : [];
+    flagsEl.textContent = flags.length ? `⚠ ${flags.join(" · ")}` : "";
+    flagsEl.style.display = flags.length ? "block" : "none";
+  }
 }
 
 function guardDeskInit() {
@@ -3378,27 +3496,33 @@ function guardShowComplianceResults(data) {
   }
   
   recEl.innerHTML = data.recommendation;
-  
-  // Fill rules
-  for (let i = 0; i < 5; i++) {
-    const li = document.getElementById(`chkRule${i+1}`);
-    const rule = data.rules[i];
-    if (rule) {
-      li.textContent = "";
+
+  // Render rules dynamically so ID-scan checks (age, expiry-soon, review flags)
+  // can extend the list beyond the original fixed five.
+  const ruleList = document.getElementById("guardRuleList");
+  if (ruleList) {
+    ruleList.innerHTML = "";
+    (data.rules || []).forEach((rule) => {
+      const li = document.createElement("li");
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.gap = "10px";
+      li.style.padding = "2px 0";
       const icon = document.createElement("span");
       if (rule.status === "pass") {
-        icon.innerHTML = "✅";
+        icon.textContent = "✅";
         li.style.color = "var(--text)";
       } else if (rule.status === "warn") {
-        icon.innerHTML = "⚠️";
+        icon.textContent = "⚠️";
         li.style.color = "var(--accent-warm)";
       } else {
-        icon.innerHTML = "❌";
+        icon.textContent = "❌";
         li.style.color = "#ef4444";
       }
       li.appendChild(icon);
       li.appendChild(document.createTextNode(" " + rule.text));
-    }
+      ruleList.appendChild(li);
+    });
   }
   
   resultPanel.style.display = "block";

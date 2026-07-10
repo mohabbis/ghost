@@ -7,6 +7,7 @@ pub mod compression;
 pub mod dry_run;
 pub mod events;
 pub mod execution;
+pub mod id_scan;
 pub mod knowledge;
 pub mod llm;
 pub mod ocr;
