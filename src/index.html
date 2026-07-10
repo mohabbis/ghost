@@ -287,11 +287,16 @@
                         <div style="width:85px; height:105px; background: rgba(255,255,255,0.05); border-radius:6px; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color: var(--text); font-size:2.4rem; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">👤</div>
                         <!-- Details -->
                         <div style="display:flex; flex-direction:column; gap:5px; font-size:0.8rem; flex-grow:1;">
-                          <div style="font-weight:bold; font-size:0.85rem; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:6px; letter-spacing: 1px; color: var(--text);">IDENTIFICATION CREDENTIAL</div>
+                          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:6px;">
+                            <span style="font-weight:bold; font-size:0.85rem; letter-spacing: 1px; color: var(--text);">IDENTIFICATION CREDENTIAL</span>
+                            <span id="idDocType" style="font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Driver License</span>
+                          </div>
                           <div>NAME: <strong id="idName" style="font-size:0.9rem; color: var(--accent-strong);">JOHN DOE</strong></div>
-                          <div>DOB: <span id="idDob" style="color: var(--muted);">1992-08-14</span></div>
-                          <div>ID NO: <span id="idNumber" style="color: var(--muted);">DL-98234812</span></div>
-                          <div>EXPIRES: <span id="idExpiry" style="color:var(--success); font-weight:bold;">2029-12-15</span></div>
+                          <div>DOB: <span id="idDob" style="color: var(--muted);">1992-08-14</span> · SEX: <span id="idSex" style="color: var(--muted);">M</span></div>
+                          <div>ID NO: <span id="idNumber" style="color: var(--muted);">DL-98234812</span> · CLASS: <span id="idClass" style="color: var(--muted);">C</span></div>
+                          <div>ISSUED: <span id="idIssue" style="color: var(--muted);">2021-12-15</span> · EXPIRES: <span id="idExpiry" style="color:var(--success); font-weight:bold;">2029-12-15</span></div>
+                          <div style="font-size:0.72rem; color:var(--muted);">JURISDICTION: <span id="idJurisdiction">California</span></div>
+                          <div id="guardIdFlags" style="display:none; font-size:0.72rem; color:var(--accent-warm); margin-top:2px;"></div>
                         </div>
                         <!-- Laser scanning overlay -->
                         <div id="guardIdScanBar" style="position:absolute; left:0; right:0; top:-4px; height:6px; background:var(--accent); box-shadow:0 0 14px var(--accent); opacity: 0.85; transition: top 0.05s linear;"></div>
@@ -304,7 +309,7 @@
                         <span>AI Compliance Verification</span>
                         <strong id="guardVerdict" style="padding:4px 10px; border-radius:6px; font-size:0.8rem; letter-spacing: 0.5px; border: 1px solid transparent;">VERIFYING...</strong>
                       </h3>
-                      <ul style="list-style:none; padding:0; margin:0; font-size:0.9rem; display:flex; flex-direction:column; gap:10px;">
+                      <ul id="guardRuleList" style="list-style:none; padding:0; margin:0; font-size:0.9rem; display:flex; flex-direction:column; gap:10px;">
                         <li id="chkRule1" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ Payee matches ID Name</li>
                         <li id="chkRule2" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ ID Expiration Validity</li>
                         <li id="chkRule3" style="display:flex; align-items:center; gap:10px; padding: 2px 0;">⏳ Check Date within 90 days limit</li>
