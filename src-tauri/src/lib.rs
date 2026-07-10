@@ -16,6 +16,7 @@ pub mod telemetry;
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(engine::GhostEngine::new());
 
@@ -142,6 +143,7 @@ pub fn run() {
             // writing an audit log and undo journal for every run.
             commands::organizer_list_zones,
             commands::organizer_list_folder_rules,
+            commands::organizer_default_paths,
             commands::organizer_create_zone,
             commands::organizer_add_folder_rule,
             commands::organizer_set_rule_trust,

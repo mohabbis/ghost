@@ -185,6 +185,7 @@ plan can never reach the filesystem.
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
 | `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
+| `organizer_default_paths` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns real Downloads/home/Documents paths for first-run Organizer UI. |
 | `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). Params: `name`, `description`, optional `renameDated` (default `false`). New Zones default to `Ask`; dated renaming only changes previewed destination names when explicitly enabled. |
 | `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. Accepts an optional `trust` (`automate`/`ask_first`/`never`); defaults to `ask_first` when omitted so old frontends behave unchanged. |
 | `organizer_set_rule_trust` | stable | ✓ | – | – | – | – | – | medium | **local-mutate (DB only).** Updates an existing rule's trust level by its path within the Zone. Errors if no such rule exists. Trust is *recorded* here but *enforced* server-side by the policy engine + executor — the frontend can't bypass it. |
