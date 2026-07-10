@@ -190,12 +190,7 @@ impl KnowledgeBase {
         // Look for key combinations (multiple keys without delay)
         let mut i = 0;
         while i < events.len() {
-            if let InputEvent::Key {
-                modifiers,
-                chars: _,
-                ..
-            } = &events[i]
-            {
+            if let InputEvent::Key { modifiers, .. } = &events[i] {
                 if *modifiers > 0 && i + 1 < events.len() {
                     if let InputEvent::Key { .. } = &events[i + 1] {
                         // Likely a shortcut
