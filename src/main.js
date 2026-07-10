@@ -1020,6 +1020,72 @@ function closeModal(modalId = "analysis-modal") {
   lastFocusedBeforeModal = null;
 }
 
+// ===== What is Ghost? =====
+// One canonical, always-available answer to "what is this, what does it do, and
+// what will it never do." Kept honest and consistent with README.md / AGENTS.md
+// so the product describes itself the same way everywhere. Static trusted copy.
+function openAbout() {
+  const modal = document.getElementById("about-modal");
+  if (!modal) return;
+  const content = modal.querySelector(".modal-content");
+  if (!content) return;
+
+  content.innerHTML = `
+    <h3>${icon("i-info")} What is Ghost?</h3>
+    <p class="about-lead"><strong>Ghost turns repetitive file and desktop work into routines you approve before they run.</strong> It's a local-first app for macOS and Windows — your files, logs, and history stay on your machine.</p>
+
+    <div class="about-section">
+      <h4 class="about-h">How it works</h4>
+      <div class="about-flow" aria-label="Plan, approve, act, audit, undo">
+        <span>Plan</span><span aria-hidden="true">→</span>
+        <span>You approve</span><span aria-hidden="true">→</span>
+        <span>Ghost acts</span><span aria-hidden="true">→</span>
+        <span>Audit log</span><span aria-hidden="true">→</span>
+        <span>Undo</span>
+      </div>
+      <p class="panel__hint" style="margin-top:8px;">Nothing changes until you approve the exact plan. Every change is logged, and reversible changes can be undone.</p>
+    </div>
+
+    <div class="about-section">
+      <h4 class="about-h">What it does today</h4>
+      <ul class="about-list">
+        <li><strong>Organize</strong> — pick a folder, preview every move and rename, approve, then undo if needed. Never deletes or overwrites silently.</li>
+        <li><strong>Plan Filing</strong> — preview how finance reports or student coursework would be sorted by type and period (from file names only), and estimate the time it saves.</li>
+        <li><strong>Guard Desk</strong> — read a check or ID image with on-device OCR and run compliance checks locally; nothing is uploaded.</li>
+        <li><strong>Record &amp; Replay</strong> — capture a task once, review each step, and replay only the steps you approved.</li>
+      </ul>
+    </div>
+
+    <div class="about-section">
+      <h4 class="about-h">What Ghost can't do yet</h4>
+      <ul class="about-list about-list--cant">
+        <li>Run unattended or while you're away — it's built for explicit, interruptible work.</li>
+        <li>Replay flawlessly across every app — when it can't find a control it falls back to coordinates, which can miss if the UI moves.</li>
+        <li>Ship as a fully signed and notarized installer — current builds are an early preview.</li>
+      </ul>
+    </div>
+
+    <div class="about-section">
+      <h4 class="about-h">What Ghost will never do</h4>
+      <ul class="about-list about-list--never">
+        <li>Use your camera or microphone.</li>
+        <li>Watch your screen in the background or observe you without an explicit, visible action.</li>
+        <li>Read your email, browser tabs, or documents unless you hand it a specific file or action.</li>
+        <li>Delete, overwrite, upload, or send anything silently.</li>
+        <li>Let AI act on its own — AI may only suggest; deterministic code executes only what you approved.</li>
+        <li>Store your data in the cloud or make network calls you didn't ask for.</li>
+      </ul>
+    </div>
+
+    <p class="panel__hint">In one line: Ghost is boring, inspectable, and reversible — automation you can trust because you approve it.</p>
+
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      <button class="btn btn--primary btn--small" data-close-modal="about-modal">Got it</button>
+    </div>`;
+
+  showModal(modal);
+}
+
 // ===== Settings =====
 
 // Cache the full config so we can send a complete GhostConfig back to the
@@ -2740,6 +2806,7 @@ function wireUpControls() {
   bind("perm-recheck", refreshPermissionBanner);
   bind("perm-restart", restartApp);
   bind("settingsBtn", openSettings);
+  bind("aboutBtn", openAbout);
   bind("lockBtn", lockApp);
 
   // Returning from System Settings should re-check permissions automatically, so

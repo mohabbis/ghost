@@ -1,9 +1,0 @@
-# Historical note
-
-The phase-7 release enhancements (optional updater artifacts, Azure Trusted
-Signing during the Windows build, conditional `--config` overrides) are now
-part of `.github/workflows/release.yml` itself, along with an atomic publish
-job and `SHA256SUMS.txt`.
-
-See `RELEASING.md` for the current release contract. This patch file is kept
-only as a pointer so old links do not 404.

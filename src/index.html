@@ -76,6 +76,7 @@
             Ready to record
           </div>
           <button class="btn btn--ghost btn--small" id="lockBtn" type="button" hidden><svg class="i"><use href="#i-lock"/></svg> Lock</button>
+          <button class="btn btn--ghost btn--small" id="aboutBtn" type="button" title="What Ghost is, what it does, and what it will never do"><svg class="i"><use href="#i-info"/></svg> What is Ghost?</button>
           <button class="btn btn--ghost btn--small" id="settingsBtn" type="button"><svg class="i"><use href="#i-gear"/></svg> Settings</button>
         </div>
       </nav>
@@ -495,6 +496,9 @@
     <div id="settings-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
       <div class="modal-content" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: min(520px, 92vw); max-height: 80vh; overflow-y: auto; color: var(--text);"></div>
     </div>
+    <div id="about-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-label="What is Ghost" tabindex="-1" style="background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: min(640px, 94vw); max-height: 86vh; overflow-y: auto; color: var(--text);"></div>
+    </div>
 
     <!-- Lock screen (shown on launch when a local password is configured) -->
     <div id="lock-screen" class="onboarding" hidden>
@@ -639,6 +643,7 @@
             <li><strong>Guard Desk</strong> — Scan (or upload), approve, Auto-fill POS.</li>
             <li><strong>Record</strong> — Capture once, review every step, replay only what you approve.</li>
           </ol>
+          <p class="onboarding__note">New here? <strong>“What is Ghost?”</strong> in the sidebar explains what it does — and what it will never do — anytime.</p>
           <div class="onboarding__actions">
             <button class="btn btn--ghost btn--small" id="onboardingBack4" type="button">Back</button>
             <button class="btn btn--primary" id="onboardingFinish" type="button">Start using Ghost</button>

@@ -16,6 +16,12 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
+/// Prefix of the placeholder public key shipped in `tauri.conf.json`. Until the
+/// maintainer generates a real updater keypair (see `docs/auto-update.md`), the
+/// config still carries this sentinel and auto-update must stay inert rather
+/// than surface signature-verification noise to users.
+const PUBKEY_PLACEHOLDER_PREFIX: &str = "REPLACE_WITH";
+
 /// What the UI needs to describe an available update to the user.
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateInfo {
@@ -29,11 +35,37 @@ pub struct UpdateInfo {
     pub date: Option<String>,
 }
 
+/// Whether a real updater public key is configured. Returns `false` when the
+/// key is missing, empty, or still the `tauri.conf.json` placeholder — in which
+/// case update checks/installs are intentional no-ops (auto-update is disabled
+/// until the maintainer completes the one-time key setup). Reads config via a
+/// JSON view so it stays correct across Tauri config-struct changes.
+fn updater_configured(app: &AppHandle) -> bool {
+    serde_json::to_value(app.config())
+        .ok()
+        .and_then(|cfg| {
+            cfg.get("plugins")
+                .and_then(|p| p.get("updater"))
+                .and_then(|u| u.get("pubkey"))
+                .and_then(|k| k.as_str())
+                .map(str::to_owned)
+        })
+        .map(|key| {
+            let key = key.trim();
+            !key.is_empty() && !key.starts_with(PUBKEY_PLACEHOLDER_PREFIX)
+        })
+        .unwrap_or(false)
+}
+
 /// Check the configured endpoint for a newer signed release. **Read-only**: it
 /// downloads nothing and changes nothing, so it is safe to call on launch.
-/// Returns `None` when the app is already current.
+/// Returns `None` when the app is already current, or when auto-update is not
+/// yet configured (no real signing key) so an unconfigured build stays quiet.
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    if !updater_configured(&app) {
+        return Ok(None);
+    }
     let updater = app.updater().map_err(|e| e.to_string())?;
     match updater.check().await.map_err(|e| e.to_string())? {
         Some(update) => Ok(Some(UpdateInfo {
@@ -52,6 +84,9 @@ pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, Stri
 /// failed verification surfaces as an error and nothing is installed.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    if !updater_configured(&app) {
+        return Err("Auto-update is not configured for this build.".into());
+    }
     let updater = app.updater().map_err(|e| e.to_string())?;
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
         return Err("No update is available to install.".into());
