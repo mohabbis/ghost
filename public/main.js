@@ -603,7 +603,7 @@ function guardDeskDemo() {
     { tag: "✓ pass", cls: "tag--new", strong: "Payee matches ID", desc: "JOHN DOE" },
     { tag: "✓ pass", cls: "tag--new", strong: "ID not expired", desc: "2029-12-15" },
     { tag: "✓ pass", cls: "tag--new", strong: "Check within 90 days", desc: "2026-07-09" },
-    { tag: "✓ pass", cls: "tag--new", strong: "Signature match", desc: "98.4%" },
+    { tag: "✓ pass", cls: "tag--new", strong: "Signature reviewed", desc: "on device" },
     { tag: "✓ pass", cls: "tag--new", strong: "Under cashing limit", desc: "$1,450.00" },
   ];
 
