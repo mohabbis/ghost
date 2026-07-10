@@ -1,10 +1,22 @@
 name: Release
 
+# Tag push (v*) builds both platforms, then a single publish job attaches every
+# asset + SHA256SUMS in one shot — so a failed Windows build never leaves a
+# Mac-only GitHub Release (and vice versa).
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to rebuild/republish (e.g. v1.2.4). Leave empty to use the ref name."
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -17,6 +29,9 @@ jobs:
   build-mac:
     name: Build macOS DMG
     runs-on: macos-latest
+    outputs:
+      signing_mode: ${{ steps.sign.outputs.signing_mode }}
+      notarization: ${{ steps.sign.outputs.notarization }}
     steps:
       - uses: actions/checkout@v7
 
@@ -31,11 +46,10 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked
 
-      # Accept the signing secrets under either naming convention: the names this
-      # workflow historically used, or the MACOS_*/alternate names documented in
-      # docs/macos-signing-checklist.md. Missing secrets resolve to "" so the
-      # `${A:-$B}` fallbacks pick whichever set the maintainer actually added.
+      # Accept signing secrets under either naming convention. Missing secrets
+      # resolve to "" so the ${A:-$B} fallbacks pick whichever set exists.
       - name: Configure macOS signing
+        id: sign
         env:
           CERT_A: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           CERT_B: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -60,7 +74,7 @@ jobs:
           A_PW="${APPLE_PW_A:-${APPLE_PW_B:-$APPLE_PW_C}}"
           TEAM="${TEAM_A:-$TEAM_B}"
           if [ -n "$CERT" ]; then
-            echo "SIGNING_MODE=full" >> "$GITHUB_ENV"
+            echo "signing_mode=full" >> "$GITHUB_OUTPUT"
             printf 'APPLE_CERTIFICATE<<__GHOST_EOF__\n%s\n__GHOST_EOF__\n' "$CERT" >> "$GITHUB_ENV"
             echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PW" >> "$GITHUB_ENV"
             echo "APPLE_SIGNING_IDENTITY=${IDENTITY:--}" >> "$GITHUB_ENV"
@@ -68,48 +82,66 @@ jobs:
               echo "APPLE_ID=$A_ID" >> "$GITHUB_ENV"
               echo "APPLE_PASSWORD=$A_PW" >> "$GITHUB_ENV"
               echo "APPLE_TEAM_ID=$TEAM" >> "$GITHUB_ENV"
-              echo "macOS signing: FULL (Developer ID cert found); notarization: ENABLED"
+              echo "notarization=enabled" >> "$GITHUB_OUTPUT"
+              echo "macOS signing: FULL; notarization: ENABLED"
             else
-              echo "macOS signing: FULL (Developer ID cert found); notarization: SKIPPED (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID not all set under any known name)"
+              echo "notarization=skipped" >> "$GITHUB_OUTPUT"
+              echo "macOS signing: FULL; notarization: SKIPPED (APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID incomplete)"
             fi
           else
-            echo "SIGNING_MODE=adhoc" >> "$GITHUB_ENV"
+            echo "signing_mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "notarization=skipped" >> "$GITHUB_OUTPUT"
             echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
-            echo "macOS signing: ADHOC (no Developer ID cert secret found — unsigned preview build)"
+            echo "macOS signing: ADHOC (no Developer ID cert — preview build)"
           fi
 
       - name: Build universal macOS DMG
-        run: cargo tauri build --target universal-apple-darwin --bundles dmg
-
-      - name: Stage macOS asset
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          mkdir -p dist
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Updater signing key present -> producing signed updater artifacts"
+            cargo tauri build --target universal-apple-darwin --bundles dmg \
+              --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "No updater signing key -> skipping updater artifacts"
+            cargo tauri build --target universal-apple-darwin --bundles dmg
+          fi
+
+      - name: Stage macOS assets
+        run: |
+          mkdir -p dist
           DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" -print -quit)
           if [ -z "$DMG" ]; then
             echo "No DMG found in Tauri bundle output" >&2
             exit 1
           fi
-          cp "$DMG" Ghost.dmg
-          mkdir -p public/downloads
-          cp Ghost.dmg public/downloads/Ghost.dmg
-          echo "Built $DMG -> Ghost.dmg"
+          cp "$DMG" dist/Ghost.dmg
+          echo "Staged $DMG -> dist/Ghost.dmg"
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          generate_release_notes: true
-          files: Ghost.dmg
-          fail_on_unmatched_files: true
+          # Optional updater artifacts (present only when TAURI_SIGNING_PRIVATE_KEY is set).
+          shopt -s nullglob
+          for f in src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz \
+                   src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig; do
+            cp "$f" "dist/$(basename "$f")"
+            echo "Staged updater artifact: $(basename "$f")"
+          done
 
-      - name: Upload website artifact
+      - name: Upload macOS build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: macos-website-binary
-          path: public/downloads/Ghost.dmg
+          name: macos-release
+          path: dist/
+          if-no-files-found: error
           retention-days: 7
 
   build-windows:
     name: Build Windows installer
     runs-on: windows-latest
+    outputs:
+      windows_signing: ${{ steps.build.outputs.windows_signing }}
     steps:
       - uses: actions/checkout@v7
 
@@ -126,32 +158,235 @@ jobs:
         shell: pwsh
         run: choco install nsis -y --no-progress
 
+      # Azure Trusted Signing runs DURING the build (Tauri signCommand) so the
+      # updater .sig covers the already-signed installer. Both Azure and updater
+      # signing are independently optional.
       - name: Build Windows NSIS installer
-        run: cargo tauri build --bundles nsis
+        id: build
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TS_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
+          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+        run: |
+          $useUpdater = [bool]$env:TAURI_SIGNING_PRIVATE_KEY
+          $useAzure   = [bool]$env:AZURE_CLIENT_ID
 
-      - name: Stage Windows asset
+          if ($useAzure) {
+            "windows_signing=azure" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            "windows_signing=unsigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+          $bundle = @{}
+          if ($useUpdater) { $bundle.createUpdaterArtifacts = $true }
+          if ($useAzure) {
+            Write-Host "Azure Trusted Signing enabled -> signing binaries during bundling"
+            cargo install trusted-signing-cli --locked
+            $signCmd = "trusted-signing-cli -e $env:AZURE_TS_ENDPOINT -a $env:AZURE_TS_ACCOUNT -c $env:AZURE_TS_PROFILE %1"
+            $bundle.windows = @{ signCommand = $signCmd }
+          }
+
+          if ($bundle.Count -gt 0) {
+            $json = (@{ bundle = $bundle } | ConvertTo-Json -Compress -Depth 5)
+            Write-Host "Building with config override: $json"
+            cargo tauri build --bundles nsis --config $json
+          } else {
+            Write-Host "No signing or updater secrets -> plain unsigned build"
+            cargo tauri build --bundles nsis
+          }
+
+      - name: Stage Windows assets
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
           $installer = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $installer) {
             Write-Error "No NSIS installer found in src-tauri\target\release\bundle\nsis"
             exit 1
           }
-          Copy-Item $installer.FullName Ghost_Setup.exe
-          New-Item -ItemType Directory -Force -Path public\downloads | Out-Null
-          Copy-Item Ghost_Setup.exe public\downloads\Ghost_Setup.exe
-          Write-Host "Built: $($installer.FullName) -> Ghost_Setup.exe"
+          Copy-Item $installer.FullName dist\Ghost_Setup.exe
+          Write-Host "Staged: $($installer.FullName) -> dist\Ghost_Setup.exe"
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          generate_release_notes: true
-          files: Ghost_Setup.exe
-          fail_on_unmatched_files: true
+          Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe.sig -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item $_.FullName "dist\$($_.Name)"
+            Write-Host "Staged updater signature: $($_.Name)"
+          }
 
-      - name: Upload website artifact
+      - name: Upload Windows build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: windows-website-binary
-          path: public/downloads/Ghost_Setup.exe
+          name: windows-release
+          path: dist/
+          if-no-files-found: error
           retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "Ref '$TAG' is not a v* semver tag" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Publishing release for $TAG"
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-release
+          path: dist
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-release
+          path: dist
+
+      - name: Verify required installers
+        run: |
+          test -f dist/Ghost.dmg || { echo "Missing dist/Ghost.dmg" >&2; exit 1; }
+          test -f dist/Ghost_Setup.exe || { echo "Missing dist/Ghost_Setup.exe" >&2; exit 1; }
+          ls -lh dist/
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          sha256sum Ghost.dmg Ghost_Setup.exe > SHA256SUMS.txt
+          # Include optional updater artifacts in the checksum file when present.
+          shopt -s nullglob
+          extras=( *.app.tar.gz *.app.tar.gz.sig *-setup.exe.sig )
+          if [ ${#extras[@]} -gt 0 ]; then
+            sha256sum "${extras[@]}" >> SHA256SUMS.txt
+          fi
+          echo "--- SHA256SUMS.txt ---"
+          cat SHA256SUMS.txt
+
+      - name: Generate latest.json (updater manifest)
+        run: |
+          # Only emit latest.json when both platform updater signatures exist.
+          # Without TAURI_SIGNING_PRIVATE_KEY the build skips .sig files and this
+          # step is a no-op — matching RELEASING.md's "optional until keys exist".
+          MAC_TGZ=$(ls dist/*.app.tar.gz 2>/dev/null | head -1 || true)
+          MAC_SIG=$(ls dist/*.app.tar.gz.sig 2>/dev/null | head -1 || true)
+          WIN_SIG=$(ls dist/*-setup.exe.sig 2>/dev/null | head -1 || true)
+          if [ -z "$MAC_TGZ" ] || [ -z "$MAC_SIG" ] || [ -z "$WIN_SIG" ]; then
+            echo "Updater artifacts incomplete — skipping latest.json"
+            exit 0
+          fi
+          VERSION="${{ steps.tag.outputs.version }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          MAC_NAME=$(basename "$MAC_TGZ")
+          WIN_SIG_NAME=$(basename "$WIN_SIG")
+          # The Windows updater downloads Ghost_Setup.exe; the .sig filename from
+          # Tauri may differ — point the URL at our stable staged name.
+          python3 - <<PY
+          import json, pathlib
+          from datetime import datetime, timezone
+          version = "${VERSION}"
+          base = "${BASE}"
+          mac_name = "${MAC_NAME}"
+          mac_sig = pathlib.Path("${MAC_SIG}").read_text().strip()
+          win_sig = pathlib.Path("${WIN_SIG}").read_text().strip()
+          manifest = {
+            "version": version,
+            "notes": f"Ghost {version} — see the GitHub release notes.",
+            "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": mac_sig,
+                "url": f"{base}/{mac_name}",
+              },
+              "darwin-x86_64": {
+                "signature": mac_sig,
+                "url": f"{base}/{mac_name}",
+              },
+              "windows-x86_64": {
+                "signature": win_sig,
+                "url": f"{base}/Ghost_Setup.exe",
+              },
+            },
+          }
+          pathlib.Path("dist/latest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print("Wrote dist/latest.json")
+          PY
+
+      - name: Compose release body
+        id: body
+        run: |
+          MAC_MODE="${{ needs.build-mac.outputs.signing_mode }}"
+          NOTARY="${{ needs.build-mac.outputs.notarization }}"
+          WIN_MODE="${{ needs.build-windows.outputs.windows_signing }}"
+          VERSION="${{ steps.tag.outputs.version }}"
+          {
+            echo "## Ghost v${VERSION}"
+            echo ""
+            echo "| Asset | SHA-256 |"
+            echo "|---|---|"
+            awk '{print "| `" $2 "` | `" $1 "` |"}' dist/SHA256SUMS.txt | head -20
+            echo ""
+            echo "### Build integrity"
+            echo "- macOS signing: **${MAC_MODE}** (notarization: **${NOTARY}**)"
+            echo "- Windows signing: **${WIN_MODE}**"
+            echo "- Checksums: see \`SHA256SUMS.txt\` attached to this release"
+            echo ""
+            if [ ! -f dist/latest.json ]; then
+              echo "> Preview builds may be ad-hoc signed. macOS Gatekeeper may require **Open Anyway** under System Settings → Privacy & Security. See [RELEASING.md](https://github.com/${{ github.repository }}/blob/master/RELEASING.md)."
+            fi
+          } > release-body.md
+          cat release-body.md
+
+      - name: Collect release files
+        id: files
+        run: |
+          # Required installers + checksums always ship. Updater artifacts and
+          # latest.json are optional (only present when signing keys are set).
+          {
+            echo "dist/Ghost.dmg"
+            echo "dist/Ghost_Setup.exe"
+            echo "dist/SHA256SUMS.txt"
+            [ -f dist/latest.json ] && echo "dist/latest.json"
+            shopt -s nullglob
+            for f in dist/*.app.tar.gz dist/*.app.tar.gz.sig dist/*-setup.exe.sig; do
+              echo "$f"
+            done
+          } > release-files.txt
+          echo "Attaching:"
+          cat release-files.txt
+          # Multiline output for softprops `files`.
+          {
+            echo "list<<__GHOST_EOF__"
+            cat release-files.txt
+            echo "__GHOST_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: v${{ steps.tag.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body_path: release-body.md
+          fail_on_unmatched_files: true
+          files: ${{ steps.files.outputs.list }}

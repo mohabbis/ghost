@@ -1,11 +1,11 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-10
-**Status:** `master` green (Rust CI + Deploy Website). **v1.2.3 released**. This branch prepares **v1.2.4** (ID-scan OCR hardening, DOM contract test, signing-docs fix, version bump).
+**Status:** `master` green. **v1.2.4 released** (`Ghost.dmg` + `Ghost_Setup.exe`). Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX.
 
 ---
 
-## 🎯 What You're Picking Up
+## What You're Picking Up
 
 You are inheriting **Ghost**, a Tauri (Rust + vanilla JS) local-first desktop automation product for macOS and Windows. Read `AGENTS.md` and `CLAUDE.md` first — they are the canonical contract. The product promise is trustworthy execution:
 
@@ -17,38 +17,33 @@ The current wedge is **Ghost Organizer** (safe file organization: scan → plan 
 
 ---
 
-## 📁 Recent Changes (through v1.2.4)
+## Recent Changes (through v1.2.4 + polish)
 
-1. **Release v1.2.4 (this session):**
-   * Bumped `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.lock`, and marketing site strings to `1.2.4`.
-   * Landed unmerged cursor follow-ups: ID-scan OCR noise hardening (`reorder_name`, `normalize_digits`, separator-tolerant dates) + `frontend_dom_contract` test + macOS signing checklist secret-name fix.
-2. **Release v1.2.3:**
-   * First signed macOS build path (secrets-dependent); signing secret-name fallback in `release.yml`.
-3. **Release v1.2.2 + marketing + ID scanning:**
-   * Working `Ghost.dmg` + `Ghost_Setup.exe`; Guard Desk `parse_id_document` + local OCR; light marketing site.
+1. **v1.2.4:** ID-scan OCR hardening, DOM contract test, signing-docs fix, version bump.
+2. **Release pipeline:** single publish job after both platform builds; `SHA256SUMS.txt`; optional updater artifacts / `latest.json` when keys exist; no more Mac-only or Windows-only partial releases.
+3. **Product polish:** platform-neutral copy, honest signing/preview language, readable IPC error toasts, Settings shows app version.
 
 ---
 
-## ✅ Current Health
+## Current Health
 
-- `cargo fmt --check`, `cargo clippy --all-targets -D warnings`, and `cargo test` should pass on this branch before merge.
-- Rust CI green on `master`; Deploy Website (Vercel) green.
-- Local Linux build/test needs the GTK/webkit deps in `AGENTS.md` **plus** `libssl-dev` + `pkg-config` (openssl-sys).
-
----
-
-## 🚀 Immediate Next Steps
-
-1. **Merge this PR and tag `v1.2.4`** on `master` to fire `release.yml` (builds DMG + NSIS and publishes the GitHub Release). Site download buttons already resolve `releases/latest`.
-2. **Release signing/notarization:** confirm Apple/Windows secrets are set so 1.2.4 is not ad-hoc. See `RELEASING.md`, `docs/macos-signing-checklist.md`.
-3. **`parse_id_document` risk hardening:** keep Guard Desk output suggestion-only (never auto-execute); consider an explicit user-enabled toggle for PII parsing.
-4. **Continue the build order in `AGENTS.md`:** policy/Zones polish → Organizer polish → replay reliability → release quality → AI suggestions last (gated).
+- Rust CI + Deploy Website on `master`.
+- Validation: `make ci` (fmt + clippy + test), `make build`, `make dev`.
+- Local Linux needs GTK/webkit deps in `AGENTS.md` plus `libssl-dev` / `pkg-config`.
 
 ---
 
-## ⚠️ Known Risks / Notes
+## Immediate Next Steps
 
-- Releases are **not signed/notarized** without secrets — do not claim production readiness.
-- `parse_id_document` handles personal data; keep it local, suggestion-only, and out of any auto-execute path.
-- Experimental commands stay behind the `experimental` Cargo feature; CI does not run that leg.
-- Validation: `make ci`, `make build`, `make dev`.
+1. **Notarization / Windows signing secrets** so releases stop being ad-hoc/unsigned. See `RELEASING.md`.
+2. **Updater pubkey:** replace `REPLACE_WITH_…` in `tauri.conf.json` and set `TAURI_SIGNING_PRIVATE_KEY` so `latest.json` publishes automatically.
+3. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
+4. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
+
+---
+
+## Known Risks
+
+- Without Apple/Azure secrets, releases are preview-quality (ad-hoc macOS / unsigned Windows).
+- `parse_id_document` handles PII — keep local and suggestion-only.
+- Experimental commands stay behind `--features experimental`; CI does not run that leg.

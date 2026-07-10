@@ -108,7 +108,7 @@ Still being hardened:
 | macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
 | Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Current builds are preview quality. The current app version is `v1.2.4`. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Notarized releases are in progress.
+Current builds are preview quality. The current app version is `v1.2.4`. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). Notarized releases require Apple signing secrets — see `RELEASING.md`.
 
 ## Architecture
 

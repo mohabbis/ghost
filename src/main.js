@@ -62,7 +62,28 @@ function showNotification(text, kind = "info") {
   setTimeout(() => notification.remove(), kind === "error" ? 8000 : 5000);
 }
 
-const toastError = (text) => showNotification(text, "error");
+
+/** Turn Tauri/IPC errors into readable toast text (avoid "[object Object]"). */
+function formatInvokeError(err) {
+  if (err == null || err === "") return "Unknown error";
+  if (typeof err === "string") return err;
+  if (typeof err === "number" || typeof err === "boolean") return String(err);
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "object") {
+    if (typeof err.message === "string" && err.message.trim()) return err.message;
+    if (typeof err.error === "string" && err.error.trim()) return err.error;
+    try {
+      const json = JSON.stringify(err);
+      if (json && json !== "{}" && json !== "null") return json;
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  const s = String(err);
+  return s === "[object Object]" ? "Unexpected error" : s;
+}
+
+const toastError = (text) => showNotification(typeof text === "string" ? text : formatInvokeError(text), "error");
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -269,7 +290,7 @@ async function tryUnlock() {
     }
   } catch (err) {
     console.error("Unlock failed:", err);
-    toastError("Unlock failed: " + err);
+    toastError("Unlock failed: " + formatInvokeError(err));
     return;
   }
 
@@ -465,7 +486,7 @@ async function startRecording() {
     showInsight("Recording. Keep the task focused; stop before entering sensitive information.");
   } catch (error) {
     console.error("Failed to start recording:", error);
-    toastError("Could not start recording: " + error);
+    toastError("Could not start recording: " + formatInvokeError(error));
     showInsight("Recording blocked — check permissions above.");
   }
 }
@@ -569,7 +590,7 @@ async function replayWorkflow() {
     await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Failed to replay workflow:", error);
-    toastError("Replay failed: " + error);
+    toastError("Replay failed: " + formatInvokeError(error));
     await captureFailedStep(0);
   } finally {
     isPlaying = false;
@@ -607,7 +628,7 @@ async function replayWithReliability() {
     await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Failed to replay with reliability:", error);
-    toastError("Replay failed: " + error);
+    toastError("Replay failed: " + formatInvokeError(error));
     await captureFailedStep(0);
   } finally {
     isPlaying = false;
@@ -681,7 +702,7 @@ async function inspectElementAtCursor() {
     }
   } catch (error) {
     console.error("Failed to inspect element:", error);
-    toastError("Inspect failed: " + error);
+    toastError("Inspect failed: " + formatInvokeError(error));
   }
 }
 
@@ -734,7 +755,7 @@ async function runGhostGuardAudit({ quiet = false } = {}) {
     if (!quiet) showInsight(`Ghost Guard: ${report.score}/100 ${report.risk_level} risk. ${report.summary}`);
   } catch (error) {
     console.error("Ghost Guard audit failed:", error);
-    if (!quiet) toastError("Ghost Guard audit failed: " + error);
+    if (!quiet) toastError("Ghost Guard audit failed: " + formatInvokeError(error));
   }
 }
 
@@ -762,7 +783,7 @@ async function saveWorkflow() {
     showNotification(`Workflow "${name}" saved.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
-    toastError("Failed to save workflow: " + error);
+    toastError("Failed to save workflow: " + formatInvokeError(error));
   }
 }
 
@@ -786,7 +807,7 @@ async function loadWorkflow() {
     runGhostGuardAudit({ quiet: true });
   } catch (error) {
     console.error("Failed to load workflow:", error);
-    toastError("Failed to load workflow: " + error);
+    toastError("Failed to load workflow: " + formatInvokeError(error));
   }
 }
 
@@ -804,7 +825,7 @@ async function analyzeWorkflow() {
     displayAnalysisResults(analysis);
   } catch (error) {
     console.error("Failed to analyze workflow:", error);
-    toastError("Failed to analyze workflow: " + error);
+    toastError("Failed to analyze workflow: " + formatInvokeError(error));
   }
 }
 
@@ -826,7 +847,7 @@ async function optimizeWorkflow() {
     showNotification(`Optimized: ${originalCount} events → ${optimized.length} events.`);
   } catch (error) {
     console.error("Failed to optimize workflow:", error);
-    toastError("Failed to optimize workflow: " + error);
+    toastError("Failed to optimize workflow: " + formatInvokeError(error));
   }
 }
 
@@ -878,7 +899,7 @@ async function generateWorkflowFromDescription() {
     showInsight("Review the generated steps in the timeline, then Replay or Save.");
   } catch (error) {
     console.error("Failed to generate workflow:", error);
-    toastError("Generate failed: " + error);
+    toastError("Generate failed: " + formatInvokeError(error));
   }
 }
 
@@ -930,7 +951,7 @@ async function saveWorkflowWithMetadata() {
     showNotification(`Workflow "${name}" saved with metadata.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
-    toastError("Failed to save workflow: " + error);
+    toastError("Failed to save workflow: " + formatInvokeError(error));
   }
 }
 
@@ -1094,6 +1115,7 @@ async function openSettings() {
     </label>
     <p class="panel__hint" style="margin: 4px 0 12px;">Leave blank to keep all audit history (the default). Pruning deletes your own past runs — sealed history you remove can't be recovered.</p>
 
+    <p class="panel__hint" id="settings-about" style="margin: 16px 0 8px;">Ghost · local-first preview</p>
     <div style="display: flex; gap: 8px; margin-top: 8px;">
       <button class="btn btn--primary btn--small" data-save-config>Save</button>
       <button class="btn btn--ghost btn--small" data-close-modal="settings-modal">Cancel</button>
@@ -1101,6 +1123,15 @@ async function openSettings() {
   `;
 
   showModal(modal);
+
+  // Best-effort version label (Tauri 2 global API). Never blocks settings.
+  try {
+    const ver = await window.__TAURI__?.app?.getVersion?.();
+    const about = document.getElementById("settings-about");
+    if (about && ver) about.textContent = `Ghost v${ver} · local-first preview`;
+  } catch (_) {
+    /* ignore */
+  }
 }
 
 async function saveSettings() {
@@ -1147,7 +1178,7 @@ async function saveSettings() {
     showNotification("Settings saved.");
   } catch (error) {
     console.error("Failed to save config:", error);
-    toastError(`Could not save settings: ${error}`);
+    toastError(`Could not save settings: ${formatInvokeError(error)}`);
   }
 }
 
@@ -1399,7 +1430,7 @@ async function startSmartObserver() {
     startObserverUIUpdate();
   } catch (error) {
     console.error("Failed to start observer:", error);
-    toastError("Failed to start observer: " + error);
+    toastError("Failed to start observer: " + formatInvokeError(error));
   }
 }
 
@@ -1457,7 +1488,7 @@ async function observeCurrentSession() {
     if (suggestions.length > 0) displaySuggestions(suggestions);
   } catch (error) {
     console.error("Failed to observe events:", error);
-    toastError("Failed to observe: " + error);
+    toastError("Failed to observe: " + formatInvokeError(error));
   }
 }
 
@@ -1474,7 +1505,7 @@ async function generateGeekInsights() {
     displayGeekInsights(insights, appName);
   } catch (error) {
     console.error("Failed to generate geek insights:", error);
-    toastError("Failed to generate insights: " + error);
+    toastError("Failed to generate insights: " + formatInvokeError(error));
   }
 }
 
@@ -1573,7 +1604,7 @@ async function replayWithVisualCheck() {
     showNotification(success ? "Replay completed with visual check." : "Replay was cancelled.");
   } catch (error) {
     console.error("Failed to replay with visual check:", error);
-    toastError("Replay failed: " + error);
+    toastError("Replay failed: " + formatInvokeError(error));
   }
 }
 
@@ -1588,7 +1619,7 @@ async function captureBaseline() {
     showNotification(`Baseline "${name}" captured.`);
   } catch (error) {
     console.error("Failed to capture baseline:", error);
-    toastError("Capture failed: " + error);
+    toastError("Capture failed: " + formatInvokeError(error));
   }
 }
 
@@ -1629,7 +1660,7 @@ async function createDataSource() {
     showNotification(`Data source "${name}" created.`);
   } catch (error) {
     console.error("Failed to create data source:", error);
-    toastError("Create failed: " + error);
+    toastError("Create failed: " + formatInvokeError(error));
   }
 }
 
@@ -1645,7 +1676,7 @@ async function loadVariablesFromSource() {
     console.log("Variables:", variables);
   } catch (error) {
     console.error("Failed to load variables:", error);
-    toastError("Load failed: " + error);
+    toastError("Load failed: " + formatInvokeError(error));
   }
 }
 
@@ -1677,7 +1708,7 @@ async function organizerRefreshZones() {
     organizerZones = await invoke("organizer_list_zones");
   } catch (err) {
     organizerZones = [];
-    toastError("Could not load Zones: " + err);
+    toastError("Could not load Zones: " + formatInvokeError(err));
   }
   const select = document.getElementById("organizerZoneSelect");
   if (!select) return;
@@ -1714,7 +1745,7 @@ async function organizerRefreshRules() {
   try {
     rules = await invoke("organizer_list_folder_rules", { zoneId: zone.id });
   } catch (err) {
-    toastError("Could not load folders: " + err);
+    toastError("Could not load folders: " + formatInvokeError(err));
   }
   if (rules.length === 0) {
     list.textContent = "No folders in this Zone yet — add one above.";
@@ -1777,7 +1808,7 @@ async function organizerSetRuleTrust(path, trust) {
     await organizerRefreshRules();
     showNotification(`Trust for ${path} set to ${trust.replace("_", " ")}.`, "info");
   } catch (err) {
-    toastError("Could not update trust: " + err);
+    toastError("Could not update trust: " + formatInvokeError(err));
     await organizerRefreshRules();
   }
 }
@@ -1800,7 +1831,7 @@ async function organizerCreateZone() {
     await organizerRefreshZones();
     showNotification(`Zone "${zone.name}" created. Add the folder to organize.`, "info");
   } catch (err) {
-    toastError("Could not create Zone: " + err);
+    toastError("Could not create Zone: " + formatInvokeError(err));
   }
 }
 
@@ -1948,7 +1979,7 @@ async function organizerRunWizard() {
     showNotification(`"${presetName}" Zone created. Previewing the plan now.`, "info");
     await organizerScan();
   } catch (err) {
-    toastError("Could not create the Zone: " + err);
+    toastError("Could not create the Zone: " + formatInvokeError(err));
   }
 }
 
@@ -2014,7 +2045,7 @@ async function organizerBrowseFolder() {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     }
   } catch (err) {
-    toastError("Could not open folder picker: " + err);
+    toastError("Could not open folder picker: " + formatInvokeError(err));
   }
 }
 
@@ -2043,7 +2074,7 @@ async function organizerAddFolder() {
     await organizerRefreshRules();
     showNotification("Folder added to the Zone.", "info");
   } catch (err) {
-    toastError("Could not add folder: " + err);
+    toastError("Could not add folder: " + formatInvokeError(err));
   }
 }
 
@@ -2103,7 +2134,7 @@ async function organizerExportAudit(executionId, format) {
     URL.revokeObjectURL(url);
     showNotification(`Audit exported as ${format.toUpperCase()}.`, "info");
   } catch (err) {
-    toastError("Export failed: " + err);
+    toastError("Export failed: " + formatInvokeError(err));
   }
 }
 
@@ -2119,7 +2150,7 @@ async function organizerScan() {
     plan = await invoke("organizer_plan", { zoneId: zone.id });
   } catch (err) {
     if (result) result.innerHTML = "";
-    return toastError("Scan failed: " + err);
+    return toastError("Scan failed: " + formatInvokeError(err));
   }
   organizerRenderPlan(plan);
   organizerHasReviewedPlan = plan.actions.length > 0;
@@ -2194,7 +2225,7 @@ async function organizerRun() {
   try {
     res = await invoke("organizer_execute", { zoneId: zone.id });
   } catch (err) {
-    return toastError("Organize failed: " + err);
+    return toastError("Organize failed: " + formatInvokeError(err));
   }
   const r = res.report || {};
   const auditRows = (r.audit || [])
@@ -2249,7 +2280,7 @@ async function organizerUndo(executionId) {
     );
     await organizerRefreshRules();
   } catch (err) {
-    toastError("Undo failed: " + err);
+    toastError("Undo failed: " + formatInvokeError(err));
   }
 }
 
@@ -2259,7 +2290,7 @@ async function organizerShowHistory() {
   try {
     history = await invoke("organizer_list_executions");
   } catch (err) {
-    return toastError("Could not load history: " + err);
+    return toastError("Could not load history: " + formatInvokeError(err));
   }
   const modal = document.getElementById("analysis-modal");
   const content = modal?.querySelector(".modal-content");
@@ -2305,7 +2336,7 @@ async function organizerVerifyIntegrity() {
     v = await invoke("organizer_verify_audit_chain");
   } catch (err) {
     if (out) out.textContent = "";
-    return toastError("Verify failed: " + err);
+    return toastError("Verify failed: " + formatInvokeError(err));
   }
   if (!out) return;
   const unsealed =
@@ -2328,7 +2359,7 @@ async function showReplayHistory() {
   try {
     history = await invoke("get_replay_history", { limit: 50 });
   } catch (err) {
-    return toastError("Could not load replay history: " + err);
+    return toastError("Could not load replay history: " + formatInvokeError(err));
   }
   const modal = document.getElementById("analysis-modal");
   const content = modal?.querySelector(".modal-content");
@@ -2552,7 +2583,7 @@ async function showDryRunPreview() {
   try {
     steps = await invoke("dry_run_workflow", { events: recordedEvents });
   } catch (err) {
-    return toastError("Could not build preview: " + err);
+    return toastError("Could not build preview: " + formatInvokeError(err));
   }
 
   const modal = document.getElementById("analysis-modal");
@@ -2627,7 +2658,7 @@ async function replayNextStep() {
     );
   } catch (error) {
     console.error("Step replay failed:", error);
-    toastError("Step replay failed: " + error);
+    toastError("Step replay failed: " + formatInvokeError(error));
     await captureFailedStep(start);
   } finally {
     isPlaying = false;
@@ -2658,7 +2689,7 @@ async function retryFromFailedStep() {
     await summarizeLastReplayResolution();
   } catch (error) {
     console.error("Retry from failed step failed:", error);
-    toastError("Retry failed: " + error);
+    toastError("Retry failed: " + formatInvokeError(error));
     await captureFailedStep(offset);
   } finally {
     isPlaying = false;
@@ -2849,7 +2880,7 @@ async function installApprovedUpdate(button, statusEl) {
   } catch (err) {
     button.disabled = false;
     statusEl.textContent = `Update failed: ${err}`;
-    toastError(`Update failed: ${err}`);
+    toastError(`Update failed: ${formatInvokeError(err)}`);
   }
 }
 
@@ -3706,7 +3737,7 @@ async function filingPreview() {
   try {
     preview = await invoke("preview_file_filing", { audience, root, fileNames });
   } catch (err) {
-    return toastError("Filing preview failed: " + err);
+    return toastError("Filing preview failed: " + formatInvokeError(err));
   }
   const rows = (preview.items || [])
     .map(
@@ -3752,7 +3783,7 @@ async function filingEstimateSavings() {
   try {
     est = await invoke("estimate_filing_savings", { inputs });
   } catch (err) {
-    return toastError("Savings estimate failed: " + err);
+    return toastError("Savings estimate failed: " + formatInvokeError(err));
   }
   const costLine =
     est.cost_saved_per_year != null

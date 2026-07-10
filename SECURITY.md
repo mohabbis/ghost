@@ -155,20 +155,24 @@ All Rust dependencies are audited:
 
 ## Supported Versions
 
-| Version | Status | Support Until |
-|---------|--------|----------------|
-| 1.1.x   | Current | TBD (first stable) |
-| 1.0.x   | Legacy | End of month after 1.1.0 release |
+| Version | Status | Support |
+|---------|--------|---------|
+| 1.2.x   | Current preview | Security fixes on latest 1.2.x tag |
+| 1.1.x   | Legacy preview | Critical fixes only |
+| 1.0.x   | Unsupported | N/A |
 | <1.0    | Unsupported | N/A |
 
-**Security patches** are backported to the previous minor version only.
+Preview releases are not production-notarized by default. Treat them as
+developer builds until signing secrets are configured (see `RELEASING.md`).
+
+**Security patches** land on the latest minor line first.
 
 ## Vulnerability Disclosure
 
 We take security seriously. If you discover a vulnerability:
 
 1. **Do not** open a public GitHub issue.
-2. **Email** [security@ghost.example.com](mailto:security@ghost.example.com) with:
+2. Report via [GitHub Security Advisories](https://github.com/mohabbis/ghost/security/advisories/new) with:
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
@@ -235,11 +239,11 @@ Before public release:
 
 ## Questions?
 
-For security questions, email [security@ghost.example.com](mailto:security@ghost.example.com).
+Report security issues via [GitHub Security Advisories](https://github.com/mohabbis/ghost/security/advisories/new).
 
 For bugs, use the GitHub issue tracker.
 
 ---
 
-**Last updated**: 2026-07-06  
-**Next review**: After Phase 3 completion (Week 8)
+**Last updated**: 2026-07-10  
+**Next review**: After notarized production release

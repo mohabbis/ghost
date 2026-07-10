@@ -1,27 +1,51 @@
 # Releasing Ghost
 
-Pushing a version tag triggers the release workflow, which builds
-Ghost.dmg (macOS) and Ghost_Setup.exe (Windows) and attaches them
-to a GitHub Release. The site download buttons resolve automatically.
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:
+
+1. Builds **macOS** (`Ghost.dmg`) and **Windows** (`Ghost_Setup.exe`) in parallel
+2. Waits for **both** builds to succeed
+3. Publishes **one** GitHub Release with installers, `SHA256SUMS.txt`, and
+   (when updater signing keys are configured) updater artifacts + `latest.json`
+
+The marketing site download buttons resolve
+`releases/latest/download/{Ghost.dmg,Ghost_Setup.exe}` automatically.
 
 ## Steps
 
-  1. Make sure master is clean and all PRs are merged
-     git checkout master and git pull origin master
+1. Make sure `master` is clean and the version bump PR is merged:
 
-  2. Tag the release (use semver)
-     git tag v0.1.0
+       git checkout master && git pull origin master
 
-  3. Push the tag — this fires the workflow
-     git push origin v0.1.0
+2. Bump the version in **all** of these (keep them identical):
+   - `src-tauri/Cargo.toml` → `[package] version`
+   - `src-tauri/tauri.conf.json` → `"version"`
+   - `src-tauri/Cargo.lock` (the `name = "ghost"` entry)
+   - Marketing site strings in `public/index.html` and `public/main.js`
+   - `README.md` current-version line (if present)
 
-GitHub Actions builds both platforms in parallel (~15 min).
+3. Tag and push (semver):
 
-## Bumping the version for future releases
+       git tag v1.2.5
+       git push origin v1.2.5
 
-Edit both of these before tagging:
-- src-tauri/tauri.conf.json  ->  "version"
-- src-tauri/Cargo.toml       ->  version in [package]
+GitHub Actions builds both platforms (~20 min). The publish job fails closed if
+either platform is missing — you will not get a one-sided release.
+
+### Re-running a release
+
+Use **Actions → Release → Run workflow** and pass the existing tag (e.g.
+`v1.2.5`). The publish job re-attaches assets to that tag.
+
+## What each release attaches
+
+| File | Always? | Purpose |
+|---|---|---|
+| `Ghost.dmg` | yes | Universal macOS installer |
+| `Ghost_Setup.exe` | yes | Windows NSIS installer |
+| `SHA256SUMS.txt` | yes | SHA-256 digests for verification |
+| `*.app.tar.gz` + `.sig` | if updater key set | macOS auto-update payload |
+| `*-setup.exe.sig` | if updater key set | Windows auto-update signature |
+| `latest.json` | if both updater sigs exist | Updater manifest |
 
 ## macOS Gatekeeper / code signing
 
@@ -110,11 +134,13 @@ spctl -a -vvv -t install Ghost.dmg
 stapler validate Ghost.dmg
 # Inspect the signing identity on the app bundle.
 codesign -dvvv /Volumes/Ghost/Ghost.app
+# Verify the published checksum.
+shasum -a 256 -c SHA256SUMS.txt
 ```
 
 If `spctl` says "rejected" or `stapler` reports no ticket, the job most likely
 fell back to ad-hoc signing because a secret was missing or the certificate was
-the wrong type — re-check the five secrets and that the cert is *Developer ID
+the wrong type — re-check the secrets and that the cert is *Developer ID
 Application*.
 
 ## Windows code signing (Azure Trusted Signing)
@@ -171,27 +197,8 @@ embedded in `tauri.conf.json`).
 
 When `TAURI_SIGNING_PRIVATE_KEY` is set, both build jobs pass
 `--config '{"bundle":{"createUpdaterArtifacts":true}}'`, producing the
-`.app.tar.gz`/`.sig` (macOS) and `-setup.exe.sig` (Windows) the workflow
-uploads to the release.
+`.app.tar.gz`/`.sig` (macOS) and `-setup.exe.sig` (Windows). The publish job
+assembles `latest.json` automatically when both platform signatures are present.
 
-### Generating `latest.json`
-
-The updater needs a `latest.json` manifest published on the release listing each
-platform's download URL + signature. The robust way to generate it is to migrate
-`release.yml` to **`tauri-apps/tauri-action`**, which emits the manifest
-automatically. Until then, assemble it by hand from the uploaded `.sig` files:
-
-```json
-{
-  "version": "1.0.12",
-  "notes": "See the release notes.",
-  "pub_date": "2026-06-25T00:00:00Z",
-  "platforms": {
-    "darwin-aarch64": { "signature": "<contents of Ghost.app.tar.gz.sig>", "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost.app.tar.gz" },
-    "darwin-x86_64":  { "signature": "<same .sig>",                         "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost.app.tar.gz" },
-    "windows-x86_64": { "signature": "<contents of *-setup.exe.sig>",       "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost_Setup.exe" }
-  }
-}
-```
-
-Upload that file to the release as `latest.json`.
+Until the pubkey placeholder is replaced and the private key secret is set,
+auto-update stays inactive — installers still publish normally.
