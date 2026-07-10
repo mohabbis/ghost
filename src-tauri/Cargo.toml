@@ -44,6 +44,7 @@ sha2 = "0.11"
 # SQLite from source so there is no system-library dependency and it builds on
 # the headless Linux CI leg. MIT-licensed (passes deny.toml).
 rusqlite = { version = "0.40", features = ["bundled"] }
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 # `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
