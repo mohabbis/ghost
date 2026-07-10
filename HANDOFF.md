@@ -1,39 +1,62 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
-**Last Updated:** 2026-07-09  
-**Status:** Clean, Compiling locally, Master CI build resolved, PRs 129 & 130 fully merged.
+**Last Updated:** 2026-07-10
+**Status:** `master` green (Rust CI + Deploy Website). **v1.2.2 released** with working `Ghost.dmg` + `Ghost_Setup.exe`. PRs #135 (marketing), #136 (release bump), #137 (ID scanning), #138 (asset cleanup + Guard Desk wiring) all merged.
 
 ---
 
 ## 🎯 What You're Picking Up
-You are inheriting **Ghost**, a Tauri-based local-first desktop automation tool. Recently, the app was prepared for Muhammad's internship at **PLS Financial Services** and structured to align with a Y Combinator submission:
-* **The Trust Pipeline (Deterministic execution):** Treat AI suggestions as proposals; deterministic code executes only what the user reviews, approves, and can undo.
-* **Local-First Privacy:** Runs entirely on-device with local database and local capabilities, making it secure and SOC2-ready out of the box.
+
+You are inheriting **Ghost**, a Tauri (Rust + vanilla JS) local-first desktop automation product for macOS and Windows. Read `AGENTS.md` and `CLAUDE.md` first — they are the canonical contract. The product promise is trustworthy execution:
+
+```text
+Record -> Inspect -> Approve -> Replay -> Audit -> Undo
+```
+
+The current wedge is **Ghost Organizer** (safe file organization: scan → plan → review → approve → move/rename → audit → undo), fully wired end to end through the policy engine, executor, audit log, and undo journal.
 
 ---
 
-## 📁 Recent Changes (This Session)
-1. **AI Copilot view (`src/index.html` & `src/main.js`):**
-   * Implemented a general-purpose **AI Copilot** tab and compliance scanner/macro replay simulator.
-   * Scenarios (Payroll Valid, Out-of-State Warning, Signature Mismatch Failure) demonstrate scanning IDs/checks and replaying automated data entry step-by-step into a legacy terminal POS form.
-   * Redesigned the UI cards for scanned checks and IDs using a high-end, **glassmorphic dark-mode** style.
-2. **Vulnerability Patches (Cargo.lock):**
-   * Updated `crossbeam-epoch`, `quick-xml`, and `anyhow` to resolve critical vulnerabilities.
-3. **Windows CI Test Crash (`0xc0000139`) Resolved:**
-   * Root cause: Tauri links the `Microsoft.Windows.Common-Controls` v6 manifest only into the shipped app binary, not into cargo's `--lib` unit-test harness. Without it the test exe falls back to the legacy ComCtl32 v5.82 and the loader aborts with `STATUS_ENTRYPOINT_NOT_FOUND` before any test runs. (The earlier `crate-type = ["rlib"]` change in `src-tauri/Cargo.toml` did not address this and is retained only because desktop builds do not need the mobile `staticlib`/`cdylib` outputs.)
-   * Fix: `src-tauri/build.rs` emits a Windows-only `cargo:rustc-link-arg=/MANIFESTDEPENDENCY:...Common-Controls 6.0.0.0...` so the v6 manifest is embedded into the test binary too. The fragile PowerShell-based `is_cargo_test()` skip of `tauri_build::build()` was removed. See tauri-apps/tauri#13419 / #14580.
-4. **Version Bump:**
-   * Bumped package version from `1.1.0` to `1.2.0` in both `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`.
-5. **Kubernetes & Containerization (Y Combinator Scale Prep):**
-   * Created a `Dockerfile` to package the static marketing landing page (`public/`) using Nginx.
-   * Created a `k8s-deployment.yaml` manifest that spawns a load-balanced, 3-replica cluster of marketing website nodes with resource limits and health checks.
-   * Documented deployment commands in `README.md` alongside an animated SVG pipeline diagram.
+## 📁 Recent Changes (through v1.2.2)
+
+1. **Release v1.2.2 (this session):**
+   * Bumped `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.lock` to `1.2.2` (PR #136).
+   * Pushed the `v1.2.2` tag; the `release.yml` workflow built and published the universal macOS DMG and Windows NSIS installer. Assets: `Ghost.dmg` (~16 MB), `Ghost_Setup.exe` (~7 MB).
+   * Signing is ad-hoc unless Apple/Windows signing secrets are configured — this is a **preview** release, not notarized.
+2. **Marketing site redesign (PR #135):**
+   * Light/white professional theme (teal accent, IBM Plex + Newsreader), one-liner **"Approve before it acts."**
+   * Four interactive demo tabs: Organizer, Record→Replay, Client filing, and **Guard Desk → Approve → POS Bridge**.
+   * Download buttons point to `github.com/mohabbis/ghost/releases/latest/download/{Ghost.dmg,Ghost_Setup.exe}` (not repo-committed binaries). Site version strings read `v1.2.2`.
+3. **ID scanning (PRs #137 + #138):**
+   * `src-tauri/src/core/id_scan.rs` — deterministic parser that turns already-OCR'd text into structured ID-document fields (name, ID number, DOB, expiry) plus derived signals (age, expiry state, review flags). Pure text in / struct out — no image, IO, or network. 14 unit tests.
+   * `parse_id_document` command in stable `commands/core.rs`, registered in `lib.rs`, wired into the Guard Desk UI. Complements the existing `run_ocr_on_image` (local macOS Vision / Windows OCR).
+   * Documented in `docs/command-registry.md` (risk `low`) and `docs/core-boundaries.md` (stable-core, sensitive fields stay local).
+4. **Asset/repo hygiene (PR #138):**
+   * Removed the ~14 MB `public/downloads/*.{dmg,exe}` binaries from git (the site links to GitHub releases instead) and stray `public/assets/*` scaffolding.
+
+---
+
+## ✅ Current Health
+
+- `cargo fmt --check`, `cargo clippy --all-targets -D warnings`, and `cargo test` (~392 unit + ipc_contract + resolution_benchmark) all pass locally on `master`.
+- Rust CI green on `master`; Deploy Website (Vercel) green.
+- Local Linux build/test needs the GTK/webkit deps in `AGENTS.md` **plus** `libssl-dev` + `pkg-config` (openssl-sys); CI installs the GTK set — add libssl if you extend the CI image.
 
 ---
 
 ## 🚀 Immediate Next Steps
-1. **Tag & Trigger v1.2.0 Release:**
-   * Push a git tag `v1.2.0` to the remote repository. This triggers the GitHub Actions `Release` workflow to build signed binaries (`Ghost.dmg` and `Ghost_Setup.exe`) and upload them to the GitHub release.
-   * The Vercel-deployed marketing site will automatically serve these new downloads as they point to `releases/latest`.
-2. **Integrate Real OCR selectors:**
-   * Transition the AI Copilot from mock scanning animations to real local OCR selectors when the internship starts.
+
+1. **`parse_id_document` risk hardening (small):** it currently lives in stable `core.rs` and is registered unconditionally. Confirm the Guard Desk UI never lets its output auto-execute anything (it must stay a suggestion feeding the approve step), and consider whether the ID-parsing surface belongs behind an explicit user-enabled toggle given it handles PII.
+2. **Release signing/notarization:** wire the Apple signing secrets (`BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) and Windows signing so future releases stop being ad-hoc. See `RELEASING.md`, `docs/macos-signing-checklist.md`, `docs/azure-signing-cost.md`.
+3. **Verify the live download path:** after `v1.2.2`, confirm `releases/latest/download/Ghost.dmg` and `Ghost_Setup.exe` resolve from the deployed site (they should, since assets are published and not draft).
+4. **Guard the multi-agent workflow:** this repo takes many concurrent PRs. Keep PRs small and single-purpose, `git fetch origin master` + rebase before pushing, and add one line to the `generate_handler!` list / `src/main.js` without reflowing neighbors (both are conflict hotspots). PR #138 was a grab-bag that merged cleanly this time but is the anti-pattern to avoid.
+5. **Continue the build order in `AGENTS.md`:** policy primitives → Zones/folder rules → Organizer planner/preview/executor polish → replay reliability/semantic targeting → release quality → AI suggestions last (suggestion-only, gated).
+
+---
+
+## ⚠️ Known Risks / Notes
+
+- Releases are **not signed/notarized** without secrets — do not claim production readiness.
+- `parse_id_document` handles personal data; keep it local, suggestion-only, and out of any auto-execute path.
+- Experimental commands (`commands/experimental.rs`) stay behind the `experimental` Cargo feature (off by default); CI does not run the experimental leg — validate those locally with `--features experimental`.
+- Validation commands: `make ci` (fmt-check + clippy + test), `make build` (`cargo tauri build --no-bundle`), `make dev`.

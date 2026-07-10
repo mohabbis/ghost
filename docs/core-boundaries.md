@@ -37,7 +37,8 @@ Allowed stable areas:
 - policy checks and command risk classification;
 - audit log primitives;
 - undo journal primitives;
-- Ghost Organizer scan/plan/review/execute flow.
+- Ghost Organizer scan/plan/review/execute flow;
+- on-device OCR of user-supplied images (`run_ocr_on_image`, macOS Vision / Windows OCR) and deterministic parsing of that OCR'd text into structured ID-document fields (`parse_id_document` / `core/id_scan.rs`). OCR runs only on images the user hands in and never touches the network; the parser is pure text-in/struct-out (no image, IO, or capture). Any resulting personal fields stay local — never uploaded, never used to auto-execute anything.
 
 Stable core behavior must be:
 
