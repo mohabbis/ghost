@@ -3,30 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost — Desktop automation you approve before it runs</title>
+    <title>Ghost — Approve before it acts</title>
     <meta
       name="description"
-      content="Ghost turns file cleanup and desktop routines into reviewable plans. Preview every move, approve the exact actions, and keep the workflow local, audited, and reversible."
+      content="Local desktop automation you approve before it acts. Scan folders, review the plan, run it on your Mac — audited, undoable, nothing uploaded."
     />
-    <meta name="theme-color" content="#0a0a14" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://ghost.muharafiq.com/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Ghost — Desktop automation you approve before it runs" />
+    <meta property="og:title" content="Ghost — Approve before it acts" />
     <meta
       property="og:description"
-      content="Turn file cleanup and desktop routines into reviewable plans without uploading client documents. Ghost previews every move, audits every change, and keeps undo ready."
+      content="Local desktop automation you approve before it acts. Plans stay on your Mac — audited, undoable, nothing uploaded."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
     <meta property="og:image" content="https://ghost.muharafiq.com/assets/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="keywords" content="automatically rename and file invoices, organize client statements, bookkeeper file organizer, local-first desktop automation, invoice filing software" />
+    <meta name="twitter:title" content="Ghost — Approve before it acts" />
+    <meta name="twitter:description" content="Local desktop automation you approve before it acts. Audited, undoable, nothing uploaded." />
+    <meta name="twitter:image" content="https://ghost.muharafiq.com/assets/og.png" />
+    <meta name="keywords" content="local desktop automation, approve before it acts, file organizer, Mac automation, audit undo" />
 
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <script src="/main.js" defer></script>
 
@@ -92,12 +98,12 @@
             />
             <circle cx="12.6" cy="13" r="3.1" fill="#fff" />
             <circle cx="19.4" cy="13" r="3.1" fill="#fff" />
-            <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0a0a14" />
-            <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0a0a14" />
+            <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0b0d12" />
+            <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0b0d12" />
             <defs>
               <linearGradient id="gp" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#a394ff" />
-                <stop offset="1" stop-color="#7b6cf0" />
+                <stop stop-color="#12a88c" />
+                <stop offset="1" stop-color="#0a6e5c" />
               </linearGradient>
             </defs>
           </svg>
@@ -128,17 +134,17 @@
       <!-- ───────────────────────── Hero ───────────────────────── -->
       <section class="hero reveal">
         <div class="hero__copy">
-          <h1>Desktop automation you <span class="grad">approve before</span> it runs.</h1>
+          <p class="brand-hero">Ghost</p>
+          <h1>Approve before it <span class="grad">acts</span>.</h1>
           <p class="lede">
-            Ghost scans messy folders, builds a plan, and shows you exactly what changes.
-            You approve the final actions, Ghost executes safely, and every move stays
-            <strong>audited</strong>, <strong>reversible</strong>, and <strong>local-first</strong>.
+            Local desktop automation for messy folders and desk workflows.
+            Scan → plan → approve → undo. Your files never leave this machine.
           </p>
           <div class="hero__actions">
-            <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download</span></a>
-            <a class="btn btn--secondary btn--lg" href="#demo"><svg class="i"><use href="#i-play"/></svg> Watch demo</a>
+            <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download for Mac</span></a>
+            <a class="btn btn--secondary btn--lg" href="#demo"><svg class="i"><use href="#i-play"/></svg> Try it live</a>
           </div>
-          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v1.2.0 preview · Your data never leaves your device.</p>
+          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v1.2.0 · Mac &amp; Windows · nothing uploaded</p>
         </div>
 
         <!-- Hero mockup: a proposed plan awaiting approval -->
@@ -157,9 +163,9 @@
                 <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
                   <path d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z" fill="url(#gp2)"/>
                   <circle cx="12.6" cy="13" r="3.1" fill="#fff"/><circle cx="19.4" cy="13" r="3.1" fill="#fff"/>
-                  <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0a0a14"/>
-                  <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0a0a14"/>
-                  <defs><linearGradient id="gp2" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse"><stop stop-color="#a394ff"/><stop offset="1" stop-color="#7b6cf0"/></linearGradient></defs>
+                  <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0b0d12"/>
+                  <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0b0d12"/>
+                  <defs><linearGradient id="gp2" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse"><stop stop-color="#12a88c"/><stop offset="1" stop-color="#0a6e5c"/></linearGradient></defs>
                 </svg>
               </span>
             </div>
@@ -195,6 +201,9 @@
             </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="client-filing" id="tab-client-filing">
               <svg class="i"><use href="#i-folder-open"/></svg> Client filing
+            </button>
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="guard-desk" id="tab-guard-desk">
+              <svg class="i"><use href="#i-shield"/></svg> Guard Desk
             </button>
           </div>
 
@@ -263,16 +272,38 @@
               <span class="demo__hint" id="client-hint">Invoices, receipts, and statements file into real category folders with dated names.</span>
             </div>
           </div>
+
+          <!-- Tab D: Guard Desk → POS Bridge -->
+          <div class="demo__panel" role="tabpanel" data-panel="guard-desk" aria-labelledby="tab-guard-desk" hidden>
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot"></span> Guard Desk — check + ID</div>
+                <ul class="planlist" id="guard-rules" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle" id="guard-planhead">Verdict</div>
+                <ul class="planlist" id="guard-verdict" aria-live="polite"></ul>
+                <div class="audit" id="guard-audit" hidden>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> POS Bridge log</div>
+                  <ul id="guard-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="guard-action" type="button">Scan documents</button>
+              <span class="demo__hint" id="guard-hint">Local compliance check — nothing leaves your browser.</span>
+            </div>
+          </div>
         </div>
       </section>
 
       <!-- ───────────────────────── Bookkeeper niche ───────────────────────── -->
       <section id="client-filing" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Built for weekly filing</p>
-          <h2>For bookkeepers, practice admins, and anyone filing client documents.</h2>
+          <p class="eyebrow">Also useful weekly</p>
+          <h2>Client filing when downloads pile up.</h2>
           <p class="section__sub">
-            Download invoices, receipts, and statements from client portals, then let Ghost propose the dated folder plan before anything moves.
+            Invoices, receipts, and statements — Ghost proposes dated folders before anything moves.
           </p>
         </div>
         <div class="niche-grid">
@@ -297,27 +328,28 @@
       <!-- ───────────────────────── Financial Operations niche ───────────────────────── -->
       <section id="financial-ops" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Built for Financial Operations</p>
-          <h2>For financial tellers, check cashers, and compliance officers.</h2>
+          <p class="eyebrow">Also in the app</p>
+          <h2>Guard Desk + POS Bridge for desk workflows.</h2>
           <p class="section__sub">
-            Scan checks and IDs, run local AI compliance audits, and let Ghost auto-fill legacy terminal screens (like PLS POS) without manual data entry.
+            When you need a compliance-style check before typing into a legacy terminal,
+            Ghost runs the scan locally, waits for your approval, then auto-fills field by field.
           </p>
         </div>
         <div class="niche-grid">
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-shield"/></svg></span>
-            <h3>Local AI verification.</h3>
-            <p>Verification matches payee names, checks ID validity, and validates check age locally on the teller machine before cashing.</p>
+            <h3>Local verification.</h3>
+            <p>Match payee to ID, check expiry and date windows, and surface a clear verdict — all on your machine.</p>
           </article>
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-keyboard"/></svg></span>
-            <h3>Zero-Error POS Auto-Fill.</h3>
-            <p>Ghost replays secure keystrokes to enter verified check details into legacy terminal screens, cutting transaction times by 80%.</p>
+            <h3>POS Bridge auto-fill.</h3>
+            <p>After you approve, Ghost types verified fields into a legacy terminal mock so you can see every keystroke.</p>
           </article>
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-lock"/></svg></span>
-            <h3>Strict regulatory boundaries.</h3>
-            <p>Compliance constraints are hardcoded into local policy zones, ensuring that transaction logs stay secure and auditable.</p>
+            <h3>Same trust pipeline.</h3>
+            <p>Scan → approve → act → audit. Rejected plans never unlock POS Bridge.</p>
           </article>
         </div>
       </section>
@@ -343,8 +375,9 @@
       <!-- ───────────────────────── Why Ghost ───────────────────────── -->
       <section id="why" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Why Ghost is different</p>
-          <h2>The opposite of an autonomous cloud agent.</h2>
+          <p class="eyebrow">Why Ghost wins</p>
+          <h2>The opposite of a cloud “chief of staff” agent.</h2>
+          <p class="section__sub">Most AI tools read your Slack and inbox online. Ghost runs on your desktop — plans file moves and POS entry locally, then waits for your approval.</p>
         </div>
         <div class="compare">
           <div class="compare__col compare__col--them">

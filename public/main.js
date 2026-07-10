@@ -586,6 +586,113 @@ function replayDemo() {
   reset();
 }
 
+/* ============================================================
+   Demo D — Guard Desk → approve → POS Bridge
+   ============================================================ */
+function guardDeskDemo() {
+  const rulesEl = $("#guard-rules");
+  const verdictEl = $("#guard-verdict");
+  const auditBox = $("#guard-audit");
+  const auditEl = $("#guard-auditlist");
+  const btn = $("#guard-action");
+  const hint = $("#guard-hint");
+  const planHead = $("#guard-planhead");
+  if (!btn) return;
+
+  const RULES = [
+    { tag: "✓ pass", cls: "tag--new", strong: "Payee matches ID", desc: "JOHN DOE" },
+    { tag: "✓ pass", cls: "tag--new", strong: "ID not expired", desc: "2029-12-15" },
+    { tag: "✓ pass", cls: "tag--new", strong: "Check within 90 days", desc: "2026-07-09" },
+    { tag: "✓ pass", cls: "tag--new", strong: "Signature match", desc: "98.4%" },
+    { tag: "✓ pass", cls: "tag--new", strong: "Under cashing limit", desc: "$1,450.00" },
+  ];
+
+  let state = "idle";
+
+  function row(a) {
+    return el(
+      "li",
+      null,
+      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc || ""}</span>`,
+    );
+  }
+
+  function reset() {
+    rulesEl.innerHTML = "";
+    verdictEl.innerHTML = "";
+    auditEl.innerHTML = "";
+    auditBox.hidden = true;
+    planHead.textContent = "Verdict";
+    hint.className = "demo__hint";
+    hint.textContent = "Local compliance check — nothing leaves your browser.";
+    btn.textContent = "Scan documents";
+    btn.disabled = false;
+    state = "idle";
+  }
+
+  async function scan() {
+    btn.disabled = true;
+    hint.textContent = "Scanning check + ID locally…";
+    await sequence(
+      RULES.map((a) => () => rulesEl.appendChild(row(a))),
+      220,
+    );
+    planHead.textContent = "Verdict — APPROVED";
+    verdictEl.appendChild(
+      row({ tag: "approve", cls: "tag--move", strong: "Safe to cash", desc: "awaiting your approval" }),
+    );
+    hint.textContent = "Ghost recommends. You still approve before POS Bridge types.";
+    btn.textContent = "Approve plan";
+    btn.disabled = false;
+    state = "scanned";
+  }
+
+  async function approve() {
+    btn.disabled = true;
+    hint.textContent = "Approved — POS Bridge unlocked.";
+    verdictEl.appendChild(
+      row({ tag: "✓ you", cls: "tag--new", strong: "Human approved", desc: "plan locked" }),
+    );
+    btn.textContent = "Auto-fill POS";
+    btn.disabled = false;
+    state = "approved";
+  }
+
+  async function autofill() {
+    btn.disabled = true;
+    auditBox.hidden = false;
+    hint.textContent = "Typing into POS Bridge…";
+    const fields = [
+      "Payee Full Name → JOHN DOE",
+      "ID Number → DL-98234812",
+      "Check Amount → 1,450.00",
+      "Routing → 121000248",
+      "Account → 987654321",
+      "Status → OK-88294",
+    ];
+    await sequence(
+      fields.map((f) => () => {
+        const li = el("li", null, `✓ ${f}`);
+        auditEl.appendChild(li);
+      }),
+      280,
+    );
+    hint.textContent = "Done — every field typed after your approval.";
+    btn.textContent = "Run again";
+    btn.disabled = false;
+    state = "done";
+  }
+
+  btn.addEventListener("click", () => {
+    if (state === "idle") scan();
+    else if (state === "scanned") approve();
+    else if (state === "approved") autofill();
+    else if (state === "done") reset();
+  });
+
+  reset();
+}
+
 /* ---------- nav hairline appears once the page scrolls ---------- */
 function setupStickyNav() {
   const nav = $(".nav");
@@ -607,4 +714,5 @@ window.addEventListener("DOMContentLoaded", () => {
   organizerDemo();
   replayDemo();
   clientFilingDemo();
+  guardDeskDemo();
 });
