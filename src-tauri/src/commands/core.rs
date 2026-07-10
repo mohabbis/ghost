@@ -117,6 +117,20 @@ pub fn ghost_guard_audit(events: Vec<InputEvent>) -> crate::core::guard::GhostGu
     crate::core::guard::audit_workflow(&events)
 }
 
+/// Run Ghost Guard against the **compressed semantic timeline** of a workflow.
+///
+/// The raw events are compressed server-side (deterministic, local, no LLM/network)
+/// and the resulting semantic steps are audited, so findings line up with the
+/// review-timeline steps the user sees rather than raw-event indices. The report
+/// is never trusted from the client — it is re-derived here from the event list.
+#[tauri::command]
+pub fn ghost_guard_audit_compressed(
+    events: Vec<InputEvent>,
+) -> crate::core::guard::GhostGuardReport {
+    let report = crate::core::compression::compress(&events);
+    crate::core::guard::audit_compressed(&report)
+}
+
 /// List past replay runs, newest first, from local execution history.
 ///
 /// Safe-read: returns only the user's own run records (status, duration,
