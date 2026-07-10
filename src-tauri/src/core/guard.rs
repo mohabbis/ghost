@@ -4,6 +4,7 @@
 //! be a cloud AI classifier; it gives users an explainable safety review of the
 //! workflow they just recorded.
 
+use crate::core::compression::{CompressedStep, CompressionReport, Target, LOW_CONFIDENCE};
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -208,6 +209,201 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
         }
     }
 
+    finalize_report(events.len(), sensitive_apps, findings)
+}
+
+/// Audit a **compressed semantic timeline** rather than the raw event stream.
+///
+/// This is the guard's view of the same read model the reviewer sees: every
+/// finding's `step_index` refers to a *semantic* [`CompressedStep`] position
+/// (aligned with the compression review timeline), not a raw-event index. It is
+/// the routing point for recorded routines — compressed steps flow through the
+/// same deterministic risk classes (`sensitive`, `destructive`, `credential`,
+/// `low-locator-confidence`, `replay-reliability`) that gate raw workflows.
+///
+/// It is intentionally local and pure: no LLM, no network, no file IO. Typed
+/// text is already redacted by the compressor before it reaches here, so this
+/// audit never sees retained secure-field text.
+pub fn audit_compressed(report: &CompressionReport) -> GhostGuardReport {
+    let mut findings = Vec::new();
+    let mut sensitive_apps = BTreeSet::new();
+
+    if report.steps.is_empty() {
+        findings.push(GuardFinding {
+            severity: GuardSeverity::Medium,
+            category: GuardCategory::EmptyWorkflow,
+            step_index: None,
+            title: "No workflow steps to audit".into(),
+            detail: "Ghost Guard could not inspect an empty semantic timeline.".into(),
+            recommendation: "Record a short, low-risk task before saving or replaying.".into(),
+        });
+    }
+
+    for (idx, step) in report.steps.iter().enumerate() {
+        match step {
+            CompressedStep::Click(click) => match &click.target {
+                Some(target) => {
+                    let haystack = target_text(target);
+                    if target_is_sensitive(target) || contains_any(&haystack, SENSITIVE_APP_HINTS) {
+                        note_sensitive_app(&mut sensitive_apps, target);
+                        findings.push(GuardFinding {
+                            severity: GuardSeverity::High,
+                            category: if target_is_sensitive(target) {
+                                GuardCategory::SensitiveField
+                            } else {
+                                GuardCategory::SensitiveApp
+                            },
+                            step_index: Some(idx),
+                            title: "Sensitive app or surface detected".into(),
+                            detail: format!("Step {} touches {}.", idx + 1, readable_target(target)),
+                            recommendation: "Replay should pause here and require manual confirmation before interacting with a sensitive surface.".into(),
+                        });
+                    }
+                    if contains_any(&haystack, DESTRUCTIVE_HINTS) {
+                        findings.push(GuardFinding {
+                            severity: GuardSeverity::High,
+                            category: GuardCategory::DestructiveAction,
+                            step_index: Some(idx),
+                            title: "Potentially irreversible action".into(),
+                            detail: format!(
+                                "Step {} may activate {}.",
+                                idx + 1,
+                                readable_target(target)
+                            ),
+                            recommendation:
+                                "Run this routine step-by-step and pause before this action."
+                                    .into(),
+                        });
+                    }
+                }
+                None => {
+                    findings.push(GuardFinding {
+                        severity: GuardSeverity::Low,
+                        category: GuardCategory::LowLocatorConfidence,
+                        step_index: Some(idx),
+                        title: "Coordinate-only click".into(),
+                        detail: format!(
+                            "Step {} clicks {} without accessible metadata.",
+                            idx + 1,
+                            click
+                                .fallback_coords
+                                .map(|(x, y)| format!("absolute coordinates ({x}, {y})"))
+                                .unwrap_or_else(|| "an unknown location".into())
+                        ),
+                        recommendation: "Re-record with app accessibility enabled so replay can target semantic UI metadata instead of screen coordinates.".into(),
+                    });
+                }
+            },
+            CompressedStep::TypeText(typed) => {
+                if typed.text.as_deref().is_some_and(looks_like_secret) {
+                    findings.push(GuardFinding {
+                        severity: GuardSeverity::Critical,
+                        category: GuardCategory::CredentialInput,
+                        step_index: Some(idx),
+                        title: "Possible credential typed".into(),
+                        detail: format!(
+                            "Step {} types text that looks like a secret or token.",
+                            idx + 1
+                        ),
+                        recommendation: "Delete this step and use a manual checkpoint instead of replaying secrets.".into(),
+                    });
+                } else if typed.secure_field
+                    || typed.target.as_ref().is_some_and(target_is_sensitive)
+                {
+                    if let Some(target) = &typed.target {
+                        note_sensitive_app(&mut sensitive_apps, target);
+                    }
+                    findings.push(GuardFinding {
+                        severity: GuardSeverity::High,
+                        category: GuardCategory::SensitiveField,
+                        step_index: Some(idx),
+                        title: "Typing into a sensitive field".into(),
+                        detail: format!(
+                            "Step {} types {} characters into a secure or credential-like field.",
+                            idx + 1,
+                            typed.char_count
+                        ),
+                        recommendation: "Replace this step with a manual checkpoint so Ghost never replays credentials.".into(),
+                    });
+                }
+            }
+            CompressedStep::Shortcut(shortcut) => {
+                let haystack = format!(
+                    "{} {}",
+                    shortcut.combo,
+                    shortcut.action.clone().unwrap_or_default()
+                )
+                .to_lowercase();
+                if contains_any(&haystack, DESTRUCTIVE_HINTS) {
+                    findings.push(GuardFinding {
+                        severity: GuardSeverity::Medium,
+                        category: GuardCategory::DestructiveAction,
+                        step_index: Some(idx),
+                        title: "Potentially destructive shortcut".into(),
+                        detail: format!("Step {} presses {}.", idx + 1, shortcut.combo),
+                        recommendation: "Confirm this shortcut is safe to replay unattended."
+                            .into(),
+                    });
+                }
+            }
+            CompressedStep::Unknown(unknown) => {
+                findings.push(GuardFinding {
+                    severity: GuardSeverity::Medium,
+                    category: GuardCategory::ReplayReliability,
+                    step_index: Some(idx),
+                    title: "Unclassified step".into(),
+                    detail: format!(
+                        "Step {} could not be classified: {}.",
+                        idx + 1,
+                        unknown.description
+                    ),
+                    recommendation:
+                        "Review this step manually; unclassified steps may not replay reliably."
+                            .into(),
+                });
+            }
+            CompressedStep::Scroll(_) | CompressedStep::Wait(_) => {}
+        }
+
+        // Fold the compressor's own confidence signal in per semantic step.
+        // Unknown steps (confidence 0.0) are covered above, and a coordinate-only
+        // click already earns a LowLocatorConfidence finding, so only flag
+        // click/type steps that *have* a target resolved with low confidence.
+        let confidence = step.confidence();
+        let has_target = match step {
+            CompressedStep::Click(c) => c.target.is_some(),
+            CompressedStep::TypeText(t) => t.target.is_some(),
+            _ => false,
+        };
+        if has_target && confidence > 0.0 && confidence <= LOW_CONFIDENCE {
+            findings.push(GuardFinding {
+                severity: GuardSeverity::Low,
+                category: GuardCategory::ReplayReliability,
+                step_index: Some(idx),
+                title: "Low-confidence target".into(),
+                detail: format!(
+                    "Step {} resolved its target with low confidence ({:.0}%).",
+                    idx + 1,
+                    confidence * 100.0
+                ),
+                recommendation: "Dry-run this step before an unattended replay.".into(),
+            });
+        }
+    }
+
+    finalize_report(report.steps.len(), sensitive_apps, findings)
+}
+
+/// Score, classify, summarize, and assemble a [`GhostGuardReport`] from a set of
+/// findings. Shared by [`audit_workflow`] (raw events) and [`audit_compressed`]
+/// (semantic steps) so both surfaces score risk identically. `unit_count` is the
+/// number of items audited (raw events or compressed steps) and feeds the
+/// report's `event_count`.
+fn finalize_report(
+    unit_count: usize,
+    sensitive_apps: BTreeSet<String>,
+    findings: Vec<GuardFinding>,
+) -> GhostGuardReport {
     let penalty: u16 = findings
         .iter()
         .map(|f| match f.severity {
@@ -219,7 +415,7 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
         .sum();
     let score = 100u16
         .saturating_sub(penalty)
-        .max(if events.is_empty() { 0 } else { 10 }) as u8;
+        .max(if unit_count == 0 { 0 } else { 10 }) as u8;
     let requires_confirmation = findings
         .iter()
         .any(|f| matches!(f.severity, GuardSeverity::High | GuardSeverity::Critical));
@@ -251,12 +447,12 @@ pub fn audit_workflow(events: &[InputEvent]) -> GhostGuardReport {
         )
     };
 
-    let ai_audit = build_audit_layer(events, &findings, blocks_replay);
+    let ai_audit = build_audit_layer(unit_count, &findings, blocks_replay);
 
     GhostGuardReport {
         score,
         risk_level,
-        event_count: events.len(),
+        event_count: unit_count,
         sensitive_apps: sensitive_apps.into_iter().collect(),
         findings,
         requires_confirmation,
@@ -299,6 +495,47 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| haystack.contains(needle))
 }
 
+fn target_text(target: &Target) -> String {
+    format!(
+        "{} {} {} {}",
+        target.app,
+        target.role,
+        target.name,
+        target.identifier.clone().unwrap_or_default()
+    )
+    .to_lowercase()
+}
+
+fn readable_target(target: &Target) -> String {
+    let name = if target.name.is_empty() {
+        "unnamed"
+    } else {
+        &target.name
+    };
+    let app = if target.app.is_empty() {
+        "Unknown"
+    } else {
+        &target.app
+    };
+    format!("{} \"{}\" in {}", target.role, name, app)
+}
+
+fn note_sensitive_app(apps: &mut BTreeSet<String>, target: &Target) {
+    if !target.app.is_empty() && target.app != "Unknown" {
+        apps.insert(target.app.clone());
+    }
+}
+
+/// Whether a compressed-step [`Target`] looks like a credential/secure surface.
+/// Mirrors [`is_sensitive_element`] but works on the reduced compressed target
+/// (which carries no `value`/`description`/`role_description`).
+pub fn target_is_sensitive(target: &Target) -> bool {
+    let role = target.role.to_ascii_lowercase();
+    role.contains("securetextfield")
+        || role.contains("password")
+        || contains_any(&target_text(target), CREDENTIAL_HINTS)
+}
+
 pub fn is_sensitive_element(el: &ElementInfo) -> bool {
     let role = el.role.to_ascii_lowercase();
     let role_description = el
@@ -338,7 +575,7 @@ pub fn sanitize_recorded_event(event: InputEvent, suppress_keyboard: bool) -> Op
 }
 
 fn build_audit_layer(
-    events: &[InputEvent],
+    unit_count: usize,
     findings: &[GuardFinding],
     blocks_replay: bool,
 ) -> GuardAuditLayer {
@@ -386,7 +623,7 @@ fn build_audit_layer(
         },
         replay_summary: if coordinate_clicks > 0 {
             format!("{coordinate_clicks} click step(s) rely only on screen coordinates, which can break when windows move.")
-        } else if events.is_empty() {
+        } else if unit_count == 0 {
             "There are no steps to replay yet.".to_string()
         } else {
             "Replay has usable semantic metadata or non-click steps for this local audit."
@@ -629,5 +866,207 @@ mod tests {
         assert_eq!(report.risk_level, "low");
         assert!(report.safe_to_save);
         assert!(!report.requires_confirmation);
+    }
+
+    // --- audit_compressed (semantic-timeline routing) --------------------
+
+    use crate::core::compression::{
+        ClickButton, ClickStep, CompressedStep, CompressionReport, ShortcutStep, Target,
+        TypeTextStep, UnknownStep,
+    };
+
+    fn report_of(steps: Vec<CompressedStep>) -> CompressionReport {
+        let spans = steps.iter().enumerate().map(|(i, _)| (i, 1)).collect();
+        CompressionReport::new(steps.len(), steps, spans)
+    }
+
+    fn target(name: &str, role: &str, app: &str) -> Target {
+        Target {
+            name: name.to_string(),
+            role: role.to_string(),
+            app: app.to_string(),
+            identifier: None,
+        }
+    }
+
+    fn click_step(target: Option<Target>, confidence: f32) -> CompressedStep {
+        CompressedStep::Click(ClickStep {
+            button: ClickButton::Left,
+            target,
+            fallback_coords: Some((10, 20)),
+            confidence,
+            raw_event_count: 1,
+        })
+    }
+
+    fn type_step(target: Option<Target>, secure_field: bool, text: Option<&str>) -> CompressedStep {
+        CompressedStep::TypeText(TypeTextStep {
+            char_count: text.map(str::len).unwrap_or(8),
+            redacted: text.is_none(),
+            secure_field,
+            target,
+            text: text.map(str::to_string),
+            confidence: 0.9,
+            raw_event_count: 8,
+        })
+    }
+
+    #[test]
+    fn target_is_sensitive_detects_credential_surfaces() {
+        assert!(target_is_sensitive(&target(
+            "Password",
+            "AXSecureTextField",
+            "Login"
+        )));
+        assert!(target_is_sensitive(&target(
+            "Card number",
+            "AXTextField",
+            "Shop"
+        )));
+        assert!(!target_is_sensitive(&target("Save", "AXButton", "Notes")));
+    }
+
+    #[test]
+    fn compressed_audit_flags_empty_timeline_without_confirmation() {
+        let report = audit_compressed(&report_of(vec![]));
+        assert_eq!(report.event_count, 0);
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::EmptyWorkflow));
+        assert!(!report.requires_confirmation);
+    }
+
+    #[test]
+    fn compressed_audit_clean_timeline_is_low_risk() {
+        let report = audit_compressed(&report_of(vec![click_step(
+            Some(target("Save", "AXButton", "Notes")),
+            0.95,
+        )]));
+        assert!(report.findings.is_empty());
+        assert_eq!(report.score, 100);
+        assert_eq!(report.risk_level, "low");
+        assert!(report.safe_to_save);
+        assert!(!report.requires_confirmation);
+    }
+
+    #[test]
+    fn compressed_audit_flags_secure_field_typing_as_high() {
+        let report = audit_compressed(&report_of(vec![type_step(
+            Some(target("Password", "AXSecureTextField", "Login")),
+            true,
+            None,
+        )]));
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.category == GuardCategory::SensitiveField)
+            .expect("expected a sensitive-field finding");
+        assert_eq!(finding.severity, GuardSeverity::High);
+        assert!(report.requires_confirmation);
+        // Secure-field text is already redacted by the compressor, so the
+        // timeline holds no secret — it stays saveable but not auto-replayable.
+        assert!(!report.blocks_replay);
+        assert!(report.safe_to_save);
+    }
+
+    #[test]
+    fn compressed_audit_blocks_secret_like_typed_text() {
+        let report = audit_compressed(&report_of(vec![type_step(
+            Some(target("API key", "AXTextField", "Console")),
+            false,
+            Some("sk-SECRETTokenValue123456789"),
+        )]));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::CredentialInput));
+        assert!(report.blocks_replay);
+        assert!(!report.safe_to_save);
+    }
+
+    #[test]
+    fn compressed_audit_flags_destructive_click_and_records_sensitive_app() {
+        let report = audit_compressed(&report_of(vec![click_step(
+            Some(target("Delete account", "AXButton", "Bank")),
+            0.95,
+        )]));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::DestructiveAction));
+        // "bank" also trips the sensitive-app hint list.
+        assert!(report.sensitive_apps.contains(&"Bank".to_string()));
+        assert!(report.requires_confirmation);
+    }
+
+    #[test]
+    fn compressed_audit_flags_coordinate_only_click_as_low_confidence() {
+        let report = audit_compressed(&report_of(vec![click_step(None, 0.25)]));
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.category == GuardCategory::LowLocatorConfidence)
+            .expect("expected a low-confidence locator finding");
+        assert_eq!(finding.severity, GuardSeverity::Low);
+        // A coordinate-only click is flagged exactly once (no duplicate
+        // reliability finding from the confidence fold).
+        assert_eq!(report.findings.len(), 1);
+        assert!(!report.requires_confirmation);
+    }
+
+    #[test]
+    fn compressed_audit_flags_low_confidence_target_for_reliability() {
+        let report = audit_compressed(&report_of(vec![click_step(
+            Some(target("Button", "AXButton", "App")),
+            0.4,
+        )]));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::ReplayReliability));
+    }
+
+    #[test]
+    fn compressed_audit_flags_unknown_step_as_reliability_risk() {
+        let report = audit_compressed(&report_of(vec![CompressedStep::Unknown(UnknownStep {
+            description: "Press Escape".to_string(),
+            raw_event_count: 1,
+        })]));
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.category == GuardCategory::ReplayReliability)
+            .expect("expected an unclassified-step reliability finding");
+        assert_eq!(finding.severity, GuardSeverity::Medium);
+    }
+
+    #[test]
+    fn compressed_audit_flags_destructive_shortcut() {
+        let report = audit_compressed(&report_of(vec![CompressedStep::Shortcut(ShortcutStep {
+            combo: "cmd+backspace".to_string(),
+            action: Some("delete".to_string()),
+            raw_event_count: 1,
+        })]));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.category == GuardCategory::DestructiveAction));
+    }
+
+    #[test]
+    fn compressed_audit_finding_step_index_is_semantic_not_raw() {
+        // A benign step, then a destructive click at semantic position 1,
+        // even though the raw stream that produced it may have many events.
+        let report = audit_compressed(&report_of(vec![
+            click_step(Some(target("Home", "AXButton", "App")), 0.95),
+            click_step(Some(target("Delete", "AXButton", "App")), 0.95),
+        ]));
+        let finding = report
+            .findings
+            .iter()
+            .find(|f| f.category == GuardCategory::DestructiveAction)
+            .expect("expected a destructive finding");
+        assert_eq!(finding.step_index, Some(1));
     }
 }
