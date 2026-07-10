@@ -78,6 +78,13 @@ const SENSITIVE_APP_HINTS: &[&str] = &[
     "terminal",
     "system settings",
     "settings",
+    "outlook",
+    "teams",
+    "copilot",
+    "power bi",
+    "fabric",
+    "office 365",
+    "azure",
 ];
 
 const DESTRUCTIVE_HINTS: &[&str] = &[
@@ -559,7 +566,7 @@ pub fn should_suppress_keyboard_after_click(event: &InputEvent) -> bool {
             element: Some(el),
             button: 0 | 2,
             ..
-        } if is_sensitive_element(el)
+        } if is_sensitive_element(el) || contains_any(&element_text(el), SENSITIVE_APP_HINTS)
     )
 }
 
@@ -789,6 +796,17 @@ mod tests {
         let benign = Some(element("AXButton", "Save", "Notes"));
         assert!(!should_suppress_keyboard_after_click(&click(benign, 0)));
         assert!(!should_suppress_keyboard_after_click(&click(None, 0)));
+    }
+
+    #[test]
+    fn suppress_triggers_for_microsoft_sensitive_apps() {
+        let teams = Some(element("AXButton", "Send message", "Teams"));
+        let outlook = Some(element("AXTextField", "Subject", "Outlook"));
+        let copilot = Some(element("AXButton", "Ask Copilot", "Copilot"));
+        
+        assert!(should_suppress_keyboard_after_click(&click(teams, 0)));
+        assert!(should_suppress_keyboard_after_click(&click(outlook, 0)));
+        assert!(should_suppress_keyboard_after_click(&click(copilot, 0)));
     }
 
     // --- sanitize_recorded_event ----------------------------------------
