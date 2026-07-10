@@ -259,6 +259,7 @@ strong { font-weight: 650; }
   border-radius: 999px; background: var(--surface-2);
 }
 .trust-strip .i { font-size: 17px; color: var(--violet-bright); }
+.works-strip { margin-top: 4px; }
 
 /* ───────────────────────── Demo ───────────────────────── */
 .demo {
