@@ -126,7 +126,7 @@ Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 Current structure:
 
 ```text
-src/                    # Tauri desktop frontend (vanilla JS/HTML/CSS, no bundler; main.js holds most UI logic)
+src/                    # Tauri desktop frontend (vanilla JS/HTML/CSS, no bundler; main.js holds most UI logic; compression-review.js/.css is the split-out event-review timeline)
 public/                 # marketing/download site (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/; auto-deployed to Vercel by deploy-website.yml)
 src-tauri/              # Rust backend
 docs/                   # planning and technical docs
@@ -153,15 +153,17 @@ src-tauri/src/
     compress.rs          # deterministic text compression for LLM-bound content
     compression/         # deterministic event compression for workflow review
     execution.rs         # ExecutionRecord tracking for replay history
-    replay_support.rs    # shared pause/cancel/pacing replay plumbing
+    replay_support.rs    # shared pause/cancel/pacing replay plumbing + resolution chain/matcher
+    dry_run.rs           # pure per-step replay preview (typed text excluded)
+    id_scan.rs           # deterministic identity-document field parsing (safe-read; text in, no image/AI)
     events.rs, guard.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
-    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs   # experimental-facing
+    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs, ocr.rs   # experimental-facing (ocr.rs touches image bytes)
   platform/
     macos.rs, windows.rs, headless.rs   # OS input capture/replay backends (headless used by Linux CI)
   policy/
     capability.rs, decision.rs, engine.rs, risk.rs, zone.rs
   storage/
-    migrations.rs, zones.rs, executions.rs
+    migrations.rs, zones.rs, executions.rs, milestones.rs   # milestones.rs: local-only first-touch timing (no network)
   organizer/
     scanner.rs, classifier.rs, naming.rs, conflict.rs, planner.rs, executor.rs, undo.rs
   audit/
