@@ -2915,6 +2915,276 @@ const PLS_SCENARIOS = {
   }
 };
 
+// --- PLS OCR helpers (local Vision/OCR on macOS & Windows) ---
+
+let plsCheckImageFile = null;
+let plsIdImageFile = null;
+
+function plsUpdateUploadStatus() {
+  const el = document.getElementById("plsUploadStatus");
+  if (!el) return;
+  const parts = [];
+  if (plsCheckImageFile) parts.push(`Check: ${plsCheckImageFile.name}`);
+  if (plsIdImageFile) parts.push(`ID: ${plsIdImageFile.name}`);
+  el.textContent = parts.length ? parts.join(" · ") : "No uploads — using preset";
+}
+
+function plsFileToBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(Array.from(new Uint8Array(reader.result)));
+    reader.onerror = () => reject(new Error("Could not read image file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function plsOcrResultsToText(results) {
+  if (!Array.isArray(results) || results.length === 0) return "";
+  return results
+    .map((r) => (r && r.text ? String(r.text).trim() : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function plsFirstMatch(text, patterns) {
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m && m[1]) return m[1].trim();
+  }
+  return "";
+}
+
+function plsNormalizeName(name) {
+  return String(name || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function plsNamesSimilar(a, b) {
+  const left = plsNormalizeName(a).split(" ").filter(Boolean);
+  const right = plsNormalizeName(b).split(" ").filter(Boolean);
+  if (!left.length || !right.length) return false;
+  const overlap = left.filter((tok) => right.includes(tok));
+  return overlap.length >= Math.min(left.length, right.length) - 1;
+}
+
+function plsParseDate(value) {
+  if (!value) return null;
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00`);
+  const slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return new Date(`${year}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}T12:00:00`);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function plsParseCheckText(text) {
+  const upper = text.toUpperCase();
+  const payee = plsFirstMatch(upper, [
+    /PAY\s+TO\s+(?:THE\s+)?ORDER\s+OF\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+    /PAYEE\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+  ]);
+  const amountRaw = plsFirstMatch(text, [
+    /\$\s*([\d,]+\.\d{2})/,
+    /AMOUNT\s*[:.]?\s*\$?\s*([\d,]+\.\d{2})/i,
+  ]);
+  const amount = amountRaw ? amountRaw.replace(/,/g, "") : "";
+  const memo = plsFirstMatch(text, [/MEMO\s*[:.]?\s*(.+)/i]);
+  const date = plsFirstMatch(text, [
+    /DATE\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /DATE\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+    /\b(\d{4}-\d{2}-\d{2})\b/,
+  ]);
+  const routing = plsFirstMatch(text, [/(?:⑆|ROUTING|RTN)\s*(\d{9})/i, /\b(\d{9})\b/]);
+  const accountPatterns = [/ACCOUNT\s*[:.]?\s*(\d{6,17})/i, /\b(\d{8,17})\b/];
+  if (routing) accountPatterns.unshift(new RegExp(`${routing}\\D+(\\d{6,17})`));
+  const account = plsFirstMatch(text, accountPatterns);
+  const signature = plsFirstMatch(text, [
+    /SIGN(?:ATURE)?\s*[:.]?\s*([A-Za-z .'-]{2,40})/i,
+    /([A-Z]\.\s*[A-Z]\.\s+[A-Za-z'-]+)/,
+  ]);
+  const number = plsFirstMatch(text, [/DOC(?:UMENT)?\s*(?:NO|#)?\s*[:.]?\s*(\d{3,6})/i, /\bNO\.?\s*(\d{3,6})\b/i]);
+  return {
+    number: number || "—",
+    payee: payee || "Unknown Payee",
+    amount: amount ? Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00",
+    memo: memo || "—",
+    date: date || "—",
+    routing: routing || "—",
+    account: account || "—",
+    signature: signature || "—",
+  };
+}
+
+function plsParseIdText(text) {
+  const idName = plsFirstMatch(text, [
+    /NAME\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+    /FULL\s+NAME\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+  ]);
+  const idDob = plsFirstMatch(text, [
+    /(?:DOB|DATE\s+OF\s+BIRTH)\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /(?:DOB|DATE\s+OF\s+BIRTH)\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+  ]);
+  const idNumber = plsFirstMatch(text, [
+    /(?:ID\s*(?:NO|#)?|LICENSE|DL)\s*[:.]?\s*([A-Z0-9-]+)/i,
+  ]);
+  const idExpiry = plsFirstMatch(text, [
+    /(?:EXP(?:IRES|IRATION)?)\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /(?:EXP(?:IRES|IRATION)?)\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+  ]);
+  return {
+    idName: idName || "UNKNOWN",
+    idDob: idDob || "—",
+    idNumber: idNumber || "—",
+    idExpiry: idExpiry || "—",
+  };
+}
+
+function plsSignatureScore(payee, signature) {
+  const payeeTokens = plsNormalizeName(payee).split(" ").filter(Boolean);
+  const sigTokens = plsNormalizeName(signature).split(" ").filter(Boolean);
+  if (!payeeTokens.length || !sigTokens.length || signature === "—") return 0;
+  const hits = payeeTokens.filter((t) => sigTokens.some((s) => s.startsWith(t[0]) || s.includes(t)));
+  return Math.round((hits.length / payeeTokens.length) * 100);
+}
+
+function plsEvaluateCompliance(raw) {
+  const today = new Date();
+  const rules = [];
+  let failCount = 0;
+  let warnCount = 0;
+
+  const payeeNorm = plsNormalizeName(raw.payee);
+  const idNorm = plsNormalizeName(raw.idName);
+  if (payeeNorm && idNorm && payeeNorm === idNorm) {
+    rules.push({ text: "Payee matches ID Name", status: "pass" });
+  } else if (payeeNorm && idNorm && plsNamesSimilar(raw.payee, raw.idName)) {
+    rules.push({ text: `Payee Name mismatch (ID shows ${raw.idName})`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: `Payee Name mismatch (ID shows ${raw.idName || "unknown"})`, status: "fail" });
+    failCount += 1;
+  }
+
+  const expiry = plsParseDate(raw.idExpiry);
+  if (expiry && expiry >= today) {
+    rules.push({ text: `ID Expiration Validity (Expires ${raw.idExpiry})`, status: "pass" });
+  } else if (expiry) {
+    rules.push({ text: `ID EXPIRED (Expired ${raw.idExpiry})`, status: "fail" });
+    failCount += 1;
+  } else {
+    rules.push({ text: "ID Expiration Validity (date not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  const checkDate = plsParseDate(raw.date);
+  if (checkDate) {
+    const ageDays = Math.floor((today - checkDate) / (1000 * 60 * 60 * 24));
+    if (ageDays <= 90) {
+      rules.push({ text: `Check Date within 90 days limit (${raw.date})`, status: "pass" });
+    } else {
+      rules.push({ text: `Check Date EXPIRED (> 90 days limit, Date: ${raw.date})`, status: "fail" });
+      failCount += 1;
+    }
+  } else {
+    rules.push({ text: "Check Date within 90 days limit (date not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  const sigScore = plsSignatureScore(raw.payee, raw.signature);
+  if (sigScore >= 60) {
+    rules.push({ text: `Fraud & Signature Verification (Match: ${sigScore}.0%)`, status: "pass" });
+  } else if (sigScore >= 30) {
+    rules.push({ text: `Fraud & Signature Verification (Match: ${sigScore}.0% - Review)`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: `Signature mismatch (Match: ${sigScore}.0% - Alert)`, status: "fail" });
+    failCount += 1;
+  }
+
+  const amountNum = parseFloat(String(raw.amount).replace(/,/g, ""));
+  if (!Number.isNaN(amountNum) && amountNum <= 3000) {
+    rules.push({ text: "Store cashing limit check (< $3,000)", status: "pass" });
+  } else if (!Number.isNaN(amountNum)) {
+    rules.push({ text: `Store cashing limit check (> $3,000 threshold)`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: "Store cashing limit check (amount not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  let verdict;
+  let verdictClass;
+  let recommendation;
+  let code;
+  if (failCount > 0) {
+    verdict = "REJECTED";
+    verdictClass = "error";
+    code = "PLS-REJECT-OCR";
+    recommendation =
+      "<strong>AI Recommendation:</strong> ❌ DO NOT CASH. One or more compliance checks failed on OCR-parsed documents. Review manually or rescan with clearer images.";
+  } else if (warnCount > 0) {
+    verdict = "MANAGER REVIEW";
+    verdictClass = "warn";
+    code = "PLS-PENDING-OCR";
+    recommendation =
+      "<strong>AI Recommendation:</strong> OCR parsed the documents but flagged items for manager review. Verify limits, name alignment, and routing before cashing.";
+  } else {
+    verdict = "APPROVED";
+    verdictClass = "success";
+    code = "PLS-OK-OCR";
+    recommendation =
+      "<strong>AI Recommendation:</strong> Check matches all compliance criteria from local OCR. Payee identity verified. Safe to cash. Click <em>Auto-Fill POS</em> to auto-fill variables into the terminal.";
+  }
+
+  return { ...raw, rules, verdict, verdictClass, recommendation, code };
+}
+
+async function plsScanFromImages(checkFile, idFile) {
+  if (!invoke) throw new Error("OCR requires the Ghost desktop app");
+  let checkText = "";
+  let idText = "";
+
+  if (checkFile) {
+    const bytes = await plsFileToBytes(checkFile);
+    const results = await invoke("run_ocr_on_image", { imageBytes: bytes });
+    checkText = plsOcrResultsToText(results);
+    if (!checkText) throw new Error("No text recognized on check image");
+  }
+  if (idFile) {
+    const bytes = await plsFileToBytes(idFile);
+    const results = await invoke("run_ocr_on_image", { imageBytes: bytes });
+    idText = plsOcrResultsToText(results);
+    if (!idText) throw new Error("No text recognized on ID image");
+  }
+
+  const parsed = {
+    ...plsParseCheckText(checkText),
+    ...plsParseIdText(idText),
+  };
+  return plsEvaluateCompliance(parsed);
+}
+
+function plsPopulateVisuals(data) {
+  document.getElementById("chkNumber").textContent = data.number;
+  document.getElementById("chkPayee").textContent = data.payee;
+  document.getElementById("chkAmount").textContent = data.amount;
+  document.getElementById("chkMemo").textContent = data.memo;
+  document.getElementById("chkDate").textContent = data.date;
+  document.getElementById("chkRouting").textContent = data.routing;
+  document.getElementById("chkAccount").textContent = data.account;
+  document.getElementById("chkSignature").textContent = data.signature;
+  document.getElementById("idName").textContent = data.idName;
+  document.getElementById("idDob").textContent = data.idDob;
+  document.getElementById("idNumber").textContent = data.idNumber;
+  document.getElementById("idExpiry").textContent = data.idExpiry;
+}
+
 function plsInit() {
   const scanBtn = document.getElementById("plsScanCheckBtn");
   const selectEl = document.getElementById("plsSampleCheckSelect");
@@ -2922,34 +3192,53 @@ function plsInit() {
   const analysisResult = document.getElementById("plsAnalysisResult");
   const autofillBtn = document.getElementById("plsAutofillBtn");
   const resetBtn = document.getElementById("plsResetBtn");
+  const checkInput = document.getElementById("plsCheckImageInput");
+  const idInput = document.getElementById("plsIdImageInput");
+  const uploadCheckBtn = document.getElementById("plsUploadCheckBtn");
+  const uploadIdBtn = document.getElementById("plsUploadIdBtn");
   
   if (!scanBtn) return;
+
+  plsUpdateUploadStatus();
+
+  uploadCheckBtn?.addEventListener("click", () => checkInput?.click());
+  uploadIdBtn?.addEventListener("click", () => idInput?.click());
+
+  checkInput?.addEventListener("change", () => {
+    plsCheckImageFile = checkInput.files?.[0] || null;
+    plsUpdateUploadStatus();
+  });
+  idInput?.addEventListener("change", () => {
+    plsIdImageFile = idInput.files?.[0] || null;
+    plsUpdateUploadStatus();
+  });
   
-  scanBtn.addEventListener("click", () => {
+  scanBtn.addEventListener("click", async () => {
     // 1. Reset POS and visual state
     plsResetPOSForm();
     analysisResult.style.display = "none";
     autofillBtn.disabled = true;
     
-    // 2. Load selected scenario
-    const scenarioKey = selectEl.value;
-    const data = PLS_SCENARIOS[scenarioKey];
+    // 2. Load scenario — real OCR when uploads exist, preset otherwise
+    let data;
+    const useOcr = plsCheckImageFile || plsIdImageFile;
+    if (useOcr) {
+      scanBtn.disabled = true;
+      try {
+        data = await plsScanFromImages(plsCheckImageFile, plsIdImageFile);
+        showNotification("Local OCR scan complete", "info");
+      } catch (err) {
+        console.warn("PLS OCR failed, falling back to preset:", err);
+        showNotification(`OCR unavailable — using preset (${err})`, "warn");
+        data = PLS_SCENARIOS[selectEl.value];
+      } finally {
+        scanBtn.disabled = false;
+      }
+    } else {
+      data = PLS_SCENARIOS[selectEl.value];
+    }
     
-    // Update Mock Check elements
-    document.getElementById("chkNumber").textContent = data.number;
-    document.getElementById("chkPayee").textContent = data.payee;
-    document.getElementById("chkAmount").textContent = data.amount;
-    document.getElementById("chkMemo").textContent = data.memo;
-    document.getElementById("chkDate").textContent = data.date;
-    document.getElementById("chkRouting").textContent = data.routing;
-    document.getElementById("chkAccount").textContent = data.account;
-    document.getElementById("chkSignature").textContent = data.signature;
-    
-    // Update Mock ID elements
-    document.getElementById("idName").textContent = data.idName;
-    document.getElementById("idDob").textContent = data.idDob;
-    document.getElementById("idNumber").textContent = data.idNumber;
-    document.getElementById("idExpiry").textContent = data.idExpiry;
+    plsPopulateVisuals(data);
     
     // 3. Show visual container
     visualContainer.style.display = "flex";
@@ -2992,6 +3281,11 @@ function plsInit() {
     analysisResult.style.display = "none";
     document.getElementById("plsReplayLogContainer").style.display = "none";
     autofillBtn.disabled = true;
+    plsCheckImageFile = null;
+    plsIdImageFile = null;
+    if (checkInput) checkInput.value = "";
+    if (idInput) idInput.value = "";
+    plsUpdateUploadStatus();
   });
 }
 

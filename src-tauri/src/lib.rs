@@ -42,6 +42,8 @@ pub fn run() {
             commands::get_playback_speed,
             commands::inspect_element,
             commands::inspect_element_at_cursor,
+            // Local OCR on user-selected images (macOS Vision / Windows OCR).
+            commands::run_ocr_on_image,
             commands::save_workflow,
             commands::load_workflow,
             commands::delete_workflow,

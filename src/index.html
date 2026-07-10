@@ -228,10 +228,15 @@
                       <h2>AI Verification &amp; Compliance</h2>
                       <span class="organizer-pipeline" aria-hidden="true" style="color:var(--success)">Scan → Parse → Verify → Compliance Audit</span>
                     </div>
-                    <p class="panel__hint">Select an AI automation preset. Scan check &amp; ID documents to verify payees, limits, and signature authenticity locally.</p>
+                    <p class="panel__hint">Select an AI automation preset, or upload check &amp; ID images for local OCR (macOS/Windows). Scan verifies payees, limits, and signature authenticity on-device — nothing leaves your machine.</p>
                     
-                    <div class="btn-row" style="margin-bottom:16px; align-items: center; gap: 12px;">
+                    <div class="btn-row" style="margin-bottom:16px; align-items: center; gap: 12px; flex-wrap: wrap;">
                       <button class="btn btn--primary" id="plsScanCheckBtn" type="button">📸 Scan Documents</button>
+                      <button class="btn btn--ghost btn--small" id="plsUploadCheckBtn" type="button" title="Upload a check image for local OCR">Upload Check</button>
+                      <button class="btn btn--ghost btn--small" id="plsUploadIdBtn" type="button" title="Upload an ID image for local OCR">Upload ID</button>
+                      <input type="file" id="plsCheckImageInput" accept="image/*" hidden />
+                      <input type="file" id="plsIdImageInput" accept="image/*" hidden />
+                      <span id="plsUploadStatus" style="font-size:0.75rem; color:var(--muted); min-width:120px;"></span>
                       <label style="font-size:0.8rem; color:var(--muted); margin-left: 8px;">Select Preset:</label>
                       <select id="plsSampleCheckSelect" style="height:36px; padding: 6px 12px; background:var(--bg-soft); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:0.85rem;" aria-label="Select preset scenario">
                         <option value="john_doe">Financial Preset: Weekly Payroll Check (Valid)</option>
