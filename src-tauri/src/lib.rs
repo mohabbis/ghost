@@ -16,6 +16,7 @@ pub mod telemetry;
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(engine::GhostEngine::new());
 
@@ -42,6 +43,10 @@ pub fn run() {
             commands::get_playback_speed,
             commands::inspect_element,
             commands::inspect_element_at_cursor,
+            // Local OCR on user-selected images (macOS Vision / Windows OCR).
+            commands::run_ocr_on_image,
+            // Deterministic ID-document parsing over OCR'd text (no image, no IO).
+            commands::parse_id_document,
             commands::save_workflow,
             commands::load_workflow,
             commands::delete_workflow,
@@ -140,6 +145,7 @@ pub fn run() {
             // writing an audit log and undo journal for every run.
             commands::organizer_list_zones,
             commands::organizer_list_folder_rules,
+            commands::organizer_default_paths,
             commands::organizer_create_zone,
             commands::organizer_add_folder_rule,
             commands::organizer_set_rule_trust,

@@ -8,6 +8,22 @@ pub struct AuthStatus {
     pub unlocked: bool,
 }
 
+/// Reject IPC that mutates local state while the vault is locked.
+///
+/// Ghost is local-first: “login” is a machine password that unlocks an
+/// Argon2id-wrapped AES-256-GCM data key. Mutating Organizer / workflow
+/// commands must call this so a locked session cannot move files or rewrite
+/// boundaries. Unconfigured installs stay usable (password is strongly
+/// recommended in onboarding, not a hard gate on first launch). Read-only
+/// preview commands may stay reachable either way.
+pub(crate) fn require_unlocked(engine: &GhostEngine) -> Result<(), String> {
+    let auth = engine.auth();
+    if auth.is_configured() && !auth.is_unlocked() {
+        return Err("Ghost is locked. Unlock with your local password to continue.".into());
+    }
+    Ok(())
+}
+
 /// Whether a local password exists and whether the app is currently unlocked.
 #[tauri::command]
 pub fn auth_status(engine: State<GhostEngine>) -> AuthStatus {
@@ -69,6 +85,23 @@ mod tests {
         let status = auth_status(app.state());
         assert!(!status.configured);
         assert!(status.unlocked);
+    }
+
+    #[test]
+    fn require_unlocked_allows_unconfigured_installs() {
+        // First-run / skip-password must still be able to create Zones and
+        // organize folders. Lock only applies after a password exists.
+        let app = managed_test_app();
+        require_unlocked(&app.state::<GhostEngine>()).expect("unconfigured should pass");
+    }
+
+    #[test]
+    fn require_unlocked_blocks_when_locked() {
+        let app = managed_test_app();
+        auth_setup("correct horse battery".into(), app.state()).expect("setup");
+        auth_lock(app.state());
+        let err = require_unlocked(&app.state::<GhostEngine>()).expect_err("locked must fail");
+        assert!(err.to_lowercase().contains("locked"));
     }
 
     #[test]

@@ -134,6 +134,8 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `get_playback_speed` | stable | – | – | – | – | – | – | low | Getter. |
 | `inspect_element` | stable | – | – | ✓ | – | – | ✓ | high | Reads the UI element at coordinates via the accessibility API; returns app/window metadata. |
 | `inspect_element_at_cursor` | stable | – | – | ✓ | – | – | ✓ | high | Same, at the current cursor position. |
+| `run_ocr_on_image` | stable | – | – | ✓ | – | – | – | high | Runs local OCR (macOS Vision / Windows OCR) on user-supplied image bytes; returns text blocks with normalized bounds. No network. |
+| `parse_id_document` | stable | – | – | – | – | – | – | low | Deterministic ID-document parsing (`core/id_scan.rs`) over already-OCR'd text; returns structured fields + derived signals (age, expiry state, review flags). Pure text, no image/IO/network. |
 | `save_workflow` | stable | ✓ | – | – | – | ~ | – | medium | Writes workflow JSON to the data dir; encrypted when local auth is configured. Name sanitized. |
 | `load_workflow` | stable | ✓ | – | – | – | ~ | – | medium | Reads workflow JSON; decryption requires unlock. |
 | `delete_workflow` | stable | ✓ | – | – | – | – | – | medium | Deletes a *workflow file* in app data (never a user file). Name sanitized. |
@@ -184,6 +186,7 @@ plan can never reach the filesystem.
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
 | `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
+| `organizer_default_paths` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns real Downloads/home/Documents paths for first-run Organizer UI. |
 | `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). Params: `name`, `description`, optional `renameDated` (default `false`). New Zones default to `Ask`; dated renaming only changes previewed destination names when explicitly enabled. |
 | `organizer_add_folder_rule` | stable | ✓ | – | – | – | – | – | medium | Persists a user-approved boundary (DB only). Refuses rules granting delete. Accepts an optional `trust` (`automate`/`ask_first`/`never`); defaults to `ask_first` when omitted so old frontends behave unchanged. |
 | `organizer_set_rule_trust` | stable | ✓ | – | – | – | – | – | medium | **local-mutate (DB only).** Updates an existing rule's trust level by its path within the Zone. Errors if no such rule exists. Trust is *recorded* here but *enforced* server-side by the policy engine + executor — the frontend can't bypass it. |

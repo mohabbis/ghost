@@ -172,7 +172,7 @@ async function refreshPermissionBanner() {
       const missing = [];
       if (!accessibility) missing.push("Accessibility");
       if (!inputMonitoring) missing.push("Input Monitoring");
-      text.textContent = `Ghost needs ${missing.join(" and ")} permission to record clicks and keystrokes. Enable it in System Settings, then Quit & Reopen so macOS applies it.`;
+      text.textContent = `Recording needs ${missing.join(" and ")}. Organizer works without it. Enable under System Settings → Privacy & Security, then Quit & Reopen.`;
     }
   } catch (error) {
     console.error("Failed to check permissions:", error);
@@ -1663,6 +1663,7 @@ let organizerSelectedZoneId = null;
 let organizerHasReviewedPlan = false;
 
 async function organizerInit() {
+  await organizerPrefillPaths();
   if (!invoke) return; // static mode: the panel stays inert
   await organizerRefreshZones();
 }
@@ -1814,25 +1815,31 @@ const ORGANIZER_PRESETS = {
     mode: "two_folder",
     renameDated: true,
     sourcePrompt: "Full path of the folder client documents arrive in",
-    sourcePlaceholder: "/Users/you/Downloads",
+    sourceKey: "downloads",
     destPrompt: "Destination root for filed client documents",
-    destPlaceholder: "/Users/you/Client Files",
+    destKey: "documents",
   },
   "Bookkeeping inbox": {
     description: "Sort a bookkeeping inbox into category folders, dated for filing.",
     mode: "in_place",
     renameDated: true,
     sourcePrompt: "Full path of the bookkeeping inbox to organize",
-    sourcePlaceholder: "/Users/you/Bookkeeping Inbox",
+    sourceKey: "documents",
   },
   "Downloads cleanup": {
     description: "Tidy a Downloads-style folder into category folders in place.",
     mode: "in_place",
     renameDated: false,
     sourcePrompt: "Full path of the folder to tidy",
-    sourcePlaceholder: "/Users/you/Downloads",
+    sourceKey: "downloads",
   },
 };
+
+function organizerPresetPath(key) {
+  if (key === "downloads") return organizerSuggestedDownloads();
+  if (key === "documents") return organizerSuggestedDocuments();
+  return organizerPathDefaults.home || "";
+}
 
 const TRUST_CHOICES = {
   "Ask first (recommended) — approve each change": "ask_first",
@@ -1854,16 +1861,17 @@ async function organizerRunWizard() {
   if (!presetName) return;
   const preset = ORGANIZER_PRESETS[presetName];
 
-  // No "~" default: the backend never expands tildes, so a literal
-  // "~/Downloads" rule would silently scan nothing. Full paths only.
+  // Prefill with real local folders. Backend also expands ~/… if needed.
+  const sourceDefault = organizerPresetPath(preset.sourceKey);
   const sourcePath = (
-    await ghostPrompt(preset.sourcePrompt, "", preset.sourcePlaceholder)
+    await ghostPrompt(preset.sourcePrompt, sourceDefault, sourceDefault)
   )?.trim();
   if (!sourcePath) return;
 
   let destPath = sourcePath;
   if (preset.mode === "two_folder") {
-    destPath = (await ghostPrompt(preset.destPrompt, "", preset.destPlaceholder))?.trim();
+    const destDefault = organizerPresetPath(preset.destKey);
+    destPath = (await ghostPrompt(preset.destPrompt, destDefault, destDefault))?.trim();
     if (!destPath) return;
   }
 
@@ -1955,6 +1963,59 @@ function organizerGrantSummary(rule) {
     .filter(Boolean)
     .join(", ");
   return grants || "no permissions";
+}
+
+
+/** Real Downloads/home paths for placeholders + guided setup (no /Users/you). */
+let organizerPathDefaults = { downloads: null, home: null, documents: null };
+
+async function organizerPrefillPaths() {
+  try {
+    organizerPathDefaults = (await invoke("organizer_default_paths")) || organizerPathDefaults;
+  } catch (err) {
+    console.warn("organizer_default_paths unavailable:", err);
+  }
+  const input = document.getElementById("organizerFolderPath");
+  if (!input) return;
+  const suggested = organizerPathDefaults.downloads || organizerPathDefaults.home || "";
+  if (suggested) {
+    input.placeholder = suggested;
+    if (!input.value.trim()) input.value = suggested;
+  }
+}
+
+function organizerSuggestedDownloads() {
+  return organizerPathDefaults.downloads || "";
+}
+
+function organizerSuggestedDocuments() {
+  return organizerPathDefaults.documents || organizerPathDefaults.home || "";
+}
+
+/** Native folder picker — avoids fake `/Users/you/…` paths on first run. */
+async function organizerBrowseFolder() {
+  const dialogApi = window.__TAURI__?.dialog;
+  if (!dialogApi?.open) {
+    showNotification("Type a full folder path, or use Browse after a desktop rebuild.", "info");
+    return;
+  }
+  try {
+    const selected = await dialogApi.open({
+      directory: true,
+      multiple: false,
+      title: "Choose a folder Ghost may organize",
+      defaultPath: organizerSuggestedDownloads() || undefined,
+    });
+    if (selected == null || selected === false) return;
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    const input = document.getElementById("organizerFolderPath");
+    if (input && path) {
+      input.value = path;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  } catch (err) {
+    toastError("Could not open folder picker: " + err);
+  }
 }
 
 async function organizerAddFolder() {
@@ -2661,6 +2722,7 @@ function wireUpControls() {
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
   bind("organizerPresetBtn", organizerRunWizard);
+  bind("organizerBrowseBtn", organizerBrowseFolder);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
   bind("organizerRunBtn", organizerRun);
@@ -2835,9 +2897,9 @@ function initViewNav() {
   show("organize");
 }
 
-// ===== PLS AI Desk Custom Demo Workflow =====
+// ===== Guard Desk (local OCR + compliance → POS Bridge) =====
 
-const PLS_SCENARIOS = {
+const GUARD_SCENARIOS = {
   john_doe: {
     number: "1042",
     payee: "John Doe",
@@ -2851,6 +2913,11 @@ const PLS_SCENARIOS = {
     idDob: "1992-08-14",
     idNumber: "DL-98234812",
     idExpiry: "2029-12-15",
+    idIssue: "2021-12-15",
+    idSex: "M",
+    idClass: "C",
+    idJurisdiction: "California",
+    idDocType: "drivers_license",
     rules: [
       { text: "Payee matches ID Name", status: "pass" },
       { text: "ID Expiration Validity (Expires 2029)", status: "pass" },
@@ -2860,8 +2927,8 @@ const PLS_SCENARIOS = {
     ],
     verdict: "APPROVED",
     verdictClass: "success",
-    recommendation: "<strong>AI Recommendation:</strong> Check matches all compliance criteria. Payee identity verified. Safe to cash. Click <em>Auto-Fill POS</em> to auto-fill variables into the terminal.",
-    code: "PLS-OK-88294"
+    recommendation: "<strong>Recommendation:</strong> Check matches all compliance criteria. Payee identity verified. Safe to cash. Approve, then use <em>Auto-fill POS</em> to type into the terminal.",
+    code: "OK-88294"
   },
   jane_smith: {
     number: "5082",
@@ -2876,6 +2943,11 @@ const PLS_SCENARIOS = {
     idDob: "1985-11-23",
     idNumber: "NY-88219421",
     idExpiry: "2030-05-18",
+    idIssue: "2022-05-18",
+    idSex: "F",
+    idClass: "D",
+    idJurisdiction: "New York",
+    idDocType: "state_id",
     rules: [
       { text: "Payee matches ID Name", status: "pass" },
       { text: "ID Expiration Validity (Expires 2030)", status: "pass" },
@@ -2885,8 +2957,8 @@ const PLS_SCENARIOS = {
     ],
     verdict: "MANAGER REVIEW",
     verdictClass: "warn",
-    recommendation: "<strong>AI Recommendation:</strong> Check amount ($4,500.00) exceeds teller authority limit of $3,000. Out-of-state routing number detected. Verify company credentials and request Manager override code.",
-    code: "PLS-PENDING-LIMIT"
+    recommendation: "<strong>Recommendation:</strong> Check amount ($4,500.00) exceeds teller authority limit of $3,000. Out-of-state routing number detected. Verify company credentials and request Manager override code.",
+    code: "PENDING-LIMIT"
   },
   bad_check: {
     number: "1104",
@@ -2901,6 +2973,11 @@ const PLS_SCENARIOS = {
     idDob: "1978-04-02",
     idNumber: "IL-10492842",
     idExpiry: "2026-02-14",
+    idIssue: "2018-02-14",
+    idSex: "M",
+    idClass: "C",
+    idJurisdiction: "Illinois",
+    idDocType: "drivers_license",
     rules: [
       { text: "Payee Name mismatch (ID shows John S. Smith)", status: "warn" },
       { text: "ID EXPIRED (Expired 2026-02-14)", status: "fail" },
@@ -2910,53 +2987,445 @@ const PLS_SCENARIOS = {
     ],
     verdict: "REJECTED",
     verdictClass: "error",
-    recommendation: "<strong>AI Recommendation:</strong> ❌ DO NOT CASH. Check is stale-dated (over 9 months old), ID is expired, and signature verification has failed. Potential fraud flag raised.",
-    code: "PLS-REJECT-BLOCKED"
+    recommendation: "<strong>Recommendation:</strong> Do not cash. Stale-dated check, expired ID, and failed signature check. POS Bridge stays locked.",
+    code: "REJECT-BLOCKED"
   }
 };
 
-function plsInit() {
-  const scanBtn = document.getElementById("plsScanCheckBtn");
-  const selectEl = document.getElementById("plsSampleCheckSelect");
-  const visualContainer = document.getElementById("plsVisualContainer");
-  const analysisResult = document.getElementById("plsAnalysisResult");
-  const autofillBtn = document.getElementById("plsAutofillBtn");
-  const resetBtn = document.getElementById("plsResetBtn");
+// --- Guard Desk OCR helpers (local Vision/OCR on macOS & Windows) ---
+
+let guardCheckImageFile = null;
+let guardIdImageFile = null;
+
+function guardUpdateUploadStatus() {
+  const el = document.getElementById("guardUploadStatus");
+  if (!el) return;
+  const parts = [];
+  if (guardCheckImageFile) parts.push(`Check: ${guardCheckImageFile.name}`);
+  if (guardIdImageFile) parts.push(`ID: ${guardIdImageFile.name}`);
+  el.textContent = parts.length ? parts.join(" · ") : "No uploads — using preset";
+}
+
+function guardFileToBytes(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(Array.from(new Uint8Array(reader.result)));
+    reader.onerror = () => reject(new Error("Could not read image file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function guardOcrResultsToText(results) {
+  if (!Array.isArray(results) || results.length === 0) return "";
+  return results
+    .map((r) => (r && r.text ? String(r.text).trim() : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function guardFirstMatch(text, patterns) {
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m && m[1]) return m[1].trim();
+  }
+  return "";
+}
+
+function guardNormalizeName(name) {
+  return String(name || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function guardNamesSimilar(a, b) {
+  const left = guardNormalizeName(a).split(" ").filter(Boolean);
+  const right = guardNormalizeName(b).split(" ").filter(Boolean);
+  if (!left.length || !right.length) return false;
+  const overlap = left.filter((tok) => right.includes(tok));
+  return overlap.length >= Math.min(left.length, right.length) - 1;
+}
+
+function guardParseDate(value) {
+  if (!value) return null;
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00`);
+  const slash = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return new Date(`${year}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}T12:00:00`);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function guardParseCheckText(text) {
+  const upper = text.toUpperCase();
+  const payee = guardFirstMatch(upper, [
+    /PAY\s+TO\s+(?:THE\s+)?ORDER\s+OF\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+    /PAYEE\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+  ]);
+  const amountRaw = guardFirstMatch(text, [
+    /\$\s*([\d,]+\.\d{2})/,
+    /AMOUNT\s*[:.]?\s*\$?\s*([\d,]+\.\d{2})/i,
+  ]);
+  const amount = amountRaw ? amountRaw.replace(/,/g, "") : "";
+  const memo = guardFirstMatch(text, [/MEMO\s*[:.]?\s*(.+)/i]);
+  const date = guardFirstMatch(text, [
+    /DATE\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /DATE\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+    /\b(\d{4}-\d{2}-\d{2})\b/,
+  ]);
+  const routing = guardFirstMatch(text, [/(?:⑆|ROUTING|RTN)\s*(\d{9})/i, /\b(\d{9})\b/]);
+  const accountPatterns = [/ACCOUNT\s*[:.]?\s*(\d{6,17})/i, /\b(\d{8,17})\b/];
+  if (routing) accountPatterns.unshift(new RegExp(`${routing}\\D+(\\d{6,17})`));
+  const account = guardFirstMatch(text, accountPatterns);
+  const signature = guardFirstMatch(text, [
+    /SIGN(?:ATURE)?\s*[:.]?\s*([A-Za-z .'-]{2,40})/i,
+    /([A-Z]\.\s*[A-Z]\.\s+[A-Za-z'-]+)/,
+  ]);
+  const number = guardFirstMatch(text, [/DOC(?:UMENT)?\s*(?:NO|#)?\s*[:.]?\s*(\d{3,6})/i, /\bNO\.?\s*(\d{3,6})\b/i]);
+  return {
+    number: number || "—",
+    payee: payee || "Unknown Payee",
+    amount: amount ? Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00",
+    memo: memo || "—",
+    date: date || "—",
+    routing: routing || "—",
+    account: account || "—",
+    signature: signature || "—",
+  };
+}
+
+// Fallback ID parser used only when the deterministic Rust scanner
+// (`parse_id_document`) is unavailable (e.g. running outside the desktop app).
+// The backend `guardScanId` is the primary, unit-tested path.
+function guardParseIdText(text) {
+  const idName = guardFirstMatch(text, [
+    /NAME\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+    /FULL\s+NAME\s*[:.]?\s*([A-Z][A-Z .'-]+)/,
+  ]);
+  const idDob = guardFirstMatch(text, [
+    /(?:DOB|DATE\s+OF\s+BIRTH)\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /(?:DOB|DATE\s+OF\s+BIRTH)\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+  ]);
+  const idNumber = guardFirstMatch(text, [
+    /(?:ID\s*(?:NO|#)?|LICENSE|DL)\s*[:.]?\s*([A-Z0-9-]+)/i,
+  ]);
+  const idExpiry = guardFirstMatch(text, [
+    /(?:EXP(?:IRES|IRATION)?)\s*[:.]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /(?:EXP(?:IRES|IRATION)?)\s*[:.]?\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i,
+  ]);
+  return {
+    idName: idName || "UNKNOWN",
+    idDob: idDob || "—",
+    idNumber: idNumber || "—",
+    idExpiry: idExpiry || "—",
+  };
+}
+
+// Human-readable label for the backend `documentType` enum value.
+function guardDocTypeLabel(docType) {
+  switch (docType) {
+    case "drivers_license":
+      return "Driver License";
+    case "state_id":
+      return "State ID";
+    case "passport":
+      return "Passport";
+    default:
+      return "ID Document";
+  }
+}
+
+// Map the backend IdScan (camelCase) onto the flat fields the Guard Desk UI and
+// compliance evaluator use.
+function guardIdScanToFields(scan) {
+  return {
+    idName: scan.name || "UNKNOWN",
+    idDob: scan.dob || "—",
+    idNumber: scan.idNumber || "—",
+    idExpiry: scan.expiry || "—",
+    idIssue: scan.issueDate || "—",
+    idAddress: scan.address || "—",
+    idSex: scan.sex || "—",
+    idClass: scan.class || "—",
+    idJurisdiction: scan.jurisdiction || "—",
+    idDocType: scan.documentType || "unknown",
+    idAge: typeof scan.age === "number" ? scan.age : null,
+    idExpired: typeof scan.expired === "boolean" ? scan.expired : null,
+    idExpiresSoon: typeof scan.expiresSoon === "boolean" ? scan.expiresSoon : null,
+    idFlags: Array.isArray(scan.flags) ? scan.flags : [],
+  };
+}
+
+// Run the deterministic backend ID scanner over OCR text, falling back to the
+// in-page JS parser if the command is missing or errors.
+async function guardScanId(idText) {
+  if (invoke) {
+    try {
+      const scan = await invoke("parse_id_document", { text: idText });
+      return guardIdScanToFields(scan);
+    } catch (err) {
+      console.warn("parse_id_document failed, using JS fallback:", err);
+    }
+  }
+  return guardParseIdText(idText);
+}
+
+function guardSignatureScore(payee, signature) {
+  const payeeTokens = guardNormalizeName(payee).split(" ").filter(Boolean);
+  const sigTokens = guardNormalizeName(signature).split(" ").filter(Boolean);
+  if (!payeeTokens.length || !sigTokens.length || signature === "—") return 0;
+  const hits = payeeTokens.filter((t) => sigTokens.some((s) => s.startsWith(t[0]) || s.includes(t)));
+  return Math.round((hits.length / payeeTokens.length) * 100);
+}
+
+function guardEvaluateCompliance(raw) {
+  const today = new Date();
+  const rules = [];
+  let failCount = 0;
+  let warnCount = 0;
+
+  const payeeNorm = guardNormalizeName(raw.payee);
+  const idNorm = guardNormalizeName(raw.idName);
+  if (payeeNorm && idNorm && payeeNorm === idNorm) {
+    rules.push({ text: "Payee matches ID Name", status: "pass" });
+  } else if (payeeNorm && idNorm && guardNamesSimilar(raw.payee, raw.idName)) {
+    rules.push({ text: `Payee Name mismatch (ID shows ${raw.idName})`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: `Payee Name mismatch (ID shows ${raw.idName || "unknown"})`, status: "fail" });
+    failCount += 1;
+  }
+
+  const expiry = guardParseDate(raw.idExpiry);
+  const backendExpired = raw.idExpired === true;
+  const backendExpiresSoon = raw.idExpiresSoon === true;
+  if (backendExpired || (expiry && expiry < today)) {
+    rules.push({ text: `ID EXPIRED (Expired ${raw.idExpiry})`, status: "fail" });
+    failCount += 1;
+  } else if (expiry) {
+    if (backendExpiresSoon) {
+      rules.push({ text: `ID expires soon (${raw.idExpiry})`, status: "warn" });
+      warnCount += 1;
+    } else {
+      rules.push({ text: `ID Expiration Validity (Expires ${raw.idExpiry})`, status: "pass" });
+    }
+  } else {
+    rules.push({ text: "ID Expiration Validity (date not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  // Age check from the ID scan: cashing to a minor is a hard stop.
+  if (typeof raw.idAge === "number") {
+    if (raw.idAge < 18) {
+      rules.push({ text: `Cardholder age check (MINOR — age ${raw.idAge})`, status: "fail" });
+      failCount += 1;
+    } else {
+      rules.push({ text: `Cardholder age check (age ${raw.idAge})`, status: "pass" });
+    }
+  }
+
+  // Surface any remaining scanner review flags (low-confidence / missing fields)
+  // that did not already map to a specific rule above.
+  if (Array.isArray(raw.idFlags)) {
+    const covered = /expired|expires within|minor/i;
+    raw.idFlags
+      .filter((f) => !covered.test(f))
+      .forEach((f) => {
+        rules.push({ text: `ID scan: ${f}`, status: "warn" });
+        warnCount += 1;
+      });
+  }
+
+  const checkDate = guardParseDate(raw.date);
+  if (checkDate) {
+    const ageDays = Math.floor((today - checkDate) / (1000 * 60 * 60 * 24));
+    if (ageDays <= 90) {
+      rules.push({ text: `Check Date within 90 days limit (${raw.date})`, status: "pass" });
+    } else {
+      rules.push({ text: `Check Date EXPIRED (> 90 days limit, Date: ${raw.date})`, status: "fail" });
+      failCount += 1;
+    }
+  } else {
+    rules.push({ text: "Check Date within 90 days limit (date not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  const sigScore = guardSignatureScore(raw.payee, raw.signature);
+  if (sigScore >= 60) {
+    rules.push({ text: `Fraud & Signature Verification (Match: ${sigScore}.0%)`, status: "pass" });
+  } else if (sigScore >= 30) {
+    rules.push({ text: `Fraud & Signature Verification (Match: ${sigScore}.0% - Review)`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: `Signature mismatch (Match: ${sigScore}.0% - Alert)`, status: "fail" });
+    failCount += 1;
+  }
+
+  const amountNum = parseFloat(String(raw.amount).replace(/,/g, ""));
+  if (!Number.isNaN(amountNum) && amountNum <= 3000) {
+    rules.push({ text: "Store cashing limit check (< $3,000)", status: "pass" });
+  } else if (!Number.isNaN(amountNum)) {
+    rules.push({ text: `Store cashing limit check (> $3,000 threshold)`, status: "warn" });
+    warnCount += 1;
+  } else {
+    rules.push({ text: "Store cashing limit check (amount not detected)", status: "warn" });
+    warnCount += 1;
+  }
+
+  let verdict;
+  let verdictClass;
+  let recommendation;
+  let code;
+  if (failCount > 0) {
+    verdict = "REJECTED";
+    verdictClass = "error";
+    code = "REJECT-OCR";
+    recommendation =
+      "<strong>Recommendation:</strong> Do not cash. One or more compliance checks failed on OCR-parsed documents. Review or rescan with clearer images.";
+  } else if (warnCount > 0) {
+    verdict = "MANAGER REVIEW";
+    verdictClass = "warn";
+    code = "PENDING-OCR";
+    recommendation =
+      "<strong>Recommendation:</strong> OCR parsed the documents but flagged items for manager review. Verify limits, name alignment, and routing before cashing.";
+  } else {
+    verdict = "APPROVED";
+    verdictClass = "success";
+    code = "OK-OCR";
+    recommendation =
+      "<strong>Recommendation:</strong> Check matches all compliance criteria from local OCR. Payee identity verified. Safe to cash. Approve, then use <em>Auto-fill POS</em> to type into the terminal.";
+  }
+
+  return { ...raw, rules, verdict, verdictClass, recommendation, code };
+}
+
+async function guardScanFromImages(checkFile, idFile) {
+  if (!invoke) throw new Error("OCR requires the Ghost desktop app");
+  let checkText = "";
+  let idText = "";
+
+  if (checkFile) {
+    const bytes = await guardFileToBytes(checkFile);
+    const results = await invoke("run_ocr_on_image", { imageBytes: bytes });
+    checkText = guardOcrResultsToText(results);
+    if (!checkText) throw new Error("No text recognized on check image");
+  }
+  let idFields = null;
+  if (idFile) {
+    const bytes = await guardFileToBytes(idFile);
+    const results = await invoke("run_ocr_on_image", { imageBytes: bytes });
+    idText = guardOcrResultsToText(results);
+    if (!idText) throw new Error("No text recognized on ID image");
+    idFields = await guardScanId(idText);
+  }
+
+  const parsed = {
+    ...guardParseCheckText(checkText),
+    ...(idFields || guardParseIdText(idText)),
+  };
+  return guardEvaluateCompliance(parsed);
+}
+
+function guardPopulateVisuals(data) {
+  document.getElementById("chkNumber").textContent = data.number;
+  document.getElementById("chkPayee").textContent = data.payee;
+  document.getElementById("chkAmount").textContent = data.amount;
+  document.getElementById("chkMemo").textContent = data.memo;
+  document.getElementById("chkDate").textContent = data.date;
+  document.getElementById("chkRouting").textContent = data.routing;
+  document.getElementById("chkAccount").textContent = data.account;
+  document.getElementById("chkSignature").textContent = data.signature;
+  document.getElementById("idName").textContent = data.idName;
+  document.getElementById("idDob").textContent = data.idDob;
+  document.getElementById("idNumber").textContent = data.idNumber;
+  document.getElementById("idExpiry").textContent = data.idExpiry;
+
+  // Extended ID-scan fields (present on OCR scans and enriched presets; older
+  // preset data leaves them undefined, so default to an em dash).
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val || "—";
+  };
+  setText("idIssue", data.idIssue);
+  setText("idSex", data.idSex);
+  setText("idClass", data.idClass);
+  setText("idJurisdiction", data.idJurisdiction);
+  const docTypeEl = document.getElementById("idDocType");
+  if (docTypeEl) docTypeEl.textContent = guardDocTypeLabel(data.idDocType);
+
+  const flagsEl = document.getElementById("guardIdFlags");
+  if (flagsEl) {
+    const flags = Array.isArray(data.idFlags) ? data.idFlags : [];
+    flagsEl.textContent = flags.length ? `⚠ ${flags.join(" · ")}` : "";
+    flagsEl.style.display = flags.length ? "block" : "none";
+  }
+}
+
+function guardDeskInit() {
+  const scanBtn = document.getElementById("guardScanBtn");
+  const selectEl = document.getElementById("guardScenarioSelect");
+  const visualContainer = document.getElementById("guardVisualContainer");
+  const analysisResult = document.getElementById("guardAnalysisResult");
+  const autofillBtn = document.getElementById("guardAutofillBtn");
+  const resetBtn = document.getElementById("guardResetBtn");
+  const checkInput = document.getElementById("guardCheckImageInput");
+  const idInput = document.getElementById("guardIdImageInput");
+  const uploadCheckBtn = document.getElementById("guardUploadCheckBtn");
+  const uploadIdBtn = document.getElementById("guardUploadIdBtn");
   
   if (!scanBtn) return;
+
+  guardUpdateUploadStatus();
+
+  uploadCheckBtn?.addEventListener("click", () => checkInput?.click());
+  uploadIdBtn?.addEventListener("click", () => idInput?.click());
+
+  checkInput?.addEventListener("change", () => {
+    guardCheckImageFile = checkInput.files?.[0] || null;
+    guardUpdateUploadStatus();
+  });
+  idInput?.addEventListener("change", () => {
+    guardIdImageFile = idInput.files?.[0] || null;
+    guardUpdateUploadStatus();
+  });
   
-  scanBtn.addEventListener("click", () => {
+  scanBtn.addEventListener("click", async () => {
     // 1. Reset POS and visual state
-    plsResetPOSForm();
+    guardResetPosForm();
     analysisResult.style.display = "none";
     autofillBtn.disabled = true;
     
-    // 2. Load selected scenario
-    const scenarioKey = selectEl.value;
-    const data = PLS_SCENARIOS[scenarioKey];
+    // 2. Load scenario — real OCR when uploads exist, preset otherwise
+    let data;
+    const useOcr = guardCheckImageFile || guardIdImageFile;
+    if (useOcr) {
+      scanBtn.disabled = true;
+      try {
+        data = await guardScanFromImages(guardCheckImageFile, guardIdImageFile);
+        showNotification("Local OCR scan complete", "info");
+      } catch (err) {
+        console.warn("OCR failed, falling back to preset:", err);
+        showNotification(`OCR unavailable — using preset (${err})`, "warn");
+        data = GUARD_SCENARIOS[selectEl.value];
+      } finally {
+        scanBtn.disabled = false;
+      }
+    } else {
+      data = GUARD_SCENARIOS[selectEl.value];
+    }
     
-    // Update Mock Check elements
-    document.getElementById("chkNumber").textContent = data.number;
-    document.getElementById("chkPayee").textContent = data.payee;
-    document.getElementById("chkAmount").textContent = data.amount;
-    document.getElementById("chkMemo").textContent = data.memo;
-    document.getElementById("chkDate").textContent = data.date;
-    document.getElementById("chkRouting").textContent = data.routing;
-    document.getElementById("chkAccount").textContent = data.account;
-    document.getElementById("chkSignature").textContent = data.signature;
-    
-    // Update Mock ID elements
-    document.getElementById("idName").textContent = data.idName;
-    document.getElementById("idDob").textContent = data.idDob;
-    document.getElementById("idNumber").textContent = data.idNumber;
-    document.getElementById("idExpiry").textContent = data.idExpiry;
+    guardPopulateVisuals(data);
     
     // 3. Show visual container
     visualContainer.style.display = "flex";
     
     // 4. Run scan animations
-    const checkBar = document.getElementById("plsCheckScanBar");
-    const idBar = document.getElementById("plsIdScanBar");
+    const checkBar = document.getElementById("guardCheckScanBar");
+    const idBar = document.getElementById("guardIdScanBar");
     
     checkBar.style.display = "block";
     idBar.style.display = "block";
@@ -2976,30 +3445,35 @@ function plsInit() {
       idBar.style.display = "none";
       
       // 5. Show compliance results
-      plsShowComplianceResults(data);
+      guardShowComplianceResults(data);
     }, 2000);
   });
   
   autofillBtn.addEventListener("click", () => {
     const scenarioKey = selectEl.value;
-    const data = PLS_SCENARIOS[scenarioKey];
-    plsRunAutofillReplay(data);
+    const data = GUARD_SCENARIOS[scenarioKey];
+    guardRunAutofillReplay(data);
   });
   
   resetBtn.addEventListener("click", () => {
-    plsResetPOSForm();
+    guardResetPosForm();
     visualContainer.style.display = "none";
     analysisResult.style.display = "none";
-    document.getElementById("plsReplayLogContainer").style.display = "none";
+    document.getElementById("guardReplayLogContainer").style.display = "none";
     autofillBtn.disabled = true;
+    guardCheckImageFile = null;
+    guardIdImageFile = null;
+    if (checkInput) checkInput.value = "";
+    if (idInput) idInput.value = "";
+    guardUpdateUploadStatus();
   });
 }
 
-function plsShowComplianceResults(data) {
-  const resultPanel = document.getElementById("plsAnalysisResult");
-  const verdictEl = document.getElementById("plsVerdict");
-  const recEl = document.getElementById("plsAiRecommendation");
-  const autofillBtn = document.getElementById("plsAutofillBtn");
+function guardShowComplianceResults(data) {
+  const resultPanel = document.getElementById("guardAnalysisResult");
+  const verdictEl = document.getElementById("guardVerdict");
+  const recEl = document.getElementById("guardRecommendation");
+  const autofillBtn = document.getElementById("guardAutofillBtn");
   
   verdictEl.textContent = data.verdict;
   
@@ -3022,40 +3496,57 @@ function plsShowComplianceResults(data) {
   }
   
   recEl.innerHTML = data.recommendation;
-  
-  // Fill rules
-  for (let i = 0; i < 5; i++) {
-    const li = document.getElementById(`chkRule${i+1}`);
-    const rule = data.rules[i];
-    if (rule) {
-      li.textContent = "";
+
+  // Render rules dynamically so ID-scan checks (age, expiry-soon, review flags)
+  // can extend the list beyond the original fixed five.
+  const ruleList = document.getElementById("guardRuleList");
+  if (ruleList) {
+    ruleList.innerHTML = "";
+    (data.rules || []).forEach((rule) => {
+      const li = document.createElement("li");
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.gap = "10px";
+      li.style.padding = "2px 0";
       const icon = document.createElement("span");
       if (rule.status === "pass") {
-        icon.innerHTML = "✅";
+        icon.textContent = "✅";
         li.style.color = "var(--text)";
       } else if (rule.status === "warn") {
-        icon.innerHTML = "⚠️";
+        icon.textContent = "⚠️";
         li.style.color = "var(--accent-warm)";
       } else {
-        icon.innerHTML = "❌";
+        icon.textContent = "❌";
         li.style.color = "#ef4444";
       }
       li.appendChild(icon);
       li.appendChild(document.createTextNode(" " + rule.text));
-    }
+      ruleList.appendChild(li);
+    });
   }
   
   resultPanel.style.display = "block";
   
-  // Only enable autofill if not rejected
-  if (data.verdict !== "REJECTED") {
-    autofillBtn.disabled = false;
-  } else {
-    autofillBtn.disabled = true;
+  // Trust pipeline: recommend → human approve → POS Bridge keys.
+  const approveBtn = document.getElementById("guardApproveBtn");
+  if (approveBtn) {
+    approveBtn.disabled = data.verdict === "REJECTED";
+    approveBtn.style.display = data.verdict === "REJECTED" ? "none" : "inline-flex";
+    approveBtn.onclick = () => {
+      autofillBtn.disabled = false;
+      approveBtn.disabled = true;
+      approveBtn.textContent = "Approved";
+      showNotification("Approved. POS Bridge can auto-fill the terminal.", "info");
+    };
+    if (data.verdict !== "REJECTED") {
+      approveBtn.textContent = "Approve plan";
+      approveBtn.disabled = false;
+    }
   }
+  autofillBtn.disabled = true;
 }
 
-function plsResetPOSForm() {
+function guardResetPosForm() {
   document.getElementById("posPayeeName").value = "";
   document.getElementById("posIdNumber").value = "";
   document.getElementById("posCheckAmount").value = "";
@@ -3070,19 +3561,19 @@ function plsResetPOSForm() {
   document.getElementById("posAccountNumber").style.borderColor = "var(--border)";
   document.getElementById("posVerifyStatus").style.borderColor = "var(--border)";
   
-  document.getElementById("plsMockPOSForm").style.opacity = "0.8";
+  document.getElementById("guardPosForm").style.opacity = "0.8";
 }
 
-async function plsRunAutofillReplay(data) {
-  const autofillBtn = document.getElementById("plsAutofillBtn");
-  const logContainer = document.getElementById("plsReplayLogContainer");
-  const logBox = document.getElementById("plsReplayLog");
+async function guardRunAutofillReplay(data) {
+  const autofillBtn = document.getElementById("guardAutofillBtn");
+  const logContainer = document.getElementById("guardReplayLogContainer");
+  const logBox = document.getElementById("guardReplayLog");
   
   autofillBtn.disabled = true;
   logContainer.style.display = "block";
   logBox.innerHTML = "";
   
-  document.getElementById("plsMockPOSForm").style.opacity = "1";
+  document.getElementById("guardPosForm").style.opacity = "1";
   
   const appendLog = (msg) => {
     const div = document.createElement("div");
@@ -3112,7 +3603,7 @@ async function plsRunAutofillReplay(data) {
     });
   };
   
-  appendLog("[GHOST] Initiating PLS POS Auto-Fill Routine...");
+  appendLog("[GHOST] Initiating POS Bridge Auto-Fill Routine...");
   await sleep(600);
   
   // Field 1: Payee Name
@@ -3138,7 +3629,7 @@ async function plsRunAutofillReplay(data) {
   // Field 6: Verification Code
   const statusInput = document.getElementById("posVerifyStatus");
   statusInput.style.borderColor = "var(--accent)";
-  appendLog(`[GHOST] Ghost Guard checking transaction integrity...`);
+  appendLog(`[GHOST] Guard Desk checking transaction integrity...`);
   await sleep(800);
   appendLog(`[GHOST] Compliance integrity check PASSED.`);
   await typeField("posVerifyStatus", data.code);
@@ -3159,5 +3650,5 @@ window.addEventListener("DOMContentLoaded", () => {
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
   initViewNav(); // left-nav view switcher
-  plsInit(); // initialize PLS AI compliance desk simulator
+  guardDeskInit(); // Guard Desk + POS Bridge
 });

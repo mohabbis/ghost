@@ -38,7 +38,7 @@ is deliberately last and is feature-gated off by default.
 ```
 src/                    Desktop app frontend — vanilla JS/HTML/CSS, NO bundler.
                         tauri.conf.json serves ../src directly; main.js holds the UI logic.
-public/                 Marketing site (static, in-browser demos), auto-deployed to Vercel/Netlify.
+public/                 Marketing site (static, in-browser demos), auto-deployed to Vercel.
 src-tauri/src/          Rust backend (the real product logic).
 docs/                   Planning + technical docs (this file lives here).
 .github/workflows/      CI (rust.yml), release (release.yml), site deploy, security.yml.
@@ -270,8 +270,9 @@ Assume the intent is "we have the accounts; wire the secrets." The touch points:
   / app-specific password or API key); Windows: Authenticode cert (Azure Trusted
   Signing is the documented path — `docs/azure-signing-cost.md`). Checklists in
   `docs/`.
-- **Site deploy** — `public/` auto-deploys to Vercel (and Netlify checks run on
-  PRs); those tokens live in the hosting provider, not the repo.
+- **Site deploy** — `public/` auto-deploys to Vercel (see
+  `.github/workflows/deploy-website.yml`); those tokens live in the hosting
+  provider, not the repo.
 - **Experimental AI/cloud** — any model/cloud credentials only matter under
   `--features experimental`; the stock product needs none.
 - **Local user data** — SQLite DB + workflows live under the OS app-data dir

@@ -40,7 +40,95 @@ use crate::storage::zones::{
     add_folder_rule, create_zone, list_folder_rules, list_zones, set_rule_trust,
 };
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use tauri::State;
+
+/// Expand a user-entered folder path so Organizer rules aren't dead on arrival.
+///
+/// The UI historically accepted `~/Downloads` and `/Users/you/Downloads` as
+/// placeholders. The scanner never expands `~`, so a literal `~/…` rule quietly
+/// matches nothing and the product looks broken. Expand home (~ / $HOME) here,
+/// canonicalize when the path exists, and reject empty input.
+fn expand_user_path(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("folder path is empty".to_string());
+    }
+
+    let expanded = if trimmed == "~" {
+        dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?
+    } else if let Some(rest) = trimmed.strip_prefix("~/") {
+        let mut home =
+            dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
+        home.push(rest);
+        home
+    } else if trimmed.starts_with('$') {
+        // Best-effort $HOME / $USERPROFILE style; anything else stays literal.
+        if let Some(rest) = trimmed.strip_prefix("$HOME") {
+            let mut home =
+                dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
+            let rest = rest.trim_start_matches('/');
+            if !rest.is_empty() {
+                home.push(rest);
+            }
+            home
+        } else {
+            PathBuf::from(trimmed)
+        }
+    } else {
+        PathBuf::from(trimmed)
+    };
+
+    // Prefer a real filesystem path when the folder already exists so rules
+    // match what the scanner / policy engine will see. Fall back to the
+    // expanded (possibly not-yet-created) path for guided setup of empty dirs.
+    if expanded.exists() {
+        expanded
+            .canonicalize()
+            .map_err(|e| format!("could not resolve folder path: {e}"))
+    } else {
+        Ok(expanded)
+    }
+}
+
+fn normalize_folder_rule(mut rule: FolderRule) -> Result<FolderRule, String> {
+    rule.path = expand_user_path(&rule.path.to_string_lossy())?;
+    Ok(rule)
+}
+
+/// Sensible first-run defaults for the Organizer UI (real paths on this machine).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganizerPathDefaults {
+    /// Absolute path to the user's Downloads folder when it exists.
+    pub downloads: Option<String>,
+    /// Absolute path to the user's home directory.
+    pub home: Option<String>,
+    /// Absolute path to the user's Documents folder when it exists.
+    pub documents: Option<String>,
+}
+
+/// Return real local paths the Organizer can pre-fill (Downloads, home, Documents).
+///
+/// Risk class: safe-read. Touches: nothing on disk beyond resolving standard dirs.
+#[tauri::command]
+pub fn organizer_default_paths() -> OrganizerPathDefaults {
+    let home = dirs::home_dir().map(|p| p.to_string_lossy().into_owned());
+    let downloads = dirs::download_dir()
+        .filter(|p| p.is_dir())
+        .map(|p| p.to_string_lossy().into_owned());
+    let documents = dirs::document_dir()
+        .filter(|p| p.is_dir())
+        .map(|p| p.to_string_lossy().into_owned());
+    OrganizerPathDefaults {
+        downloads,
+        home,
+        documents,
+    }
+}
+
+fn path_exists_dir(path: &Path) -> bool {
+    path.is_dir()
+}
 
 /// The result of executing a plan: the report plus the id under which it was
 /// stored, so the UI can offer an undo for exactly this run.
@@ -82,7 +170,9 @@ pub fn organizer_create_zone(
     name: String,
     description: Option<String>,
     rename_dated: Option<bool>,
+    engine: State<GhostEngine>,
 ) -> Result<Zone, String> {
+    super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
     let zone = create_zone(
         &conn,
@@ -105,12 +195,24 @@ pub fn organizer_create_zone(
 ///
 /// Risk class: local-mutate (DB only).
 #[tauri::command]
-pub fn organizer_add_folder_rule(zone_id: String, rule: FolderRule) -> Result<(), String> {
+pub fn organizer_add_folder_rule(
+    zone_id: String,
+    rule: FolderRule,
+    engine: State<GhostEngine>,
+) -> Result<(), String> {
+    super::auth::require_unlocked(&engine)?;
     // Ghost never grants delete through the Organizer surface (MVP never deletes,
     // and the policy engine denies it regardless). Refuse to even persist such a
     // rule so the stored boundary can't imply a capability the product won't honor.
     if rule.can_delete {
         return Err("Organizer folder rules cannot grant delete".to_string());
+    }
+    let rule = normalize_folder_rule(rule)?;
+    if !path_exists_dir(&rule.path) {
+        return Err(format!(
+            "folder does not exist: {}. Pick a real folder on this Mac.",
+            rule.path.display()
+        ));
     }
     let conn = open_default().map_err(|e| e.to_string())?;
     add_folder_rule(&conn, &zone_id, &rule).map_err(|e| e.to_string())
@@ -130,13 +232,47 @@ pub fn organizer_set_rule_trust(
     zone_id: String,
     path: String,
     trust: TrustLevel,
+    engine: State<GhostEngine>,
 ) -> Result<(), String> {
+    super::auth::require_unlocked(&engine)?;
+    let path = expand_user_path(&path)?.to_string_lossy().into_owned();
     let conn = open_default().map_err(|e| e.to_string())?;
     let changed = set_rule_trust(&conn, &zone_id, &path, trust).map_err(|e| e.to_string())?;
     if changed == 0 {
         return Err(format!("no folder rule at {path} in this zone"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn expand_rejects_empty() {
+        assert!(expand_user_path("").is_err());
+        assert!(expand_user_path("   ").is_err());
+    }
+
+    #[test]
+    fn expand_tilde_home() {
+        let home = dirs::home_dir().expect("home");
+        assert_eq!(
+            expand_user_path("~").unwrap(),
+            home.canonicalize().unwrap_or(home.clone())
+        );
+        let under = expand_user_path("~/Downloads").unwrap();
+        assert!(under.starts_with(&home) || under.starts_with(home.canonicalize().unwrap_or(home)));
+    }
+
+    #[test]
+    fn expand_absolute_passthrough_when_missing() {
+        let p = expand_user_path("/tmp/ghost-organizer-path-that-should-not-exist-xyz").unwrap();
+        assert_eq!(
+            p,
+            PathBuf::from("/tmp/ghost-organizer-path-that-should-not-exist-xyz")
+        );
+    }
 }
 
 /// Produce a reviewable plan for a Zone. **Read-only**: this scans and proposes,
@@ -171,6 +307,7 @@ pub fn organizer_execute(
     zone_id: String,
     engine: State<GhostEngine>,
 ) -> Result<ExecutionResult, String> {
+    super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
     let rules = list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())?;
     let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
@@ -206,7 +343,11 @@ pub fn organizer_list_executions() -> Result<Vec<ExecutionSummary>, String> {
 ///
 /// Risk class: local-mutate (filesystem).
 #[tauri::command]
-pub fn organizer_undo(execution_id: String) -> Result<UndoReport, String> {
+pub fn organizer_undo(
+    execution_id: String,
+    engine: State<GhostEngine>,
+) -> Result<UndoReport, String> {
+    super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
     let stored = get_execution(&conn, &execution_id)
         .map_err(|e| e.to_string())?

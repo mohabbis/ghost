@@ -1,21 +1,19 @@
 :root {
   color-scheme: dark;
-  /* Shared design language with the marketing site (public/styles.css):
-     restrained graphite + one violet, hairline borders, calm depth. */
-  --bg: #06060b;
-  --bg-soft: #101020;
-  --panel: rgba(255, 255, 255, 0.045);
-  --panel-strong: rgba(255, 255, 255, 0.085);
-  --border: rgba(255, 255, 255, 0.11);
-  --text: #eef0f8;
-  --muted: #9ea4c0;
-  --accent: #8b7cf6;
-  --accent-strong: #ab9dff;
-  --accent-warm: #f2b45c;
-  --success: #49d3a0;
-  --mono: "SFMono-Regular", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Shared with marketing: industrial graphite + steel teal. */
+  --bg: #08090b;
+  --bg-soft: #12151a;
+  --panel: rgba(255, 255, 255, 0.04);
+  --panel-strong: rgba(255, 255, 255, 0.075);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f2f1ec;
+  --muted: #9aa3af;
+  --accent: #2ec4a2;
+  --accent-strong: #5fd9bb;
+  --accent-warm: #e0a354;
+  --success: #2ec4a2;
+  --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -35,8 +33,8 @@ body {
   margin: 0;
   color: var(--text);
   background:
-    linear-gradient(180deg, rgba(139, 124, 246, 0.06), transparent 28rem),
-    linear-gradient(160deg, #08080f 0%, #0b0b17 55%, #06060b 100%);
+    radial-gradient(720px 280px at 88% -6%, rgba(46, 196, 162, 0.07), transparent 55%),
+    linear-gradient(160deg, #0c0e11 0%, #0a0c0f 55%, #08090b 100%);
 }
 
 body::before {
