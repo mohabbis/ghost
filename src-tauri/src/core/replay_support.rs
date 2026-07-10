@@ -30,6 +30,8 @@ pub enum ResolutionKind {
     WindowRelative,
     /// The element had moved; the search spiral found it nearby.
     SpiralReresolved,
+    /// The element name had slightly drifted or changed, but was resolved fuzzy-matching.
+    FuzzyReresolved,
     /// The element was not found anywhere near the recorded point; replay
     /// fell back to the raw recorded coordinates.
     CoordinateFallback,
@@ -165,6 +167,39 @@ pub fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
     }
 }
 
+/// Does the live element `found` match the recorded `target` descriptor fuzzy-matching
+/// (when exact name match has failed)?
+pub fn descriptor_matches_fuzzy(target: &ElementInfo, found: &ElementInfo) -> bool {
+    // Role must still match case-insensitively.
+    if target.role.is_empty() || !target.role.eq_ignore_ascii_case(&found.role) {
+        return false;
+    }
+
+    // Both must have non-empty names.
+    if target.name.is_empty() || found.name.is_empty() {
+        return false;
+    }
+
+    // App must match case-insensitively if we have one.
+    if !target.app.is_empty() && target.app != "Unknown" {
+        if !target.app.eq_ignore_ascii_case(&found.app) {
+            return false;
+        }
+    }
+
+    let t_name = target.name.to_lowercase();
+    let f_name = found.name.to_lowercase();
+
+    // Check if either is a substring of the other (minimum length 3 to avoid matching noise).
+    if t_name.len() >= 3 && f_name.len() >= 3 {
+        if t_name.contains(&f_name) || f_name.contains(&t_name) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Outward spiral used when re-resolving a moved element: four rings of
 /// eight directions around the recorded point.
 pub const SEARCH_RADII: [i32; 4] = [30, 70, 140, 260];
@@ -222,16 +257,13 @@ where
     F: Fn(i32, i32) -> Option<ElementInfo>,
     W: Fn(&ElementInfo) -> Option<(i32, i32)>,
 {
+    // Pass 1: Exact matches (avoiding decoy false-positives first)
     if let Some(found) = lookup(rx, ry) {
         if descriptor_matches(target, &found) {
             return Some(((rx, ry), ResolutionKind::RecordedPoint));
         }
     }
 
-    // Window-relative: only when the recording captured both the window
-    // title and the in-window offset, and the platform can find that window
-    // now. The candidate is verified against the descriptor — a moved window
-    // with rearranged contents must not be blind-clicked.
     if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
         if let Some((ox, oy)) = window_origin(target) {
             let (px, py) = (ox + relx, oy + rely);
@@ -254,6 +286,40 @@ where
             if let Some(found) = lookup(px, py) {
                 if descriptor_matches(target, &found) {
                     return Some(((px, py), ResolutionKind::SpiralReresolved));
+                }
+            }
+        }
+    }
+
+    // Pass 2: Fuzzy matches (only when exact match couldn't be found)
+    if let Some(found) = lookup(rx, ry) {
+        if descriptor_matches_fuzzy(target, &found) {
+            return Some(((rx, ry), ResolutionKind::FuzzyReresolved));
+        }
+    }
+
+    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
+        if let Some((ox, oy)) = window_origin(target) {
+            let (px, py) = (ox + relx, oy + rely);
+            if (px, py) != (rx, ry) && px >= 0 && py >= 0 {
+                if let Some(found) = lookup(px, py) {
+                    if descriptor_matches_fuzzy(target, &found) {
+                        return Some(((px, py), ResolutionKind::FuzzyReresolved));
+                    }
+                }
+            }
+        }
+    }
+
+    for r in SEARCH_RADII {
+        for (dx, dy) in SEARCH_DIRS {
+            let (px, py) = (rx + dx * r, ry + dy * r);
+            if px < 0 || py < 0 {
+                continue;
+            }
+            if let Some(found) = lookup(px, py) {
+                if descriptor_matches_fuzzy(target, &found) {
+                    return Some(((px, py), ResolutionKind::FuzzyReresolved));
                 }
             }
         }

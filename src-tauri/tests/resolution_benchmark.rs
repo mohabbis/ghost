@@ -239,6 +239,14 @@ fn scenarios() -> Vec<Scenario> {
             windows: HashMap::from([("Report", (900, 500))]),
             expect: None,
         },
+        Scenario {
+            name: "fuzzy match resolves when name has drifted slightly",
+            target: element("AXButton", "Save Changes", "Notes"),
+            recorded: (100, 100),
+            world: vec![((100, 100), element("AXButton", "Save", "Notes"))],
+            windows: HashMap::new(),
+            expect: Some(((100, 100), ResolutionKind::FuzzyReresolved)),
+        },
     ]
 }
 
