@@ -108,7 +108,9 @@ Still being hardened:
 | macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
 | Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Current builds are preview quality. The current app version is `v1.2.4`. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Notarized releases are in progress.
+Current builds are preview quality. The current app version is `v1.2.5`. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Notarized releases are in progress.
+
+Ghost ships a signed, user-approved auto-updater: on launch it checks for a newer release and, if one exists, offers it — it installs only after you click **Update now**, and never swaps itself out silently. See [`docs/auto-update.md`](docs/auto-update.md).
 
 ## Architecture
 

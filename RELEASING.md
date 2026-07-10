@@ -176,22 +176,26 @@ uploads to the release.
 
 ### Generating `latest.json`
 
-The updater needs a `latest.json` manifest published on the release listing each
-platform's download URL + signature. The robust way to generate it is to migrate
-`release.yml` to **`tauri-apps/tauri-action`**, which emits the manifest
-automatically. Until then, assemble it by hand from the uploaded `.sig` files:
+`release.yml` now generates and uploads `latest.json` automatically. After both
+platform builds finish, the `publish-manifest` job downloads the updater
+signatures, assembles the manifest, and uploads it to the release. It is a
+no-op (auto-update stays inert, plain installers still ship) until the updater
+signing key secret is configured, so there is nothing to assemble by hand.
+
+The generated manifest looks like:
 
 ```json
 {
-  "version": "1.0.12",
-  "notes": "See the release notes.",
-  "pub_date": "2026-06-25T00:00:00Z",
+  "version": "1.2.5",
+  "notes": "See the release notes: https://github.com/mohabbis/ghost/releases/tag/v1.2.5",
+  "pub_date": "2026-07-10T00:00:00Z",
   "platforms": {
-    "darwin-aarch64": { "signature": "<contents of Ghost.app.tar.gz.sig>", "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost.app.tar.gz" },
-    "darwin-x86_64":  { "signature": "<same .sig>",                         "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost.app.tar.gz" },
-    "windows-x86_64": { "signature": "<contents of *-setup.exe.sig>",       "url": "https://github.com/mohabbis/ghost/releases/download/v1.0.12/Ghost_Setup.exe" }
+    "darwin-aarch64": { "signature": "<Ghost.app.tar.gz.sig>", "url": "https://github.com/mohabbis/ghost/releases/download/v1.2.5/Ghost.app.tar.gz" },
+    "darwin-x86_64":  { "signature": "<same .sig>",            "url": "https://github.com/mohabbis/ghost/releases/download/v1.2.5/Ghost.app.tar.gz" },
+    "windows-x86_64": { "signature": "<Ghost_Setup.exe.sig>",  "url": "https://github.com/mohabbis/ghost/releases/download/v1.2.5/Ghost_Setup.exe" }
   }
 }
 ```
 
-Upload that file to the release as `latest.json`.
+See `docs/auto-update.md` for the end-to-end user experience and the one-time
+key setup that turns auto-update on.
