@@ -221,7 +221,7 @@ fn extract_name(text: &str) -> Option<String> {
             r"(?i)\bname\s*[:.]?\s*([A-Za-z][A-Za-z .,'-]+)",
         ],
     ) {
-        return Some(normalize_name(&labelled));
+        return Some(reorder_name(&labelled));
     }
 
     // AAMVA element codes: DCS/LN = family name, DAC/FN = first name.
@@ -243,6 +243,39 @@ fn extract_name(text: &str) -> Option<String> {
 
 fn normalize_name(raw: &str) -> String {
     raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Reorder a `LAST, FIRST [MIDDLE]` name into `FIRST [MIDDLE] LAST`. Many IDs
+/// (and OCR passes) surface the surname first with a comma. Names without a
+/// comma are returned as-is (whitespace-normalized).
+fn reorder_name(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches(',').trim();
+    if let Some((last, rest)) = trimmed.split_once(',') {
+        let last = last.trim();
+        let rest = rest.trim();
+        if !last.is_empty() && !rest.is_empty() {
+            return normalize_name(&format!("{rest} {last}"));
+        }
+    }
+    normalize_name(trimmed)
+}
+
+/// Map characters commonly confused by OCR back to the digits they almost
+/// certainly are. Only applied to strings that are expected to be numeric
+/// (date and, when parsing, number tokens) so letters in real words are never
+/// touched.
+fn normalize_digits(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'O' | 'o' | 'Q' | 'D' => '0',
+            'I' | 'l' | 'L' | 'i' | '|' => '1',
+            'S' | 's' => '5',
+            'B' => '8',
+            'Z' | 'z' => '2',
+            'G' => '6',
+            other => other,
+        })
+        .collect()
 }
 
 fn detect_document_type(text: &str) -> IdDocumentType {
@@ -367,47 +400,49 @@ fn first_capture(text: &str, patterns: &[&str]) -> Option<String> {
 /// (ISO or slash) is appended, so `DOB: 1992-08-14` and `DOB 08/14/1992` both
 /// work. Returns the raw date string as written on the document.
 fn first_date(text: &str, prefixes: &[&str]) -> Option<String> {
-    const DATE: &str = r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4})";
+    // Digit-or-OCR-confusable class, kept in sync with `normalize_digits`.
+    const D: &str = r"[0-9OoIlLSBZzGQ|]";
+    let date = format!(r"({D}{{1,4}}[-/. ]{D}{{1,2}}[-/. ]{D}{{2,4}})");
     for prefix in prefixes {
-        let pattern = format!("{prefix}{DATE}");
+        let pattern = format!("{prefix}{date}");
         if let Some(found) = first_capture(text, &[&pattern]) {
-            return Some(found);
+            return Some(normalize_digits(&found));
         }
     }
     None
 }
 
-/// Parse an ISO (`YYYY-MM-DD`) or US slash (`M/D/YY` or `M/D/YYYY`) date into
-/// `(year, month, day)`. Two-digit years are windowed to `2000..=2099`.
+/// Parse a date token into `(year, month, day)`, separator-agnostic (`-`, `/`,
+/// `.`, space) and tolerant of OCR digit confusions. Order is inferred from the
+/// component widths: a leading four-digit group is ISO (`Y M D`), otherwise the
+/// token is read as US (`M D Y`). Two-digit years are windowed like strptime
+/// (`00..=68` -> `2000..=2068`, `69..=99` -> `1969..=1999`), which keeps birth
+/// years in the past while near-future expiries stay in the future.
 fn parse_date(value: &str) -> Option<(i32, u32, u32)> {
-    let value = value.trim();
-    if let Some(caps) = Regex::new(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
-        .ok()?
-        .captures(value)
-    {
-        let y = caps.get(1)?.as_str().parse().ok()?;
-        let m = caps.get(2)?.as_str().parse().ok()?;
-        let d = caps.get(3)?.as_str().parse().ok()?;
-        return valid_ymd(y, m, d);
+    let norm = normalize_digits(value.trim());
+    let parts: Vec<&str> = norm
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.len() != 3 {
+        return None;
     }
-    if let Some(caps) = Regex::new(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$")
-        .ok()?
-        .captures(value)
-    {
-        let m = caps.get(1)?.as_str().parse().ok()?;
-        let d = caps.get(2)?.as_str().parse().ok()?;
-        let raw_year: i32 = caps.get(3)?.as_str().parse().ok()?;
-        // Window two-digit years like strptime: 00-68 -> 2000-2068, 69-99 ->
-        // 1969-1999. This keeps birth years (e.g. `85` -> 1985) in the past
-        // while near-future expiries (e.g. `30` -> 2030) stay in the future.
-        let y = match raw_year {
-            0..=68 => 2000 + raw_year,
-            69..=99 => 1900 + raw_year,
-            _ => raw_year,
+    let (year_str, month_str, day_str) = if parts[0].len() == 4 {
+        (parts[0], parts[1], parts[2])
+    } else {
+        (parts[2], parts[0], parts[1])
+    };
+    let mut year: i32 = year_str.parse().ok()?;
+    let month: u32 = month_str.parse().ok()?;
+    let day: u32 = day_str.parse().ok()?;
+    if year_str.len() <= 2 {
+        year = match year {
+            0..=68 => 2000 + year,
+            69..=99 => 1900 + year,
+            _ => year,
         };
-        return valid_ymd(y, m, d);
     }
-    None
+    valid_ymd(year, month, day)
 }
 
 fn valid_ymd(y: i32, m: u32, d: u32) -> Option<(i32, u32, u32)> {
@@ -623,5 +658,43 @@ mod tests {
     #[test]
     fn future_birth_date_has_no_age() {
         assert_eq!(compute_age((2030, 1, 1), TODAY), None);
+    }
+
+    #[test]
+    fn tolerates_dot_separators_and_ocr_digit_confusions() {
+        // `l992` (lowercase L for 1), dot separators, `O1` (letter O for 0).
+        let text = "DRIVER LICENSE\nNAME: JOHN DOE\nDOB: l992.O8.14\nEXP 2030.O1.O1";
+        let scan = scan_id_at(text, TODAY);
+        assert_eq!(scan.dob.as_deref(), Some("1992.08.14"));
+        assert_eq!(scan.age, Some(33));
+        assert_eq!(scan.expiry.as_deref(), Some("2030.01.01"));
+        assert_eq!(scan.expired, Some(false));
+    }
+
+    #[test]
+    fn tolerates_space_separated_us_date() {
+        let text = "IDENTIFICATION CARD\nName: Jane Doe\nEXP 05 18 2030";
+        let scan = scan_id_at(text, TODAY);
+        assert_eq!(scan.expiry.as_deref(), Some("05 18 2030"));
+        assert_eq!(scan.expired, Some(false));
+    }
+
+    #[test]
+    fn reorders_last_comma_first_name() {
+        let text = "DRIVER LICENSE\nNAME: DOE, JOHN A\nDOB: 1990-01-01";
+        let scan = scan_id_at(text, TODAY);
+        assert_eq!(scan.name.as_deref(), Some("JOHN A DOE"));
+    }
+
+    #[test]
+    fn parse_date_reads_iso_us_and_dotted_forms() {
+        assert_eq!(parse_date("1992-08-14"), Some((1992, 8, 14)));
+        assert_eq!(parse_date("08/14/1992"), Some((1992, 8, 14)));
+        assert_eq!(parse_date("2030.01.01"), Some((2030, 1, 1)));
+        assert_eq!(parse_date("11/23/85"), Some((1985, 11, 23)));
+        assert_eq!(parse_date("05 18 30"), Some((2030, 5, 18)));
+        // Junk / wrong arity -> no date.
+        assert_eq!(parse_date("not a date"), None);
+        assert_eq!(parse_date("2026-13-40"), None);
     }
 }

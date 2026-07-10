@@ -230,8 +230,10 @@ resolution, double-click preservation.
 - **CI green on all three OSes** — Check / Test / Clippy / Rustfmt + a
   `cargo tauri build --no-bundle` smoke test on macOS & Windows (`rust.yml`).
   363 backend tests + integration suites (`ipc_contract`, `resolution_benchmark`,
-  `canonical_workflows`) pass. An IPC-contract test asserts the frontend only
-  invokes registered commands with matching params.
+  `canonical_workflows`, `frontend_dom_contract`) pass. An IPC-contract test
+  asserts the frontend only invokes registered commands with matching params;
+  a DOM-contract test asserts every `getElementById` the JS looks up is authored
+  in the markup.
 
 ## 8. What does NOT work / is incomplete ⚠️
 
@@ -248,8 +250,9 @@ resolution, double-click preservation.
   `--features experimental`, and **CI does not run the experimental leg**. Treat
   these as prototypes, not shipped features.
 - **No frontend build/test harness** — `src/` is served raw. UI logic in
-  `main.js` is validated only indirectly (the IPC-contract test) — there are no
-  DOM/interaction tests.
+  `main.js` is validated by static contract tests (the IPC-contract test for
+  JS→Rust calls and the DOM-contract test for JS→element wiring), not by
+  DOM/interaction (behavior) tests.
 - **Organizer destination model is MVP-simple** — first folder rule granting
   create+move is the destination root; files sort into
   `<root>/<Category>/`. Richer routing/rules are not built.
