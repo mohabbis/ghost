@@ -59,6 +59,15 @@ JSON of the audit log; it reads the stored run and returns text, writing nothing
 itself (the frontend saves the file the user picks). This is Ghost's version of
 an exportable "what the machine did, and under which rule" record.
 
+Every export format (`csv`, `compliance`, `signed`, and `json`) runs paths and
+skip/fail detail text through `audit::pii::mask` first (`AuditLog::masked()`
+for `json`), redacting SSN-, card-, email-, and phone-shaped substrings — the
+Organizer's filing preset routes tax/financial documents whose *filenames*
+can carry that kind of PII (`docs/filing-profiles.md`). The log that's
+actually persisted and hash-chained (`storage::executions`) and the one undo
+replays against are never touched, so redaction only affects what leaves the
+app as a portable file — it can't desync a run's tamper-evident seal.
+
 ## Undo
 
 `undo::revert(journal)` replays the `UndoJournal` **in reverse order** (newest

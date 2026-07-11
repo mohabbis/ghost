@@ -226,6 +226,18 @@ cargo tauri build --no-bundle
 
 If the environment cannot run checks, say that plainly and leave a validation note.
 
+### Faster local dev builds
+
+`[profile.dev]` in `src-tauri/Cargo.toml` pins `incremental = true` explicitly.
+For a faster linker, opt in locally with a `src-tauri/.cargo/config.toml`
+(not checked in — mold/lld availability varies per machine and CI doesn't
+install either, so this is not a repo-wide default):
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]  # or mold, if installed
+```
+
 ## Final response expectations
 
 When reporting work back to the user, include:
