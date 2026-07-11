@@ -437,11 +437,19 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
             out.push_str(&stored.audit.to_csv());
             Ok(out)
         }
-        "compliance" => {
-            Ok(stored.audit.to_compliance_report(&stored.id, &stored.created_at, &stored.hash, &stored.prev_hash))
-        }
+        "compliance" => Ok(stored.audit.to_compliance_report(
+            &stored.id,
+            &stored.created_at,
+            &stored.hash,
+            &stored.prev_hash,
+        )),
         "signed" => {
-            let report = stored.audit.to_compliance_report(&stored.id, &stored.created_at, &stored.hash, &stored.prev_hash);
+            let report = stored.audit.to_compliance_report(
+                &stored.id,
+                &stored.created_at,
+                &stored.hash,
+                &stored.prev_hash,
+            );
             let signature = generate_compliance_signature(&report);
             let mut out = report;
             out.push_str("\n---\n# Cryptographic Verification Signature\nSignature: ");
@@ -473,7 +481,7 @@ fn get_compliance_signing_secret() -> Vec<u8> {
 }
 
 fn generate_compliance_signature(report: &str) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let secret = get_compliance_signing_secret();
     let mut hasher = Sha256::new();
     hasher.update(&secret);
@@ -509,8 +517,7 @@ pub fn organizer_export_policy_pack(zone_id: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no zone with id {zone_id}"))?;
 
-    let rules = list_folder_rules(&conn, &zone_id)
-        .map_err(|e| e.to_string())?;
+    let rules = list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())?;
 
     let pack = PolicyPack {
         name: zone.name,
@@ -529,14 +536,20 @@ pub fn organizer_export_policy_pack(zone_id: String) -> Result<String, String> {
 /// Risk class: local-mutate (DB only; inserts zone and rules).
 #[tauri::command]
 pub fn organizer_import_policy_pack(pack_json: String) -> Result<Zone, String> {
-    let pack: PolicyPack = serde_json::from_str(&pack_json)
-        .map_err(|e| format!("invalid policy pack JSON: {e}"))?;
+    let pack: PolicyPack =
+        serde_json::from_str(&pack_json).map_err(|e| format!("invalid policy pack JSON: {e}"))?;
 
     let mut conn = open_default().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-    let zone = create_zone(&tx, &pack.name, pack.description.as_deref(), pack.default_decision, pack.rename_dated)
-        .map_err(|e| e.to_string())?;
+    let zone = create_zone(
+        &tx,
+        &pack.name,
+        pack.description.as_deref(),
+        pack.default_decision,
+        pack.rename_dated,
+    )
+    .map_err(|e| e.to_string())?;
 
     for rule in &pack.rules {
         add_folder_rule(&tx, &zone.id, rule).map_err(|e| e.to_string())?;
@@ -554,9 +567,9 @@ pub fn organizer_import_policy_pack(pack_json: String) -> Result<Zone, String> {
 #[tauri::command]
 pub fn organizer_verify_signed_report(report_content: String) -> Result<bool, String> {
     let sig_marker = "\n---\n# Cryptographic Verification Signature\nSignature: ";
-    let idx = report_content.rfind(sig_marker).ok_or_else(|| {
-        "No cryptographic verification signature found in report".to_string()
-    })?;
+    let idx = report_content
+        .rfind(sig_marker)
+        .ok_or_else(|| "No cryptographic verification signature found in report".to_string())?;
 
     let report_body = &report_content[..idx];
     let signature_part = &report_content[idx + sig_marker.len()..];
@@ -574,7 +587,7 @@ mod tests {
     fn test_signature_generation_and_verification() {
         let report = "This is a compliance report body.";
         let signature = generate_compliance_signature(report);
-        
+
         let mut signed_report = report.to_string();
         signed_report.push_str("\n---\n# Cryptographic Verification Signature\nSignature: ");
         signed_report.push_str(&signature);

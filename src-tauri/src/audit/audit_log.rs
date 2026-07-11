@@ -168,15 +168,21 @@ impl AuditLog {
 
         out.push_str(&format!("* **Execution ID**: `{}`\n", execution_id));
         out.push_str(&format!("* **Timestamp**: `{}`\n", created_at));
-        out.push_str(&format!("* **Tamper-Evident Seal (SHA-256)**: `{}`\n", hash));
+        out.push_str(&format!(
+            "* **Tamper-Evident Seal (SHA-256)**: `{}`\n",
+            hash
+        ));
         out.push_str(&format!("* **Prior Execution Link**: `{}`\n\n", prev_hash));
 
         out.push_str("### Run Outcome Stats\n\n");
         out.push_str(&format!("* **Total Actions Processed**: {}\n", total));
-        out.push_str(&format!("* **Successfully Applied (Moved/Renamed)**: {}\n", applied));
+        out.push_str(&format!(
+            "* **Successfully Applied (Moved/Renamed)**: {}\n",
+            applied
+        ));
         out.push_str(&format!("* **Skipped**: {}\n", skipped));
         out.push_str(&format!("* **Failed**: {}\n", failed));
-        
+
         let total_prov = automated + user_approved;
         if total_prov > 0 {
             let auto_rate = (automated as f64 / total_prov as f64) * 100.0;
