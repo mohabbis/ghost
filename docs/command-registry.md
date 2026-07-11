@@ -28,6 +28,7 @@ Use the right module, then re-export/register from the registry layer.
 |---|---|---|
 | `commands/core.rs` | Stable local automation: permissions, recording, replay, inspection, workflow storage | explicit, tested, user-started |
 | `commands/auth.rs` | Local password state and at-rest workflow protection | local-only, no network dependency |
+| `commands/account.rs` | Microsoft/Google OAuth sign-in (identity only, no data movement) | network-scoped to the provider's own authorize/token/userinfo endpoints; no other outbound calls |
 | `commands/diagnostics.rs` | Config summaries, telemetry export, performance/debug data | read-first, redacted, user-initiated export |
 | `commands/updates.rs` | Signed auto-update: read-only check + user-approved install | signature-verified, user-gated install |
 | `commands/organizer.rs` | Ghost Organizer: Zone/rule management + plan/execute/undo for safe file organization | policy-gated, read-only plan, audited + undoable execution |
@@ -156,6 +157,14 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `auth_setup` | stable | ✓ | – | – | – | ✓ | – | high | Creates the password, wraps the DEK, atomically writes `auth.json`. Losing that file makes encrypted workflows unrecoverable. |
 | `auth_unlock` | stable | ✓ | – | – | – | ✓ | – | high | Derives the KEK from the password; a wrong password returns `false`, not an error. |
 | `auth_lock` | stable | – | – | – | – | ✓ | – | low | Drops the in-memory data key. |
+
+### `commands/account.rs` — account sign-in (stable, network-scoped)
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `account_status` | stable | ✓ | – | – | – | ✓ | – | low | Reads the local linked-account record (via the vault's protect/reveal envelope). Reports "not signed in" if locked or unlinked — never errors. |
+| `account_sign_in` | stable | ✓ | – | – | ✓ | ✓ | – | high | Opens the system browser (OAuth 2.0 + PKCE) and a loopback listener, then calls the provider's token + userinfo endpoints. Requires `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID`) to be configured, else fails with an actionable error. Errors on state mismatch, cancellation, or a non-2xx provider response. Identity only — establishes no data-access grant to any other product surface. |
+| `account_sign_out` | stable | ✓ | – | – | – | ✓ | – | low | Deletes the local linked-account record. Does not revoke provider-side consent — the user should also remove Ghost from their account's connected-apps list if they want that. |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 

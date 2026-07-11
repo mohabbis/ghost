@@ -40,6 +40,8 @@ The product value is trustworthy execution:
 Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 ```
 
+Ghost supports account sign-in (Microsoft/Google) and is meant to eventually connect with the tech stacks users already run — Microsoft Fabric/Power BI, Google Cloud, and AI-assistant connectors (Claude, Cursor, Codex, ChatGPT). Stack connectivity is a competitive advantage; it does not replace the trust pipeline above. See `docs/integrations-roadmap.md`.
+
 ## Current wedge
 
 Prioritize Ghost Organizer before broad automation.
@@ -96,8 +98,10 @@ Default stance:
 - no background email monitoring;
 - no background browser/tab reading;
 - no raw secret capture;
-- no cloud-first storage;
+- no cloud-first storage for workflow/organizer data — it stays local and encrypted at rest, regardless of which account or stack integrations are enabled;
 - keyboard/pointer capture only during explicit recording or approved replay.
+
+Account sign-in (Microsoft/Google OAuth) and any stack integration (Fabric/Power BI, Google Cloud, AI-assistant connectors) are opt-in, scoped, and disclosed — see `docs/integrations-roadmap.md`. None of them weaken the privacy defaults above.
 
 For Organizer, use explicit folder selection and local filesystem operations.
 
@@ -141,11 +145,13 @@ src-tauri/src/
   main.rs                # binary entrypoint
   bin/diagnose_perms.rs  # macOS-only dev binary: reports Accessibility/Input Monitoring grant state via IOKit
   engine.rs              # recording/replay engine state
-  auth.rs, config.rs, error.rs, performance.rs, telemetry.rs
+  auth.rs, accounts.rs, config.rs, error.rs, performance.rs, telemetry.rs
+                         # accounts.rs: persisted OAuth account link (Microsoft/Google), independent of the vault password in auth.rs
   commands.rs            # thin registry/re-export over commands/
   commands/
     core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions, Ghost Guard audit, OCR, ID parsing
     auth.rs              # local password state and protection
+    account.rs           # account_status/_sign_in/_sign_out: Microsoft/Google OAuth + PKCE sign-in (identity only, see docs/integrations-roadmap.md)
     compression.rs       # compress_workflow (event compression -> review timeline)
     diagnostics.rs       # config, telemetry export, performance, is_experimental_enabled
     organizer.rs         # organizer_plan/_execute/_list_executions/_undo, audit export, signed-report verify, policy pack import/export, audit-chain verify, time-to-value
@@ -161,6 +167,7 @@ src-tauri/src/
     dry_run.rs           # pure per-step replay preview (typed text excluded)
     id_scan.rs           # deterministic identity-document field parsing (stable; text in, no image/AI)
     ocr.rs               # stable: local OCR (macOS Vision / Windows OCR) over user-supplied image bytes, no network
+    oauth.rs             # stable: OAuth 2.0 + PKCE flow (Microsoft/Google) for account sign-in — the only place Ghost opens the system browser or calls an identity-provider endpoint
     guard.rs             # Ghost Guard: keyboard-suppression heuristics + deterministic pre-replay/save workflow audit (docs/GHOST_GUARD.md)
     events.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
     ai.rs, cloud.rs, llm.rs, local_llm.rs, vision.rs, knowledge.rs   # experimental-facing
@@ -215,6 +222,8 @@ Also built: target resilience. Capture stores window-level locator context on `E
 
 Also built: pixel template-match fallback, the last resort in that same resolution chain, for elements a semantic lookup can't find (descriptor changed, or none was ever recorded) but whose pixels haven't. `core/template_match.rs` is pure Rust over the `image` crate already in the dependency tree (normalized cross-correlation, 4x downsampled, nearest-neighbor to avoid blurring template edges) — deliberately not an `opencv-rust` binding, since OpenCV needs a prebuilt system library this repo's 3-OS CI matrix doesn't install. `ElementInfo.template_png` (a small screenshot crop) is only captured when the opt-in `PerformanceSettings.capture_element_templates` is enabled (off by default — capturing a screenshot per recorded click adds latency to recording); `engine.rs::buffer_event` is the single cross-platform capture point.
 
+Also built: account sign-in. `commands/account.rs` + `core/oauth.rs` implement "Sign in with Microsoft" / "Sign in with Google" as a public-client OAuth 2.0 + PKCE flow (no client secret): the system browser opens to the provider's consent screen, a loopback listener on an OS-assigned port receives the redirect, and the resulting profile (email/name, plus a refresh token if the provider issued one) is stored via `accounts.rs`, encrypted at rest through the same `AuthManager::protect`/`reveal` envelope as workflow files whenever a vault password is configured. This is an identity link, not a data-access grant — signing in does not itself move workflow/organizer data anywhere, and it needs `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID` for local dev) configured before it will do anything, since Ghost ships with no client IDs of its own. The Settings modal in `src/main.js` surfaces sign-in/sign-out. See `docs/integrations-roadmap.md` for how this identity is meant to be reused by future Fabric/Power BI, Google Cloud, and AI-assistant-connector integrations, none of which exist yet.
+
 Also built: AI Copilot view (data-view="pls"). This view houses the financial compliance check and legacy POS terminal auto-fill simulators, displaying modern glassmorphic document representations and typing replay logs. It is initialized via plsInit() on DOMContentLoaded.
 
 The app shell should stay thin. Product logic belongs in modules that can be tested without the UI.
@@ -253,6 +262,7 @@ Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 
 - `commands/core.rs` for stable automation, recording, replay and replay history, workflow storage, permissions;
 - `commands/auth.rs` for local password state and protection;
+- `commands/account.rs` for Microsoft/Google OAuth account sign-in (identity only — see `docs/integrations-roadmap.md`);
 - `commands/compression.rs` for the `compress_workflow` event-compression command;
 - `commands/diagnostics.rs` for config, telemetry export, performance summaries, and `is_experimental_enabled`;
 - `commands/organizer.rs` for the Organizer plan/execute/history/undo surface, plus audit export, signed-report verify, policy pack import/export, audit-chain verify, and time-to-value;

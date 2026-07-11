@@ -113,6 +113,8 @@ pub struct GhostEngine {
     recording_start: Arc<Mutex<Option<Instant>>>,
     /// Local login + at-rest encryption for workflow data
     auth: Arc<AuthManager>,
+    /// Linked Microsoft/Google account (sign-in identity), separate from `auth`
+    accounts: Arc<crate::accounts::AccountManager>,
 }
 
 impl GhostEngine {
@@ -182,12 +184,18 @@ impl GhostEngine {
             perf,
             recording_start: Arc::new(Mutex::new(None)),
             auth: Arc::new(AuthManager::new()),
+            accounts: Arc::new(crate::accounts::AccountManager::new()),
         }
     }
 
     /// Access the local auth manager (login + workflow encryption).
     pub fn auth(&self) -> Arc<AuthManager> {
         Arc::clone(&self.auth)
+    }
+
+    /// Access the linked-account manager (Microsoft/Google sign-in identity).
+    pub fn accounts(&self) -> Arc<crate::accounts::AccountManager> {
+        Arc::clone(&self.accounts)
     }
 
     /// Test-only engine with its `AuthManager` rooted at `auth_path` instead
@@ -197,7 +205,12 @@ impl GhostEngine {
     #[cfg(test)]
     pub(crate) fn with_auth_path(auth_path: PathBuf) -> Self {
         let mut engine = Self::new();
+        let accounts_path = auth_path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("account.json");
         engine.auth = Arc::new(AuthManager::with_path(auth_path));
+        engine.accounts = Arc::new(crate::accounts::AccountManager::with_path(accounts_path));
         engine
     }
 

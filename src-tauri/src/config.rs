@@ -23,6 +23,25 @@ pub struct GhostConfig {
     /// before this section existed loading cleanly (they get "keep everything").
     #[serde(default)]
     pub audit: AuditSettings,
+    /// OAuth client IDs for account sign-in (`commands/account.rs`) and, later,
+    /// stack integrations (Fabric/Power BI, Google Cloud). `#[serde(default)]`
+    /// keeps configs written before this section existed loading cleanly.
+    #[serde(default)]
+    pub integrations: IntegrationSettings,
+}
+
+/// Public-client OAuth identifiers. These are not secrets (PKCE public
+/// clients have none to keep) — they identify Ghost to Microsoft/Google as
+/// the calling application, same as a package/bundle ID. Empty means the
+/// corresponding "Sign in with ..." option is unavailable until an operator
+/// registers an app and fills these in (or sets `GHOST_MS_CLIENT_ID` /
+/// `GHOST_GOOGLE_CLIENT_ID`, which take priority for local dev).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct IntegrationSettings {
+    #[serde(default)]
+    pub microsoft_client_id: Option<String>,
+    #[serde(default)]
+    pub google_client_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,6 +225,7 @@ impl Default for GhostConfig {
             },
             // Keep all audit history by default; retention is opt-in.
             audit: AuditSettings::default(),
+            integrations: IntegrationSettings::default(),
         }
     }
 }
