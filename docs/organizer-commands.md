@@ -30,9 +30,11 @@ the filesystem.
 | `organizer_add_folder_rule` | `{ zoneId, rule: FolderRule }` | — | Persist a boundary. Rejects `can_delete: true`. `rule.trust` optional (`automate`/`ask_first`/`never`, default `ask_first`). |
 | `organizer_set_rule_trust` | `{ zoneId, path, trust }` | — | Update a rule's trust level in place. Errors if no rule at `path`. |
 | `organizer_plan` | `{ zoneId }` | `OrganizerPlan` | **Read-only** preview; mutates nothing. |
-| `organizer_execute` | `{ zoneId }` | `ExecutionResult` | Apply the approved plan; audited + undoable. Seals the run into the hash chain and prunes per the retention policy. |
-| `organizer_list_executions` | — | `ExecutionSummary[]` | History, newest first; each row has a `sealed` flag. |
-| `organizer_undo` | `{ executionId }` | `UndoReport` | Reverse a past run. |
+| `organizer_execute` | `{ zoneId }` | `ExecutionResult` | Apply the approved plan; audited + undoable. Write-ahead durable (see `docs/organizer-executor.md` "Crash recovery"): a row exists before the first mutation and is updated after every action, not just once at the end. Seals the run into the hash chain and prunes per the retention policy. |
+| `organizer_list_executions` | — | `ExecutionSummary[]` | History, newest first; each row has `sealed` and `finished` flags. |
+| `organizer_check_unfinished_run` | — | `ExecutionSummary \| null` | A run that began but never finished — almost always a crash mid-run. `null` means the last run ended cleanly. |
+| `organizer_dismiss_unfinished_run` | `{ executionId }` | — | Mark an interrupted run resolved without undoing it (the user is fine leaving its changes in place). |
+| `organizer_undo` | `{ executionId }` | `UndoReport` | Reverse a past run. Works on unfinished runs too — undoing one also resolves it. |
 | `organizer_export_audit` | `{ executionId, format }` | `string` | A past run's audit log as `json` or `csv` text, carrying the run's `hash`/`prev_hash` seal as metadata; writes nothing. |
 | `organizer_time_to_value` | — | `{ key, at }[]` | Local first-touch milestone timestamps for diagnostics. |
 | `organizer_verify_audit_chain` | — | `ChainVerification` | Verify the tamper-evidence chain offline. |

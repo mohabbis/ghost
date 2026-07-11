@@ -37,6 +37,17 @@ pub struct ExecutionSummary {
     /// Lets the history view show which runs are sealed without loading blobs.
     #[serde(default)]
     pub sealed: bool,
+    /// False only for a run that began (`begin_execution`) but never reached
+    /// `finish_execution` — almost always because the app crashed or was
+    /// killed mid-run. `true` for every run written before this column
+    /// existed (V6): those predate write-ahead durability entirely, so by
+    /// definition they already ran to completion one way or another.
+    #[serde(default = "default_true")]
+    pub finished: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// A fully-loaded past execution, including the records needed to undo it.
@@ -58,6 +69,9 @@ pub struct StoredExecution {
     /// for pre-V5 rows).
     #[serde(default)]
     pub prev_hash: String,
+    /// See [`ExecutionSummary::finished`].
+    #[serde(default = "default_true")]
+    pub finished: bool,
 }
 
 /// The outcome of verifying the execution hash chain: whether every sealed run
@@ -182,6 +196,165 @@ pub fn save_execution(
         ],
     )?;
     Ok(id)
+}
+
+/// Begin a write-ahead-durable execution: insert a row *before* the executor
+/// touches the filesystem, so a crash before the very first action still
+/// leaves a discoverable (if empty) record rather than nothing at all.
+/// `finished = 0` until [`finish_execution`] runs — see
+/// [`find_unfinished_execution`]. Deliberately unsealed at this point
+/// (`hash`/`prev_hash` empty): sealing needs the run's *final* content, which
+/// doesn't exist yet.
+pub fn begin_execution(conn: &Connection, zone_id: &str) -> rusqlite::Result<String> {
+    let id = Uuid::new_v4().to_string();
+    let ts = now_ts();
+    conn.execute(
+        "INSERT INTO organizer_executions \
+         (id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json, \
+          hash, prev_hash, finished) \
+         VALUES (?1, ?2, ?3, 0, 0, 0, '[]', '[]', '', '', 0)",
+        params![id, zone_id, ts],
+    )?;
+    Ok(id)
+}
+
+/// Durably overwrite the report-so-far for an execution begun with
+/// [`begin_execution`]. Called after every action
+/// (`organizer::executor::execute_plan_with_progress`), so a crash between
+/// two actions loses at most the most recent snapshot write — never the
+/// whole run's undo journal. Still unsealed; sealing happens once, in
+/// [`finish_execution`].
+pub fn update_execution_progress(
+    conn: &Connection,
+    id: &str,
+    report: &ExecutionReport,
+) -> rusqlite::Result<()> {
+    let audit_json = serde_json::to_string(&report.audit).map_err(to_sqlite_err)?;
+    let undo_json = serde_json::to_string(&report.undo).map_err(to_sqlite_err)?;
+    conn.execute(
+        "UPDATE organizer_executions \
+         SET applied = ?2, skipped = ?3, failed = ?4, audit_json = ?5, undo_json = ?6 \
+         WHERE id = ?1",
+        params![
+            id,
+            report.applied as i64,
+            report.skipped as i64,
+            report.failed as i64,
+            audit_json,
+            undo_json,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Finalize a run started with [`begin_execution`]: write its final content,
+/// seal it into the tamper-evident chain (same scheme as [`save_execution`]),
+/// and mark it finished. Excludes this row's own id when locating the chain
+/// tip, since `begin_execution` already inserted it (with an empty seal)
+/// before this runs — without the exclusion, a run would (harmlessly but
+/// incorrectly) chain to itself instead of the run before it.
+pub fn finish_execution(
+    conn: &Connection,
+    id: &str,
+    zone_id: &str,
+    report: &ExecutionReport,
+) -> rusqlite::Result<()> {
+    let ts: String = conn.query_row(
+        "SELECT created_at FROM organizer_executions WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )?;
+    let audit_json = serde_json::to_string(&report.audit).map_err(to_sqlite_err)?;
+    let undo_json = serde_json::to_string(&report.undo).map_err(to_sqlite_err)?;
+
+    let prev_hash: String = conn
+        .query_row(
+            "SELECT hash FROM organizer_executions WHERE id != ?1 ORDER BY rowid DESC LIMIT 1",
+            params![id],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+    let hash = execution_row_hash(
+        &prev_hash,
+        id,
+        zone_id,
+        &ts,
+        report.applied,
+        report.skipped,
+        report.failed,
+        &audit_json,
+        &undo_json,
+    );
+
+    conn.execute(
+        "UPDATE organizer_executions \
+         SET applied = ?2, skipped = ?3, failed = ?4, audit_json = ?5, undo_json = ?6, \
+             hash = ?7, prev_hash = ?8, finished = 1 \
+         WHERE id = ?1",
+        params![
+            id,
+            report.applied as i64,
+            report.skipped as i64,
+            report.failed as i64,
+            audit_json,
+            undo_json,
+            hash,
+            prev_hash,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Mark an execution finished without changing its content — for a run the
+/// user has resolved (undone, or explicitly dismissed) without going through
+/// `finish_execution`'s sealing (an interrupted run's content was already
+/// durably written by the last `update_execution_progress` before the
+/// crash; there is nothing further to seal).
+pub fn mark_execution_finished(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE organizer_executions SET finished = 1 WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+/// The most recent execution that began but never reached
+/// [`finish_execution`] — almost always because the app crashed or was
+/// killed mid-run. `None` means the last run (if any) ended cleanly (finished
+/// normally, or was already resolved via [`mark_execution_finished`]).
+///
+/// At most one unfinished run should exist at a time in normal operation
+/// (`organizer_execute` is not reentrant within one app instance), but this
+/// queries for the latest defensively rather than assuming that invariant.
+pub fn find_unfinished_execution(conn: &Connection) -> rusqlite::Result<Option<StoredExecution>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json, \
+         hash, prev_hash, finished \
+         FROM organizer_executions WHERE finished = 0 ORDER BY rowid DESC LIMIT 1",
+    )?;
+    let mut rows = stmt.query_map([], |row| {
+        let audit_json: String = row.get(6)?;
+        let undo_json: String = row.get(7)?;
+        let audit = serde_json::from_str(&audit_json).map_err(to_sqlite_err)?;
+        let undo = serde_json::from_str(&undo_json).map_err(to_sqlite_err)?;
+        Ok(StoredExecution {
+            id: row.get(0)?,
+            zone_id: row.get(1)?,
+            created_at: row.get(2)?,
+            applied: row.get::<_, i64>(3)? as usize,
+            skipped: row.get::<_, i64>(4)? as usize,
+            failed: row.get::<_, i64>(5)? as usize,
+            audit,
+            undo,
+            hash: row.get(8)?,
+            prev_hash: row.get(9)?,
+            finished: row.get::<_, i64>(10)? != 0,
+        })
+    })?;
+    match rows.next() {
+        Some(execution) => Ok(Some(execution?)),
+        None => Ok(None),
+    }
 }
 
 /// Delete executions that fall outside the retention policy, returning how many
@@ -325,7 +498,7 @@ struct VerifyRow {
 /// List past executions, newest first.
 pub fn list_executions(conn: &Connection) -> rusqlite::Result<Vec<ExecutionSummary>> {
     let mut stmt = conn.prepare(
-        "SELECT id, zone_id, created_at, applied, skipped, failed, hash \
+        "SELECT id, zone_id, created_at, applied, skipped, failed, hash, finished \
          FROM organizer_executions ORDER BY created_at DESC, id DESC",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -338,6 +511,7 @@ pub fn list_executions(conn: &Connection) -> rusqlite::Result<Vec<ExecutionSumma
             skipped: row.get::<_, i64>(4)? as usize,
             failed: row.get::<_, i64>(5)? as usize,
             sealed: !hash.is_empty(),
+            finished: row.get::<_, i64>(7)? != 0,
         })
     })?;
     rows.collect()
@@ -347,7 +521,7 @@ pub fn list_executions(conn: &Connection) -> rusqlite::Result<Vec<ExecutionSumma
 pub fn get_execution(conn: &Connection, id: &str) -> rusqlite::Result<Option<StoredExecution>> {
     let mut stmt = conn.prepare(
         "SELECT id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json, \
-         hash, prev_hash \
+         hash, prev_hash, finished \
          FROM organizer_executions WHERE id = ?1",
     )?;
     let mut rows = stmt.query_map(params![id], |row| {
@@ -366,6 +540,7 @@ pub fn get_execution(conn: &Connection, id: &str) -> rusqlite::Result<Option<Sto
             undo,
             hash: row.get(8)?,
             prev_hash: row.get(9)?,
+            finished: row.get::<_, i64>(10)? != 0,
         })
     })?;
     match rows.next() {
@@ -383,7 +558,7 @@ fn to_sqlite_err(e: serde_json::Error) -> rusqlite::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::organizer::executor::execute_plan;
+    use crate::organizer::executor::{execute_plan, execute_plan_with_progress};
     use crate::organizer::planner::plan_with_rules;
     use crate::policy::FolderRule;
     use crate::storage::open_in_memory;
@@ -449,6 +624,118 @@ mod tests {
         assert_eq!(loaded.audit, report.audit);
         assert_eq!(loaded.undo, report.undo);
         assert_eq!(loaded.zone_id, "z");
+
+        // save_execution is the one-shot legacy path: rows it writes are
+        // already finished, never surfaced as needing recovery.
+        assert!(loaded.finished);
+        assert!(list[0].finished);
+        assert!(find_unfinished_execution(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn begin_execution_writes_an_unfinished_unsealed_row() {
+        let conn = open_in_memory().unwrap();
+        let id = begin_execution(&conn, "z").unwrap();
+
+        let loaded = get_execution(&conn, &id).unwrap().unwrap();
+        assert!(!loaded.finished, "a begun run is not yet finished");
+        assert_eq!(loaded.hash, "", "a begun run is not yet sealed");
+        assert_eq!(loaded.applied, 0);
+        assert!(loaded.audit.is_empty());
+        assert!(loaded.undo.is_empty());
+    }
+
+    /// The scenario `begin_execution` exists for: the app crashes between two
+    /// actions. Everything durably written by `update_execution_progress`
+    /// before the crash must still be there — including the undo journal for
+    /// files that were actually moved — even though `finish_execution` never ran.
+    #[test]
+    fn update_execution_progress_survives_a_simulated_crash() {
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        tmp.file("song.mp3", b"b");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+
+        let conn = open_in_memory().unwrap();
+        let id = begin_execution(&conn, "z").unwrap();
+
+        // Simulate the executor's progress callback firing partway through a
+        // run, then the process dying before finish_execution ever runs.
+        let mut last_report = None;
+        execute_plan_with_progress(&plan, &rules, |report| {
+            update_execution_progress(&conn, &id, report).unwrap();
+            last_report = Some(report.clone());
+        });
+        let last_report = last_report.expect("plan had at least one action");
+        // (no finish_execution call — this is the "crash" point)
+
+        let recovered = find_unfinished_execution(&conn)
+            .unwrap()
+            .expect("the begun-but-never-finished run must be discoverable");
+        assert_eq!(recovered.id, id);
+        assert!(!recovered.finished);
+        assert_eq!(recovered.hash, "", "an interrupted run is never sealed");
+        assert_eq!(
+            recovered.undo, last_report.undo,
+            "undo journal survives the crash"
+        );
+        assert_eq!(recovered.applied, last_report.applied);
+    }
+
+    #[test]
+    fn finish_execution_seals_and_marks_finished() {
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+
+        let conn = open_in_memory().unwrap();
+        // A prior, already-sealed run establishes a chain tip to link to.
+        let earlier = execute_plan(&plan_with_rules("z", &rules), &rules);
+        let _ = save_execution(&conn, "z", &earlier).unwrap();
+        let expected_prev_hash = get_execution(&conn, &list_executions(&conn).unwrap()[0].id)
+            .unwrap()
+            .unwrap()
+            .hash;
+
+        let id = begin_execution(&conn, "z").unwrap();
+        let report = execute_plan(&plan, &rules);
+        finish_execution(&conn, &id, "z", &report).unwrap();
+
+        let loaded = get_execution(&conn, &id).unwrap().unwrap();
+        assert!(loaded.finished);
+        assert!(
+            !loaded.hash.is_empty(),
+            "finish_execution must seal the run"
+        );
+        assert_eq!(
+            loaded.prev_hash, expected_prev_hash,
+            "must chain to the run before it, not to its own pre-seal empty hash"
+        );
+        assert_eq!(loaded.audit, report.audit);
+        assert_eq!(loaded.undo, report.undo);
+        assert!(find_unfinished_execution(&conn).unwrap().is_none());
+
+        // The chain (including the WAL-style run) still verifies end to end.
+        assert!(verify_chain(&conn).unwrap().intact);
+    }
+
+    #[test]
+    fn mark_execution_finished_resolves_without_resealing() {
+        let conn = open_in_memory().unwrap();
+        let id = begin_execution(&conn, "z").unwrap();
+        assert!(find_unfinished_execution(&conn).unwrap().is_some());
+
+        mark_execution_finished(&conn, &id).unwrap();
+
+        assert!(find_unfinished_execution(&conn).unwrap().is_none());
+        let loaded = get_execution(&conn, &id).unwrap().unwrap();
+        assert!(loaded.finished);
+        assert_eq!(
+            loaded.hash, "",
+            "resolving without finish_execution stays unsealed"
+        );
     }
 
     #[test]

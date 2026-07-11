@@ -7,7 +7,7 @@
 use rusqlite::Connection;
 
 /// The schema version this binary produces.
-pub const LATEST_VERSION: i64 = 5;
+pub const LATEST_VERSION: i64 = 6;
 
 /// Bring `conn` up to [`LATEST_VERSION`], applying forward migrations only.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
@@ -46,6 +46,12 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if version < 5 {
         conn.execute_batch(MIGRATION_V5)?;
         version = 5;
+        conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
+    }
+
+    if version < 6 {
+        conn.execute_batch(MIGRATION_V6)?;
+        version = 6;
         conn.execute_batch(&format!("PRAGMA user_version = {version};"))?;
     }
 
@@ -124,6 +130,18 @@ CREATE TABLE organizer_milestones (
 const MIGRATION_V5: &str = r#"
 ALTER TABLE organizer_executions ADD COLUMN hash TEXT NOT NULL DEFAULT '';
 ALTER TABLE organizer_executions ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';
+"#;
+
+/// v5 -> v6: write-ahead durability for executions. `organizer_execute` now
+/// inserts a row *before* touching the filesystem and updates it after every
+/// action, rather than holding the whole run in memory and writing it once at
+/// the end — so a crash mid-run leaves a row Ghost can recognize and offer to
+/// undo on next launch, instead of losing the undo journal for whatever had
+/// already been applied. `finished = 0` marks a row not yet known to have
+/// reached a normal end (see `storage::executions::find_unfinished_execution`).
+/// Existing rows predate this and are, by definition, already finished.
+const MIGRATION_V6: &str = r#"
+ALTER TABLE organizer_executions ADD COLUMN finished INTEGER NOT NULL DEFAULT 1;
 "#;
 
 #[cfg(test)]
@@ -249,5 +267,37 @@ mod tests {
             .unwrap();
         assert_eq!(hash, "");
         assert_eq!(prev, "");
+    }
+
+    /// Upgrading a v5 database must mark existing executions `finished = 1` —
+    /// they completed (successfully or not) before this column existed, so
+    /// none of them should be mistaken for an interrupted run.
+    #[test]
+    fn migration_v6_marks_existing_executions_finished() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_V1).unwrap();
+        conn.execute_batch(MIGRATION_V2).unwrap();
+        conn.execute_batch(MIGRATION_V3).unwrap();
+        conn.execute_batch(MIGRATION_V4).unwrap();
+        conn.execute_batch(MIGRATION_V5).unwrap();
+        conn.execute_batch("PRAGMA user_version = 5;").unwrap();
+        conn.execute(
+            "INSERT INTO organizer_executions \
+             (id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json, hash, prev_hash) \
+             VALUES ('e', 'z', '1', 0, 0, 0, '[]', '[]', '', '')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let finished: i64 = conn
+            .query_row(
+                "SELECT finished FROM organizer_executions WHERE id = 'e'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(finished, 1);
     }
 }

@@ -87,6 +87,8 @@ macro_rules! run_with_commands {
                 commands::organizer_plan,
                 commands::organizer_execute,
                 commands::organizer_list_executions,
+                commands::organizer_check_unfinished_run,
+                commands::organizer_dismiss_unfinished_run,
                 commands::organizer_undo,
                 commands::organizer_export_audit,
                 commands::organizer_verify_signed_report,

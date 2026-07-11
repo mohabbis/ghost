@@ -1828,6 +1828,50 @@ async function organizerInit() {
   await organizerPrefillPaths();
   if (!invoke) return; // static mode: the panel stays inert
   await organizerRefreshZones();
+  await organizerCheckUnfinishedRun();
+}
+
+// A run that began (files may already have moved) but never finished —
+// almost always because the app crashed or was killed mid-run. Ghost wrote
+// undo data for every step it completed before that happened
+// (write-ahead durability — see docs/organizer-executor.md), so nothing is
+// lost; the user just needs to say what to do about it: undo what was
+// applied, or leave it as-is.
+async function organizerCheckUnfinishedRun() {
+  const banner = document.getElementById("organizerUnfinishedBanner");
+  if (!banner || !invoke) return;
+  let found;
+  try {
+    found = await invoke("organizer_check_unfinished_run");
+  } catch (_err) {
+    return; // best-effort; a failed check must not block the Organizer view
+  }
+  if (!found) {
+    banner.innerHTML = "";
+    return;
+  }
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>Ghost was interrupted mid-run.</strong> Before it stopped, it applied
+      ${found.applied} change(s) to your files. You can undo those changes now, or leave them as they are.</span>
+      <div class="banner__actions">
+        <button class="btn btn--ghost btn--small" id="organizerUnfinishedUndoBtn" type="button">Undo those changes</button>
+        <button class="btn btn--ghost btn--small" id="organizerUnfinishedDismissBtn" type="button">Leave as-is</button>
+      </div>
+    </section>`;
+  document.getElementById("organizerUnfinishedUndoBtn")?.addEventListener("click", async () => {
+    await organizerUndo(found.id);
+    await organizerCheckUnfinishedRun();
+  });
+  document.getElementById("organizerUnfinishedDismissBtn")?.addEventListener("click", async () => {
+    try {
+      await invoke("organizer_dismiss_unfinished_run", { executionId: found.id });
+      showNotification("Left the interrupted run's changes as-is.", "info");
+    } catch (err) {
+      toastError("Could not dismiss: " + formatInvokeError(err));
+    }
+    await organizerCheckUnfinishedRun();
+  });
 }
 
 function organizerSelectedZone() {

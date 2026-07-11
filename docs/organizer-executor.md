@@ -50,6 +50,48 @@ Only the file-organization capabilities the planner emits (`CreateFolder`,
 rather than risked. The result is an `ExecutionReport { applied, skipped,
 failed, audit, undo }`.
 
+`execute_plan` itself holds this report in memory until the whole plan
+finishes — fine for callers that persist it once at the end, but see
+"Crash recovery" below for the durable path `organizer_execute` actually uses.
+
+## Crash recovery (write-ahead durability)
+
+`execute_plan` builds its `ExecutionReport` in memory across the whole plan;
+a naive caller that persists it only once, after the loop returns, loses the
+*entire* run's undo journal if the process dies mid-run — even though some
+files were already moved on disk and successfully verified.
+
+`organizer_execute` avoids this with a write-ahead sequence, using
+`executor::execute_plan_with_progress` (identical to `execute_plan`, but
+invokes a callback with the report-so-far after every action) together with
+three `storage::executions` functions:
+
+1. **`begin_execution`** inserts a row *before* the executor touches the
+   filesystem — empty, unsealed, `finished = 0`.
+2. **`update_execution_progress`** overwrites that row's content after every
+   action (the `execute_plan_with_progress` callback). A crash between two
+   actions loses at most the most recent snapshot write, never the whole run.
+3. **`finish_execution`** writes the final content, computes the real
+   tamper-evident seal (excluding the row's own pre-seal empty hash from the
+   chain-tip lookup), and sets `finished = 1`.
+
+If the app crashes between (1)/(2) and (3), the row survives with
+`finished = 0` and an accurate (if not final) undo journal for whatever had
+actually been applied. `organizer_check_unfinished_run` finds it on the next
+Organizer view load (`find_unfinished_execution`: the newest row with
+`finished = 0`), and the frontend offers the user the same two, honest
+options: **undo** what was applied (`organizer_undo` — it already works on
+any stored execution by id, unfinished ones included — which also marks the
+row resolved) or **dismiss** it as intentional
+(`organizer_dismiss_unfinished_run`, a bare `mark_execution_finished`). There
+is no "resume the rest of the plan" option: the plan itself was never
+persisted, only what the executor actually did, so re-running Organizer to
+plan and apply the remainder fresh is the correct next step either way.
+
+Rows written before this existed (V6 migration) default to `finished = 1` —
+they predate write-ahead durability entirely, so by definition they already
+ran to completion one way or another; none are mistaken for an interrupted run.
+
 ## Export
 
 `AuditLog::to_csv()` renders a run's log as RFC-4180 CSV (one row per event:
@@ -105,3 +147,12 @@ execute→undo round-trip back to the original tree, and folder-preservation whe
 user refills a created folder. The executor and undo runner are wired to Tauri
 through `organizer_execute` and `organizer_undo`; the frontend still owns the
 explicit review/approval affordance before calling execution.
+
+Also implemented: write-ahead durability (`begin_execution` /
+`update_execution_progress` / `finish_execution` / `find_unfinished_execution` /
+`mark_execution_finished` in `storage::executions`), with unit tests covering a
+simulated mid-run crash (the undo journal for already-applied steps survives),
+correct chain-tip linking when finalizing a WAL-started run, and the
+resolve-without-resealing path. Wired to Tauri through
+`organizer_check_unfinished_run` and `organizer_dismiss_unfinished_run`; the
+frontend checks on Organizer view load and offers undo-or-dismiss via a banner.

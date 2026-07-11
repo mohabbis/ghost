@@ -58,7 +58,32 @@ pub struct ExecutionReport {
 /// function independently re-checks every action through the policy engine and
 /// refuses anything denied, so an unapproved or stale action can never slip
 /// through to the filesystem.
+///
+/// Holds the whole run's report in memory until it returns, so it's only
+/// crash-safe as a unit — a mid-run crash loses the undo journal for
+/// whatever had already been applied. Callers that persist the report as it
+/// grows (write-ahead durability) should use [`execute_plan_with_progress`]
+/// instead; this is a thin wrapper over it with a no-op callback, kept for
+/// call sites (and the tests below) that don't need that.
 pub fn execute_plan(plan: &OrganizerPlan, rules: &[FolderRule]) -> ExecutionReport {
+    execute_plan_with_progress(plan, rules, |_| {})
+}
+
+/// Like [`execute_plan`], but invokes `on_progress` with the report-so-far
+/// after every action — applied, skipped, or failed alike, since a crash
+/// recovery view benefits from an accurate picture of what was attempted,
+/// not just what mutated.
+///
+/// `on_progress` is deliberately given the *whole* report each time (not just
+/// the newest step): the natural way to persist it is a durable snapshot
+/// overwrite (`storage::executions::update_execution_progress`), simpler and
+/// less failure-prone than an append-only log the caller would have to
+/// replay correctly.
+pub fn execute_plan_with_progress(
+    plan: &OrganizerPlan,
+    rules: &[FolderRule],
+    mut on_progress: impl FnMut(&ExecutionReport),
+) -> ExecutionReport {
     let mut report = ExecutionReport::default();
 
     for action in &plan.actions {
@@ -71,6 +96,7 @@ pub fn execute_plan(plan: &OrganizerPlan, rules: &[FolderRule]) -> ExecutionRepo
         let rule_path = evaluation.rule_path.clone();
         if let PolicyDecision::Deny { reason } = &evaluation.decision {
             report.record_skip(cap.clone(), format!("policy denied: {reason}"), rule_path);
+            on_progress(&report);
             continue;
         }
         // An `automate` rule yields Allow with no prompting; anything requiring
@@ -102,6 +128,7 @@ pub fn execute_plan(plan: &OrganizerPlan, rules: &[FolderRule]) -> ExecutionRepo
                 );
             }
         }
+        on_progress(&report);
     }
 
     report
@@ -255,6 +282,38 @@ mod tests {
         walk(root, root, &mut out);
         out.sort();
         out
+    }
+
+    #[test]
+    fn progress_callback_fires_once_per_action_with_growing_state() {
+        // `_tmp` still needs to stay alive (its Drop cleans up the temp
+        // dir); the test itself only reads `rules`.
+        let (_tmp, rules) = fixture();
+        let plan = plan_with_rules("z", &rules);
+        let action_count = plan.actions.len();
+
+        let mut snapshots: Vec<(usize, usize, usize)> = Vec::new();
+        let report = execute_plan_with_progress(&plan, &rules, |r| {
+            snapshots.push((r.applied, r.skipped, r.failed));
+        });
+
+        assert_eq!(
+            snapshots.len(),
+            action_count,
+            "callback must fire exactly once per action"
+        );
+        // Monotonically non-decreasing totals — each snapshot is a growing
+        // prefix of the final report, never a regression.
+        let mut prev = (0, 0, 0);
+        for s in &snapshots {
+            assert!(s.0 >= prev.0 && s.1 >= prev.1 && s.2 >= prev.2);
+            prev = *s;
+        }
+        assert_eq!(
+            *snapshots.last().unwrap(),
+            (report.applied, report.skipped, report.failed),
+            "the last snapshot must match the final report"
+        );
     }
 
     #[test]
