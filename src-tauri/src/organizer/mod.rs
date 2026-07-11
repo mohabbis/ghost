@@ -30,7 +30,7 @@ pub mod scanner;
 pub mod undo;
 
 #[cfg(test)]
-mod testutil;
+pub(crate) mod testutil;
 
 pub use classifier::{Category, Classification};
 pub use conflict::Conflict;

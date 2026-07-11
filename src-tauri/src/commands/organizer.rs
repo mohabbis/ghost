@@ -39,6 +39,7 @@ use crate::storage::open_default;
 use crate::storage::zones::{
     add_folder_rule, create_zone, list_folder_rules, list_zones, set_rule_trust,
 };
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -283,8 +284,15 @@ mod path_tests {
 #[tauri::command]
 pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
-    let _ = record_milestone(&conn, Milestone::FirstPlan);
+    organizer_plan_with_conn(&conn, &zone_id)
+}
+
+/// The actual logic behind [`organizer_plan`], taking an already-open
+/// connection so it is testable against an in-memory database instead of the
+/// real OS data directory (`open_default` has no test seam of its own).
+fn organizer_plan_with_conn(conn: &Connection, zone_id: &str) -> Result<OrganizerPlan, String> {
+    let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
+    let _ = record_milestone(conn, Milestone::FirstPlan);
     Ok(plan)
 }
 
@@ -309,17 +317,34 @@ pub fn organizer_execute(
 ) -> Result<ExecutionResult, String> {
     super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
-    let rules = list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())?;
-    let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
+    let audit = engine.get_config().audit;
+    organizer_execute_with_conn(
+        &conn,
+        &zone_id,
+        audit.retention_keep_last,
+        audit.retention_keep_days,
+    )
+}
+
+/// The actual logic behind [`organizer_execute`], taking an already-open
+/// connection (see [`organizer_plan_with_conn`]) so the plan -> execute ->
+/// save -> prune -> milestone sequence is directly testable.
+fn organizer_execute_with_conn(
+    conn: &Connection,
+    zone_id: &str,
+    retention_keep_last: Option<usize>,
+    retention_keep_days: Option<u64>,
+) -> Result<ExecutionResult, String> {
+    let rules = list_folder_rules(conn, zone_id).map_err(|e| e.to_string())?;
+    let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
     let report = execute_plan(&plan, &rules);
-    let execution_id = save_execution(&conn, &zone_id, &report).map_err(|e| e.to_string())?;
-    let _ = record_milestone(&conn, Milestone::FirstRun);
+    let execution_id = save_execution(conn, zone_id, &report).map_err(|e| e.to_string())?;
+    let _ = record_milestone(conn, Milestone::FirstRun);
 
     // Enforce the user's retention policy, if any. Deleting the user's own audit
     // history is opt-in (both bounds default to None = keep all); a prune failure
     // must not fail an otherwise-successful run.
-    let audit = engine.get_config().audit;
-    let _ = prune_executions(&conn, audit.retention_keep_last, audit.retention_keep_days);
+    let _ = prune_executions(conn, retention_keep_last, retention_keep_days);
 
     Ok(ExecutionResult {
         execution_id,
@@ -349,11 +374,18 @@ pub fn organizer_undo(
 ) -> Result<UndoReport, String> {
     super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
-    let stored = get_execution(&conn, &execution_id)
+    organizer_undo_with_conn(&conn, &execution_id)
+}
+
+/// The actual logic behind [`organizer_undo`], taking an already-open
+/// connection (see [`organizer_plan_with_conn`]) so the lookup -> revert ->
+/// milestone sequence, including the unknown-id error path, is testable.
+fn organizer_undo_with_conn(conn: &Connection, execution_id: &str) -> Result<UndoReport, String> {
+    let stored = get_execution(conn, execution_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
     let report = revert(&stored.undo);
-    let _ = record_milestone(&conn, Milestone::FirstUndo);
+    let _ = record_milestone(conn, Milestone::FirstUndo);
     Ok(report)
 }
 
@@ -581,6 +613,144 @@ pub fn organizer_verify_signed_report(report_content: String) -> Result<bool, St
 
     let computed_signature = generate_compliance_signature(report_body);
     Ok(recorded_signature == computed_signature)
+}
+
+#[cfg(test)]
+mod execute_undo_tests {
+    //! Tests for the previously-untested command-layer glue: the exact
+    //! plan -> execute -> save -> milestone sequence in
+    //! `organizer_execute_with_conn`, and the lookup -> revert -> milestone
+    //! sequence (including the unknown-id error) in `organizer_undo_with_conn`.
+    //! These run through the same storage/organizer functions the real
+    //! `#[tauri::command]`s call, against an in-memory DB, so they never touch
+    //! a developer's real Ghost database.
+
+    use super::*;
+    use crate::organizer::testutil::tempdir;
+    use crate::storage::milestones::get_milestone;
+    use crate::storage::open_in_memory;
+    use crate::storage::zones::{add_folder_rule, create_zone};
+
+    fn full_rule(path: &Path, trust: TrustLevel) -> FolderRule {
+        FolderRule {
+            path: path.to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust,
+        }
+    }
+
+    #[test]
+    fn execute_moves_file_and_persists_retrievable_execution() {
+        let tmp = tempdir();
+        tmp.file("notes.txt", b"hello");
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Test Zone", None, DefaultDecision::Ask, false).unwrap();
+        add_folder_rule(
+            &conn,
+            &zone.id,
+            &full_rule(tmp.path(), TrustLevel::AskFirst),
+        )
+        .unwrap();
+
+        let result = organizer_execute_with_conn(&conn, &zone.id, None, None)
+            .expect("execute should succeed");
+
+        assert_eq!(result.report.applied, 2, "expected CreateFolder + MoveFile");
+        assert_eq!(result.report.failed, 0);
+        assert!(
+            tmp.path().join("Documents/notes.txt").is_file(),
+            "file should have moved into its category folder"
+        );
+        assert!(
+            !tmp.path().join("notes.txt").exists(),
+            "file should no longer be at its original location"
+        );
+
+        let stored = get_execution(&conn, &result.execution_id)
+            .unwrap()
+            .expect("execution should be retrievable by the id returned to the caller");
+        assert_eq!(stored.audit.len(), result.report.audit.len());
+
+        assert!(
+            get_milestone(&conn, Milestone::FirstRun).unwrap().is_some(),
+            "organizer_execute must record the first-run milestone"
+        );
+    }
+
+    #[test]
+    fn execute_then_undo_restores_original_location() {
+        let tmp = tempdir();
+        tmp.file("notes.txt", b"hello");
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Test Zone", None, DefaultDecision::Ask, false).unwrap();
+        add_folder_rule(
+            &conn,
+            &zone.id,
+            &full_rule(tmp.path(), TrustLevel::AskFirst),
+        )
+        .unwrap();
+
+        let result = organizer_execute_with_conn(&conn, &zone.id, None, None).unwrap();
+        assert!(tmp.path().join("Documents/notes.txt").is_file());
+
+        organizer_undo_with_conn(&conn, &result.execution_id).expect("undo should succeed");
+
+        assert!(
+            tmp.path().join("notes.txt").is_file(),
+            "undo must restore the file to its original location"
+        );
+        assert!(
+            !tmp.path().join("Documents/notes.txt").exists(),
+            "undo must remove the file from where it was moved to"
+        );
+        assert!(
+            get_milestone(&conn, Milestone::FirstUndo)
+                .unwrap()
+                .is_some(),
+            "organizer_undo must record the first-undo milestone"
+        );
+    }
+
+    #[test]
+    fn undo_unknown_execution_id_returns_descriptive_error() {
+        let conn = open_in_memory().unwrap();
+        let err = organizer_undo_with_conn(&conn, "does-not-exist")
+            .expect_err("undoing an unknown execution id must fail");
+        assert!(
+            err.contains("no execution with id does-not-exist"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_makes_no_filesystem_changes_when_rule_trust_is_never() {
+        // The rule still grants read/create/move (so the planner proposes
+        // actions), but `Never` trust must refuse every one of them at
+        // execution time — the command-layer guarantee that a proposed plan
+        // can never reach the filesystem without an approved, non-refusing
+        // boundary.
+        let tmp = tempdir();
+        tmp.file("notes.txt", b"hello");
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Test Zone", None, DefaultDecision::Ask, false).unwrap();
+        add_folder_rule(&conn, &zone.id, &full_rule(tmp.path(), TrustLevel::Never)).unwrap();
+
+        let result = organizer_execute_with_conn(&conn, &zone.id, None, None)
+            .expect("execute should succeed even though every action is refused");
+
+        assert_eq!(result.report.applied, 0);
+        assert!(result.report.skipped > 0);
+        assert!(
+            tmp.path().join("notes.txt").is_file(),
+            "file must stay exactly where it was"
+        );
+        assert!(!tmp.path().join("Documents").exists());
+    }
 }
 
 #[cfg(test)]
