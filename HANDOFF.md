@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-11
-**Status:** `master` green. **v1.2.6 release candidate prepared** (tag push will build `Ghost.dmg` + `Ghost_Setup.exe`). Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX plus PRs 150-160 release consolidation.
+**Status:** `master` green. **v1.2.7 release candidate prepared** (tag push will build `Ghost.dmg` + `Ghost_Setup.exe`). v1.2.5 and v1.2.6 were version-bumped in `Cargo.toml`/`tauri.conf.json` but the required `git tag vX.Y.Z && git push origin vX.Y.Z` step (see `RELEASING.md`) was never run, so no release was published for either — the last published GitHub Release is still `v1.2.4`. This bump also picks up a CI fix: `rusqlite` 0.40.1 pulled in a `libsqlite3-sys` 0.38.1 whose build script used the unstable `cfg_select!` macro and failed to compile on stable Rust, and `diagnose_perms.rs` had no `target_os` gate, breaking `cargo check --all-targets` on Linux/Windows. Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX plus PRs 150-160 release consolidation.
 
 ---
 
@@ -17,8 +17,9 @@ The current wedge is **Ghost Organizer** (safe file organization: scan → plan 
 
 ---
 
-## Recent Changes (through v1.2.4 + polish)
+## Recent Changes (through v1.2.7 + polish)
 
+0. **v1.2.7:** fixed `master`'s broken build (`rusqlite`/`libsqlite3-sys` unstable-macro regression, missing test helper, unguarded macOS-only bin) and published the release tag that v1.2.5/v1.2.6 skipped.
 1. **v1.2.4:** ID-scan OCR hardening, DOM contract test, signing-docs fix, version bump.
 2. **Release pipeline:** single publish job after both platform builds; `SHA256SUMS.txt`; optional updater artifacts / `latest.json` when keys exist; no more Mac-only or Windows-only partial releases.
 3. **Product polish:** platform-neutral copy, honest signing/preview language, readable IPC error toasts, Settings shows app version.

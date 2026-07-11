@@ -40,13 +40,13 @@ function platformDetection() {
   document.body.dataset.platform = platform;
 
   const sub = $("#download-sub");
-  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v1.2.6 preview release.";
-  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v1.2.6 preview release.";
+  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v1.2.7 preview release.";
+  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v1.2.7 preview release.";
 
   const primaryLabel = $("[data-download-label]");
   if (primaryLabel) {
-    if (platform === "mac") primaryLabel.textContent = "Download v1.2.6 for macOS";
-    else if (platform === "windows") primaryLabel.textContent = "Download v1.2.6 for Windows";
+    if (platform === "mac") primaryLabel.textContent = "Download v1.2.7 for macOS";
+    else if (platform === "windows") primaryLabel.textContent = "Download v1.2.7 for Windows";
   }
 }
 
