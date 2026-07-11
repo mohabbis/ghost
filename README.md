@@ -124,9 +124,9 @@ Ghost is a Tauri 2 desktop app with a Rust backend and a vanilla HTML/CSS/JS fro
 | `src-tauri/src/platform/` | macOS and Windows capture/replay backends. |
 | `src/` | Desktop app UI packaged by Tauri. |
 | `public/` | Hosted product/marketing site. |
-| `docs/` | Operational specs, command registry, roadmap, and security notes. |
+| `docs/` | Operational specs, command registry, roadmap, MCP boundaries, and security notes. |
 
-The command surface is intentionally classified by risk. Before changing Tauri commands, read [`AGENTS.md`](AGENTS.md), [`docs/command-registry.md`](docs/command-registry.md), and [`docs/core-boundaries.md`](docs/core-boundaries.md).
+The command surface is intentionally classified by risk. Before changing Tauri commands, read [`AGENTS.md`](AGENTS.md), [`docs/command-registry.md`](docs/command-registry.md), and [`docs/core-boundaries.md`](docs/core-boundaries.md). For AI-client interoperability, use one MCP boundary instead of vendor-specific integrations; see [`docs/mcp-integration.md`](docs/mcp-integration.md) and [`docs/ai-provider-boundaries.md`](docs/ai-provider-boundaries.md).
 
 ## Development
 
