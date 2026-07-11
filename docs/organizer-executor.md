@@ -29,7 +29,10 @@ resulting risk classes in `docs/command-registry.md`.
    carried onto the audit event.
 2. **Verifies state.** A move/rename requires the source to still exist and the
    target to *not* exist. Ghost never silently overwrites (`AGENTS.md`
-   non-negotiable): an occupied target is `Skipped`, not clobbered.
+   non-negotiable): an occupied target is `Skipped`, not clobbered. The target
+   parent folder must already exist from an explicit, policy-checked
+   `CreateFolder` action; the move/rename step never creates missing parent
+   folders implicitly because that would be an unaudited mutation.
 3. **Writes undo before mutating.** The inverse op (`UndoOp::RemoveFolder` for a
    created folder, `UndoOp::Restore` for a move/rename) is recorded in the
    `UndoJournal` *before* the filesystem call — trust invariant 8.
@@ -71,6 +74,9 @@ step first), so files are moved out of a destination folder before that folder's
 - **No deletes.** The executor never removes files; undo only removes folders it
   created, and only when empty.
 - **No silent overwrite.** Targets are re-checked at execution and at undo.
+- **No implicit folder mutation.** Missing target parents skip the file instead
+  of creating folders that were not separately planned, approved, audited, and
+  journaled.
 - **Undo before execute.** Every reversible op is journaled before it runs, so a
   partial failure is still reversible.
 - **Partial failure is recoverable.** Each action is independent; a failure on
@@ -82,7 +88,8 @@ step first), so files are moved out of a destination folder before that folder's
 Implemented: `audit::audit_log`, `audit::undo_journal`, `organizer::executor`,
 `organizer::undo`, with unit tests covering happy-path application, policy-denied
 skips, overwrite refusal, missing-source skips, unsupported-capability rejection,
-a full execute→undo round-trip back to the original tree, and folder-preservation
-when a user refills a created folder. The executor and undo runner are wired to
-Tauri through `organizer_execute` and `organizer_undo`; the frontend still owns
-the explicit review/approval affordance before calling execution.
+missing-target-parent skips without implicit folder creation, a full
+execute→undo round-trip back to the original tree, and folder-preservation when a
+user refills a created folder. The executor and undo runner are wired to Tauri
+through `organizer_execute` and `organizer_undo`; the frontend still owns the
+explicit review/approval affordance before calling execution.
