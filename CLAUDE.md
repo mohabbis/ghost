@@ -138,16 +138,18 @@ Current backend layout:
 ```text
 src-tauri/src/
   lib.rs                 # app wiring + generate_handler! registry (conflict hotspot — add entries in place)
+  main.rs                # binary entrypoint
+  bin/diagnose_perms.rs  # macOS-only dev binary: reports Accessibility/Input Monitoring grant state via IOKit
   engine.rs              # recording/replay engine state
   auth.rs, config.rs, error.rs, performance.rs, telemetry.rs
   commands.rs            # thin registry/re-export over commands/
   commands/
-    core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions
+    core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions, Ghost Guard audit, OCR, ID parsing
     auth.rs              # local password state and protection
     compression.rs       # compress_workflow (event compression -> review timeline)
     diagnostics.rs       # config, telemetry export, performance, is_experimental_enabled
-    organizer.rs         # organizer_plan / organizer_execute / organizer_list_executions / organizer_undo
-    filing.rs            # preview_file_filing / estimate_filing_savings (read-only, audience-aware filing preview)
+    organizer.rs         # organizer_plan/_execute/_list_executions/_undo, audit export, signed-report verify, policy pack import/export, audit-chain verify, time-to-value
+    filing.rs            # preview_file_filing / estimate_filing_savings (read-only, audience-aware filing preview: Finance/Student/Engineering)
     updates.rs           # updater surface
     experimental.rs      # AI, observer, cloud sync, analytics, visual checks (feature-gated)
   core/
@@ -156,9 +158,11 @@ src-tauri/src/
     execution.rs         # ExecutionRecord tracking for replay history
     replay_support.rs    # shared pause/cancel/pacing replay plumbing + resolution chain/matcher
     dry_run.rs           # pure per-step replay preview (typed text excluded)
-    id_scan.rs           # deterministic identity-document field parsing (safe-read; text in, no image/AI)
-    events.rs, guard.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
-    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs, ocr.rs   # experimental-facing (ocr.rs touches image bytes)
+    id_scan.rs           # deterministic identity-document field parsing (stable; text in, no image/AI)
+    ocr.rs               # stable: local OCR (macOS Vision / Windows OCR) over user-supplied image bytes, no network
+    guard.rs             # Ghost Guard: keyboard-suppression heuristics + deterministic pre-replay/save workflow audit (docs/GHOST_GUARD.md)
+    events.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
+    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs   # experimental-facing
   platform/
     macos.rs, windows.rs, headless.rs   # OS input capture/replay backends (headless used by Linux CI)
   policy/
@@ -167,10 +171,18 @@ src-tauri/src/
     migrations.rs, zones.rs, executions.rs, milestones.rs   # milestones.rs: local-only first-touch timing (no network)
   organizer/
     scanner.rs, classifier.rs, naming.rs, conflict.rs, planner.rs, executor.rs, undo.rs
+    testutil.rs          # #[cfg(test)] temp-dir fixtures shared across organizer tests
   filing/
-    mod.rs, finance.rs, academic.rs, period.rs, preview.rs, savings.rs   # read-only filing preview + savings estimate (see docs/filing-profiles.md)
+    mod.rs, finance.rs, academic.rs, engineering.rs, period.rs, preview.rs, savings.rs   # read-only filing preview + savings estimate across Finance/Student/Engineering audiences (see docs/filing-profiles.md)
   audit/
     audit_log.rs, undo_journal.rs
+    pii.rs               # redacts SSN/card/email/phone patterns from *exported* audit text only; the stored audit log and hash chain are untouched
+  checks/, compliance/, data_protection/, enterprise/, finance/, fraud/
+                         # commandless domain-model scaffolding for enterprise financial-operations
+                         # work (playbooks/approvals, reconciliation, KYC/AML, encryption/retention,
+                         # fraud scoring, check/ID review). No Tauri commands, no network, no
+                         # mutation — read docs/enterprise-financial-operations.md before adding any
+                         # command surface on top of these.
 ```
 
 Built so far — the Ghost Organizer trust pipeline is wired end to end:
@@ -181,6 +193,16 @@ Built so far — the Ghost Organizer trust pipeline is wired end to end:
 - `audit/` — append-only audit log and undo journal written for every mutating run.
 
 These are wired to the `organizer_*` Tauri commands and the Organizer UI: plan is read-only; execute re-checks policy per action, writes undo before mutating, and audits every change; undo replays the journal in reverse. The executor never overwrites or deletes silently.
+
+Also built: Organizer audit hardening. Every executed run is sealed into a tamper-evident hash chain (`organizer_execute` persists it; `organizer_verify_audit_chain` recomputes and reports `intact`/`sealed_count`/`unsealed_count`/`first_break` offline, no network); `organizer_export_audit` returns a run's audit log as JSON/CSV with its seal metadata, and `audit/pii.rs` redacts SSN/card/email/phone patterns from that *exported* text only (the stored audit log used for the seal and undo is untouched, so redaction can never desync a run's hash). `organizer_export_policy_pack` / `organizer_import_policy_pack` move Zone + folder-rule configuration between machines, and `organizer_time_to_value` reports local first-touch milestones (first zone/plan/run/undo) for the diagnostics view.
+
+Also built: Ghost Guard, the deterministic local safety layer (`core/guard.rs`, see `docs/GHOST_GUARD.md`). It suppresses keyboard capture after clicks into password/OTP/payment-shaped fields during recording, and the stable `ghost_guard_audit` / `ghost_guard_audit_compressed` commands run a pure local risk audit over raw events or the compressed semantic timeline (no network, no LLM) before replay/save. Routing compressed-step findings into the review-timeline UI remains follow-up work.
+
+Also built: stable on-device OCR and ID-document parsing. `run_ocr_on_image` (`core/ocr.rs`) runs local OCR (macOS Vision / Windows OCR) over user-supplied image bytes with no network; `parse_id_document` (`core/id_scan.rs`) is a pure text-in/struct-out parser over that OCR'd text (age/expiry/review-flag signals, no image/IO/network). Both are stable core, not experimental — see `docs/core-boundaries.md`.
+
+Also built (commandless): `checks/`, `compliance/`, `data_protection/`, `enterprise/`, `finance/`, `fraud/` are domain-model scaffolding for possible enterprise financial-operations work (playbooks/approvals/workflows, reconciliation/invoices, KYC/AML/retention, encryption/redaction/secure-delete, fraud rules/scoring/evidence, check/ID review packets). Per `docs/enterprise-financial-operations.md` these modules intentionally add **no Tauri commands, no background monitoring, no network calls, and no financial mutations** — most are still single-purpose stub files. Do not wire a command onto them without a playbook, risk class, policy check, approval step, audit/undo behavior, and an update to `docs/command-registry.md`, same as any other command.
+
+An external repository/product audit (`docs/ghost-product-repository-audit-2026-07-11.md`) and a phased hardening handoff (`docs/post-audit-implementation-handoff.md`) are the current source of truth for release-readiness gaps (version/release consistency, updater signing, replay's not-yet-policy-bound status, Guard Desk/POS Bridge marketing overstatement, Organizer symlink/TOCTOU test coverage, Actions pinning). Read both before doing release, security, or "production readiness" framing work.
 
 Also built: `core/compress.rs` for deterministic text compression before experimental model calls, and `core/compression/` for deterministic event compression from raw `InputEvent` streams into reviewable `CompressedStep`s. Both are exercised in product — the `compress_workflow` command and the compressed-step review timeline UI are live. Compression reports carry per-step raw-event spans (`raw_spans` + `step_for_raw_index`) so replay resolution traces map onto semantic steps: the review timeline badges steps that fell back to coordinates in the last run, history/insight rows name the semantic step, and the replay-history modal opens with a cross-run reliability summary (success rate, avg duration, coordinate-fallback share — computed in the frontend from `get_replay_history`, no new command). See `docs/token-compression.md` and `docs/event-compression.md`. (Ghost Guard routing of compressed steps remains follow-up work.)
 
@@ -230,8 +252,8 @@ Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 - `commands/auth.rs` for local password state and protection;
 - `commands/compression.rs` for the `compress_workflow` event-compression command;
 - `commands/diagnostics.rs` for config, telemetry export, performance summaries, and `is_experimental_enabled`;
-- `commands/organizer.rs` for the Organizer plan/execute/history/undo surface;
-- `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; see `src-tauri/src/filing/` and `docs/filing-profiles.md`);
+- `commands/organizer.rs` for the Organizer plan/execute/history/undo surface, plus audit export, signed-report verify, policy pack import/export, audit-chain verify, and time-to-value;
+- `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; audiences are Finance/Student/Engineering — see `src-tauri/src/filing/` and `docs/filing-profiles.md`);
 - `commands/updates.rs` for the updater;
 - `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
@@ -271,8 +293,9 @@ Notes:
 - there is no `package.json` and no frontend build step — `tauri.conf.json` serves `../src` directly, so frontend changes need no compile;
 - local Linux builds need the GTK/webkit system deps listed in `AGENTS.md`; the `platform/headless.rs` backend is what Linux CI exercises;
 - CI (`rust.yml`) runs check/test/clippy on ubuntu/macos/windows, fmt on ubuntu, and a `cargo tauri build --no-bundle` smoke test on macos/windows — it does not run `--features experimental`;
-- for a single test, use `cargo test --manifest-path src-tauri/Cargo.toml <test_name>` (add `--features experimental` if the test lives behind the gate).
-- **Connected Hardware Environment:** Flipper Zero with Momentum custom firmware is connected via USB/WiFi for hardware keystroke injection (BadUSB style replay testing) and physical security key simulation.
+- `security.yml` runs separately (push/PR to main/develop + a weekly schedule): gitleaks secret scanning, `cargo audit`/`cargo deny check` (see `deny.toml`), and CodeQL. It does not gate PRs into `master` the way `rust.yml` does — don't assume it ran on your branch;
+- integration/contract tests live in `src-tauri/tests/`: `canonical_workflows.rs`, `e2e.rs`, `frontend_dom_contract.rs`, `integration_test.rs`, `ipc_contract.rs`, `resolution_benchmark.rs` (the target-resolution scenario benchmark — see `docs/target-resolution.md` before touching it);
+- for a single test, use `cargo test --manifest-path src-tauri/Cargo.toml <test_name>` (add `--features experimental` if the test lives behind the gate); for a single integration file, add `--test <file_stem>` (e.g. `--test ipc_contract`).
 
 If checks cannot run, report that directly.
 
