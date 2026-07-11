@@ -844,6 +844,25 @@ async function loadWorkflow() {
   }
 }
 
+async function deleteWorkflow() {
+  if (!invoke) return;
+
+  try {
+    const names = await invoke("list_workflows");
+    const name = await ghostPick("Delete a workflow", names);
+    if (!name) return;
+
+    const ok = await ghostConfirm(`Delete "${name}"? This cannot be undone.`, "Delete");
+    if (!ok) return;
+
+    await invoke("delete_workflow", { name });
+    showNotification(`Deleted "${name}".`);
+  } catch (error) {
+    console.error("Failed to delete workflow:", error);
+    toastError("Failed to delete workflow: " + formatInvokeError(error));
+  }
+}
+
 // ===== AI-powered workflow functions =====
 
 async function analyzeWorkflow() {
@@ -1934,6 +1953,48 @@ async function organizerCreateZone() {
   }
 }
 
+// Export the selected Zone's boundary and folder rules as a portable JSON
+// policy pack — the write side of organizer_import_policy_pack, for sharing
+// a reviewed boundary definition across a team's devices without cloud sync.
+async function organizerExportPolicyPack() {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone) return toastError("Select a Zone first.");
+  try {
+    const json = await invoke("organizer_export_policy_pack", { zoneId: zone.id });
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const slug = zone.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "zone";
+    a.href = url;
+    a.download = `ghost-policy-pack-${slug}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showNotification(`Policy pack exported for "${zone.name}".`, "info");
+  } catch (err) {
+    toastError("Export failed: " + formatInvokeError(err));
+  }
+}
+
+function organizerImportPolicyPack() {
+  document.getElementById("organizerImportPackInput")?.click();
+}
+
+async function organizerHandlePolicyPackFile(file) {
+  if (!invoke || !file) return;
+  try {
+    const text = await file.text();
+    const zone = await invoke("organizer_import_policy_pack", { packJson: text });
+    organizerSelectedZoneId = zone.id;
+    await organizerRefreshZones();
+    showNotification(`Imported policy pack as Zone "${zone.name}". Review its rules before running it.`, "info");
+  } catch (err) {
+    toastError("Import failed: " + formatInvokeError(err));
+  }
+}
+
 // The guided setup presets. Each turns a short "interview" (a few questions)
 // into a named Zone and its folder rules — Ghost's local, permission-bounded
 // answer to the "configure yourself from how the team works" onboarding, with
@@ -2216,22 +2277,32 @@ function organizerProvenanceBadge(provenance) {
 // Export a run's audit log as CSV or JSON. The backend returns the text; we
 // hand it to the user as a download so they keep a portable record of exactly
 // what Ghost did and under which rule.
+const ORGANIZER_EXPORT_FORMATS = {
+  csv: { mime: "text/csv", ext: "csv", label: "CSV" },
+  json: { mime: "application/json", ext: "json", label: "JSON" },
+  compliance: { mime: "text/plain", ext: "txt", label: "a compliance report" },
+  // A compliance report plus a cryptographic signature over its own content,
+  // verifiable offline against this machine's signing key via
+  // organizer_verify_signed_report — see organizerVerifySignedReport().
+  signed: { mime: "text/plain", ext: "txt", label: "a signed report" },
+};
+
 async function organizerExportAudit(executionId, format) {
   if (!invoke) return notAvailable();
   if (!executionId) return;
+  const spec = ORGANIZER_EXPORT_FORMATS[format] || { mime: "text/plain", ext: format, label: format.toUpperCase() };
   try {
     const text = await invoke("organizer_export_audit", { executionId, format });
-    const mime = format === "csv" ? "text/csv" : "application/json";
-    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const blob = new Blob([text], { type: `${spec.mime};charset=utf-8` });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ghost-audit-${executionId}.${format}`;
+    a.download = `ghost-audit-${executionId}.${spec.ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showNotification(`Audit exported as ${format.toUpperCase()}.`, "info");
+    showNotification(`Audit exported as ${spec.label}.`, "info");
   } catch (err) {
     toastError("Export failed: " + formatInvokeError(err));
   }
@@ -2353,6 +2424,7 @@ async function organizerRun() {
         <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
         <button class="btn btn--ghost btn--small" id="organizerExportCsvBtn" type="button">Export audit (CSV)</button>
         <button class="btn btn--ghost btn--small" id="organizerExportJsonBtn" type="button">Export audit (JSON)</button>
+        <button class="btn btn--ghost btn--small" id="organizerExportSignedBtn" type="button" title="A compliance report with a cryptographic signature, verifiable offline">Export signed report</button>
       </div>
       <h3 class="organizer-subhead">Audit log</h3>
       <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
@@ -2362,6 +2434,8 @@ async function organizerRun() {
     if (csvBtn) csvBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "csv"));
     const jsonBtn = document.getElementById("organizerExportJsonBtn");
     if (jsonBtn) jsonBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "json"));
+    const signedBtn = document.getElementById("organizerExportSignedBtn");
+    if (signedBtn) signedBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "signed"));
   }
   organizerHasReviewedPlan = false;
   organizerUpdateButtons(await safeRules(zone.id));
@@ -2383,13 +2457,49 @@ async function organizerUndo(executionId) {
   }
 }
 
+// Labels for the local, first-touch milestones behind organizer_time_to_value —
+// no paths or content, just when each stage of the trust pipeline first ran.
+const ORGANIZER_MILESTONE_LABELS = {
+  first_zone_created: "First Zone created",
+  first_plan: "First plan previewed",
+  first_run: "First run approved",
+  first_undo: "First undo used",
+};
+
+function organizerRenderMilestones(milestones) {
+  if (!milestones || milestones.length === 0) {
+    return `<p class="organizer-muted">No milestones recorded yet — create a Zone to get started.</p>`;
+  }
+  const byKey = Object.fromEntries(milestones.map((m) => [m.key, m.at]));
+  const items = ["first_zone_created", "first_plan", "first_run", "first_undo"]
+    .filter((key) => byKey[key])
+    .map((key) => {
+      const when = new Date(Number(byKey[key]) * 1000).toLocaleString();
+      return `<li><strong>${escapeHtml(ORGANIZER_MILESTONE_LABELS[key])}:</strong> ${escapeHtml(when)}</li>`;
+    })
+    .join("");
+  const firstZone = Number(byKey.first_zone_created);
+  const firstRun = Number(byKey.first_run);
+  const ttv =
+    firstZone && firstRun && firstRun >= firstZone
+      ? `<p class="organizer-muted">Time to first run: ${Math.round((firstRun - firstZone) / 60)} minute(s) after the first Zone.</p>`
+      : "";
+  return `<ul class="organizer-history">${items}</ul>${ttv}`;
+}
+
 async function organizerShowHistory() {
   if (!invoke) return notAvailable();
   let history = [];
+  let milestones = [];
   try {
     history = await invoke("organizer_list_executions");
   } catch (err) {
     return toastError("Could not load history: " + formatInvokeError(err));
+  }
+  try {
+    milestones = await invoke("organizer_time_to_value");
+  } catch {
+    milestones = [];
   }
   const modal = document.getElementById("analysis-modal");
   const content = modal?.querySelector(".modal-content");
@@ -2409,9 +2519,13 @@ async function organizerShowHistory() {
     <h3 style="margin-top:0">Organizer history</h3>
     <div class="btn-row" style="margin-bottom:10px">
       <button class="btn btn--ghost btn--small" id="organizerVerifyBtn" type="button">Verify integrity</button>
+      <button class="btn btn--ghost btn--small" id="organizerVerifyReportBtn" type="button">Verify a signed report…</button>
+      <input type="file" id="organizerVerifyReportInput" accept=".txt,.md,text/plain" hidden />
     </div>
     <p class="organizer-verify-result" id="organizerVerifyResult" aria-live="polite"></p>
     <ul class="organizer-history">${rows}</ul>
+    <h3 class="organizer-subhead">Milestones</h3>
+    ${organizerRenderMilestones(milestones)}
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
   content.querySelectorAll("[data-undo-exec]").forEach((btn) =>
     btn.addEventListener("click", async () => {
@@ -2421,7 +2535,37 @@ async function organizerShowHistory() {
   );
   const verifyBtn = document.getElementById("organizerVerifyBtn");
   if (verifyBtn) verifyBtn.addEventListener("click", organizerVerifyIntegrity);
+  const verifyReportBtn = document.getElementById("organizerVerifyReportBtn");
+  const verifyReportInput = document.getElementById("organizerVerifyReportInput");
+  if (verifyReportBtn && verifyReportInput) {
+    verifyReportBtn.addEventListener("click", () => verifyReportInput.click());
+    verifyReportInput.addEventListener("change", () => {
+      const file = verifyReportInput.files?.[0];
+      verifyReportInput.value = "";
+      if (file) organizerVerifySignedReport(file);
+    });
+  }
   showModal(modal);
+}
+
+// Verify a previously exported signed compliance report against this
+// machine's signing key — the read side of organizer_export_audit's
+// "signed" format. Confirms the report wasn't altered after export.
+async function organizerVerifySignedReport(file) {
+  if (!invoke) return notAvailable();
+  const out = document.getElementById("organizerVerifyResult");
+  if (out) out.textContent = "Verifying…";
+  try {
+    const text = await file.text();
+    const ok = await invoke("organizer_verify_signed_report", { reportContent: text });
+    if (!out) return;
+    out.innerHTML = ok
+      ? `<span class="org-verify org-verify--ok">${icon("i-check-circle")} Signature valid — report matches this machine's signing key</span>`
+      : `<span class="org-verify org-verify--bad">${icon("i-x-circle")} Signature invalid — report was altered or signed on another machine</span>`;
+  } catch (err) {
+    if (out) out.textContent = "";
+    toastError("Verify failed: " + formatInvokeError(err));
+  }
 }
 
 // Verify the tamper-evident audit chain and render the verdict — the payoff of
@@ -2821,6 +2965,7 @@ function wireUpControls() {
   bind("saveBtn", saveWorkflow);
   bind("saveAiBtn", saveWorkflowWithMetadata);
   bind("loadBtn", loadWorkflow);
+  bind("deleteWorkflowBtn", deleteWorkflow);
   bind("analyzeBtn", analyzeWorkflow);
   bind("optimizeBtn", optimizeWorkflow);
   bind("generateAiBtn", generateWorkflowFromDescription);
@@ -2853,6 +2998,16 @@ function wireUpControls() {
   // Ghost Organizer: the wedge product's trust pipeline.
   bind("organizerNewZoneBtn", organizerCreateZone);
   bind("organizerPresetBtn", organizerRunWizard);
+  bind("organizerExportPackBtn", organizerExportPolicyPack);
+  bind("organizerImportPackBtn", organizerImportPolicyPack);
+  const importPackInput = document.getElementById("organizerImportPackInput");
+  if (importPackInput) {
+    importPackInput.addEventListener("change", () => {
+      const file = importPackInput.files?.[0];
+      importPackInput.value = "";
+      if (file) organizerHandlePolicyPackFile(file);
+    });
+  }
   bind("organizerBrowseBtn", organizerBrowseFolder);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
