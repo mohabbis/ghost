@@ -334,11 +334,11 @@ mod tests {
 
     #[test]
     fn auto_apply_rule_rejects_amounts_over_threshold() {
-        let invoices = vec![invoice("inv-1", Some("PO-9"), 999_999_00, date(2026, 1, 1))];
+        let invoices = vec![invoice("inv-1", Some("PO-9"), 99_999_900, date(2026, 1, 1))];
         let ledger = vec![ledger_line(
             "ln-1",
             Some("PO-9"),
-            999_999_00,
+            99_999_900,
             date(2026, 1, 1),
         )];
         let strict = AutoApplyRule {
