@@ -16,6 +16,8 @@ Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 
 Ghost should turn repeated computer work into safe, reusable, permission-bounded routines. It must not be presented or built as a generic autonomous agent that silently controls the user's computer.
 
+Ghost supports account sign-in (Microsoft/Google) and is meant to eventually connect with the tech stacks users already run — Microsoft Fabric/Power BI, Google Cloud, and AI-assistant connectors (Claude, Cursor, Codex, ChatGPT). That connectivity is a competitive advantage, not the thesis: every integration is additive to the trust pipeline below, never a way around it. See `docs/integrations-roadmap.md` for what's built versus planned.
+
 ## Current product wedge
 
 Prioritize **Ghost Organizer** first.
@@ -49,7 +51,7 @@ Broad app automation, AI-generated workflows, observer mode, cloud sync, analyti
 5. Do not silently overwrite, delete, upload, send, submit, or type into unknown apps.
 6. Do not add a Tauri command without a module, owner boundary, and risk class.
 7. Do not move experimental features into default UI without documented limits, tests, and user-facing controls.
-8. Do not weaken local-first behavior by adding cloud storage, telemetry, or network calls unless the user specifically asks.
+8. Do not add cloud storage, telemetry, or network calls beyond what's already scoped and documented (account sign-in, `docs/integrations-roadmap.md`) unless the user specifically asks. Any new network surface must stay opt-in, scoped, and disclosed — never a silent default.
 9. Do not claim production readiness if release signing, replay reliability, policy checks, or undo paths are incomplete.
 10. Do not make README or marketing copy promise more than the repo can support.
 
@@ -156,8 +158,8 @@ Default posture:
 - no background email monitoring;
 - no background browser/tab reading;
 - no raw secret capture;
-- no cloud-first storage;
-- no unapproved network calls;
+- no cloud-first storage for workflow/organizer data (it stays local and encrypted at rest regardless of which integrations are enabled);
+- no unapproved network calls beyond account sign-in and explicitly-approved stack integrations (see `docs/integrations-roadmap.md`);
 - keyboard and pointer capture only during explicit recording or approved replay.
 
 Browser and app integrations must be scoped by user-approved Zones, windows, tabs, domains, folders, and actions.

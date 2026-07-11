@@ -4,6 +4,7 @@
 //! smaller modules so stable core behavior does not get buried under experiment
 //! drift, humanity's favorite maintenance strategy for some reason.
 
+mod account;
 mod auth;
 mod compression;
 mod core;
@@ -14,6 +15,7 @@ mod filing;
 mod organizer;
 mod updates;
 
+pub use account::*;
 pub use auth::*;
 pub use compression::*;
 pub use core::*;

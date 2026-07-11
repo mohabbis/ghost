@@ -160,11 +160,11 @@ cargo tauri build --no-bundle
 - No microphone.
 - No hidden screen capture.
 - No background email, browser, or document reading.
-- No cloud-first storage.
-- No unapproved network calls.
+- No cloud-first storage for workflow/organizer data.
+- No unapproved network calls beyond account sign-in and explicitly-approved stack integrations.
 - Keyboard and pointer capture only during explicit recording or approved replay.
 
-Workflow data, logs, settings, audit history, and undo journals stay local by default.
+Workflow data, logs, settings, audit history, and undo journals stay local and encrypted at rest by default, regardless of which account or stack integrations are enabled. Ghost supports account sign-in (Microsoft/Google) and is built to connect with the tech stacks users already run — Microsoft Fabric/Power BI, Google Cloud, and AI-assistant connectors (Claude, Cursor, Codex, ChatGPT) — without weakening the trust pipeline above. See `docs/integrations-roadmap.md` for what's built versus planned.
 
 ## Roadmap
 

@@ -1165,6 +1165,13 @@ async function openSettings() {
     return;
   }
 
+  let account = { signed_in: false };
+  try {
+    account = await invoke("account_status");
+  } catch (error) {
+    console.error("Failed to load account status:", error);
+  }
+
   const modal = document.getElementById("settings-modal");
   if (!modal) return;
   const content = modal.querySelector(".modal-content");
@@ -1180,7 +1187,20 @@ async function openSettings() {
   content.innerHTML = `
     <h3>${icon("i-gear")} Settings</h3>
 
-    <h4 style="color: #8d7bff; margin-bottom: 4px;">Replay</h4>
+    <h4 style="color: #8d7bff; margin-bottom: 4px;">Account</h4>
+    ${
+      account.signed_in
+        ? `<p class="panel__hint" style="margin: 4px 0 8px;">Signed in as <strong>${escapeAttr(account.name || account.email)}</strong> (${escapeAttr(account.email)}) via ${escapeAttr(account.provider)}.</p>
+           <button class="btn btn--ghost btn--small" data-account-sign-out>Sign out</button>`
+        : `<p class="panel__hint" style="margin: 4px 0 8px;">Sign in to connect Ghost with your Microsoft or Google identity. This links who you are — it does not move your workflow or Organizer data anywhere.</p>
+           <div style="display: flex; gap: 8px;">
+             <button class="btn btn--ghost btn--small" data-account-sign-in="microsoft">Sign in with Microsoft</button>
+             <button class="btn btn--ghost btn--small" data-account-sign-in="google">Sign in with Google</button>
+           </div>`
+    }
+    <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;"></p>
+
+    <h4 style="color: #8d7bff; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
       <input id="cfg-default-speed" type="number" step="0.1" min="0.1" max="10"
              value="${escapeAttr(replay.default_speed)}" style="${fieldStyle}">
@@ -1310,6 +1330,37 @@ async function saveSettings() {
   } catch (error) {
     console.error("Failed to save config:", error);
     toastError(`Could not save settings: ${formatInvokeError(error)}`);
+  }
+}
+
+// --- Account sign-in (Microsoft/Google OAuth) -------------------------------
+// Identity only: links who the user is, for a future stack integration
+// (Fabric/Power BI, Google Cloud, AI-assistant connectors) to request access
+// under. Does not gate the app and does not move workflow/organizer data.
+async function signInWithProvider(provider) {
+  if (!invoke) return notAvailable();
+  const note = document.getElementById("account-status-note");
+  if (note) note.textContent = "Opening your browser to sign in…";
+  try {
+    await invoke("account_sign_in", { provider });
+    showNotification("Signed in.");
+    openSettings();
+  } catch (error) {
+    console.error("Sign-in failed:", error);
+    if (note) note.textContent = `Sign-in failed: ${formatInvokeError(error)}`;
+    else toastError(`Sign-in failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function signOutAccount() {
+  if (!invoke) return notAvailable();
+  try {
+    await invoke("account_sign_out");
+    showNotification("Signed out.");
+    openSettings();
+  } catch (error) {
+    console.error("Sign-out failed:", error);
+    toastError(`Sign-out failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -3133,6 +3184,18 @@ function wireUpControls() {
     const saveConfigTarget = e.target.closest("[data-save-config]");
     if (saveConfigTarget) {
       saveSettings();
+      return;
+    }
+
+    const signInTarget = e.target.closest("[data-account-sign-in]");
+    if (signInTarget) {
+      signInWithProvider(signInTarget.dataset.accountSignIn);
+      return;
+    }
+
+    const signOutTarget = e.target.closest("[data-account-sign-out]");
+    if (signOutTarget) {
+      signOutAccount();
     }
   });
 }

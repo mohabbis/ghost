@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod audit;
 pub mod auth;
 pub mod checks;
@@ -66,6 +67,11 @@ macro_rules! run_with_commands {
                 commands::auth_setup,
                 commands::auth_unlock,
                 commands::auth_lock,
+                // Account sign-in (Microsoft/Google OAuth + PKCE): identity only,
+                // independent of the local vault password above.
+                commands::account_status,
+                commands::account_sign_in,
+                commands::account_sign_out,
                 // Configuration, telemetry, and diagnostics.
                 commands::get_config,
                 commands::update_config,

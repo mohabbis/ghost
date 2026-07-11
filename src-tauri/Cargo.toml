@@ -23,7 +23,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -64,6 +64,11 @@ candle-core = { version = "0.11", optional = true }
 candle-nn = { version = "0.11", optional = true }
 candle-transformers = { version = "0.11", optional = true }
 tokenizers = { version = "0.23", optional = true }
+# Opens the system browser for OAuth sign-in (core/oauth.rs). Already in the
+# dependency tree transitively via tauri-plugin-opener; declared directly here
+# because we call its Rust API, not just the frontend `opener` plugin command.
+# MIT licensed (passes deny.toml).
+open = "5"
 
 [dev-dependencies]
 # `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
