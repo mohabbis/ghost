@@ -692,6 +692,7 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
         role_description,
         window_title,
         window_rel,
+        template_png: None,
     })
 }
 
@@ -1003,7 +1004,6 @@ impl ReplayEngine for MacosReplayer {
         speed: f32,
         progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
-        use crate::core::vision;
         use crate::core::wait::VariableContext;
 
         let mut enigo = Enigo::new(&Settings::default())?;
