@@ -1,11 +1,17 @@
 pub mod audit;
 pub mod auth;
+pub mod checks;
 mod commands;
+pub mod compliance;
 pub mod config;
 pub mod core;
+pub mod data_protection;
 pub mod engine;
+pub mod enterprise;
 pub mod error;
 pub mod filing;
+pub mod finance;
+pub mod fraud;
 pub mod organizer;
 pub mod performance;
 mod platform;
