@@ -82,7 +82,7 @@ fn default_retry_backoff_ms() -> u64 {
 pub struct AISettings {
     /// Enable AI features
     pub enabled: bool,
-    /// LLM provider (openai, anthropic, local)
+    /// LLM provider (openai, anthropic, local, local_model)
     pub provider: String,
     /// API endpoint (optional for custom providers)
     pub api_endpoint: Option<String>,
@@ -92,6 +92,16 @@ pub struct AISettings {
     pub auto_optimize: bool,
     /// Enable proactive suggestions
     pub proactive_suggestions: bool,
+    /// Path to a local GGUF model file, used when `provider` is
+    /// `local_model` (see `core::local_llm`). Nothing is loaded until this is
+    /// set — no model ships with the app. `#[serde(default)]` keeps configs
+    /// written before this field existed loading cleanly.
+    #[serde(default)]
+    pub local_model_path: Option<String>,
+    /// Path to the matching `tokenizer.json`, used alongside
+    /// `local_model_path`. `#[serde(default)]` for the same reason.
+    #[serde(default)]
+    pub local_tokenizer_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +178,8 @@ impl Default for GhostConfig {
                 model: "local-heuristics".to_string(),
                 auto_optimize: false,
                 proactive_suggestions: false,
+                local_model_path: None,
+                local_tokenizer_path: None,
             },
             privacy: PrivacySettings {
                 anonymize_logs: true,

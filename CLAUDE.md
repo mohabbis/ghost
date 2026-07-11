@@ -162,7 +162,7 @@ src-tauri/src/
     ocr.rs               # stable: local OCR (macOS Vision / Windows OCR) over user-supplied image bytes, no network
     guard.rs             # Ghost Guard: keyboard-suppression heuristics + deterministic pre-replay/save workflow audit (docs/GHOST_GUARD.md)
     events.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
-    ai.rs, cloud.rs, llm.rs, vision.rs, knowledge.rs   # experimental-facing
+    ai.rs, cloud.rs, llm.rs, local_llm.rs, vision.rs, knowledge.rs   # experimental-facing
   platform/
     macos.rs, windows.rs, headless.rs   # OS input capture/replay backends (headless used by Linux CI)
   policy/

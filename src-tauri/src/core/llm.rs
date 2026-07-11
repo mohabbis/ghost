@@ -38,6 +38,10 @@ pub struct LLMConfig {
     pub temperature: f32,
     /// Optional custom base endpoint (OpenAI-compatible). `None` = provider default.
     pub endpoint: Option<String>,
+    /// GGUF model path, used only when `provider` is `LocalModel`.
+    pub local_model_path: Option<String>,
+    /// `tokenizer.json` path, used only when `provider` is `LocalModel`.
+    pub local_tokenizer_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -46,6 +50,11 @@ pub enum LLMProviderType {
     Local,
     OpenAI,
     Claude,
+    /// A locally-loaded GGUF model (see `core::local_llm`), run entirely on
+    /// device — nothing leaves the machine. Requires `local_model_path` /
+    /// `local_tokenizer_path` in `AISettings` and the `experimental` build
+    /// feature; without the feature this degrades to [`LLMProviderType::Local`].
+    LocalModel,
 }
 
 impl LLMConfig {
@@ -73,7 +82,7 @@ impl LLMConfig {
             LLMProviderType::Claude => {
                 env::var("GHOST_AI_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string())
             }
-            LLMProviderType::Local => "local-heuristic".to_string(),
+            LLMProviderType::Local | LLMProviderType::LocalModel => "local-heuristic".to_string(),
         };
 
         LLMConfig {
@@ -83,6 +92,8 @@ impl LLMConfig {
             max_tokens: 2048,
             temperature: 0.7,
             endpoint: None,
+            local_model_path: None,
+            local_tokenizer_path: None,
         }
     }
 
@@ -97,14 +108,23 @@ impl LLMConfig {
         let requested = match ai.provider.to_lowercase().as_str() {
             "openai" => LLMProviderType::OpenAI,
             "anthropic" | "claude" => LLMProviderType::Claude,
+            "local_model" => LLMProviderType::LocalModel,
             _ => LLMProviderType::Local,
         };
 
-        // Downgrade to Local if the matching API key is absent.
+        // Downgrade to Local if the matching API key is absent, or if
+        // `local_model` was requested without both a model and tokenizer
+        // path configured — generation degrades gracefully rather than
+        // erroring at call time either way.
         let provider = match requested {
             LLMProviderType::OpenAI if env_key_present("OPENAI_API_KEY") => LLMProviderType::OpenAI,
             LLMProviderType::Claude if env_key_present("ANTHROPIC_API_KEY") => {
                 LLMProviderType::Claude
+            }
+            LLMProviderType::LocalModel
+                if ai.local_model_path.is_some() && ai.local_tokenizer_path.is_some() =>
+            {
+                LLMProviderType::LocalModel
             }
             LLMProviderType::Local => LLMProviderType::Local,
             _ => LLMProviderType::Local,
@@ -112,6 +132,10 @@ impl LLMConfig {
 
         let model = match provider {
             LLMProviderType::Local => "local-heuristic".to_string(),
+            LLMProviderType::LocalModel => ai
+                .local_model_path
+                .clone()
+                .unwrap_or_else(|| "local-heuristic".to_string()),
             _ => ai.model.clone(),
         };
 
@@ -122,6 +146,8 @@ impl LLMConfig {
             max_tokens: 2048,
             temperature: 0.7,
             endpoint: ai.api_endpoint.clone(),
+            local_model_path: ai.local_model_path.clone(),
+            local_tokenizer_path: ai.local_tokenizer_path.clone(),
         }
     }
 
@@ -129,7 +155,7 @@ impl LLMConfig {
         match self.provider {
             LLMProviderType::OpenAI => env::var("OPENAI_API_KEY").ok(),
             LLMProviderType::Claude => env::var("ANTHROPIC_API_KEY").ok(),
-            LLMProviderType::Local => None,
+            LLMProviderType::Local | LLMProviderType::LocalModel => None,
         }
     }
 }
@@ -144,15 +170,48 @@ fn env_key_present(name: &str) -> bool {
 static LLM_INSTANCE: RwLock<Option<Arc<dyn LLMProvider>>> = RwLock::new(None);
 
 /// Initialize (or replace) the active LLM provider from `config`.
+///
+/// `LocalModel` degrades to the heuristic [`LocalFallback`] whenever it can't
+/// actually run: the `experimental` feature isn't compiled in, paths are
+/// missing, or the model/tokenizer fails to load. Generation should never
+/// hard-fail just because a local model isn't available — this is a
+/// suggestion-only feature (see `docs/` "Ghost Intelligence").
 pub fn init_llm(config: &LLMConfig) {
     let provider: Arc<dyn LLMProvider> = match config.provider {
         LLMProviderType::OpenAI => Arc::new(OpenAIProvider::new(config)),
         LLMProviderType::Claude => Arc::new(ClaudeProvider::new(config)),
         LLMProviderType::Local => Arc::new(LocalFallback::new()),
+        LLMProviderType::LocalModel => local_model_provider(config),
     };
     if let Ok(mut guard) = LLM_INSTANCE.write() {
         *guard = Some(provider);
     }
+}
+
+#[cfg(feature = "experimental")]
+fn local_model_provider(config: &LLMConfig) -> Arc<dyn LLMProvider> {
+    let (Some(model_path), Some(tokenizer_path)) =
+        (&config.local_model_path, &config.local_tokenizer_path)
+    else {
+        return Arc::new(LocalFallback::new());
+    };
+    match crate::core::local_llm::LocalModelProvider::load(
+        model_path,
+        tokenizer_path,
+        config.max_tokens as usize,
+        config.temperature,
+    ) {
+        Ok(provider) => Arc::new(provider),
+        Err(e) => {
+            tracing::warn!("local model load failed, falling back to heuristics: {e}");
+            Arc::new(LocalFallback::new())
+        }
+    }
+}
+
+#[cfg(not(feature = "experimental"))]
+fn local_model_provider(_config: &LLMConfig) -> Arc<dyn LLMProvider> {
+    Arc::new(LocalFallback::new())
 }
 
 /// Get a handle to the active LLM provider, if one has been initialized.
@@ -245,16 +304,7 @@ impl LLMProvider for OpenAIProvider {
             .and_then(|c| c.as_str())
             .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?;
 
-        // Parse the JSON response
-        let parsed: serde_json::Value = serde_json::from_str(content)?;
-        let events: Vec<InputEvent> = serde_json::from_value(
-            parsed
-                .get("events")
-                .cloned()
-                .unwrap_or(serde_json::Value::Array(vec![])),
-        )?;
-
-        Ok(events)
+        parse_events_json(content)
     }
 
     fn name(&self) -> &'static str {
@@ -331,20 +381,26 @@ impl LLMProvider for ClaudeProvider {
             .and_then(|t| t.as_str())
             .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?;
 
-        let parsed: serde_json::Value = serde_json::from_str(content)?;
-        let events: Vec<InputEvent> = serde_json::from_value(
-            parsed
-                .get("events")
-                .cloned()
-                .unwrap_or(serde_json::Value::Array(vec![])),
-        )?;
-
-        Ok(events)
+        parse_events_json(content)
     }
 
     fn name(&self) -> &'static str {
         "Claude"
     }
+}
+
+/// Parse a model's raw text response into workflow events, per the
+/// `{"events": [...]}` schema every provider's prompt asks for. Shared by
+/// the OpenAI, Claude, and local-model providers.
+pub(crate) fn parse_events_json(content: &str) -> anyhow::Result<Vec<InputEvent>> {
+    let parsed: serde_json::Value = serde_json::from_str(content)?;
+    let events: Vec<InputEvent> = serde_json::from_value(
+        parsed
+            .get("events")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(vec![])),
+    )?;
+    Ok(events)
 }
 
 /// Local fallback provider (heuristic-based)
@@ -508,6 +564,8 @@ mod tests {
             model: "test-model".to_string(),
             auto_optimize: true,
             proactive_suggestions: true,
+            local_model_path: None,
+            local_tokenizer_path: None,
         }
     }
 
@@ -544,6 +602,41 @@ mod tests {
         let cfg =
             LLMConfig::from_ghost_config(&ai_settings("local", Some("https://example.test/v1")));
         assert_eq!(cfg.endpoint.as_deref(), Some("https://example.test/v1"));
+    }
+
+    #[test]
+    fn local_model_without_paths_falls_back_to_local() {
+        // "local_model" requested but no model/tokenizer path configured yet
+        // (the common case right after enabling the provider) must degrade
+        // to the heuristic rather than reach `local_model_provider` with
+        // nothing to load.
+        let cfg = LLMConfig::from_ghost_config(&ai_settings("local_model", None));
+        assert!(matches!(cfg.provider, LLMProviderType::Local));
+    }
+
+    #[test]
+    fn local_model_with_both_paths_selects_local_model_provider() {
+        let mut settings = ai_settings("local_model", None);
+        settings.local_model_path = Some("/models/llama-3-8b-instruct.Q4_K_M.gguf".to_string());
+        settings.local_tokenizer_path = Some("/models/tokenizer.json".to_string());
+
+        let cfg = LLMConfig::from_ghost_config(&settings);
+        assert!(matches!(cfg.provider, LLMProviderType::LocalModel));
+        assert_eq!(cfg.model, "/models/llama-3-8b-instruct.Q4_K_M.gguf");
+        assert_eq!(
+            cfg.local_tokenizer_path.as_deref(),
+            Some("/models/tokenizer.json")
+        );
+    }
+
+    #[test]
+    fn local_model_with_only_one_path_falls_back_to_local() {
+        let mut settings = ai_settings("local_model", None);
+        settings.local_model_path = Some("/models/llama-3-8b-instruct.Q4_K_M.gguf".to_string());
+        // local_tokenizer_path left unset.
+
+        let cfg = LLMConfig::from_ghost_config(&settings);
+        assert!(matches!(cfg.provider, LLMProviderType::Local));
     }
 
     fn element(name: &str, coords: Option<(i32, i32)>) -> ElementInfo {

@@ -55,6 +55,15 @@ tauri-plugin-dialog = "2"
 # pool to speed up deep-tree scans; scanner.rs still sorts the result into a
 # deterministic order before it reaches the planner. MIT/Apache-2.0.
 jwalk = "0.8"
+# Local GGUF model inference (core/local_llm.rs), gated behind the
+# `experimental` feature below — optional so a stock build never pulls these
+# in. Pure-Rust CPU backend only (no cuda/metal/mkl features enabled): no C++
+# toolchain or GPU driver requirement, which matters for the 3-OS CI matrix.
+# Apache-2.0/MIT.
+candle-core = { version = "0.11", optional = true }
+candle-nn = { version = "0.11", optional = true }
+candle-transformers = { version = "0.11", optional = true }
+tokenizers = { version = "0.23", optional = true }
 
 [dev-dependencies]
 # `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
@@ -70,8 +79,11 @@ profiling = ["tracing-chrome"]
 # exposes only the trusted core (recording/replay, workflow storage,
 # permissions, Organizer, compression, auth, diagnostics, updates). The
 # underlying engine/core logic always compiles; this flag only gates the IPC
-# command surface and the frontend panel that drives it.
-experimental = []
+# command surface and the frontend panel that drives it. Also pulls in the
+# local-model inference dependencies (core/local_llm.rs) — without this
+# feature, `provider = "local_model"` degrades to the existing heuristic
+# LocalFallback rather than failing to compile.
+experimental = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

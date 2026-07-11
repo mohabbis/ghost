@@ -10,6 +10,8 @@ pub mod execution;
 pub mod id_scan;
 pub mod knowledge;
 pub mod llm;
+#[cfg(feature = "experimental")]
+pub mod local_llm;
 pub mod ocr;
 pub mod replay_support;
 pub mod security;
