@@ -38,6 +38,7 @@ Allowed stable areas:
 - audit log primitives;
 - undo journal primitives;
 - Ghost Organizer scan/plan/review/execute flow;
+- enterprise financial-operations domain models and playbook/runtime primitives when they are commandless scaffolding or otherwise preserve the trust pipeline;
 - on-device OCR of user-supplied images (`run_ocr_on_image`, macOS Vision / Windows OCR) and deterministic parsing of that OCR'd text into structured ID-document fields (`parse_id_document` / `core/id_scan.rs`). OCR runs only on images the user hands in and never touches the network; the parser is pure text-in/struct-out (no image, IO, or capture). Any resulting personal fields stay local — never uploaded, never used to auto-execute anything.
 
 Stable core behavior must be:
@@ -65,6 +66,7 @@ These areas may exist for research or developer mode, but they must not be treat
 - visual regression checks;
 - data-source-driven workflow testing;
 - broad proactive intelligence.
+- enterprise financial connectors that can approve payments, post journal entries, transmit funds, modify closed periods, or decide check-cashing outcomes.
 
 Experimental work must be:
 
