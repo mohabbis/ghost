@@ -33,10 +33,12 @@ resulting risk classes in `docs/command-registry.md`.
    parent folder must already exist from an explicit, policy-checked
    `CreateFolder` action; the move/rename step never creates missing parent
    folders implicitly because that would be an unaudited mutation.
-3. **Writes undo before mutating.** The inverse op (`UndoOp::RemoveFolder` for a
-   created folder, `UndoOp::Restore` for a move/rename) is recorded in the
-   `UndoJournal` *before* the filesystem call — trust invariant 8.
-4. **Applies, verifies the result, and audits.** Each action produces exactly
+3. **Prepares undo before mutating.** The inverse op (`UndoOp::RemoveFolder` for
+   a created folder, `UndoOp::Restore` for a move/rename) is constructed before
+   the filesystem call but not yet committed to the `UndoJournal`.
+4. **Applies, verifies the result, commits undo, and audits.** The inverse is
+   recorded only after the filesystem postcondition is verified, so failed or
+   skipped actions do not create false rollback entries. Each action produces exactly
    one `AuditEvent` (`Applied` / `Skipped` / `Failed`), tagged with the rule
    that fired (`rule_path`) and — for actions that ran — how it was authorized
    (`provenance`: `Automated` under an `automate` rule, `UserApproved`
@@ -77,10 +79,11 @@ step first), so files are moved out of a destination folder before that folder's
 - **No implicit folder mutation.** Missing target parents skip the file instead
   of creating folders that were not separately planned, approved, audited, and
   journaled.
-- **Undo before execute.** Every reversible op is journaled before it runs, so a
-  partial failure is still reversible.
+- **Undo describes applied state.** Every reversible op prepares its inverse before
+  it runs, then journals that inverse only after successful postcondition verification.
 - **Partial failure is recoverable.** Each action is independent; a failure on
-  one leaves the others (and their undo entries) intact.
+  one leaves prior successful actions and their undo entries intact without adding
+  undo entries for failed/skipped work.
 - **Deterministic & policy-gated.** Denied actions never reach the filesystem.
 
 ## Status

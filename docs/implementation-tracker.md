@@ -1,0 +1,5 @@
+# Organizer trust implementation tracker
+
+| Finding ID | Severity | Description | Source file and line | Planned fix | Branch | PR | Regression test | CI result | Merge SHA | Closure evidence | Remaining limitations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| GHO-CRIT-001 | Critical | Undo journal could describe intended mutations because entries were committed before filesystem success/postcondition verification. | `src-tauri/src/organizer/executor.rs` pre-fix executor comments and `apply_one`/`relocate` undo recording | Commit undo entries only after successful mutation verification. | local `work` | Pending | `failed_folder_creation_does_not_commit_undo`; `failed_move_or_rename_does_not_commit_undo`; `mixed_success_and_failure_journals_only_successful_mutations` | Local pending | Pending | Code now prepares inverse operations before mutation and records them only after verified success. | Journal is still in-memory until the existing command persistence step; crash-durable prepared/applied states remain future work. |

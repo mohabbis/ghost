@@ -17,9 +17,9 @@
 //!    applied — even though it was in the plan (rules or state may have drifted).
 //! 2. **Verifies state.** The source must still exist; the target must *not*
 //!    (Ghost never silently overwrites — `AGENTS.md` non-negotiable rule).
-//! 3. **Writes undo before mutating.** A reversible op records its inverse in
-//!    the [`UndoJournal`] *before* the filesystem call (trust invariant 8).
-//! 4. **Applies, then verifies the result**, and records one audit event.
+//! 3. **Prepares undo before mutating.** A reversible op constructs its inverse
+//!    before the filesystem call, but does not commit it to the [`UndoJournal`] yet.
+//! 4. **Applies, verifies the result, then commits undo**, and records one audit event.
 //!
 //! It only ever applies the file-organization capabilities the planner emits
 //! (`CreateFolder`, `MoveFile`, `RenameFile`). It never deletes, never copies
@@ -122,9 +122,9 @@ enum Outcome {
     Failed(String),
 }
 
-/// Apply one capability, recording its undo step before any mutation. Only the
-/// organizer's own file-organization capabilities are executable here; anything
-/// else is skipped rather than risked.
+/// Apply one capability, committing its undo step only after the mutation is
+/// successful and verified. Only the organizer's own file-organization
+/// capabilities are executable here; anything else is skipped rather than risked.
 fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
     match cap {
         Capability::CreateFolder { path } => {
@@ -133,10 +133,14 @@ fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
                 // in this same run). Not an error, but nothing to undo either.
                 return Outcome::Skipped(format!("folder already exists: {}", path.display()));
             }
-            // (3) Undo before mutating: remove the folder we are about to create.
-            undo.record(UndoOp::RemoveFolder { path: path.clone() });
+            // (3) Prepare undo before mutating: remove the folder we are about to create.
+            let inverse = UndoOp::RemoveFolder { path: path.clone() };
             match fs::create_dir_all(path) {
-                Ok(()) if path.is_dir() => Outcome::Applied,
+                Ok(()) if path.is_dir() => {
+                    // (4) Commit undo only after the postcondition is verified.
+                    undo.record(inverse);
+                    Outcome::Applied
+                }
                 Ok(()) => Outcome::Failed(format!("folder not created: {}", path.display())),
                 Err(e) => Outcome::Failed(e.to_string()),
             }
@@ -150,7 +154,8 @@ fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
     }
 }
 
-/// Move or rename a file from `from` to `to`, recording the reverse step first.
+/// Move or rename a file from `from` to `to`, committing the reverse step only
+/// after the move succeeds and its postcondition is verified.
 fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
     // (2) Verify state. The plan may have been approved a while ago.
     if !from.exists() {
@@ -179,15 +184,18 @@ fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
         }
     }
 
-    // (3) Undo before mutating: move the file back to where it started.
-    undo.record(UndoOp::Restore {
+    // (3) Prepare undo before mutating: move the file back to where it started.
+    let inverse = UndoOp::Restore {
         from: to.to_path_buf(),
         to: from.to_path_buf(),
-    });
+    };
 
     match fs::rename(from, to) {
-        // (4) Verify the result actually landed.
-        Ok(()) if to.exists() && !from.exists() => Outcome::Applied,
+        // (4) Verify the result actually landed, then commit the undo entry.
+        Ok(()) if to.exists() && !from.exists() => {
+            undo.record(inverse);
+            Outcome::Applied
+        }
         Ok(()) => Outcome::Failed(format!(
             "post-move verification failed for {}",
             to.display()
@@ -397,6 +405,110 @@ mod tests {
             "relocate must not create an unplanned parent folder"
         );
         assert!(undo.is_empty(), "a refused move records no undo step");
+    }
+
+    #[test]
+    fn failed_folder_creation_does_not_commit_undo() {
+        let tmp = tempdir();
+        tmp.file("not-a-dir", b"x");
+        let path = tmp.path().join("not-a-dir").join("child");
+        let mut undo = UndoJournal::new();
+
+        let outcome = apply_one(&Capability::CreateFolder { path }, &mut undo);
+
+        assert!(matches!(outcome, Outcome::Failed(_)));
+        assert!(
+            undo.is_empty(),
+            "failed create_dir_all must not create undo"
+        );
+    }
+
+    #[test]
+    fn successful_folder_creation_commits_one_matching_inverse() {
+        let tmp = tempdir();
+        let path = tmp.path().join("Documents");
+        let mut undo = UndoJournal::new();
+
+        let outcome = apply_one(&Capability::CreateFolder { path: path.clone() }, &mut undo);
+
+        assert!(matches!(outcome, Outcome::Applied));
+        assert_eq!(undo.ops(), &[UndoOp::RemoveFolder { path }]);
+    }
+
+    #[test]
+    fn failed_move_or_rename_does_not_commit_undo() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"x");
+        tmp.file("not-a-dir", b"x");
+        let target = tmp.path().join("not-a-dir").join("report.pdf");
+        let mut undo = UndoJournal::new();
+
+        let outcome = relocate(&tmp.path().join("report.pdf"), &target, &mut undo);
+
+        assert!(matches!(outcome, Outcome::Failed(_)));
+        assert!(tmp.path().join("report.pdf").exists());
+        assert!(undo.is_empty(), "failed rename must not create undo");
+    }
+
+    #[test]
+    fn successful_move_commits_one_matching_inverse() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"x");
+        tmp.dir("Documents");
+        let from = tmp.path().join("report.pdf");
+        let to = tmp.path().join("Documents/report.pdf");
+        let mut undo = UndoJournal::new();
+
+        let outcome = relocate(&from, &to, &mut undo);
+
+        assert!(matches!(outcome, Outcome::Applied));
+        assert_eq!(undo.ops(), &[UndoOp::Restore { from: to, to: from }]);
+    }
+
+    #[test]
+    fn applied_audit_count_matches_committed_undo_entries() {
+        let (tmp, rules) = fixture();
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+        let applied_audit_count = report
+            .audit
+            .events()
+            .iter()
+            .filter(|event| matches!(event.outcome, ActionOutcome::Applied))
+            .count();
+
+        assert_eq!(report.applied, applied_audit_count);
+        assert_eq!(report.applied, report.undo.len());
+        assert!(tmp.path().join("Documents/report.pdf").exists());
+    }
+
+    #[test]
+    fn mixed_success_and_failure_journals_only_successful_mutations() {
+        let tmp = tempdir();
+        tmp.file("ok.pdf", b"ok");
+        tmp.file("blocked-parent", b"x");
+        tmp.dir("Documents");
+        let mut undo = UndoJournal::new();
+
+        let ok_from = tmp.path().join("ok.pdf");
+        let ok_to = tmp.path().join("Documents/ok.pdf");
+        let ok = relocate(&ok_from, &ok_to, &mut undo);
+        let failed = apply_one(
+            &Capability::CreateFolder {
+                path: tmp.path().join("blocked-parent/child"),
+            },
+            &mut undo,
+        );
+
+        assert!(matches!(ok, Outcome::Applied));
+        assert!(matches!(failed, Outcome::Failed(_)));
+        assert_eq!(
+            undo.ops(),
+            &[UndoOp::Restore {
+                from: ok_to,
+                to: ok_from
+            }]
+        );
     }
 
     #[test]
