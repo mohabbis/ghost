@@ -9,12 +9,14 @@
 //! - [`finance`] — recurring financial reports by type + reporting period
 //!   (finance/operations admins).
 //! - [`academic`] — student coursework by course + term + assignment type.
+//! - [`engineering`] — software automation artifacts by type + run period.
 //!
 //! Everything here is pure and deterministic: it reads only the file *name* and
 //! extension, never file contents, the network, or a model. It proposes; the
 //! user approves; the deterministic executor does the actual, reversible move.
 
 pub mod academic;
+pub mod engineering;
 pub mod finance;
 pub mod period;
 pub mod preview;

@@ -19,7 +19,7 @@ Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 
 ## Why Ghost Exists
 
-Bookkeepers, practice admins, students, and small operations teams spend hours cleaning up downloads, renaming client documents, filing statements, and repeating the same desktop chores. That work is repetitive enough to automate, but too sensitive for black-box automation.
+Software teams, automation engineers, practice admins, students, and small operations teams spend hours cleaning up downloads, filing test reports and build logs, renaming client documents, filing statements, and repeating the same desktop chores. That work is repetitive enough to automate, but too sensitive for black-box automation.
 
 Common tools miss the shape of the problem:
 
@@ -35,7 +35,7 @@ Ghost focuses on the missing middle: local workflows that need preview, approval
 
 ## Start Here: Ghost Organizer
 
-The current wedge is **Ghost Organizer**, a safe file-organization flow for invoices, receipts, exports, statements, screenshots, and messy download folders.
+The current wedge is **Ghost Organizer**, a safe file-organization flow for test reports, coverage exports, build logs, screenshots, invoices, statements, and messy download folders.
 
 ```text
 Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo

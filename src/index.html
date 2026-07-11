@@ -156,13 +156,14 @@
                   <h2 id="filing-heading">Plan Filing</h2>
                   <span class="organizer-pipeline" aria-hidden="true">Paste names → Preview → Approve in Organizer</span>
                 </div>
-                <p class="panel__hint">Preview how a batch of files would be filed by type and reporting period — for finance reports or student coursework. This reads only the file <em>names</em> you paste; it never touches your disk. To actually move files, use the Organizer, which adds approval, audit, and undo.</p>
+                <p class="panel__hint">Preview how a batch of files would be filed by type and reporting period — for software automation artifacts, finance reports, or student coursework. This reads only the file <em>names</em> you paste; it never touches your disk. To actually move files, use the Organizer, which adds approval, audit, and undo.</p>
 
                 <div class="organizer-zone">
                   <label class="organizer-field">
                     <span>Profile</span>
                     <select id="filingAudience" aria-label="Filing profile">
-                      <option value="finance" selected>Finance &amp; operations</option>
+                      <option value="engineering" selected>Software engineering &amp; automation</option>
+                      <option value="finance">Finance &amp; operations</option>
                       <option value="student">Student coursework</option>
                     </select>
                   </label>
@@ -174,7 +175,7 @@
 
                 <label class="organizer-field organizer-field--grow filing-names-field">
                   <span>File names (one per line)</span>
-                  <textarea id="filingNames" rows="6" spellcheck="false" placeholder="Q2 2026 Income Statement.xlsx&#10;Balance Sheet 2026-06.xlsx"></textarea>
+                  <textarea id="filingNames" rows="6" spellcheck="false" placeholder="junit-test-results-2026-07.xml&#10;coverage-Q2-2026.html"></textarea>
                 </label>
 
                 <div class="btn-row">
