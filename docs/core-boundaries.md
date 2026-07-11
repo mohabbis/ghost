@@ -70,6 +70,7 @@ These areas may exist for research or developer mode, but they must not be treat
 
 Experimental work must be:
 
+- compiled out of the stock Tauri IPC registry unless `--features experimental` is used;
 - feature-gated or clearly labeled;
 - isolated from trusted execution;
 - denied by default for risky mutations;
