@@ -1173,7 +1173,7 @@ async function openSettings() {
   const { replay, ai } = settingsConfig;
   // `audit` may be absent in configs written before the retention feature.
   const audit = settingsConfig.audit || {};
-  const providers = ["local", "openai", "anthropic"];
+  const providers = ["local", "openai", "anthropic", "local_model"];
   const fieldStyle =
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
 
@@ -1221,6 +1221,15 @@ async function openSettings() {
              value="${escapeAttr(ai.api_endpoint ?? "")}" style="${fieldStyle}">
     </label>
     <p class="panel__hint" style="margin: 4px 0 12px;">API keys come from environment variables (OPENAI_API_KEY / ANTHROPIC_API_KEY), never stored here.</p>
+    <label>Local model path (.gguf, for the "local_model" provider)
+      <input id="cfg-ai-local-model-path" type="text" placeholder="/path/to/model.gguf"
+             value="${escapeAttr(ai.local_model_path ?? "")}" style="${fieldStyle}">
+    </label>
+    <label>Local tokenizer path (tokenizer.json)
+      <input id="cfg-ai-local-tokenizer-path" type="text" placeholder="/path/to/tokenizer.json"
+             value="${escapeAttr(ai.local_tokenizer_path ?? "")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 4px 0 12px;">Runs entirely on device — nothing is uploaded. Requires a build with the experimental feature; otherwise "local_model" falls back to the built-in heuristics. Ghost does not ship or download model weights.</p>
 
     <h4 style="color: #8d7bff; margin: 12px 0 4px;">Audit retention</h4>
     <label>Keep only the most recent N runs
@@ -1272,6 +1281,10 @@ async function saveSettings() {
   settingsConfig.ai.model = document.getElementById("cfg-ai-model")?.value || settingsConfig.ai.model;
   const endpoint = document.getElementById("cfg-ai-endpoint")?.value?.trim();
   settingsConfig.ai.api_endpoint = endpoint ? endpoint : null;
+  const localModelPath = document.getElementById("cfg-ai-local-model-path")?.value?.trim();
+  settingsConfig.ai.local_model_path = localModelPath ? localModelPath : null;
+  const localTokenizerPath = document.getElementById("cfg-ai-local-tokenizer-path")?.value?.trim();
+  settingsConfig.ai.local_tokenizer_path = localTokenizerPath ? localTokenizerPath : null;
 
   // Audit retention: a blank field means "keep all" (null); a positive integer
   // sets the bound. Anything invalid falls back to null rather than 0, which the
