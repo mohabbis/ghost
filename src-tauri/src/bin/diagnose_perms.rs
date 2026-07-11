@@ -9,5 +9,8 @@ const kIOHIDAccessTypeGranted: u32 = 0;
 fn main() {
     let acc = unsafe { accessibility_sys::AXIsProcessTrusted() };
     let im = unsafe { IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted };
-    println!("DIAGNOSTIC: Accessibility = {}, Input Monitoring = {}", acc, im);
+    println!(
+        "DIAGNOSTIC: Accessibility = {}, Input Monitoring = {}",
+        acc, im
+    );
 }
