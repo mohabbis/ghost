@@ -6,6 +6,7 @@ use crate::core::replay_support::{
     self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
+use crate::core::vision;
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -523,6 +524,11 @@ fn try_resolve_click_point_traced(
         // Windows resolves purely by title (FindWindowA); the element's app
         // is not needed here.
         |el: &ElementInfo| el.window_title.as_deref().and_then(find_window_origin),
+        || {
+            vision::capture_screenshot()
+                .ok()
+                .and_then(|bytes| image::load_from_memory(&bytes).ok())
+        },
     )
 }
 

@@ -28,6 +28,35 @@ fn workflow_file_path(workflows_dir: &std::path::Path, name: &str) -> anyhow::Re
     Ok(workflows_dir.join(safe_name).with_extension("json"))
 }
 
+/// Half-width of the screenshot crop captured around a recorded click for
+/// `ElementInfo::template_png` — 64x64 total, small enough to keep workflow
+/// files a reasonable size while covering a typical button/field.
+const TEMPLATE_CROP_HALF: i32 = 32;
+
+/// Crop a small region around `(x, y)` from a fresh screenshot and PNG-encode
+/// it, for the template-match replay fallback (`core::template_match`).
+/// Best-effort: any failure (capture, decode, degenerate crop bounds) yields
+/// `None` rather than interrupting recording.
+fn capture_template_crop(x: i32, y: i32) -> Option<Box<[u8]>> {
+    use image::GenericImageView;
+
+    let bytes = vision::capture_screenshot().ok()?;
+    let img = image::load_from_memory(&bytes).ok()?;
+    let (w, h) = img.dimensions();
+    let x0 = (x - TEMPLATE_CROP_HALF).max(0) as u32;
+    let y0 = (y - TEMPLATE_CROP_HALF).max(0) as u32;
+    let x1 = ((x + TEMPLATE_CROP_HALF).max(0) as u32).min(w);
+    let y1 = ((y + TEMPLATE_CROP_HALF).max(0) as u32).min(h);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+
+    let crop = img.crop_imm(x0, y0, x1 - x0, y1 - y0);
+    let mut buf = std::io::Cursor::new(Vec::new());
+    crop.write_to(&mut buf, image::ImageFormat::Png).ok()?;
+    Some(buf.into_inner().into_boxed_slice())
+}
+
 /// RAII guard marking a replay as active for its lifetime (drop-safe, so the
 /// flag clears even if the replay errors or panics).
 struct ReplayActiveGuard(Arc<AtomicBool>);
@@ -218,8 +247,30 @@ impl GhostEngine {
         }
     }
 
-    /// Add an event to the recorded events buffer (called from the bridge thread)
-    pub fn buffer_event(&self, event: InputEvent) {
+    /// Add an event to the recorded events buffer (called from the bridge
+    /// thread). When `performance.capture_element_templates` is enabled, a
+    /// click's `ElementInfo` gets a small screenshot crop attached for the
+    /// template-match replay fallback (`core::template_match`) — best-effort:
+    /// a capture failure never blocks or corrupts recording.
+    pub fn buffer_event(&self, mut event: InputEvent) {
+        if let InputEvent::MouseClick {
+            x,
+            y,
+            element: Some(el),
+            ..
+        } = &mut event
+        {
+            if el.template_png.is_none()
+                && self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .performance
+                    .capture_element_templates
+            {
+                el.template_png = capture_template_crop(*x, *y);
+            }
+        }
         self.recorded_events.lock().unwrap().push(event);
     }
 
@@ -1316,6 +1367,39 @@ mod tests {
         assert!(workflow_file_path(&base, "../secrets").is_err());
         assert!(workflow_file_path(&base, "nested/workflow").is_err());
         assert!(workflow_file_path(&base, "workflow.json").is_err());
+    }
+
+    #[test]
+    fn buffer_event_leaves_template_png_unset_when_capture_disabled() {
+        // capture_element_templates is off by default — buffer_event must
+        // not attempt (or need) a screenshot at all in that case, so this is
+        // deterministic across every CI platform regardless of display
+        // availability.
+        let engine = GhostEngine::new();
+        let click = InputEvent::MouseClick {
+            x: 10,
+            y: 10,
+            button: 0,
+            element: Some(ElementInfo {
+                role: "AXButton".into(),
+                name: "Save".into(),
+                app: "Notes".into(),
+                ..Default::default()
+            }),
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        };
+        engine.buffer_event(click);
+
+        let recorded = engine.get_recorded_events();
+        match &recorded[0] {
+            InputEvent::MouseClick { element, .. } => {
+                assert!(element.as_ref().unwrap().template_png.is_none());
+            }
+            other => panic!("expected MouseClick, got {:?}", other),
+        }
     }
 
     #[test]
