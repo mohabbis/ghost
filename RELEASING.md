@@ -25,8 +25,8 @@ The marketing site download buttons resolve
 
 3. Tag and push (semver):
 
-       git tag v1.2.5
-       git push origin v1.2.5
+       git tag v1.2.6
+       git push origin v1.2.6
 
 GitHub Actions builds both platforms (~20 min). The publish job fails closed if
 either platform is missing — you will not get a one-sided release.
@@ -34,7 +34,7 @@ either platform is missing — you will not get a one-sided release.
 ### Re-running a release
 
 Use **Actions → Release → Run workflow** and pass the existing tag (e.g.
-`v1.2.5`). The publish job re-attaches assets to that tag.
+`v1.2.6`). The publish job re-attaches assets to that tag.
 
 ## What each release attaches
 

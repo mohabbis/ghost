@@ -1,6 +1,6 @@
 # Ghost — Technical State of the Project
 
-> Snapshot for context (as of 2026-07-10, `master` @ v1.2.5).
+> Snapshot for context (as of 2026-07-11, `master` @ v1.2.6).
 > Audience: engineers picking this up to push it to a YC-submission bar.
 > Everything below is grounded in the actual code in this repo — file paths and
 > symbols are real and clickable.
@@ -28,7 +28,7 @@ scan → propose → approve → move/rename → audit → undo). Recording/repl
 cross-app routines is the second layer and is partially built. AI/"Intelligence"
 is deliberately last and is feature-gated off by default.
 
-**Version:** `1.2.5` (`src-tauri/Cargo.toml`). ~20k lines of Rust across
+**Version:** `1.2.6` (`src-tauri/Cargo.toml`). ~20k lines of Rust across
 `src-tauri/src` plus a no-build-step vanilla JS/HTML/CSS frontend in `src/`.
 
 ---

@@ -803,7 +803,7 @@ mod tests {
         let teams = Some(element("AXButton", "Send message", "Teams"));
         let outlook = Some(element("AXTextField", "Subject", "Outlook"));
         let copilot = Some(element("AXButton", "Ask Copilot", "Copilot"));
-        
+
         assert!(should_suppress_keyboard_after_click(&click(teams, 0)));
         assert!(should_suppress_keyboard_after_click(&click(outlook, 0)));
         assert!(should_suppress_keyboard_after_click(&click(copilot, 0)));
