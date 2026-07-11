@@ -110,6 +110,9 @@
                   </label>
                   <button class="btn btn--ghost btn--small" id="organizerNewZoneBtn" type="button">New Zone</button>
                   <button class="btn btn--ghost btn--small" id="organizerPresetBtn" type="button">Guided setup</button>
+                  <button class="btn btn--ghost btn--small" id="organizerExportPackBtn" type="button" title="Export this Zone's boundary and rules as a portable JSON file">Export policy pack</button>
+                  <button class="btn btn--ghost btn--small" id="organizerImportPackBtn" type="button" title="Create a Zone from a previously exported policy pack">Import policy pack</button>
+                  <input type="file" id="organizerImportPackInput" accept="application/json,.json" hidden />
                 </div>
 
                 <div class="organizer-rule" id="organizerRuleRow">
@@ -276,6 +279,7 @@
                 <div class="btn-row">
                   <button class="btn btn--ghost btn--small" id="saveBtn">Save</button>
                   <button class="btn btn--ghost btn--small" id="loadBtn">Load</button>
+                  <button class="btn btn--ghost btn--small" id="deleteWorkflowBtn">Delete</button>
                   <button class="btn btn--ghost btn--small" id="analyzeBtn">Local Audit</button>
                   <button class="btn btn--ghost btn--small" id="optimizeBtn">Clean Steps</button>
                 </div>
