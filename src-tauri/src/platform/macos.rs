@@ -181,8 +181,11 @@ extern "C" {
 extern "C" {
     /// Returns kIOHIDAccessTypeGranted (0), Denied (1), or Unknown (2).
     fn IOHIDCheckAccess(request_type: u32) -> u32;
-    /// Prompts the user (once) and returns true if access is granted.
-    fn IOHIDRequestAccess(request_type: u32) -> bool;
+    /// Prompts the user (once) and returns a CoreFoundation Boolean (UInt8).
+    ///
+    /// Do not model this as Rust `bool`: the IOKit API returns Apple's
+    /// `Boolean` typedef, not C99 `_Bool`, and using `u8` keeps the ABI exact.
+    fn IOHIDRequestAccess(request_type: u32) -> u8;
 }
 
 const kIOHIDRequestTypeListenEvent: u32 = 1;
@@ -268,7 +271,7 @@ impl MacosBackend {
     /// opening the System Settings pane (same one-shot prompt behavior as
     /// Accessibility).
     pub fn request_input_monitoring() -> bool {
-        let granted = unsafe { IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) };
+        let granted = unsafe { IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) != 0 };
         if !granted {
             Self::open_privacy_pane("Privacy_ListenEvent");
         }

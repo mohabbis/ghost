@@ -179,6 +179,8 @@ async function checkPermissions() {
 
 let _permAutoPrompted = false;
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function refreshPermissionBanner() {
   if (!invoke) return;
 
@@ -208,6 +210,10 @@ async function refreshPermissionBanner() {
         _permAutoPrompted = true;
         if (!accessibility) {
           await invoke("request_accessibility").catch(() => {});
+          // macOS can drop or hide back-to-back privacy prompts. Give the
+          // Accessibility prompt/System Settings navigation time to settle
+          // before requesting Input Monitoring.
+          await wait(500);
         }
         if (!inputMonitoring) {
           await invoke("request_input_monitoring").catch(() => {});
@@ -228,9 +234,17 @@ async function requestAccessibility() {
     const { accessibility, inputMonitoring } = await checkPermissions();
     // macOS shows each permission prompt only once per app; afterwards the
     // backend opens the matching System Settings pane instead.
-    if (!accessibility) await invoke("request_accessibility");
-    if (!inputMonitoring) await invoke("request_input_monitoring").catch(() => {});
+    if (!accessibility) {
+      await invoke("request_accessibility");
+      // Avoid racing two macOS privacy prompts/panes when both grants are
+      // missing. Users need to see and respond to each grant separately.
+      await wait(500);
+    }
+    if (!inputMonitoring) {
+      await invoke("request_input_monitoring").catch(() => {});
+    }
 
+    await wait(500);
     const after = await checkPermissions();
     if (!after.accessibility || !after.inputMonitoring) {
       // The grant only takes effect after a relaunch. Point the user at the
