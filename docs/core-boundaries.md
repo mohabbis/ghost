@@ -67,7 +67,9 @@ These areas may exist for research or developer mode, but they must not be treat
 - visual regression checks;
 - data-source-driven workflow testing;
 - broad proactive intelligence;
-- remote MCP relay, secure tunneling, provider integrations, plugin SDKs, workflow marketplaces, and signed approval-token infrastructure until their authentication, authorization, policy, audit, and undo boundaries are implemented and tested.
+- remote MCP endpoints or network-accessible agent integrations;
+- internal AI provider adapters until they are suggestion-only, scoped, and explicitly configured;
+- secure tunneling, plugin SDKs, workflow marketplaces, and signed approval-token infrastructure until their authentication, authorization, policy, audit, and undo boundaries are implemented and tested;
 - enterprise financial connectors that can approve payments, post journal entries, transmit funds, modify closed periods, or decide check-cashing outcomes.
 
 Experimental work must be:
@@ -78,6 +80,12 @@ Experimental work must be:
 - denied by default for risky mutations;
 - excluded from default UI unless explicitly requested;
 - documented with limits and failure modes before promotion.
+
+## Integration boundary
+
+Use one Ghost MCP server for external AI-client interoperability rather than separate vendor-specific integrations. Local read-only MCP tools may be promoted only when they preserve Ghost's privacy defaults, expose metadata instead of content by default, and cannot mutate state. Planning tools must produce reviewable plans; execution tools must require approval from the Ghost desktop UI and must verify a short-lived, single-use token bound to the exact plan hash. See `docs/mcp-integration.md`.
+
+AI provider adapters for Ghost's own UI are separate from MCP. Provider output is suggestion-only and must flow through redaction, deterministic planning, policy evaluation, desktop approval, execution, audit, and undo. See `docs/ai-provider-boundaries.md`.
 
 ## Deny-by-default actions
 

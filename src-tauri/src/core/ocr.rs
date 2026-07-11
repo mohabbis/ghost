@@ -199,3 +199,51 @@ ConvertTo-Json $out
 fn run_platform_ocr(_img_path: &std::path::Path) -> anyhow::Result<Vec<OcrResult>> {
     anyhow::bail!("OCR element selectors are not supported on this platform")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ocr_temp_files() -> Vec<std::path::PathBuf> {
+        let dir = std::env::temp_dir();
+        std::fs::read_dir(&dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.file_name()
+                            .and_then(|n| n.to_str())
+                            .is_some_and(|n| n.starts_with("ghost_ocr_screenshot_"))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[test]
+    fn run_ocr_reports_unsupported_platform() {
+        // This crate only implements platform OCR for macOS and Windows; on
+        // every other target (headless Linux CI included) it must fail
+        // loudly rather than silently return no text.
+        let err = run_ocr(b"not a real image").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("OCR element selectors are not supported on this platform"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn run_ocr_cleans_up_its_temp_screenshot_file() {
+        let before = ocr_temp_files();
+        let _ = run_ocr(b"some bytes");
+        let after = ocr_temp_files();
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "run_ocr must remove its temp screenshot file regardless of OCR outcome"
+        );
+    }
+}

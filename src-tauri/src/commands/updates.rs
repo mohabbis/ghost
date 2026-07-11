@@ -40,7 +40,7 @@ pub struct UpdateInfo {
 /// case update checks/installs are intentional no-ops (auto-update is disabled
 /// until the maintainer completes the one-time key setup). Reads config via a
 /// JSON view so it stays correct across Tauri config-struct changes.
-fn updater_configured(app: &AppHandle) -> bool {
+fn updater_configured<R: tauri::Runtime>(app: &AppHandle<R>) -> bool {
     serde_json::to_value(app.config())
         .ok()
         .and_then(|cfg| {
@@ -97,4 +97,19 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     // Relaunch into the freshly installed version. `restart` does not return.
     app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn updater_configured_is_false_without_a_real_pubkey() {
+        // A mock app carries no updater plugin config at all, which is the
+        // same shape as a real build that still has the tauri.conf.json
+        // placeholder: no configured key means auto-update must stay inert
+        // rather than surface signature-verification noise.
+        let app = tauri::test::mock_app();
+        assert!(!updater_configured(app.handle()));
+    }
 }
