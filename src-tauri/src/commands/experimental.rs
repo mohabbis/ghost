@@ -485,3 +485,89 @@ pub fn generate_geek_insights(
 ) -> crate::core::knowledge::GeekDetails {
     engine.generate_geek_insights(&events, &app_name)
 }
+
+#[cfg(test)]
+mod cloud_state_tests {
+    //! `CloudSyncManager` itself is tested in `core::cloud` — where
+    //! `authenticate`/`sync_workflows` are a deliberate placeholder that
+    //! always errors ("Cloud sync is not available in this build") pending a
+    //! real backend. What was never tested is the command-layer glue around
+    //! it: the `Mutex<Option<..>>` wiring in `CloudState`, and specifically
+    //! that the "Cloud sync not initialized" error only fires before
+    //! `init_cloud_sync`, and the manager's own errors surface unchanged
+    //! afterward — a caller must be able to tell "you forgot to init" apart
+    //! from "the backend refused this".
+    use super::*;
+    use crate::core::cloud::CloudConfig;
+    use tauri::Manager;
+
+    fn managed_test_app() -> tauri::App<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_app();
+        app.manage(CloudState::new());
+        app
+    }
+
+    #[test]
+    fn commands_error_before_cloud_sync_is_initialized() {
+        let app = managed_test_app();
+        let state = app.state::<CloudState>();
+
+        let err = cloud_authenticate("token".into(), state.clone()).unwrap_err();
+        assert!(err.contains("not initialized"));
+
+        let err = cloud_sync_workflows(None, Vec::new(), None, state.clone()).unwrap_err();
+        assert!(err.contains("not initialized"));
+
+        let err = create_workspace("Team".into(), "owner-1".into(), state.clone()).unwrap_err();
+        assert!(err.contains("not initialized"));
+
+        let err = get_audit_logs(None, state).unwrap_err();
+        assert!(err.contains("not initialized"));
+    }
+
+    #[test]
+    fn after_init_authenticate_and_sync_reach_the_manager_placeholder() {
+        let app = managed_test_app();
+        let state = app.state::<CloudState>();
+        assert!(init_cloud_sync(CloudConfig::default(), state.clone()).unwrap());
+
+        // Once initialized, the error must come from the manager itself
+        // (the real, if stubbed, backend), never the "not initialized" guard.
+        let err = cloud_authenticate("token".into(), state.clone()).unwrap_err();
+        assert_eq!(err, "Cloud sync is not available in this build");
+
+        let err = cloud_sync_workflows(None, Vec::new(), None, state).unwrap_err();
+        assert_eq!(err, "Cloud sync is not available in this build");
+    }
+
+    #[test]
+    fn create_workspace_and_get_audit_logs_work_once_initialized() {
+        // Unlike authenticate/sync, workspace management is not a stub —
+        // this exercises the real, currently-untested command wiring.
+        let app = managed_test_app();
+        let state = app.state::<CloudState>();
+        init_cloud_sync(CloudConfig::default(), state.clone()).unwrap();
+
+        let workspace = create_workspace("Team".into(), "owner-1".into(), state.clone())
+            .expect("workspace creation should succeed once initialized");
+        assert_eq!(workspace.name, "Team");
+        assert_eq!(workspace.owner_id, "owner-1");
+
+        let logs = get_audit_logs(None, state).expect("audit logs should be readable");
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].action, "workspace_created");
+    }
+
+    #[test]
+    fn get_audit_logs_limit_is_forwarded_to_the_manager() {
+        let app = managed_test_app();
+        let state = app.state::<CloudState>();
+        init_cloud_sync(CloudConfig::default(), state.clone()).unwrap();
+        create_workspace("First".into(), "owner-1".into(), state.clone()).unwrap();
+        create_workspace("Second".into(), "owner-1".into(), state.clone()).unwrap();
+
+        let limited = get_audit_logs(Some(1), state).expect("audit logs should be readable");
+        assert_eq!(limited.len(), 1);
+        assert!(limited[0].details.contains("Second"));
+    }
+}

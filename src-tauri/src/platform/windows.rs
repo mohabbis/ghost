@@ -562,6 +562,43 @@ fn click_action(button: u8) -> (Button, Direction) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `matches!` rather than `assert_eq!` because enigo's `Button`/`Direction`
+    // don't guarantee `PartialEq`/`Debug` across versions (see the identical
+    // note on this same function's `headless` backend counterpart).
+
+    #[test]
+    fn click_action_maps_button_down_to_press() {
+        // Recorders emit mouse-down (0/2) as a Press so a single recorded click
+        // synthesizes exactly one press — not a full Click that double-fires.
+        assert!(matches!(click_action(0), (Button::Left, Direction::Press)));
+        assert!(matches!(click_action(2), (Button::Right, Direction::Press)));
+    }
+
+    #[test]
+    fn click_action_maps_button_up_to_release() {
+        // Mouse-up (1/3) mirrors as Release so press/release pairs stay balanced
+        // and drags / double-clicks survive replay faithfully.
+        assert!(matches!(
+            click_action(1),
+            (Button::Left, Direction::Release)
+        ));
+        assert!(matches!(
+            click_action(3),
+            (Button::Right, Direction::Release)
+        ));
+    }
+
+    #[test]
+    fn click_action_unknown_button_falls_back_to_click() {
+        // Defensive default for malformed recordings: a self-contained Click.
+        assert!(matches!(click_action(9), (Button::Left, Direction::Click)));
+    }
+}
+
 struct WindowsReplayer;
 
 impl ReplayEngine for WindowsReplayer {

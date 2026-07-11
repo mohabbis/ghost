@@ -107,6 +107,42 @@ jobs:
       - name: Check formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
+  coverage:
+    name: Coverage summary (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev
+
+      - uses: taiki-e/install-action@cargo-llvm-cov
+
+      # Visibility only — this job never fails the build. It exists so gaps
+      # like "this module has zero tests" show up in the run summary instead
+      # of requiring someone to audit test files by hand.
+      - name: Generate coverage summary
+        continue-on-error: true
+        run: |
+          cd src-tauri
+          cargo llvm-cov --summary-only --no-cfg-coverage 2>&1 | tee /tmp/coverage.txt
+          {
+            echo "### Coverage summary (ubuntu, default features)"
+            echo '```'
+            cat /tmp/coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   tauri-compile:
     name: Tauri compile smoke test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
