@@ -164,13 +164,18 @@ fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
             to.display()
         ));
     }
-    // The planner emits an explicit CreateFolder for each destination, so the
-    // parent normally exists by now. This is a defensive fallback only.
+    // The planner emits an explicit, policy-checked CreateFolder for each
+    // destination. Do not create parent folders implicitly here: doing so would
+    // mutate the filesystem without a separate plan row, audit event, and undo
+    // entry for that folder. If the destination parent disappeared or was
+    // denied/skipped earlier in the run, skip this file rather than filling in
+    // the gap behind the user's back.
     if let Some(parent) = to.parent() {
         if !parent.exists() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                return Outcome::Failed(format!("could not create target parent: {e}"));
-            }
+            return Outcome::Skipped(format!(
+                "target parent does not exist: {}",
+                parent.display()
+            ));
         }
     }
 
@@ -368,6 +373,30 @@ mod tests {
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));
         assert!(undo.is_empty());
+    }
+
+    #[test]
+    fn missing_target_parent_is_skipped_without_implicit_mutation_or_undo() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"x");
+        let missing_parent = tmp.path().join("Documents");
+        let target = missing_parent.join("report.pdf");
+        let mut undo = UndoJournal::new();
+
+        let outcome = relocate(&tmp.path().join("report.pdf"), &target, &mut undo);
+
+        assert!(
+            matches!(outcome, Outcome::Skipped(reason) if reason.contains("target parent does not exist"))
+        );
+        assert!(
+            tmp.path().join("report.pdf").exists(),
+            "source file must be left in place"
+        );
+        assert!(
+            !missing_parent.exists(),
+            "relocate must not create an unplanned parent folder"
+        );
+        assert!(undo.is_empty(), "a refused move records no undo step");
     }
 
     #[test]
