@@ -9,7 +9,7 @@
 
 > **Desktop automation you approve before it acts.**
 
-Ghost is a local-first desktop automation product for macOS and Windows. It turns repeated file and desktop work into reviewable routines: scan or record, inspect the plan, approve the exact actions, execute inside policy boundaries, audit every change, and undo when needed.
+Ghost is a local-first desktop automation product for macOS and Windows. It turns repeated file and desktop work into reviewable routines: scan or record, inspect the plan, approve the exact actions, execute inside policy boundaries, audit every change, and undo when needed. Long term, Ghost is the trusted execution layer for AI-assisted local file operations: AI can reason and suggest, but Ghost verifies, the user approves, and deterministic code executes.
 
 Ghost is not a cloud agent and not a silent macro recorder. The product is built around a simple constraint:
 
@@ -79,7 +79,7 @@ Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Und
 | Audit log | Persist what changed and why it was allowed. |
 | Undo path | Store recovery data where reversal is possible. |
 
-The hard boundary is intentional: experimental features may suggest; only the trusted core may mutate.
+The hard boundary is intentional: experimental features may suggest; only the trusted core may mutate. This boundary also applies to future MCP and AI-client integrations: clients may request scans, plans, explanations, approvals, execution of approved plans, and undo, but they must never receive raw filesystem execution authority.
 
 ## Current Status
 
@@ -126,7 +126,7 @@ Ghost is a Tauri 2 desktop app with a Rust backend and a vanilla HTML/CSS/JS fro
 | `public/` | Hosted product/marketing site. |
 | `docs/` | Operational specs, command registry, roadmap, and security notes. |
 
-The command surface is intentionally classified by risk. Before changing Tauri commands, read [`AGENTS.md`](AGENTS.md), [`docs/command-registry.md`](docs/command-registry.md), and [`docs/core-boundaries.md`](docs/core-boundaries.md).
+The command surface is intentionally classified by risk. Before changing Tauri commands, read [`AGENTS.md`](AGENTS.md), [`docs/command-registry.md`](docs/command-registry.md), [`docs/core-boundaries.md`](docs/core-boundaries.md), and the next-generation execution architecture in [`docs/next-generation-architecture.md`](docs/next-generation-architecture.md).
 
 ## Development
 
@@ -173,6 +173,8 @@ Workflow data, logs, settings, audit history, and undo journals stay local by de
 3. Improve target resolution and replay reliability.
 4. Finish release signing and installer quality.
 5. Add suggestion-only intelligence behind clear gates after the trusted core is reliable.
+6. Add a local MCP server as a single provider-neutral integration surface for read, scan, plan, validate, explain, approval, execution, and undo workflows.
+7. Add signed approval tokens, remote pairing/relay, provider abstraction, and plugin/workflow capabilities without weakening local-first execution ownership.
 
 ## Contributing
 

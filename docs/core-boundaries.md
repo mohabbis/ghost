@@ -18,7 +18,7 @@ For meaningful operations, use the full trust pipeline:
 Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Undo path
 ```
 
-If a feature cannot fit this pipeline, it does not belong in the trusted core.
+If a feature cannot fit this pipeline, it does not belong in the trusted core. Future AI-client and MCP integrations must preserve this split: models produce structured intent or suggestions; Ghost plans, verifies, obtains approval, executes deterministically, audits, and records undo data.
 
 ## Stable core
 
@@ -38,6 +38,7 @@ Allowed stable areas:
 - audit log primitives;
 - undo journal primitives;
 - Ghost Organizer scan/plan/review/execute flow;
+- provider-neutral MCP planning surfaces that expose status, Zone listing, scans, plan creation, validation, explanations, approval requests, execution of already approved plans, run verification, and undo without exposing raw filesystem authority;
 - enterprise financial-operations domain models and playbook/runtime primitives when they are commandless scaffolding or otherwise preserve the trust pipeline;
 - on-device OCR of user-supplied images (`run_ocr_on_image`, macOS Vision / Windows OCR) and deterministic parsing of that OCR'd text into structured ID-document fields (`parse_id_document` / `core/id_scan.rs`). OCR runs only on images the user hands in and never touches the network; the parser is pure text-in/struct-out (no image, IO, or capture). Any resulting personal fields stay local — never uploaded, never used to auto-execute anything.
 
@@ -65,7 +66,8 @@ These areas may exist for research or developer mode, but they must not be treat
 - analytics dashboards;
 - visual regression checks;
 - data-source-driven workflow testing;
-- broad proactive intelligence.
+- broad proactive intelligence;
+- remote MCP relay, secure tunneling, provider integrations, plugin SDKs, workflow marketplaces, and signed approval-token infrastructure until their authentication, authorization, policy, audit, and undo boundaries are implemented and tested.
 - enterprise financial connectors that can approve payments, post journal entries, transmit funds, modify closed periods, or decide check-cashing outcomes.
 
 Experimental work must be:
@@ -89,6 +91,8 @@ The following actions must not execute silently:
 - submitting forms;
 - typing into unknown apps or fields;
 - running shell commands;
+- exposing raw filesystem APIs to AI clients or plugins;
+- letting AI clients approve plans, modify approved plans, reuse approvals, or escalate permissions;
 - capturing screenshots or screen contents;
 - reading email, browser, or document contents;
 - using network/cloud sync;
