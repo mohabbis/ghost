@@ -130,6 +130,14 @@ pub struct PerformanceSettings {
     pub cache_enabled: bool,
     /// Cache size in MB
     pub cache_size_mb: usize,
+    /// Capture a small screenshot crop around each recorded click, for the
+    /// template-match replay fallback (`core::template_match`,
+    /// `ElementInfo::template_png`). Off by default — it adds a screenshot
+    /// capture's latency to every recorded click. `#[serde(default)]` so
+    /// configs written before this setting existed keep loading (and stay
+    /// off, matching pre-existing behavior).
+    #[serde(default)]
+    pub capture_element_templates: bool,
 }
 
 /// Retention policy for the Organizer's stored execution history (the audit
@@ -194,6 +202,7 @@ impl Default for GhostConfig {
                 thread_pool_size: 4,
                 cache_enabled: true,
                 cache_size_mb: 100,
+                capture_element_templates: false,
             },
             // Keep all audit history by default; retention is opt-in.
             audit: AuditSettings::default(),

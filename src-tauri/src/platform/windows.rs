@@ -6,6 +6,7 @@ use crate::core::replay_support::{
     self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
+use crate::core::vision;
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -523,6 +524,11 @@ fn try_resolve_click_point_traced(
         // Windows resolves purely by title (FindWindowA); the element's app
         // is not needed here.
         |el: &ElementInfo| el.window_title.as_deref().and_then(find_window_origin),
+        || {
+            vision::capture_screenshot()
+                .ok()
+                .and_then(|bytes| image::load_from_memory(&bytes).ok())
+        },
     )
 }
 
@@ -559,43 +565,6 @@ fn click_action(button: u8) -> (Button, Direction) {
         2 => (Button::Right, Direction::Press),
         3 => (Button::Right, Direction::Release),
         _ => (Button::Left, Direction::Click),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // `matches!` rather than `assert_eq!` because enigo's `Button`/`Direction`
-    // don't guarantee `PartialEq`/`Debug` across versions (see the identical
-    // note on this same function's `headless` backend counterpart).
-
-    #[test]
-    fn click_action_maps_button_down_to_press() {
-        // Recorders emit mouse-down (0/2) as a Press so a single recorded click
-        // synthesizes exactly one press — not a full Click that double-fires.
-        assert!(matches!(click_action(0), (Button::Left, Direction::Press)));
-        assert!(matches!(click_action(2), (Button::Right, Direction::Press)));
-    }
-
-    #[test]
-    fn click_action_maps_button_up_to_release() {
-        // Mouse-up (1/3) mirrors as Release so press/release pairs stay balanced
-        // and drags / double-clicks survive replay faithfully.
-        assert!(matches!(
-            click_action(1),
-            (Button::Left, Direction::Release)
-        ));
-        assert!(matches!(
-            click_action(3),
-            (Button::Right, Direction::Release)
-        ));
-    }
-
-    #[test]
-    fn click_action_unknown_button_falls_back_to_click() {
-        // Defensive default for malformed recordings: a self-contained Click.
-        assert!(matches!(click_action(9), (Button::Left, Direction::Click)));
     }
 }
 
@@ -956,5 +925,42 @@ impl ReplayEngine for WindowsReplayer {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `matches!` rather than `assert_eq!` because enigo's `Button`/`Direction`
+    // don't guarantee `PartialEq`/`Debug` across versions (see the identical
+    // note on this same function's `headless` backend counterpart).
+
+    #[test]
+    fn click_action_maps_button_down_to_press() {
+        // Recorders emit mouse-down (0/2) as a Press so a single recorded click
+        // synthesizes exactly one press — not a full Click that double-fires.
+        assert!(matches!(click_action(0), (Button::Left, Direction::Press)));
+        assert!(matches!(click_action(2), (Button::Right, Direction::Press)));
+    }
+
+    #[test]
+    fn click_action_maps_button_up_to_release() {
+        // Mouse-up (1/3) mirrors as Release so press/release pairs stay balanced
+        // and drags / double-clicks survive replay faithfully.
+        assert!(matches!(
+            click_action(1),
+            (Button::Left, Direction::Release)
+        ));
+        assert!(matches!(
+            click_action(3),
+            (Button::Right, Direction::Release)
+        ));
+    }
+
+    #[test]
+    fn click_action_unknown_button_falls_back_to_click() {
+        // Defensive default for malformed recordings: a self-contained Click.
+        assert!(matches!(click_action(9), (Button::Left, Direction::Click)));
     }
 }

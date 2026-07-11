@@ -32,6 +32,10 @@ pub enum ResolutionKind {
     SpiralReresolved,
     /// The element name had slightly drifted or changed, but was resolved fuzzy-matching.
     FuzzyReresolved,
+    /// No accessibility descriptor matched, but a screenshot crop taken at
+    /// record time (`ElementInfo::template_png`) was found nearby via pixel
+    /// template matching (`core::template_match`).
+    TemplateMatched,
     /// The element was not found anywhere near the recorded point; replay
     /// fell back to the raw recorded coordinates.
     CoordinateFallback,
@@ -219,18 +223,21 @@ pub const SEARCH_DIRS: [(i32, i32); 8] = [
 /// Re-resolve where to click for a recorded element using a platform lookup
 /// closure. Returns `None` when no matching element is found anywhere near
 /// the recorded point (callers decide whether to fall back or retry).
-pub fn try_resolve_click_point<F, W>(
+pub fn try_resolve_click_point<F, W, S>(
     target: &ElementInfo,
     rx: i32,
     ry: i32,
     lookup: F,
     window_origin: W,
+    screenshot: S,
 ) -> Option<(i32, i32)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
     W: Fn(&ElementInfo) -> Option<(i32, i32)>,
+    S: Fn() -> Option<image::DynamicImage>,
 {
-    try_resolve_click_point_traced(target, rx, ry, lookup, window_origin).map(|(point, _)| point)
+    try_resolve_click_point_traced(target, rx, ry, lookup, window_origin, screenshot)
+        .map(|(point, _)| point)
 }
 
 /// Like `try_resolve_click_point`, but also reports *how* the target was
@@ -242,22 +249,32 @@ where
 ///    inside it (one lookup; survives arbitrarily large window moves);
 /// 3. spiral — scan outward around the recorded point (element moved
 ///    within its window, or window moved slightly);
-/// 4. `None` — callers decide whether to coordinate-fall-back or retry.
+/// 4. template match — when a screenshot crop was captured at record time
+///    (`ElementInfo::template_png`), search a bounded region around the
+///    recorded point for those pixels (`core::template_match`). Pixel-level,
+///    so it can succeed where every accessibility-tree strategy above it
+///    failed (descriptor changed, or none was ever recorded).
+/// 5. `None` — callers decide whether to coordinate-fall-back or retry.
 ///
 /// `window_origin` receives the full recorded element (platforms use
 /// `window_title`, and on macOS also `app` to locate the owning process) and
 /// returns the window's current top-left corner; platforms without a window
-/// lookup pass `|_| None`, which skips strategy 2 entirely.
-pub fn try_resolve_click_point_traced<F, W>(
+/// lookup pass `|_| None`, which skips strategy 2 entirely. `screenshot`
+/// captures the current screen on demand; it's only called (once) if
+/// strategies 1-3 all fail and a template is present, so platforms that
+/// can't cheaply screenshot can pass `|| None` to skip strategy 4 entirely.
+pub fn try_resolve_click_point_traced<F, W, S>(
     target: &ElementInfo,
     rx: i32,
     ry: i32,
     lookup: F,
     window_origin: W,
+    screenshot: S,
 ) -> Option<((i32, i32), ResolutionKind)>
 where
     F: Fn(i32, i32) -> Option<ElementInfo>,
     W: Fn(&ElementInfo) -> Option<(i32, i32)>,
+    S: Fn() -> Option<image::DynamicImage>,
 {
     // Pass 1: Exact matches (avoiding decoy false-positives first)
     if let Some(found) = lookup(rx, ry) {
@@ -327,7 +344,59 @@ where
         }
     }
 
+    // Pass 3: pixel template match. Only reachable when every accessibility-
+    // tree strategy above has already failed and a template was actually
+    // captured; `screenshot()` is a no-op closure (`|| None`) for callers
+    // that skip this strategy, so it costs nothing when unused.
+    if let Some(template_bytes) = &target.template_png {
+        if let Some(point) = resolve_via_template(template_bytes, rx, ry, &screenshot) {
+            return Some((point, ResolutionKind::TemplateMatched));
+        }
+    }
+
     None
+}
+
+/// Search a bounded region around the recorded point for `template_bytes`
+/// (see [`crate::core::template_match`]). Bounded the same way the spiral
+/// scan is (`SEARCH_RADII`'s max radius) rather than searching the whole
+/// screen — cheaper, and a UI element that moved further than that is
+/// unlikely to be the same control the user meant to click.
+fn resolve_via_template<S>(
+    template_bytes: &[u8],
+    rx: i32,
+    ry: i32,
+    screenshot: &S,
+) -> Option<(i32, i32)>
+where
+    S: Fn() -> Option<image::DynamicImage>,
+{
+    use image::GenericImageView;
+
+    let template = image::load_from_memory(template_bytes).ok()?;
+    let screen = screenshot()?;
+
+    let margin = *SEARCH_RADII.last().expect("SEARCH_RADII is non-empty");
+    let (screen_w, screen_h) = screen.dimensions();
+    let x0 = (rx - margin).max(0) as u32;
+    let y0 = (ry - margin).max(0) as u32;
+    let x1 = ((rx + margin).max(0) as u32).min(screen_w);
+    let y1 = ((ry + margin).max(0) as u32).min(screen_h);
+    if x1 <= x0 || y1 <= y0 {
+        return None;
+    }
+    let region = screen.crop_imm(x0, y0, x1 - x0, y1 - y0);
+
+    let m = crate::core::template_match::find_template(&region, &template)?;
+    if m.score < crate::core::template_match::DEFAULT_MIN_SCORE {
+        return None;
+    }
+    // Click the matched region's center, not its top-left corner.
+    let (tw, th) = template.dimensions();
+    Some((
+        x0 as i32 + m.x as i32 + (tw / 2) as i32,
+        y0 as i32 + m.y as i32 + (th / 2) as i32,
+    ))
 }
 
 #[cfg(test)]
@@ -481,6 +550,7 @@ mod tests {
             10,
             |x, y| (x == 10 && y == 10).then(|| at_point.clone()),
             |_| None,
+            || None,
         );
         assert_eq!(resolved, Some((10, 10)));
     }
@@ -496,6 +566,7 @@ mod tests {
             100,
             |x, y| (x == 170 && y == 100).then(|| moved.clone()),
             |_| None,
+            || None,
         );
         assert_eq!(resolved, Some((170, 100)));
     }
@@ -503,7 +574,7 @@ mod tests {
     #[test]
     fn returns_none_when_element_gone() {
         let target = info("AXButton", "Save", "Notes");
-        let resolved = try_resolve_click_point(&target, 100, 100, |_, _| None, |_| None);
+        let resolved = try_resolve_click_point(&target, 100, 100, |_, _| None, |_| None, || None);
         assert_eq!(resolved, None);
     }
 
@@ -567,6 +638,7 @@ mod tests {
             130,
             |x, y| (x == 940 && y == 530).then(|| moved.clone()),
             |el| (el.window_title.as_deref() == Some("Report")).then_some((900, 500)),
+            || None,
         );
         assert_eq!(traced, Some(((940, 530), ResolutionKind::WindowRelative)));
     }
@@ -584,6 +656,7 @@ mod tests {
             130,
             |x, y| (x == 940 && y == 530).then(|| stranger.clone()),
             |el| (el.window_title.as_deref() == Some("Report")).then_some((900, 500)),
+            || None,
         );
         assert_eq!(traced, None);
     }
@@ -600,6 +673,7 @@ mod tests {
             130,
             |x, y| (x == 140 && y == 130).then(|| at_point.clone()),
             |_| Some((900, 500)),
+            || None,
         );
         assert_eq!(traced, Some(((140, 130), ResolutionKind::RecordedPoint)));
     }
@@ -617,6 +691,7 @@ mod tests {
             10,
             |x, y| (x == 10 && y == 10).then(|| at_point.clone()),
             |_| None,
+            || None,
         );
         assert_eq!(traced, Some(((10, 10), ResolutionKind::RecordedPoint)));
 
@@ -627,10 +702,12 @@ mod tests {
             100,
             |x, y| (x == 170 && y == 100).then(|| moved.clone()),
             |_| None,
+            || None,
         );
         assert_eq!(traced, Some(((170, 100), ResolutionKind::SpiralReresolved)));
 
-        let traced = try_resolve_click_point_traced(&target, 100, 100, |_, _| None, |_| None);
+        let traced =
+            try_resolve_click_point_traced(&target, 100, 100, |_, _| None, |_| None, || None);
         assert_eq!(traced, None);
     }
 

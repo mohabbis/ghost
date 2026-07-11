@@ -15,6 +15,7 @@ pub mod local_llm;
 pub mod ocr;
 pub mod replay_support;
 pub mod security;
+pub mod template_match;
 pub mod traits;
 pub mod vision;
 pub mod wait;

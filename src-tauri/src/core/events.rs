@@ -121,6 +121,17 @@ pub enum MismatchAction {
 
 /// Shared event schema for cross-platform input events.
 /// All variants are serializable for IPC transmission.
+///
+/// `MouseClick` is inherently larger than the other variants: reliable
+/// target resolution (`core::replay_support`) needs a rich `ElementInfo`
+/// descriptor that `Key`/`Scroll`/etc. have no equivalent use for. That
+/// imbalance existed before `ElementInfo::template_png`; boxing this one
+/// field (already `Box<[u8]>`, the minimal owned-bytes representation) only
+/// closes part of the gap, and boxing `ElementInfo` itself to close the rest
+/// would mean an unrelated, sweeping refactor of every by-value use of
+/// `Option<ElementInfo>` across platform/recording/replay code. Accepting
+/// the size difference here is the more targeted trade.
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum InputEvent {
     MouseClick {
@@ -223,6 +234,23 @@ pub struct ElementInfo {
     /// before this field existed or when the window frame was unavailable.
     #[serde(default)]
     pub window_rel: Option<(i32, i32)>,
+    /// A small PNG-encoded screenshot crop taken around the click point at
+    /// record time, for the template-match replay fallback
+    /// (`core::template_match`) — a last resort when the accessibility-tree
+    /// descriptor can't find the element (or none was ever recorded) but its
+    /// pixels haven't changed. Only populated when
+    /// `PerformanceSettings::capture_element_templates` is enabled (off by
+    /// default: capturing a screenshot per recorded click adds latency to
+    /// recording). `#[serde(default)]` so workflows recorded before this
+    /// field existed still load.
+    ///
+    /// `Box<[u8]>` rather than `Vec<u8>` directly: this field lives inside
+    /// `Option`, inside `InputEvent::MouseClick`, and a bare `Vec<u8>` there
+    /// pushes that variant's inline size far past `Key`'s — `Box` keeps
+    /// `InputEvent` itself small by moving the bytes to the heap (clippy's
+    /// `large_enum_variant`).
+    #[serde(default)]
+    pub template_png: Option<Box<[u8]>>,
 }
 
 /// Keyboard action state for key events.

@@ -2640,6 +2640,7 @@ async function showReplayHistory() {
     if (count("RecordedPoint")) parts.push(`${count("RecordedPoint")} found in place`);
     if (count("WindowRelative")) parts.push(`${count("WindowRelative")} followed their window`);
     if (count("SpiralReresolved")) parts.push(`${count("SpiralReresolved")} re-resolved nearby`);
+    if (count("TemplateMatched")) parts.push(`${count("TemplateMatched")} found by template match`);
     if (count("CoordinateFallback")) parts.push(`${count("CoordinateFallback")} lost their element`);
     if (count("NoDescriptor")) parts.push(`${count("NoDescriptor")} coordinate-only`);
     const risky = trace.filter(

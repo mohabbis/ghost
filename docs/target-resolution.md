@@ -12,7 +12,11 @@ validated. Code: `src-tauri/src/core/replay_support.rs`; benchmark:
 - `identifier` — stable automation id, strongest signal when present;
 - `window_title`, `window_rel` — the containing window's title and the click
   position relative to its top-left corner;
-- `fallback_coords` — absolute screen point, last resort.
+- `fallback_coords` — absolute screen point, last resort;
+- `template_png` — a small screenshot crop taken around the click point, for
+  the pixel-level template-match strategy below. Only populated when
+  `PerformanceSettings::capture_element_templates` is enabled (off by
+  default — it adds a screenshot capture's latency to every recorded click).
 
 macOS reads the AXWindow ancestor (title + AXPosition); Windows reads the
 GA_ROOT window (text + GetWindowRect). Recordings made before these fields
@@ -31,7 +35,19 @@ existed deserialize with them absent and behave exactly as before.
    fails through.
 3. **Spiral** — scan outward around the recorded point (4 radii × 8
    directions, up to 260 px).
-4. **None** — callers decide: plain replay falls back to recorded
+4. **Template match** — when `ElementInfo.template_png` is set, crop the
+   current screenshot to a region around the recorded point (bounded by the
+   spiral's own max radius, 260 px) and search it for the captured template
+   (`core/template_match.rs`: normalized cross-correlation over a 4x
+   downsampled grayscale image, matched by nearest-neighbor sampling to
+   avoid blurring template edges into surrounding content). Accepts a match
+   only above `template_match::DEFAULT_MIN_SCORE` (0.80). Pixel-level, so it
+   can succeed where every strategy above it needs an accessibility-tree
+   descriptor that either changed or was never recorded.
+   Deliberately pure Rust over the `image` crate rather than an
+   `opencv-rust` binding — OpenCV needs a prebuilt system library
+   (pkg-config/vcpkg/brew) this repo's 3-OS CI matrix doesn't install.
+5. **None** — callers decide: plain replay falls back to recorded
    coordinates; guarded replay retries with backoff, then errors unless
    `continue_on_error`.
 
@@ -68,16 +84,24 @@ Window titles never *reject* a named match: titles legitimately drift
   step — any failure falls through to the spiral / recorded coordinates.
 
 The `window_origin` closure receives the full recorded `ElementInfo`
-(Windows uses only `window_title`; macOS also needs `app`).
+(Windows uses only `window_title`; macOS also needs `app`). A third closure,
+`screenshot`, supplies the current screen on demand for the template-match
+strategy; it's called at most once per resolution (only when strategies 1-3
+have failed and a template is present), so a platform that can't cheaply
+screenshot can pass `|| None` to skip strategy 4 entirely.
 
 ## Changing this code
 
-The benchmark suite is the gate: 13 canonical scenarios (moved element,
-moved window, decoys, renames, title drift, old recordings) each pin the
-exact click point and winning strategy — including the "must NOT resolve"
-cases where blind-clicking would hit the wrong control. Any change to the
-chain or the matcher must keep it green, and new behavior needs new
-scenarios:
+The benchmark suite is the gate: 16 canonical scenarios (moved element,
+moved window, decoys, renames, title drift, old recordings, template match
+found/not-found) each pin the exact click point and winning strategy —
+including the "must NOT resolve" cases where blind-clicking would hit the
+wrong control. (Template-match scenarios compare their click point within a
+small pixel tolerance rather than exactly — see
+`TEMPLATE_MATCH_TOLERANCE_PX` in the benchmark file — since that strategy is
+pixel-approximate by nature, unlike the exact accessibility-tree matches.)
+Any change to the chain or the matcher must keep it green, and new behavior
+needs new scenarios:
 
 ```bash
 cargo test --manifest-path src-tauri/Cargo.toml --test resolution_benchmark

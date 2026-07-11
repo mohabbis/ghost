@@ -6,6 +6,7 @@ use crate::core::replay_support::{
     self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
+use crate::core::vision;
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
@@ -691,6 +692,7 @@ unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
         role_description,
         window_title,
         window_rel,
+        template_png: None,
     })
 }
 
@@ -881,6 +883,11 @@ fn try_resolve_click_point_traced(
         ry,
         |x, y| unsafe { ax_info_at(x, y) },
         find_window_origin,
+        || {
+            vision::capture_screenshot()
+                .ok()
+                .and_then(|bytes| image::load_from_memory(&bytes).ok())
+        },
     )
 }
 
@@ -997,7 +1004,6 @@ impl ReplayEngine for MacosReplayer {
         speed: f32,
         progress: Arc<ReplayProgress>,
     ) -> anyhow::Result<()> {
-        use crate::core::vision;
         use crate::core::wait::VariableContext;
 
         let mut enigo = Enigo::new(&Settings::default())?;
