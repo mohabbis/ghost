@@ -26,12 +26,13 @@
 //! deterministic backend against the same persisted rules.
 
 use crate::engine::GhostEngine;
-use crate::organizer::executor::{execute_plan, ExecutionReport};
+use crate::organizer::executor::{execute_plan_with_progress, ExecutionReport};
 use crate::organizer::planner::{plan_zone, OrganizerPlan};
 use crate::organizer::undo::{revert, UndoReport};
 use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use crate::storage::executions::{
-    get_execution, list_executions, prune_executions, save_execution, verify_chain,
+    begin_execution, find_unfinished_execution, finish_execution, get_execution, list_executions,
+    mark_execution_finished, prune_executions, update_execution_progress, verify_chain,
     ChainVerification, ExecutionSummary,
 };
 use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
@@ -329,6 +330,14 @@ pub fn organizer_execute(
 /// The actual logic behind [`organizer_execute`], taking an already-open
 /// connection (see [`organizer_plan_with_conn`]) so the plan -> execute ->
 /// save -> prune -> milestone sequence is directly testable.
+///
+/// Write-ahead durable: a row exists (`begin_execution`) before the executor
+/// touches the filesystem, and is durably updated after every action
+/// (`execute_plan_with_progress` + `update_execution_progress`) rather than
+/// held in memory until the whole run finishes. A crash mid-run leaves a
+/// discoverable, undoable record of whatever had already been applied
+/// instead of losing it — see `organizer_check_unfinished_run` and
+/// `docs/organizer-executor.md`.
 fn organizer_execute_with_conn(
     conn: &Connection,
     zone_id: &str,
@@ -337,8 +346,16 @@ fn organizer_execute_with_conn(
 ) -> Result<ExecutionResult, String> {
     let rules = list_folder_rules(conn, zone_id).map_err(|e| e.to_string())?;
     let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
-    let report = execute_plan(&plan, &rules);
-    let execution_id = save_execution(conn, zone_id, &report).map_err(|e| e.to_string())?;
+
+    let execution_id = begin_execution(conn, zone_id).map_err(|e| e.to_string())?;
+    let report = execute_plan_with_progress(&plan, &rules, |partial| {
+        // Best-effort: the filesystem mutation already happened and was
+        // verified before this fires, so a failed durability write here is
+        // strictly less bad than a failed mutation would be. The next
+        // snapshot (or finish_execution) catches up regardless.
+        let _ = update_execution_progress(conn, &execution_id, partial);
+    });
+    finish_execution(conn, &execution_id, zone_id, &report).map_err(|e| e.to_string())?;
     let _ = record_milestone(conn, Milestone::FirstRun);
 
     // Enforce the user's retention policy, if any. Deleting the user's own audit
@@ -350,6 +367,41 @@ fn organizer_execute_with_conn(
         execution_id,
         report,
     })
+}
+
+/// Check for a run that began but never finished — almost always because the
+/// app crashed or was killed mid-run. `None` means the last run (if any)
+/// ended cleanly. The frontend calls this on Organizer view load so the user
+/// can review and either undo (`organizer_undo`) or dismiss
+/// (`organizer_dismiss_unfinished_run`) whatever it managed to apply before
+/// being interrupted.
+///
+/// Risk class: safe-read (DB only).
+#[tauri::command]
+pub fn organizer_check_unfinished_run() -> Result<Option<ExecutionSummary>, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let found = find_unfinished_execution(&conn).map_err(|e| e.to_string())?;
+    Ok(found.map(|e| ExecutionSummary {
+        id: e.id,
+        zone_id: e.zone_id,
+        created_at: e.created_at,
+        applied: e.applied,
+        skipped: e.skipped,
+        failed: e.failed,
+        sealed: !e.hash.is_empty(),
+        finished: e.finished,
+    }))
+}
+
+/// Dismiss an interrupted run without undoing it — the user has reviewed what
+/// it applied and is fine leaving those changes in place. Marks it finished
+/// so it stops being surfaced as needing recovery.
+///
+/// Risk class: local-mutate (DB only). Does not touch the filesystem.
+#[tauri::command]
+pub fn organizer_dismiss_unfinished_run(execution_id: String) -> Result<(), String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    mark_execution_finished(&conn, &execution_id).map_err(|e| e.to_string())
 }
 
 /// List past executions, newest first, for the history/undo view.
@@ -386,6 +438,11 @@ fn organizer_undo_with_conn(conn: &Connection, execution_id: &str) -> Result<Und
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
     let report = revert(&stored.undo);
     let _ = record_milestone(conn, Milestone::FirstUndo);
+    // Undoing an interrupted run resolves it — it no longer needs recovery
+    // attention even though it was never sealed by finish_execution.
+    if !stored.finished {
+        let _ = mark_execution_finished(conn, execution_id);
+    }
     Ok(report)
 }
 
