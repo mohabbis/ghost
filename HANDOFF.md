@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-11
-**Status:** `master` green. **v1.2.5 released** (`Ghost.dmg` + `Ghost_Setup.exe`). Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX.
+**Status:** `master` green. **v1.2.6 release candidate prepared** (tag push will build `Ghost.dmg` + `Ghost_Setup.exe`). Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX plus PRs 150-160 release consolidation.
 
 ---
 

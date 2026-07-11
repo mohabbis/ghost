@@ -30,8 +30,8 @@ ghost/
 2. Tag and push:
 
    ```bash
-   git tag v1.2.5
-   git push origin v1.2.5
+   git tag v1.2.6
+   git push origin v1.2.6
    ```
 
 3. CI builds both platforms, then a single publish job attaches:
