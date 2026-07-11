@@ -1069,7 +1069,7 @@ function openAbout() {
       <h4 class="about-h">What it does today</h4>
       <ul class="about-list">
         <li><strong>Organize</strong> — pick a folder, preview every move and rename, approve, then undo if needed. Never deletes or overwrites silently.</li>
-        <li><strong>Plan Filing</strong> — preview how finance reports or student coursework would be sorted by type and period (from file names only), and estimate the time it saves.</li>
+        <li><strong>Plan Filing</strong> — preview how software automation artifacts, finance reports, or student coursework would be sorted by type and period (from file names only), and estimate the time it saves.</li>
         <li><strong>Guard Desk</strong> — read a check or ID image with on-device OCR and run compliance checks locally; nothing is uploaded.</li>
         <li><strong>Record &amp; Replay</strong> — capture a task once, review each step, and replay only the steps you approved.</li>
       </ul>
@@ -3764,6 +3764,14 @@ async function guardRunAutofillReplay(data) {
 // approve -> audit -> undo pipeline.
 
 const FILING_SAMPLES = {
+  engineering: [
+    "junit-test-results-2026-07.xml",
+    "coverage-Q2-2026.html",
+    "build-log-2026-07-10.txt",
+    "playwright-screenshot-checkout-2026-07.png",
+    "incident-postmortem-2026-06.md",
+    "vacation.jpg",
+  ],
   finance: [
     "Q2 2026 Income Statement.xlsx",
     "Balance Sheet 2026-06.xlsx",
@@ -3810,7 +3818,7 @@ function filingConfidenceBadge(item) {
 
 async function filingPreview() {
   if (!invoke) return notAvailable();
-  const audience = document.getElementById("filingAudience")?.value || "finance";
+  const audience = document.getElementById("filingAudience")?.value || "engineering";
   const root = document.getElementById("filingRoot")?.value || "";
   const fileNames = filingParseNames(document.getElementById("filingNames")?.value);
   const result = document.getElementById("filingResult");
@@ -3900,7 +3908,7 @@ function filingInit() {
   if (!previewBtn) return;
   previewBtn.addEventListener("click", filingPreview);
   document.getElementById("filingSampleBtn")?.addEventListener("click", () => {
-    const audience = document.getElementById("filingAudience")?.value || "finance";
+    const audience = document.getElementById("filingAudience")?.value || "engineering";
     const ta = document.getElementById("filingNames");
     if (ta) ta.value = (FILING_SAMPLES[audience] || []).join("\n");
   });

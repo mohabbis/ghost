@@ -211,7 +211,7 @@ undoable executor.
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
-| `preview_file_filing` | stable | – | – | – | – | – | – | low | **safe-read.** Classifies each provided file name by the chosen `audience` profile and proposes a destination directory (report type/coursework type + reporting period/term), plus counts and per-item review flags. Deterministic; unrecognized files are surfaced for review, never guessed or mutated. `root` optional (audience default when empty). |
+| `preview_file_filing` | stable | – | – | – | – | – | – | low | **safe-read.** Classifies each provided file name by the chosen `audience` profile and proposes a destination directory (engineering artifact/report type/coursework type + run period/reporting period/term), plus counts and per-item review flags. Deterministic; unrecognized files are surfaced for review, never guessed or mutated. `root` optional (audience default when empty). |
 | `estimate_filing_savings` | stable | – | – | – | – | – | – | low | **safe-read.** Pure arithmetic: turns filing volume/cadence/time inputs into annual hours (and, with an hourly rate, cost) saved by an assisted workflow. Inputs are clamped defensively; the estimate echoes back every default applied. |
 
 ### `commands/experimental.rs` — experimental (gated / not default UI)

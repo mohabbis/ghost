@@ -7,7 +7,7 @@
 //! has granted any folder access. The actual move/rename still goes through the
 //! Organizer's preview -> approve -> execute -> audit -> undo path.
 
-use super::{academic, finance, period};
+use super::{academic, engineering, finance, period};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -19,6 +19,8 @@ pub enum Audience {
     Finance,
     /// Students: coursework by course + term + assignment type.
     Student,
+    /// Software teams: automation artifacts by type + run period.
+    Engineering,
 }
 
 impl Audience {
@@ -26,6 +28,7 @@ impl Audience {
         match self {
             Audience::Finance => "Financial Reports",
             Audience::Student => "Coursework",
+            Audience::Engineering => "Engineering Automation",
         }
     }
 }
@@ -85,6 +88,7 @@ pub fn preview_filing(audience: Audience, root: &str, file_names: &[String]) -> 
         let item = match audience {
             Audience::Finance => file_finance(&root, name),
             Audience::Student => file_student(&root, name),
+            Audience::Engineering => file_engineering(&root, name),
         };
         if item.recognized {
             recognized += 1;
@@ -189,6 +193,31 @@ fn file_student(root: &str, name: &str) -> FiledItem {
     }
 }
 
+fn file_engineering(root: &str, name: &str) -> FiledItem {
+    match engineering::classify_artifact(name) {
+        Some(c) => {
+            let period = period::extract_period(&stem_of(name));
+            let mut segments = vec![root.to_string(), c.kind.folder_name().to_string()];
+            match &period {
+                Some(p) => segments.extend(p.dir_segments()),
+                None => segments.push("Undated".to_string()),
+            }
+            let needs_review = c.confidence <= engineering::LOW_CONFIDENCE || period.is_none();
+            FiledItem {
+                file_name: name.to_string(),
+                category: c.kind.label().to_string(),
+                period: period.map(|p| p.label()),
+                relative_dir: join_dir(&segments),
+                confidence: c.confidence,
+                reason: c.reason,
+                recognized: true,
+                needs_review,
+            }
+        }
+        None => unsorted(root, name),
+    }
+}
+
 fn unsorted(root: &str, name: &str) -> FiledItem {
     FiledItem {
         file_name: name.to_string(),
@@ -253,6 +282,26 @@ mod tests {
         assert_eq!(item.category, "Assignment");
         assert_eq!(item.period.as_deref(), Some("Fall 2026"));
         assert_eq!(item.relative_dir, "Coursework/CS101/Assignments/2026 Fall");
+    }
+
+    #[test]
+    fn engineering_preview_files_by_artifact_type_and_period() {
+        let preview = preview_filing(
+            Audience::Engineering,
+            "",
+            &names(&["junit-test-results-2026-07.xml", "coverage-Q2-2026.html"]),
+        );
+        assert_eq!(preview.root, "Engineering Automation");
+        assert_eq!(preview.recognized, 2);
+        assert_eq!(preview.items[0].category, "Test Report");
+        assert_eq!(
+            preview.items[0].relative_dir,
+            "Engineering Automation/Test Reports/2026/2026-07"
+        );
+        assert_eq!(
+            preview.items[1].relative_dir,
+            "Engineering Automation/Coverage Reports/2026/Q2"
+        );
     }
 
     #[test]
