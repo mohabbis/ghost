@@ -3,6 +3,11 @@
 //! platforms — `accessibility-sys` and the IOKit framework link are only
 //! declared as dependencies under `target_os = "macos"` in Cargo.toml.
 
+// Mirrors the Apple IOKit constant names (kIOHID...) so they stay
+// recognizable against Apple's own headers/docs; see the same allow in
+// platform/macos.rs.
+#![allow(non_upper_case_globals)]
+
 #[cfg(target_os = "macos")]
 #[link(name = "IOKit", kind = "framework")]
 extern "C" {
