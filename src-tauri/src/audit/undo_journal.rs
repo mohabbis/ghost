@@ -1,9 +1,10 @@
 //! The undo journal: how to reverse what the executor did.
 //!
-//! Invariant 8 of the trust model (`CLAUDE.md`): *reversible mutations must
-//! write undo data before execution*. The executor records one [`UndoOp`] in
-//! this journal immediately **before** each reversible filesystem operation, so
-//! a rollback is always possible even after a partial failure.
+//! The executor prepares each inverse operation before mutating, then records the
+//! [`UndoOp`] in this journal only after the filesystem operation succeeds and
+//! its postcondition is verified. The journal therefore describes applied state,
+//! not intended state, so failed or skipped actions do not create false rollback
+//! entries.
 //!
 //! This module is pure data — it never touches the filesystem. The reversal
 //! itself is performed by `crate::organizer::undo`, which replays the journal
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// A single reversible step, expressed as the inverse of the operation that was
-/// applied. Recorded before the forward operation runs.
+/// applied. Recorded only after the forward operation has run and verified.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "op")]
 pub enum UndoOp {
@@ -46,7 +47,7 @@ impl UndoJournal {
         Self::default()
     }
 
-    /// Append one reversible step. Called before the forward operation runs.
+    /// Append one reversible step after the forward operation is verified.
     pub fn record(&mut self, op: UndoOp) {
         self.ops.push(op);
     }
