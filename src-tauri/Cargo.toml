@@ -50,6 +50,11 @@ sha2 = "0.11"
 # predates the bug. Bump once a fixed libsqlite3-sys ships.
 rusqlite = { version = "0.39", features = ["bundled"] }
 tauri-plugin-dialog = "2"
+# Parallel directory walker for the Organizer scanner
+# (src-tauri/src/organizer/scanner.rs). Reads directories across a thread
+# pool to speed up deep-tree scans; scanner.rs still sorts the result into a
+# deterministic order before it reaches the planner. MIT/Apache-2.0.
+jwalk = "0.8"
 
 [dev-dependencies]
 # `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
@@ -81,3 +86,8 @@ enigo = "0.2"
 # crate compiles and the test suite runs everywhere (see platform/headless.rs).
 [target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
 enigo = "0.2"
+
+[profile.dev]
+# Explicit (matches cargo's own default) so iteration speed doesn't silently
+# regress if that default ever changes; keeps rebuilds cheap during local dev.
+incremental = true

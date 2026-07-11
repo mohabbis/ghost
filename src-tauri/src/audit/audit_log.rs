@@ -5,6 +5,7 @@
 //! executor builds it and the UI/persistence layers read it. This is the
 //! "Audit" step of the trust pipeline made concrete and inspectable.
 
+use super::pii;
 use crate::policy::Capability;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -100,8 +101,8 @@ impl AuditLog {
             let (kind, path, target) = describe_capability(&event.capability);
             let (outcome, detail) = match &event.outcome {
                 ActionOutcome::Applied => ("applied", String::new()),
-                ActionOutcome::Skipped { reason } => ("skipped", reason.clone()),
-                ActionOutcome::Failed { error } => ("failed", error.clone()),
+                ActionOutcome::Skipped { reason } => ("skipped", pii::mask(reason)),
+                ActionOutcome::Failed { error } => ("failed", pii::mask(error)),
             };
             let rule = event
                 .rule_path
@@ -201,8 +202,10 @@ impl AuditLog {
             let (kind, path, target) = describe_capability(&event.capability);
             let outcome_str = match &event.outcome {
                 ActionOutcome::Applied => "✅ Applied".to_string(),
-                ActionOutcome::Skipped { reason } => format!("⚠️ Skipped ({})", reason),
-                ActionOutcome::Failed { error } => format!("❌ Failed ({})", error),
+                ActionOutcome::Skipped { reason } => {
+                    format!("⚠️ Skipped ({})", pii::mask(reason))
+                }
+                ActionOutcome::Failed { error } => format!("❌ Failed ({})", pii::mask(error)),
             };
             let rule = event
                 .rule_path
@@ -230,6 +233,28 @@ impl AuditLog {
         out
     }
 
+    /// A copy of this log with PII-shaped substrings (SSNs, card numbers,
+    /// emails, phone numbers) redacted from every path and detail string.
+    /// Used for the portable JSON export (`organizer_export_audit`,
+    /// `format="json"`); the log actually persisted and hash-chained by
+    /// `storage::executions` is never touched, so redaction here cannot
+    /// desync a run's tamper-evident seal.
+    pub fn masked(&self) -> AuditLog {
+        AuditLog {
+            events: self
+                .events
+                .iter()
+                .map(|e| AuditEvent {
+                    capability: mask_capability(&e.capability),
+                    outcome: mask_outcome(&e.outcome),
+                    rule_path: e.rule_path.clone(),
+                    provenance: e.provenance,
+                    at: e.at.clone(),
+                })
+                .collect(),
+        }
+    }
+
     /// The recorded events, in the order they happened.
     pub fn events(&self) -> &[AuditEvent] {
         &self.events
@@ -255,9 +280,11 @@ fn now_ts() -> String {
         .to_string()
 }
 
-/// A short action name plus the capability's path(s) for tabular export.
+/// A short action name plus the capability's path(s) for tabular export,
+/// with PII-shaped substrings redacted (see [`pii::mask`]) since this is only
+/// ever used to build human-facing exports (CSV, compliance report).
 fn describe_capability(cap: &Capability) -> (&'static str, String, String) {
-    match cap {
+    let (kind, path, target) = match cap {
         Capability::ReadFolder { path } => {
             ("read_folder", path.display().to_string(), String::new())
         }
@@ -283,6 +310,47 @@ fn describe_capability(cap: &Capability) -> (&'static str, String, String) {
             ("delete_file", path.display().to_string(), String::new())
         }
         other => ("other", format!("{other:?}"), String::new()),
+    };
+    (kind, pii::mask(&path), pii::mask(&target))
+}
+
+/// A redacted clone of a capability: same shape, PII-shaped substrings in its
+/// path(s) masked. Used by [`AuditLog::masked`] for the JSON export, kept
+/// distinct from [`describe_capability`] because it must preserve the typed
+/// `Capability` shape rather than flatten it to display strings.
+fn mask_capability(cap: &Capability) -> Capability {
+    let mp = |p: &PathBuf| PathBuf::from(pii::mask(&p.display().to_string()));
+    match cap {
+        Capability::ReadFolder { path } => Capability::ReadFolder { path: mp(path) },
+        Capability::CreateFolder { path } => Capability::CreateFolder { path: mp(path) },
+        Capability::RenameFile { from, to } => Capability::RenameFile {
+            from: mp(from),
+            to: mp(to),
+        },
+        Capability::MoveFile { from, to } => Capability::MoveFile {
+            from: mp(from),
+            to: mp(to),
+        },
+        Capability::CopyFile { from, to } => Capability::CopyFile {
+            from: mp(from),
+            to: mp(to),
+        },
+        Capability::DeleteFile { path } => Capability::DeleteFile { path: mp(path) },
+        other => other.clone(),
+    }
+}
+
+/// A redacted clone of an outcome: PII-shaped substrings masked in
+/// `Skipped`/`Failed` detail text. See [`mask_capability`].
+fn mask_outcome(outcome: &ActionOutcome) -> ActionOutcome {
+    match outcome {
+        ActionOutcome::Applied => ActionOutcome::Applied,
+        ActionOutcome::Skipped { reason } => ActionOutcome::Skipped {
+            reason: pii::mask(reason),
+        },
+        ActionOutcome::Failed { error } => ActionOutcome::Failed {
+            error: pii::mask(error),
+        },
     }
 }
 
@@ -475,5 +543,44 @@ mod tests {
         assert!(report.contains("b.pdf"));
         assert!(report.contains("Approved"));
         assert!(report.contains("N/A"));
+    }
+
+    /// A file path or skip/fail detail carrying an SSN-shaped substring must
+    /// not reach any export format unredacted — CSV, the Markdown compliance
+    /// report, or the masked JSON export — while the log the app actually
+    /// stores and hash-chains stays untouched.
+    #[test]
+    fn pii_is_redacted_in_every_export_but_not_in_the_stored_log() {
+        let mut log = AuditLog::new();
+        log.record(
+            Capability::RenameFile {
+                from: PathBuf::from("/z/138-45-9821_w2.pdf"),
+                to: PathBuf::from("/z/Tax/138-45-9821_w2.pdf"),
+            },
+            ActionOutcome::Skipped {
+                reason: "contact jane.doe@example.com to resolve".into(),
+            },
+        );
+
+        assert!(!log.to_csv().contains("138-45-9821"));
+        assert!(!log.to_csv().contains("jane.doe@example.com"));
+
+        let report = log.to_compliance_report("id", "1700000000", "h", "p");
+        assert!(!report.contains("138-45-9821"));
+        assert!(!report.contains("jane.doe@example.com"));
+
+        let masked_json = serde_json::to_string(&log.masked()).unwrap();
+        assert!(!masked_json.contains("138-45-9821"));
+        assert!(!masked_json.contains("jane.doe@example.com"));
+
+        // The stored log itself — what's persisted, hash-chained, and used
+        // for undo — must keep the real path so those systems still work.
+        assert_eq!(
+            log.events()[0].capability,
+            Capability::RenameFile {
+                from: PathBuf::from("/z/138-45-9821_w2.pdf"),
+                to: PathBuf::from("/z/Tax/138-45-9821_w2.pdf"),
+            }
+        );
     }
 }

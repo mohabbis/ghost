@@ -78,42 +78,37 @@ pub fn is_ignored(name: &str) -> bool {
 ///
 /// Read-only: descends directories and reads metadata, never contents. Entries
 /// it cannot read are skipped rather than aborting the whole scan, so one
-/// permission error does not sink an otherwise valid plan.
+/// permission error does not sink an otherwise valid plan. Directories are
+/// read in parallel (via `jwalk`) since deep trees are IO-bound; the result is
+/// still sorted before it reaches the planner, so the parallelism is
+/// invisible to callers — same files in, same order out, every time.
 pub fn scan(root: &Path) -> Vec<ScannedFile> {
-    let mut out = Vec::new();
-    scan_into(root, 0, &mut out);
+    // jwalk numbers the root itself at depth 0 and files directly inside it at
+    // depth 1, one more than the `scan_into`-style depth this bound used to
+    // gate on. `min_depth(1)` drops the root entry (a directory, and not a
+    // `ScannedFile` candidate anyway); `max_depth` is shifted by one to match.
+    let mut out: Vec<ScannedFile> = jwalk::WalkDir::new(root)
+        .skip_hidden(false) // `is_ignored` already covers dotfiles/dirs
+        .min_depth(1)
+        .max_depth(MAX_DEPTH + 1)
+        .process_read_dir(|_depth, _dir, _state, children| {
+            children.retain(|entry| match entry {
+                Ok(e) => !is_ignored(&e.file_name().to_string_lossy()),
+                Err(_) => false, // unreadable entry: skip, don't fail the scan
+            });
+        })
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        // Symlinks and other entry kinds are intentionally excluded: the MVP
+        // organizes plain files only.
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            describe(&entry.path(), &name)
+        })
+        .collect();
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out
-}
-
-fn scan_into(dir: &Path, depth: usize, out: &mut Vec<ScannedFile>) {
-    if depth > MAX_DEPTH {
-        return;
-    }
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return, // unreadable directory: skip, don't fail the scan
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if is_ignored(&name) {
-            continue;
-        }
-        let path = entry.path();
-        let file_type = match entry.file_type() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        if file_type.is_dir() {
-            scan_into(&path, depth + 1, out);
-        } else if file_type.is_file() {
-            if let Some(scanned) = describe(&path, &name) {
-                out.push(scanned);
-            }
-        }
-        // Symlinks and other entry kinds are intentionally ignored: the MVP
-        // organizes plain files only.
-    }
 }
 
 /// Build a [`ScannedFile`] from a path and its file name. Returns `None` if
@@ -176,5 +171,31 @@ mod tests {
         let files = scan(tmp.path());
         assert_eq!(files[0].extension.as_deref(), Some("jpeg"));
         assert_eq!(files[0].stem, "IMG");
+    }
+
+    /// A file at `MAX_DEPTH` levels of nesting is included; one level deeper
+    /// is not. Pins the exact boundary so a future depth-accounting change
+    /// (e.g. adjusting jwalk's depth offset) can't silently shift it.
+    #[test]
+    fn respects_max_depth_boundary() {
+        let tmp = tempdir();
+        let mut rel = String::new();
+        for i in 1..=(MAX_DEPTH + 2) {
+            rel.push_str(&format!("d{i}/"));
+            tmp.file(&format!("{rel}f{i}.txt"), b"x");
+        }
+        let files = scan(tmp.path());
+        let depths: Vec<usize> = files
+            .iter()
+            .map(|f| {
+                f.path
+                    .strip_prefix(tmp.path())
+                    .unwrap()
+                    .components()
+                    .count()
+            })
+            .collect();
+        assert!(depths.contains(&(MAX_DEPTH + 1)));
+        assert!(!depths.contains(&(MAX_DEPTH + 2)));
     }
 }

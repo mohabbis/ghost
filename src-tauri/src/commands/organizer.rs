@@ -414,12 +414,16 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
         "json" => {
             // Wrap the audit log with the run's seal so the exported artifact
             // carries its own tamper-evidence, verifiable against the chain.
+            // The audit content itself is PII-redacted (see `AuditLog::masked`)
+            // since this is a portable file a user may hand to someone else;
+            // the seal was computed over the unredacted stored bytes at write
+            // time, so masking here doesn't affect chain verification.
             let doc = serde_json::json!({
                 "execution_id": stored.id,
                 "created_at": stored.created_at,
                 "hash": stored.hash,
                 "prev_hash": stored.prev_hash,
-                "audit": stored.audit,
+                "audit": stored.audit.masked(),
             });
             serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
         }
