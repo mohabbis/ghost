@@ -61,11 +61,7 @@ impl ApprovalGate {
         let missing_action_ids = self
             .required_action_ids
             .iter()
-            .filter(|action_id| {
-                !approved_scopes
-                    .iter()
-                    .any(|scope| *scope == action_id.as_str())
-            })
+            .filter(|action_id| !approved_scopes.contains(&action_id.as_str()))
             .cloned()
             .collect::<Vec<_>>();
 

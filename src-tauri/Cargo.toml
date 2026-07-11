@@ -44,7 +44,11 @@ sha2 = "0.11"
 # Local trust-boundary storage (Zones + folder rules). `bundled` compiles
 # SQLite from source so there is no system-library dependency and it builds on
 # the headless Linux CI leg. MIT-licensed (passes deny.toml).
-rusqlite = { version = "0.40", features = ["bundled"] }
+# Pinned below 0.40: rusqlite >=0.40.1 requires libsqlite3-sys ^0.38.1, whose
+# build script uses the unstable `cfg_select!` macro and fails to compile on
+# stable Rust (rust-lang/rust#115585). 0.39 pulls libsqlite3-sys 0.37, which
+# predates the bug. Bump once a fixed libsqlite3-sys ships.
+rusqlite = { version = "0.39", features = ["bundled"] }
 tauri-plugin-dialog = "2"
 
 [dev-dependencies]

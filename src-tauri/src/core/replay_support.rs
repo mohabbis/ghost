@@ -181,20 +181,22 @@ pub fn descriptor_matches_fuzzy(target: &ElementInfo, found: &ElementInfo) -> bo
     }
 
     // App must match case-insensitively if we have one.
-    if !target.app.is_empty() && target.app != "Unknown" {
-        if !target.app.eq_ignore_ascii_case(&found.app) {
-            return false;
-        }
+    if !target.app.is_empty()
+        && target.app != "Unknown"
+        && !target.app.eq_ignore_ascii_case(&found.app)
+    {
+        return false;
     }
 
     let t_name = target.name.to_lowercase();
     let f_name = found.name.to_lowercase();
 
     // Check if either is a substring of the other (minimum length 3 to avoid matching noise).
-    if t_name.len() >= 3 && f_name.len() >= 3 {
-        if t_name.contains(&f_name) || f_name.contains(&t_name) {
-            return true;
-        }
+    if t_name.len() >= 3
+        && f_name.len() >= 3
+        && (t_name.contains(&f_name) || f_name.contains(&t_name))
+    {
+        return true;
     }
 
     false

@@ -28,6 +28,14 @@ impl TempDir {
         fs::write(&p, bytes).unwrap();
         p
     }
+
+    /// Create `rel` (and any parent dirs) under this temp dir, returning its
+    /// absolute path.
+    pub fn dir(&self, rel: &str) -> PathBuf {
+        let p = self.path.join(rel);
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
 }
 
 impl Drop for TempDir {
