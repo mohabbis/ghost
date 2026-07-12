@@ -38,7 +38,7 @@ use crate::storage::executions::{
 use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
 use crate::storage::open_default;
 use crate::storage::zones::{
-    add_folder_rule, create_zone, list_folder_rules, list_zones, set_rule_trust,
+    add_folder_rule, create_zone, get_zone, list_folder_rules, list_zones, set_rule_trust,
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -49,23 +49,35 @@ use tauri::State;
 ///
 /// The UI historically accepted `~/Downloads` and `/Users/you/Downloads` as
 /// placeholders. The scanner never expands `~`, so a literal `~/…` rule quietly
-/// matches nothing and the product looks broken. Expand home (~ / $HOME) here,
-/// canonicalize when the path exists, and reject empty input.
+/// matches nothing and the product looks broken. Expand home (~ / $HOME /
+/// $USERPROFILE / %USERPROFILE%) here, canonicalize when the path exists, and
+/// reject empty input.
+fn userprofile_path(rest: &str) -> Result<PathBuf, String> {
+    let mut profile = std::env::var("USERPROFILE")
+        .map(PathBuf::from)
+        .or_else(|_| {
+            dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())
+        })?;
+    if !rest.is_empty() {
+        profile.push(rest);
+    }
+    Ok(profile)
+}
+
 fn expand_user_path(raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("folder path is empty".to_string());
     }
 
-    let expanded = if trimmed == "~" {
+    let expanded: PathBuf = if trimmed == "~" {
         dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?
     } else if let Some(rest) = trimmed.strip_prefix("~/") {
         let mut home =
             dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
         home.push(rest);
         home
-    } else if trimmed.starts_with('$') {
-        // Best-effort $HOME / $USERPROFILE style; anything else stays literal.
+    } else if trimmed.starts_with('$') || trimmed.starts_with('%') {
         if let Some(rest) = trimmed.strip_prefix("$HOME") {
             let mut home =
                 dirs::home_dir().ok_or_else(|| "could not resolve home directory".to_string())?;
@@ -74,6 +86,10 @@ fn expand_user_path(raw: &str) -> Result<PathBuf, String> {
                 home.push(rest);
             }
             home
+        } else if let Some(rest) = trimmed.strip_prefix("$USERPROFILE") {
+            userprofile_path(rest.trim_start_matches(['/', '\\']))?
+        } else if let Some(rest) = trimmed.strip_prefix("%USERPROFILE%") {
+            userprofile_path(rest.trim_start_matches(['/', '\\']))?
         } else {
             PathBuf::from(trimmed)
         }
@@ -175,10 +191,14 @@ pub fn organizer_create_zone(
     engine: State<GhostEngine>,
 ) -> Result<Zone, String> {
     super::auth::require_unlocked(&engine)?;
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("zone name cannot be empty".to_string());
+    }
     let conn = open_default().map_err(|e| e.to_string())?;
     let zone = create_zone(
         &conn,
-        &name,
+        name,
         description.as_deref(),
         DefaultDecision::Ask,
         rename_dated.unwrap_or(false),
@@ -212,7 +232,7 @@ pub fn organizer_add_folder_rule(
     let rule = normalize_folder_rule(rule)?;
     if !path_exists_dir(&rule.path) {
         return Err(format!(
-            "folder does not exist: {}. Pick a real folder on this Mac.",
+            "folder does not exist: {}. Pick a real folder that exists on this machine.",
             rule.path.display()
         ));
     }
@@ -292,6 +312,12 @@ pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
 /// connection so it is testable against an in-memory database instead of the
 /// real OS data directory (`open_default` has no test seam of its own).
 fn organizer_plan_with_conn(conn: &Connection, zone_id: &str) -> Result<OrganizerPlan, String> {
+    if get_zone(conn, zone_id)
+        .map_err(|e| e.to_string())?
+        .is_none()
+    {
+        return Err(format!("no zone with id {zone_id}"));
+    }
     let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
     let _ = record_milestone(conn, Milestone::FirstPlan);
     Ok(plan)
@@ -401,7 +427,10 @@ pub fn organizer_check_unfinished_run() -> Result<Option<ExecutionSummary>, Stri
 #[tauri::command]
 pub fn organizer_dismiss_unfinished_run(execution_id: String) -> Result<(), String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    mark_execution_finished(&conn, &execution_id).map_err(|e| e.to_string())
+    mark_execution_finished(&conn, &execution_id).map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => format!("no execution with id {execution_id}"),
+        other => other.to_string(),
+    })
 }
 
 /// List past executions, newest first, for the history/undo view.
@@ -628,7 +657,11 @@ pub fn organizer_export_policy_pack(zone_id: String) -> Result<String, String> {
 ///
 /// Risk class: local-mutate (DB only; inserts zone and rules).
 #[tauri::command]
-pub fn organizer_import_policy_pack(pack_json: String) -> Result<Zone, String> {
+pub fn organizer_import_policy_pack(
+    pack_json: String,
+    engine: State<GhostEngine>,
+) -> Result<Zone, String> {
+    super::auth::require_unlocked(&engine)?;
     let pack: PolicyPack =
         serde_json::from_str(&pack_json).map_err(|e| format!("invalid policy pack JSON: {e}"))?;
 
@@ -645,7 +678,17 @@ pub fn organizer_import_policy_pack(pack_json: String) -> Result<Zone, String> {
     .map_err(|e| e.to_string())?;
 
     for rule in &pack.rules {
-        add_folder_rule(&tx, &zone.id, rule).map_err(|e| e.to_string())?;
+        if rule.can_delete {
+            return Err("Organizer folder rules cannot grant delete".to_string());
+        }
+        let rule = normalize_folder_rule(rule.clone())?;
+        if !path_exists_dir(&rule.path) {
+            return Err(format!(
+                "folder does not exist: {}. Pick a real folder that exists on this machine.",
+                rule.path.display()
+            ));
+        }
+        add_folder_rule(&tx, &zone.id, &rule).map_err(|e| e.to_string())?;
     }
 
     tx.commit().map_err(|e| e.to_string())?;

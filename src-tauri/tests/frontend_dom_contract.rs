@@ -91,3 +91,85 @@ fn guard_desk_id_scan_elements_exist() {
         );
     }
 }
+
+/// Every `bind("id", …)` in wireUpControls must point at a real element.
+fn bind_targets(js: &str) -> Vec<String> {
+    let re = regex::Regex::new(r#"bind\(\s*["']([A-Za-z0-9_-]+)["']\s*,"#).unwrap();
+    re.captures_iter(js).map(|c| c[1].to_string()).collect()
+}
+
+#[test]
+fn wireup_bind_targets_are_authored() {
+    let js = read("../src/main.js");
+    let html = read("../src/index.html");
+
+    let mut authored = authored_ids(&html);
+    authored.extend(authored_ids(&js));
+
+    let referenced = bind_targets(&js);
+    assert!(
+        referenced.len() > 40,
+        "bind() parsing looks broken — only found {} references",
+        referenced.len()
+    );
+
+    let missing: Vec<String> = referenced
+        .into_iter()
+        .filter(|id| !authored.contains(id))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "wireUpControls bind() targets ids that are never authored in \
+         src/index.html or a main.js template string: {:?}",
+        missing
+    );
+}
+
+fn data_view_values(html: &str, attr_prefix: &str) -> HashSet<String> {
+    let re =
+        regex::Regex::new(&format!(r#"{attr_prefix}\s*=\s*["']([A-Za-z0-9_-]+)["']"#)).unwrap();
+    re.captures_iter(html).map(|c| c[1].to_string()).collect()
+}
+
+#[test]
+fn nav_data_view_values_have_matching_panels() {
+    let html = read("../src/index.html");
+    let nav_views = data_view_values(&html, "data-view");
+    assert!(
+        nav_views.len() >= 5,
+        "data-view parsing looks broken — only found {} nav views",
+        nav_views.len()
+    );
+
+    // Every nav tab must have a matching `.view` section (and vice versa).
+    let panel_re =
+        regex::Regex::new(r#"class="view[^"]*"[^>]*data-view\s*=\s*["']([A-Za-z0-9_-]+)["']"#)
+            .unwrap();
+    let panel_views: HashSet<String> = panel_re
+        .captures_iter(&html)
+        .map(|c| c[1].to_string())
+        .collect();
+
+    let nav_only: Vec<String> = nav_views.difference(&panel_views).cloned().collect();
+    let panel_only: Vec<String> = panel_views.difference(&nav_views).cloned().collect();
+
+    assert!(
+        nav_only.is_empty() && panel_only.is_empty(),
+        "nav/panel data-view mismatch — nav-only: {:?}, panel-only: {:?}",
+        nav_only,
+        panel_only
+    );
+}
+
+#[test]
+fn compression_review_container_ids_exist() {
+    let html = read("../src/index.html");
+    let authored = authored_ids(&html);
+    for id in ["events-timeline", "review-modal-compression"] {
+        assert!(
+            authored.contains(id),
+            "CompressionReview container id `{id}` must exist in src/index.html",
+        );
+    }
+}
