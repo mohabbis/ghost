@@ -9,9 +9,9 @@
 use crate::engine::GhostEngine;
 use crate::intelligence::capability::{ProviderHealth, ProviderId};
 use crate::intelligence::credentials::{CredentialProvider, CredentialStore};
-use crate::intelligence::IntelligenceProvider;
 use crate::intelligence::schema::PlanningRequest;
 use crate::intelligence::service::{build_router, provider_id_from_config};
+use crate::intelligence::IntelligenceProvider;
 use tauri::State;
 
 #[derive(serde::Serialize)]
