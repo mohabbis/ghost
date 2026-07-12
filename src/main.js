@@ -1166,10 +1166,16 @@ async function openSettings() {
   }
 
   let account = { signed_in: false };
+  let intelStatus = { default_provider: "disabled", providers: [] };
   try {
     account = await invoke("account_status");
   } catch (error) {
     console.error("Failed to load account status:", error);
+  }
+  try {
+    intelStatus = await invoke("intelligence_provider_status");
+  } catch (error) {
+    console.error("Failed to load intelligence provider status:", error);
   }
 
   const modal = document.getElementById("settings-modal");
@@ -1178,11 +1184,32 @@ async function openSettings() {
   if (!content) return;
 
   const { replay, ai } = settingsConfig;
+  const intelligence = settingsConfig.intelligence || {
+    default_provider: "disabled",
+    openai: { model: "gpt-4o-mini", api_base: null, timeout_seconds: 60, max_input_bytes: 32768 },
+    anthropic: { model: "claude-sonnet-4-20250514", timeout_seconds: 60, max_input_bytes: 32768 },
+    routing: { allow_fallback: false, local_only_for_sensitive_data: true, maximum_remote_payload_bytes: 32768 },
+  };
   // `audit` may be absent in configs written before the retention feature.
   const audit = settingsConfig.audit || {};
   const providers = ["local", "openai", "anthropic", "local_model"];
+  const intelProviders = ["disabled", "openai", "anthropic"];
   const fieldStyle =
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
+
+  const intelStatusLine = (id) => {
+    const entry = (intelStatus.providers || []).find((p) => p.id === id);
+    if (!entry) return "Status unknown";
+    const health =
+      typeof entry.health === "string"
+        ? entry.health
+        : entry.health?.degraded?.reason
+          ? `degraded: ${entry.health.degraded.reason}`
+          : entry.health?.unavailable?.reason
+            ? `unavailable: ${entry.health.unavailable.reason}`
+            : "unknown";
+    return entry.configured ? `configured · ${health}` : `no API key · ${health}`;
+  };
 
   content.innerHTML = `
     <h3>${icon("i-gear")} Settings</h3>
@@ -1199,6 +1226,36 @@ async function openSettings() {
            </div>`
     }
     <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;"></p>
+
+    <h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
+    <label>Default intelligence provider
+      <select id="cfg-intel-default" style="${fieldStyle}">
+        ${intelProviders
+          .map(
+            (p) =>
+              `<option value="${p}" ${p === (intelligence.default_provider || "disabled") ? "selected" : ""}>${p}</option>`,
+          )
+          .join("")}
+      </select>
+    </label>
+    <label>OpenAI model
+      <input id="cfg-intel-openai-model" type="text" value="${escapeAttr(intelligence.openai?.model ?? "gpt-4o-mini")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 0 0 4px;">OpenAI · ${escapeAttr(intelStatusLine("openai"))}</p>
+    <label>OpenAI API key (stored encrypted locally; leave blank to keep current)
+      <input id="cfg-intel-openai-key" type="password" autocomplete="off" placeholder="sk-…" style="${fieldStyle}">
+    </label>
+    <button class="btn btn--ghost btn--small" type="button" data-intel-test="openai">Test OpenAI connection</button>
+    <label style="margin-top: 12px;">Anthropic model
+      <input id="cfg-intel-anthropic-model" type="text" value="${escapeAttr(intelligence.anthropic?.model ?? "claude-sonnet-4-20250514")}" style="${fieldStyle}">
+    </label>
+    <p class="panel__hint" style="margin: 0 0 4px;">Anthropic · ${escapeAttr(intelStatusLine("anthropic"))}</p>
+    <label>Anthropic API key (stored encrypted locally; leave blank to keep current)
+      <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
+    </label>
+    <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
+    <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>
 
     <h4 style="color: #8d7bff; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1319,7 +1376,35 @@ async function saveSettings() {
   settingsConfig.audit.retention_keep_last = posIntOrNull("cfg-audit-keep-last");
   settingsConfig.audit.retention_keep_days = posIntOrNull("cfg-audit-keep-days");
 
+  if (!settingsConfig.intelligence) {
+    settingsConfig.intelligence = {
+      default_provider: "disabled",
+      openai: { model: "gpt-4o-mini", timeout_seconds: 60, max_input_bytes: 32768 },
+      anthropic: { model: "claude-sonnet-4-20250514", timeout_seconds: 60, max_input_bytes: 32768 },
+      routing: { allow_fallback: false, local_only_for_sensitive_data: true, maximum_remote_payload_bytes: 32768 },
+    };
+  }
+  settingsConfig.intelligence.default_provider =
+    document.getElementById("cfg-intel-default")?.value || "disabled";
+  if (!settingsConfig.intelligence.openai) settingsConfig.intelligence.openai = {};
+  if (!settingsConfig.intelligence.anthropic) settingsConfig.intelligence.anthropic = {};
+  settingsConfig.intelligence.openai.model =
+    document.getElementById("cfg-intel-openai-model")?.value?.trim() ||
+    settingsConfig.intelligence.openai.model;
+  settingsConfig.intelligence.anthropic.model =
+    document.getElementById("cfg-intel-anthropic-model")?.value?.trim() ||
+    settingsConfig.intelligence.anthropic.model;
+
+  const openaiKey = document.getElementById("cfg-intel-openai-key")?.value?.trim();
+  const anthropicKey = document.getElementById("cfg-intel-anthropic-key")?.value?.trim();
+
   try {
+    if (openaiKey) {
+      await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
+    }
+    if (anthropicKey) {
+      await invoke("intelligence_set_api_key", { provider: "anthropic", apiKey: anthropicKey });
+    }
     await invoke("update_config", { config: settingsConfig });
     // Reflect the new default speed in the picker and live state.
     playbackSpeed = settingsConfig.replay.default_speed;
@@ -1337,6 +1422,37 @@ async function saveSettings() {
 // Identity only: links who the user is, for a future stack integration
 // (Fabric/Power BI, Google Cloud, AI-assistant connectors) to request access
 // under. Does not gate the app and does not move workflow/organizer data.
+async function signOutAccount() {
+  if (!invoke) return notAvailable();
+  try {
+    await invoke("account_sign_out");
+    showNotification("Signed out.");
+    openSettings();
+  } catch (error) {
+    toastError(`Sign-out failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function testIntelligenceProvider(provider) {
+  if (!invoke) return notAvailable();
+  const note = document.getElementById("intel-test-note");
+  if (note) note.textContent = `Testing ${provider}…`;
+  try {
+    const result = await invoke("intelligence_test_provider", { provider });
+    const health =
+      typeof result.health === "string"
+        ? result.health
+        : result.health?.degraded?.reason ||
+          result.health?.unavailable?.reason ||
+          JSON.stringify(result.health);
+    if (note) note.textContent = `${provider}: ${health}`;
+    showNotification(`${provider} test: ${health}`);
+  } catch (error) {
+    if (note) note.textContent = `${provider} test failed.`;
+    toastError(formatInvokeError(error));
+  }
+}
+
 async function signInWithProvider(provider) {
   if (!invoke) return notAvailable();
   const note = document.getElementById("account-status-note");
@@ -1349,18 +1465,6 @@ async function signInWithProvider(provider) {
     console.error("Sign-in failed:", error);
     if (note) note.textContent = `Sign-in failed: ${formatInvokeError(error)}`;
     else toastError(`Sign-in failed: ${formatInvokeError(error)}`);
-  }
-}
-
-async function signOutAccount() {
-  if (!invoke) return notAvailable();
-  try {
-    await invoke("account_sign_out");
-    showNotification("Signed out.");
-    openSettings();
-  } catch (error) {
-    console.error("Sign-out failed:", error);
-    toastError(`Sign-out failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -3196,6 +3300,12 @@ function wireUpControls() {
     const signOutTarget = e.target.closest("[data-account-sign-out]");
     if (signOutTarget) {
       signOutAccount();
+      return;
+    }
+
+    const intelTestTarget = e.target.closest("[data-intel-test]");
+    if (intelTestTarget) {
+      testIntelligenceProvider(intelTestTarget.dataset.intelTest);
     }
   });
 }
