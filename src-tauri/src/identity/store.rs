@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 const BUNDLE_VERSION: u32 = 1;
 
+#[derive(Clone)]
 pub struct IdentityStore {
     path: PathBuf,
 }
