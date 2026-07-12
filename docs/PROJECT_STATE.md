@@ -1,6 +1,6 @@
 # Ghost — Technical State of the Project
 
-> Snapshot for context (as of 2026-07-11, `master` @ v1.2.7).
+> Snapshot for context (as of 2026-07-12, `master` @ `f274f67`, v1.2.7).
 > Audience: engineers picking this up to push it to a YC-submission bar.
 > Everything below is grounded in the actual code in this repo — file paths and
 > symbols are real and clickable.
@@ -28,8 +28,11 @@ scan → propose → approve → move/rename → audit → undo). Recording/repl
 cross-app routines is the second layer and is partially built. AI/"Intelligence"
 is deliberately last and is feature-gated off by default.
 
-**Version:** `1.2.7` (`src-tauri/Cargo.toml`). ~20k lines of Rust across
+**Version:** `1.2.7` (`src-tauri/Cargo.toml`). ~29k lines of Rust across
 `src-tauri/src` plus a no-build-step vanilla JS/HTML/CSS frontend in `src/`.
+Account sign-in (Microsoft/Google OAuth + PKCE) is wired for identity only —
+see `docs/integrations-roadmap.md`; it does not gate the app or move data off
+the machine by itself.
 
 ---
 
@@ -48,8 +51,9 @@ docs/                   Planning + technical docs (this file lives here).
 
 | Area | Path | Role |
 |---|---|---|
-| App wiring + IPC registry | `src-tauri/src/lib.rs` | `tauri::generate_handler!` lists **81 commands**; experimental ones `#[cfg(feature = "experimental")]` |
-| Command bridge | `src-tauri/src/commands/` | Thin IPC layer: `core.rs`, `organizer.rs`, `auth.rs`, `compression.rs`, `diagnostics.rs`, `updates.rs`, `experimental.rs` |
+| App wiring + IPC registry | `src-tauri/src/lib.rs` | `tauri::generate_handler!` lists **65 stable commands**; **30 more** register only with `#[cfg(feature = "experimental")]` |
+| Command bridge | `src-tauri/src/commands/` | Thin IPC layer: `core.rs`, `organizer.rs`, `auth.rs`, `account.rs`, `compression.rs`, `diagnostics.rs`, `filing.rs`, `updates.rs`, `experimental.rs` |
+| Account identity | `src-tauri/src/accounts.rs`, `core/oauth.rs` | Microsoft/Google OAuth 2.0 + PKCE; identity link only, encrypted at rest when a vault password is set |
 | **Policy engine** | `src-tauri/src/policy/` | Pure, deny-by-default trust evaluation. No IO. |
 | **Organizer** | `src-tauri/src/organizer/` | scanner → classifier → naming → conflict → planner → executor → undo |
 | **Audit + undo** | `src-tauri/src/audit/` | Append-only audit log + undo journal (pure data) |
@@ -156,13 +160,16 @@ seal and are reported as "unsealed, pre-upgrade" rather than as tampering.
 ## 4. Data + storage (`src-tauri/src/storage/`)
 
 SQLite via `rusqlite`, with **forward-only versioned migrations**
-(`migrations.rs`, `LATEST_VERSION = 5`):
+(`migrations.rs`, `LATEST_VERSION = 6`):
 
 - v1–v3: Zones, folder rules, execution history, `rename_dated` opt-in.
 - v4: per-rule `trust_level` (`automate`/`ask_first`/`never`, CHECK-constrained;
   existing rules default to `ask_first`) + a local `organizer_milestones` table
   (time-to-first-value instrumentation).
 - v5: `hash` + `prev_hash` columns for the tamper-evident chain above.
+- v6: `finished` column on `organizer_executions` for write-ahead durability —
+  a crash mid-run leaves a recoverable `finished = 0` row instead of losing the
+  undo journal for already-applied steps.
 
 All local. No cloud dependency in the stock build.
 
@@ -170,7 +177,8 @@ All local. No cloud dependency in the stock build.
 
 ## 5. Command surface (`src-tauri/src/lib.rs`)
 
-**81 registered Tauri commands.** They split cleanly:
+**65 stable + 30 experimental Tauri commands** (95 registered in total). They
+split cleanly:
 
 - **Stable core (always compiled):** recording/replay (`start_recording`,
   `replay_workflow`, `dry_run_workflow`, `get_replay_progress`,
@@ -178,8 +186,12 @@ All local. No cloud dependency in the stock build.
   workflow storage, permissions (`check/request_accessibility`,
   `*_input_monitoring`, `restart_app`), `compress_workflow`, signed updater
   (`check_for_update` / `install_update`), local auth
-  (`auth_setup/unlock/lock/status`), config/telemetry/diagnostics, the full
-  `organizer_*` surface, and `is_experimental_enabled`.
+  (`auth_setup/unlock/lock/status`), account sign-in
+  (`account_status` / `account_sign_in` / `account_sign_out`), config/telemetry/diagnostics,
+  the full `organizer_*` surface (including crash-recovery
+  `organizer_check_unfinished_run` / `organizer_dismiss_unfinished_run`),
+  read-only filing preview (`preview_file_filing`, `estimate_filing_savings`),
+  and `is_experimental_enabled`.
 - **Experimental (`#[cfg(feature = "experimental")]`):** AI analysis, workflow
   generation from prompt, cloud sync, analytics, visual checks. **A stock build
   neither registers nor exposes these**; the frontend hides the panel unless the
@@ -219,6 +231,13 @@ resolution, double-click preservation.
 - **Ghost Organizer end-to-end trust pipeline** — plan (read-only) → policy →
   approval → execute (re-checked, undo-before-mutate, no overwrite/delete) →
   audit → undo. Fully wired to `organizer_*` commands and the app UI.
+- **Write-ahead execution durability** — `organizer_execute` persists the undo
+  journal after every action; a crash mid-run surfaces via
+  `organizer_check_unfinished_run` with undo-or-dismiss recovery.
+- **Account sign-in (identity only)** — Microsoft/Google OAuth + PKCE via
+  `commands/account.rs` and `core/oauth.rs`; stored encrypted when a vault
+  password is configured. No Fabric/Power BI/Google Cloud/AI-assistant data
+  access is granted by sign-in alone.
 - **Deny-by-default policy engine** with per-rule trust levels and rule
   attribution, pure and heavily unit-tested.
 - **Tamper-evident, offline-verifiable audit chain** over executions.
@@ -229,8 +248,9 @@ resolution, double-click preservation.
 - **Local at-rest protection** — `argon2` + `aes-gcm` (see `auth.rs`).
 - **CI green on all three OSes** — Check / Test / Clippy / Rustfmt + a
   `cargo tauri build --no-bundle` smoke test on macOS & Windows (`rust.yml`).
-  363 backend tests + integration suites (`ipc_contract`, `resolution_benchmark`,
-  `canonical_workflows`, `frontend_dom_contract`) pass. An IPC-contract test
+  530 lib tests + 34 integration-suite tests (`ipc_contract`,
+  `resolution_benchmark`, `canonical_workflows`, `frontend_dom_contract`,
+  `e2e`, `integration_test`) pass. An IPC-contract test
   asserts the frontend only invokes registered commands with matching params;
   a DOM-contract test asserts every `getElementById` the JS looks up is authored
   in the markup.
@@ -280,10 +300,15 @@ Assume the intent is "we have the accounts; wire the secrets." The touch points:
   provider, not the repo.
 - **Experimental AI/cloud** — any model/cloud credentials only matter under
   `--features experimental`; the stock product needs none.
+- **OAuth client IDs (optional)** — account sign-in requires an operator-supplied
+  Microsoft or Google public-client ID (`integrations.*` config or
+  `GHOST_MS_CLIENT_ID` / `GHOST_GOOGLE_CLIENT_ID` for local dev). Ghost ships
+  with none of its own; sign-in is unavailable until configured.
 - **Local user data** — SQLite DB + workflows live under the OS app-data dir
   (`dirs`), optionally encrypted at rest via the local password (`auth.rs`).
 
 No secrets are required to build, test, or run the core product locally.
+Account sign-in and auto-update are optional and need operator configuration.
 
 ---
 
@@ -321,7 +346,7 @@ signing), not a rewrite of the trust foundation.
 # System deps (Linux): GTK/webkit + libxdo (see AGENTS.md). macOS/Windows: none extra.
 cargo fmt   --manifest-path src-tauri/Cargo.toml -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --all-targets
-cargo test  --manifest-path src-tauri/Cargo.toml          # 363 + integration suites
+cargo test  --manifest-path src-tauri/Cargo.toml          # 530 lib + 34 integration
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo tauri build --no-bundle                             # compile smoke test
 # Makefile shortcuts: `make ci` (fmt+clippy+test), `make check`, `make build`, `make dev`.

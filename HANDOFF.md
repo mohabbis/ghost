@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
-**Last Updated:** 2026-07-11
-**Status:** `master` green. **v1.2.7 release candidate prepared** (tag push will build `Ghost.dmg` + `Ghost_Setup.exe`). v1.2.5 and v1.2.6 were version-bumped in `Cargo.toml`/`tauri.conf.json` but the required `git tag vX.Y.Z && git push origin vX.Y.Z` step (see `RELEASING.md`) was never run, so no release was published for either — the last published GitHub Release is still `v1.2.4`. This bump also picks up a CI fix: `rusqlite` 0.40.1 pulled in a `libsqlite3-sys` 0.38.1 whose build script used the unstable `cfg_select!` macro and failed to compile on stable Rust, and `diagnose_perms.rs` had no `target_os` gate, breaking `cargo check --all-targets` on Linux/Windows. Professional polish in progress: atomic release publish + checksums, marketing honesty, app error/version UX plus PRs 150-160 release consolidation.
+**Last Updated:** 2026-07-12
+**Status:** `master` @ `f274f67` (v1.2.7). CI green on all three OSes. Recent merges: write-ahead Organizer crash recovery (#181), Microsoft/Google account sign-in (#182), finance reconciliation matcher (#179), pixel template-match replay fallback (#178). **Release gap remains:** `Cargo.toml`/`tauri.conf.json` are at `1.2.7` but the updater pubkey is still `REPLACE_WITH_OUTPUT_OF_cargo_tauri_signer_generate` and the last published GitHub Release may lag the repo version — verify `https://github.com/mohabbis/ghost/releases` before claiming a download version. See `RELEASING.md` for tag push + signing secrets.
 
 ---
 
@@ -13,33 +13,41 @@ You are inheriting **Ghost**, a Tauri (Rust + vanilla JS) local-first desktop au
 Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 ```
 
-The current wedge is **Ghost Organizer** (safe file organization: scan → plan → review → approve → move/rename → audit → undo), fully wired end to end through the policy engine, executor, audit log, and undo journal.
+The current wedge is **Ghost Organizer** (safe file organization: scan → plan → review → approve → move/rename → audit → undo), fully wired end to end through the policy engine, executor, audit log, and undo journal. Account sign-in (Microsoft/Google) is wired for **identity only** — see `docs/integrations-roadmap.md`.
 
 ---
 
-## Recent Changes (through v1.2.7 + polish)
+## Recent Changes (through v1.2.7 + PRs #178–#182)
 
-0. **v1.2.7:** fixed `master`'s broken build (`rusqlite`/`libsqlite3-sys` unstable-macro regression, missing test helper, unguarded macOS-only bin) and published the release tag that v1.2.5/v1.2.6 skipped.
-1. **v1.2.4:** ID-scan OCR hardening, DOM contract test, signing-docs fix, version bump.
-2. **Release pipeline:** single publish job after both platform builds; `SHA256SUMS.txt`; optional updater artifacts / `latest.json` when keys exist; no more Mac-only or Windows-only partial releases.
-3. **Product polish:** platform-neutral copy, honest signing/preview language, readable IPC error toasts, Settings shows app version.
+0. **Account sign-in (#182):** `account_status` / `account_sign_in` / `account_sign_out` via OAuth 2.0 + PKCE (`core/oauth.rs`, `accounts.rs`); Settings modal in `src/main.js`. Identity link only — no data-access grant to Fabric/Power BI/Google Cloud/AI assistants yet. Requires operator-supplied client IDs.
+1. **Write-ahead Organizer durability (#181):** `organizer_execute` now persists undo journal progress after every action (`begin_execution` / `update_execution_progress` / `finish_execution`); crash mid-run surfaces via `organizer_check_unfinished_run` with undo-or-dismiss UI.
+2. **Replay template-match fallback (#178):** pure-Rust pixel template matching as last resort in the resolution chain (`core/template_match.rs`).
+3. **Finance reconciliation matcher (#179):** deterministic reconciliation scaffolding in `finance/`.
+4. **v1.2.7 build fix:** `rusqlite` pin below 0.40 (stable-Rust `cfg_select!` regression), macOS-only `diagnose_perms.rs` gate.
+5. **Release pipeline (earlier PRs):** single publish job, `SHA256SUMS.txt`, optional updater artifacts / `latest.json` when signing secrets exist.
+6. **Product polish:** platform-neutral copy, honest signing/preview language, readable IPC error toasts, Settings shows app version, in-app "What is Ghost?" explainer, audience-aware filing preview.
+
+For a full technical snapshot see `docs/PROJECT_STATE.md`.
 
 ---
 
 ## Current Health
 
 - Rust CI + Deploy Website on `master`.
-- Validation: `make ci` (fmt + clippy + test), `make build`, `make dev`.
+- **564 tests pass** locally (530 lib + 34 integration suites); `make ci` covers fmt + clippy + test.
 - Local Linux needs GTK/webkit deps in `AGENTS.md` plus `libssl-dev` / `pkg-config`.
+- **65 stable + 30 experimental** Tauri commands registered in `lib.rs`.
 
 ---
 
 ## Immediate Next Steps
 
-1. **Notarization / Windows signing secrets** so releases stop being ad-hoc/unsigned. See `RELEASING.md`.
+1. **Publish v1.2.7 release** (or align site/README to the actual latest GitHub Release). Tag push builds `Ghost.dmg` + `Ghost_Setup.exe`. See `RELEASING.md`.
 2. **Updater pubkey:** replace `REPLACE_WITH_…` in `tauri.conf.json` and set `TAURI_SIGNING_PRIVATE_KEY` so `latest.json` publishes automatically.
-3. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
-4. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
+3. **Notarization / Windows signing secrets** so releases stop being ad-hoc/unsigned. See `RELEASING.md`.
+4. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
+5. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
+6. **Close the Routines loop** — route compressed replay steps through guard + policy + approval + undo (biggest gap vs Organizer; see `docs/PROJECT_STATE.md` §10).
 
 ---
 
