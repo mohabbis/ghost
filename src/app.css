@@ -153,8 +153,10 @@
 .advanced-tools .btn-row { margin-top: 8px; }
 
 /* Contextual sidebar: recording-specific rail sections (Ghost Guard, workflow
-   health, event timeline) belong to Record/Workflows, not the Organize wedge. */
-body[data-view="organize"] .rail-record { display: none; }
+   health, event timeline) belong to Record/Workflows, not Organizer/Filing/Guard. */
+body[data-view="organize"] .rail-record,
+body[data-view="filing"] .rail-record,
+body[data-view="guard-desk"] .rail-record { display: none; }
 
 .app-grid {
   display: grid;
@@ -637,6 +639,11 @@ body[data-view="organize"] .rail-record { display: none; }
 .notification--error {
   border-color: rgba(239, 68, 68, 0.48);
   background: rgba(239, 68, 68, 0.12);
+}
+
+.notification--warn {
+  border-color: rgba(245, 158, 11, 0.48);
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .notification__text {
