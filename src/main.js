@@ -1265,10 +1265,12 @@ async function openSettings() {
   } catch (error) {
     console.error("Failed to load account status:", error);
   }
-  try {
-    intelStatus = await invoke("intelligence_provider_status");
-  } catch (error) {
-    console.error("Failed to load intelligence provider status:", error);
+  if (experimentalEnabled) {
+    try {
+      intelStatus = await invoke("intelligence_provider_status");
+    } catch (error) {
+      console.error("Failed to load intelligence provider status:", error);
+    }
   }
 
   const modal = document.getElementById("settings-modal");
@@ -1320,35 +1322,39 @@ async function openSettings() {
     }
     <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;"></p>
 
-    <h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
-    <label>Default intelligence provider
-      <select id="cfg-intel-default" style="${fieldStyle}">
-        ${intelProviders
-          .map(
-            (p) =>
-              `<option value="${p}" ${p === (intelligence.default_provider || "disabled") ? "selected" : ""}>${p}</option>`,
-          )
-          .join("")}
-      </select>
-    </label>
-    <label>OpenAI model
-      <input id="cfg-intel-openai-model" type="text" value="${escapeAttr(intelligence.openai?.model ?? "gpt-4o-mini")}" style="${fieldStyle}">
-    </label>
-    <p class="panel__hint" style="margin: 0 0 4px;">OpenAI · ${escapeAttr(intelStatusLine("openai"))}</p>
-    <label>OpenAI API key (stored encrypted locally; leave blank to keep current)
-      <input id="cfg-intel-openai-key" type="password" autocomplete="off" placeholder="sk-…" style="${fieldStyle}">
-    </label>
-    <button class="btn btn--ghost btn--small" type="button" data-intel-test="openai">Test OpenAI connection</button>
-    <label style="margin-top: 12px;">Anthropic model
-      <input id="cfg-intel-anthropic-model" type="text" value="${escapeAttr(intelligence.anthropic?.model ?? "claude-sonnet-4-20250514")}" style="${fieldStyle}">
-    </label>
-    <p class="panel__hint" style="margin: 0 0 4px;">Anthropic · ${escapeAttr(intelStatusLine("anthropic"))}</p>
-    <label>Anthropic API key (stored encrypted locally; leave blank to keep current)
-      <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
-    </label>
-    <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
-    <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>
+    ${
+      experimentalEnabled
+        ? `<h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
+           <label>Default intelligence provider
+             <select id="cfg-intel-default" style="${fieldStyle}">
+               ${intelProviders
+                 .map(
+                   (p) =>
+                     `<option value="${p}" ${p === (intelligence.default_provider || "disabled") ? "selected" : ""}>${p}</option>`,
+                 )
+                 .join("")}
+             </select>
+           </label>
+           <label>OpenAI model
+             <input id="cfg-intel-openai-model" type="text" value="${escapeAttr(intelligence.openai?.model ?? "gpt-4o-mini")}" style="${fieldStyle}">
+           </label>
+           <p class="panel__hint" style="margin: 0 0 4px;">OpenAI · ${escapeAttr(intelStatusLine("openai"))}</p>
+           <label>OpenAI API key (stored encrypted locally; leave blank to keep current)
+             <input id="cfg-intel-openai-key" type="password" autocomplete="off" placeholder="sk-…" style="${fieldStyle}">
+           </label>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-test="openai">Test OpenAI connection</button>
+           <label style="margin-top: 12px;">Anthropic model
+             <input id="cfg-intel-anthropic-model" type="text" value="${escapeAttr(intelligence.anthropic?.model ?? "claude-sonnet-4-20250514")}" style="${fieldStyle}">
+           </label>
+           <p class="panel__hint" style="margin: 0 0 4px;">Anthropic · ${escapeAttr(intelStatusLine("anthropic"))}</p>
+           <label>Anthropic API key (stored encrypted locally; leave blank to keep current)
+             <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
+           </label>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
+           <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>`
+        : ""
+    }
 
     <h4 style="color: #8d7bff; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1496,11 +1502,13 @@ async function saveSettings() {
   if (saveBtn) saveBtn.disabled = true;
 
   try {
-    if (openaiKey) {
-      await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
-    }
-    if (anthropicKey) {
-      await invoke("intelligence_set_api_key", { provider: "anthropic", apiKey: anthropicKey });
+    if (experimentalEnabled) {
+      if (openaiKey) {
+        await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
+      }
+      if (anthropicKey) {
+        await invoke("intelligence_set_api_key", { provider: "anthropic", apiKey: anthropicKey });
+      }
     }
     await invoke("update_config", { config: settingsConfig });
     // Reflect the new default speed in the picker and live state.
@@ -1534,6 +1542,7 @@ async function signOutAccount() {
 
 async function testIntelligenceProvider(provider) {
   if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
   const note = document.getElementById("intel-test-note");
   if (note) note.textContent = `Testing ${provider}…`;
   try {

@@ -1,5 +1,10 @@
 //! Internal intelligence provider commands (suggestion-only, no execution).
 //!
+//! Stability: experimental — gated behind `--features experimental`; this
+//! module is not compiled and these commands are not registered or
+//! reachable in stock builds. See `docs/integrations-roadmap.md` and
+//! `docs/ai-provider-architecture.md`.
+//!
 //! Command: `intelligence_provider_status` | risk: `safe-read`
 //! Command: `intelligence_set_api_key` | risk: `local-mutate` | stores encrypted key
 //! Command: `intelligence_clear_api_key` | risk: `local-mutate`

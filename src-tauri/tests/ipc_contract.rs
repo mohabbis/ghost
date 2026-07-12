@@ -57,6 +57,9 @@ fn registered_commands() -> HashSet<String> {
     parse_command_lines(&read("src/lib.rs"))
 }
 
+// Only consumed by `#[cfg(not(feature = "experimental"))]` tests below, so an
+// `--features experimental` build sees it as unused — pre-existing, harmless.
+#[cfg_attr(feature = "experimental", allow(dead_code))]
 fn experimental_only_commands() -> HashSet<String> {
     let lib = read("src/lib.rs");
     let mut in_experimental = false;
@@ -129,6 +132,73 @@ fn stock_build_observer_learn_is_gated() {
     assert!(
         body.contains("experimentalEnabled"),
         "observerLearnFromSession must gate on experimentalEnabled in stock builds"
+    );
+}
+
+/// The Settings modal's AI Providers status fetch must stay gated in stock
+/// builds — `intelligence_provider_status` is experimental-only.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_open_settings_gates_intelligence_status_call() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function openSettings\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("openSettings must exist").as_str();
+    let idx = body
+        .find("intelligence_provider_status")
+        .expect("openSettings must still reference intelligence_provider_status when gated");
+    let before = &body[..idx];
+    assert!(
+        before.rfind("experimentalEnabled").is_some(),
+        "openSettings must gate intelligence_provider_status on experimentalEnabled"
+    );
+}
+
+/// Both `intelligence_set_api_key` calls in `saveSettings` must stay gated
+/// in stock builds.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_save_settings_gates_intelligence_set_api_key_calls() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function saveSettings\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("saveSettings must exist").as_str();
+    let mut search_from = 0usize;
+    let mut found = 0usize;
+    while let Some(rel_idx) = body[search_from..].find("intelligence_set_api_key") {
+        let idx = search_from + rel_idx;
+        let before = &body[..idx];
+        assert!(
+            before.rfind("experimentalEnabled").is_some(),
+            "saveSettings must gate every intelligence_set_api_key call on experimentalEnabled"
+        );
+        found += 1;
+        search_from = idx + "intelligence_set_api_key".len();
+    }
+    assert_eq!(
+        found, 2,
+        "expected both the OpenAI and Anthropic intelligence_set_api_key calls in saveSettings"
+    );
+}
+
+/// `testIntelligenceProvider` must refuse to call `intelligence_test_provider`
+/// in stock builds.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_test_intelligence_provider_is_gated() {
+    let js = read("../src/main.js");
+    let re =
+        regex::Regex::new(r"(?s)async function testIntelligenceProvider\(provider\)\s*\{.*?\n\}")
+            .unwrap();
+    let body = re
+        .find(&js)
+        .expect("testIntelligenceProvider must exist")
+        .as_str();
+    let idx = body.find("intelligence_test_provider").expect(
+        "testIntelligenceProvider must still reference intelligence_test_provider when gated",
+    );
+    let before = &body[..idx];
+    assert!(
+        before.rfind("experimentalEnabled").is_some(),
+        "testIntelligenceProvider must gate intelligence_test_provider on experimentalEnabled"
     );
 }
 

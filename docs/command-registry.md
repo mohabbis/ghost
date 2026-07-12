@@ -29,7 +29,7 @@ Use the right module, then re-export/register from the registry layer.
 | `commands/core.rs` | Stable local automation: permissions, recording, replay, inspection, workflow storage | explicit, tested, user-started |
 | `commands/auth.rs` | Local password state and at-rest workflow protection | local-only, no network dependency |
 | `commands/account.rs` | Microsoft/Google OAuth sign-in (identity only, no data movement) | network-scoped to the provider's own authorize/token/userinfo endpoints; no other outbound calls |
-| `commands/intelligence.rs` | Internal intelligence providers (suggestion-only Organizer planning) | explicit API keys (encrypted at rest), redacted metadata outbound, no execution |
+| `commands/intelligence.rs` | Internal intelligence providers (suggestion-only Organizer planning) — **experimental**, gated behind `--features experimental` | explicit API keys (encrypted at rest), redacted metadata outbound, no execution |
 | `commands/diagnostics.rs` | Config summaries, telemetry export, performance/debug data | read-first, redacted, user-initiated export |
 | `commands/updates.rs` | Signed auto-update: read-only check + user-approved install | signature-verified, user-gated install |
 | `commands/organizer.rs` | Ghost Organizer: Zone/rule management + plan/execute/undo for safe file organization | policy-gated, read-only plan, audited + undoable execution |
@@ -167,15 +167,15 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `account_sign_in` | stable | ✓ | – | – | ✓ | ✓ | – | high | Opens the system browser (OAuth 2.0 + PKCE) and a loopback listener, then calls the provider's token + userinfo endpoints. Requires `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID`) to be configured, else fails with an actionable error. Errors on state mismatch, cancellation, or a non-2xx provider response. Identity only — establishes no data-access grant to any other product surface. |
 | `account_sign_out` | stable | ✓ | – | – | – | ✓ | – | low | Deletes the local linked-account record. Does not revoke provider-side consent — the user should also remove Ghost from their account's connected-apps list if they want that. |
 
-### `commands/intelligence.rs` — internal intelligence providers (stable, suggestion-only)
+### `commands/intelligence.rs` — internal intelligence providers (experimental, suggestion-only)
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
-| `intelligence_provider_status` | stable | ✓ | – | – | ~ | ✓ | – | low | Reports configured state and health per provider; never returns API keys. |
-| `intelligence_set_api_key` | stable | ✓ | – | – | – | ✓ | – | medium | Encrypts and stores provider API key locally (`intelligence-secrets.json`). |
-| `intelligence_clear_api_key` | stable | ✓ | – | – | – | ✓ | – | low | Removes one provider key from local storage. |
-| `intelligence_test_provider` | stable | – | – | – | ✓ | ✓ | – | medium | Network health check (OpenAI models list; Anthropic configured check). |
-| `intelligence_propose_plan` | stable | ~ | – | – | ✓ | ✓ | – | high | Sends redacted file metadata to the configured provider; returns a `PlanningSuggestion` only — **never executes**. Blocks confidential/secret payloads when local-only routing is enabled. |
+| `intelligence_provider_status` | experimental | ✓ | – | – | ~ | ✓ | – | low | Reports configured state and health per provider; never returns API keys. |
+| `intelligence_set_api_key` | experimental | ✓ | – | – | – | ✓ | – | medium | Encrypts and stores provider API key locally (`intelligence-secrets.json`). |
+| `intelligence_clear_api_key` | experimental | ✓ | – | – | – | ✓ | – | low | Removes one provider key from local storage. |
+| `intelligence_test_provider` | experimental | – | – | – | ✓ | ✓ | – | medium | Network health check (OpenAI models list; Anthropic configured check). |
+| `intelligence_propose_plan` | experimental | ~ | – | – | ✓ | ✓ | – | high | Sends redacted file metadata to the configured provider; returns a `PlanningSuggestion` only — **never executes**. Blocks confidential/secret payloads when local-only routing is enabled. |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 
