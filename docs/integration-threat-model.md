@@ -24,7 +24,7 @@ If yes, the design is wrong.
 | Excessive OAuth scopes | **built** — identity scopes separate from Fabric/PBI grants |
 | Tenant confusion (wrong Microsoft tenant) | **partially built** — `tenant_id` on identity; UI **planned** |
 | Cross-account data leakage | **planned** — grant scoped to `account_id` |
-| Silent data export | **built** — no export commands yet; design requires preview + approval |
+| Silent data export | **built** — Power BI export requires an active, explicit grant (separate from identity) and re-derives the payload server-side from live data rather than trusting a frontend-supplied one, so a push can never diverge from what local execution history actually contains. The Settings UI additionally requires a preview to have been shown before the push button enables, but — like other approve-gated actions in Ghost — that ordering is enforced in the UI layer, not by a server-side token binding preview to push (no plan-hash-style mechanism yet, unlike `organizer_execute`); the desktop UI is the trusted caller, per `docs/core-boundaries.md`. |
 | Auto-approval by AI client | **built** — MCP tools cannot approve; documented denial |
 
 ## Layer separation

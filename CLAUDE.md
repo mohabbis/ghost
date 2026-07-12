@@ -146,7 +146,7 @@ src-tauri/src/
   bin/diagnose_perms.rs  # macOS-only dev binary: reports Accessibility/Input Monitoring grant state via IOKit
   engine.rs              # recording/replay engine state
   auth.rs, accounts.rs, config.rs, error.rs, performance.rs, telemetry.rs
-                         # accounts.rs: persisted OAuth account link (Microsoft/Google), independent of the vault password in auth.rs
+                         # accounts.rs: thin compatibility shim over identity/ (see below), independent of the vault password in auth.rs
   commands.rs            # thin registry/re-export over commands/
   commands/
     core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions, Ghost Guard audit, OCR, ID parsing
@@ -157,7 +157,16 @@ src-tauri/src/
     organizer.rs         # organizer_plan/_execute/_list_executions/_undo, audit export, signed-report verify, policy pack import/export, audit-chain verify, time-to-value
     filing.rs            # preview_file_filing / estimate_filing_savings (read-only, audience-aware filing preview: Finance/Student/Engineering)
     updates.rs           # updater surface
+    intelligence.rs       # experimental (feature-gated): internal suggestion-only OpenAI/Anthropic planning providers
+    integrations.rs       # experimental (feature-gated): Power BI audit-export grant flow/preview/push (docs/power-bi-integration.md)
     experimental.rs      # AI, observer, cloud sync, analytics, visual checks (feature-gated)
+  identity/               # Layer A: account identity + integration grants, separate from the vault password
+    types.rs, store.rs, errors.rs
+    oauth/                # pkce.rs, provider.rs, callback.rs, flow.rs (run_sign_in_flow + run_grant_flow, sharing one authorize_and_exchange core)
+  integrations/           # Layer B: business-system connectors, gated behind their own IntegrationGrant
+    microsoft/            # mod.rs (grant checks + Power BI grant request), scopes.rs, fabric/ (stub), power_bi/ (real HTTP client + export.rs payload builder)
+  intelligence/           # Layer C: internal suggestion-only AI providers (OpenAI/Anthropic), feature-gated
+  mcp/                    # tool/approval-token scaffolding for a future MCP server; no transport yet (docs/mcp-integration.md)
   core/
     compress.rs          # deterministic text compression for LLM-bound content
     compression/         # deterministic event compression for workflow review
@@ -167,7 +176,7 @@ src-tauri/src/
     dry_run.rs           # pure per-step replay preview (typed text excluded)
     id_scan.rs           # deterministic identity-document field parsing (stable; text in, no image/AI)
     ocr.rs               # stable: local OCR (macOS Vision / Windows OCR) over user-supplied image bytes, no network
-    oauth.rs             # stable: OAuth 2.0 + PKCE flow (Microsoft/Google) for account sign-in — the only place Ghost opens the system browser or calls an identity-provider endpoint
+    oauth.rs             # thin compatibility re-export of identity/oauth/ for older imports — new code should import identity:: directly
     guard.rs             # Ghost Guard: keyboard-suppression heuristics + deterministic pre-replay/save workflow audit (docs/GHOST_GUARD.md)
     events.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
     ai.rs, cloud.rs, llm.rs, local_llm.rs, vision.rs, knowledge.rs   # experimental-facing
@@ -226,7 +235,9 @@ Also built: target resilience. Capture stores window-level locator context on `E
 
 Also built: pixel template-match fallback, the last resort in that same resolution chain, for elements a semantic lookup can't find (descriptor changed, or none was ever recorded) but whose pixels haven't. `core/template_match.rs` is pure Rust over the `image` crate already in the dependency tree (normalized cross-correlation, 4x downsampled, nearest-neighbor to avoid blurring template edges) — deliberately not an `opencv-rust` binding, since OpenCV needs a prebuilt system library this repo's 3-OS CI matrix doesn't install. `ElementInfo.template_png` (a small screenshot crop) is only captured when the opt-in `PerformanceSettings.capture_element_templates` is enabled (off by default — capturing a screenshot per recorded click adds latency to recording); `engine.rs::buffer_event` is the single cross-platform capture point.
 
-Also built: account sign-in. `commands/account.rs` + `core/oauth.rs` implement "Sign in with Microsoft" / "Sign in with Google" as a public-client OAuth 2.0 + PKCE flow (no client secret): the system browser opens to the provider's consent screen, a loopback listener on an OS-assigned port receives the redirect, and the resulting profile (email/name, plus a refresh token if the provider issued one) is stored via `accounts.rs`, encrypted at rest through the same `AuthManager::protect`/`reveal` envelope as workflow files whenever a vault password is configured. This is an identity link, not a data-access grant — signing in does not itself move workflow/organizer data anywhere, and it needs `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID` for local dev) configured before it will do anything, since Ghost ships with no client IDs of its own. The Settings modal in `src/main.js` surfaces sign-in/sign-out. See `docs/integrations-roadmap.md` for how this identity is meant to be reused by future Fabric/Power BI, Google Cloud, and AI-assistant-connector integrations, none of which exist yet.
+Also built: account sign-in. `commands/account.rs` + `identity/oauth/flow.rs` implement "Sign in with Microsoft" / "Sign in with Google" as a public-client OAuth 2.0 + PKCE flow (no client secret): the system browser opens to the provider's consent screen, a loopback listener on an OS-assigned port receives the redirect, and the resulting profile (email/name, plus a refresh token if the provider issued one) is stored via `identity::IdentityStore` (accessed through the `accounts.rs` compatibility shim), encrypted at rest through the same `AuthManager::protect`/`reveal` envelope as workflow files whenever a vault password is configured. This is an identity link, not a data-access grant — signing in does not itself move workflow/organizer data anywhere, and it needs `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID` for local dev) configured before it will do anything, since Ghost ships with no client IDs of its own. The Settings modal in `src/main.js` surfaces sign-in/sign-out. See `docs/integrations-roadmap.md` for how this identity is reused by the Power BI integration below and is meant to be reused by future Fabric, Google Cloud, and AI-assistant-connector integrations, none of which exist yet.
+
+Also built (experimental): Power BI audit export. `commands/integrations.rs` (gated behind `--features experimental`, unlike account sign-in above) adds a separate, revocable `IntegrationGrant` on top of the base Microsoft identity: `power_bi_request_grant` runs incremental consent via `identity::run_grant_flow` (the same PKCE/loopback core `run_sign_in_flow` uses, factored out into a shared `authorize_and_exchange` helper, requesting the Power BI API scope instead of identity scopes and skipping the userinfo fetch), and `IdentityStore::add_grant` persists it alongside — not replacing — the identity grant. `power_bi_export_preview` is a pure, read-only command that assembles the exact `GhostRuns`/`GhostActions`/`GhostPolicyEvents` payload (`integrations/microsoft/power_bi/export.rs::build_export`) from local Organizer execution history, masking every string field through `audit::pii::mask` (the same redaction `organizer_export_audit` uses, not the separate `intelligence::redaction` module). `power_bi_push_audit_export` is the only command that touches the network: it re-derives that same payload server-side (never trusting a frontend-supplied snapshot) and pushes it via `PowerBiClient` to a dataset named `GhostOperations` in the signed-in user's own Power BI "My workspace," creating it on first use. The Settings modal's "Power BI Export" section (gated on `experimentalEnabled`, same as the AI Providers section) requires a preview to have been shown before the push button enables. There is no workspace/dataset picker yet — v1 always targets "My workspace." See `docs/power-bi-integration.md` and `docs/microsoft-auth.md`.
 
 Also built: AI Copilot view (data-view="pls"). This view houses the financial compliance check and legacy POS terminal auto-fill simulators, displaying modern glassmorphic document representations and typing replay logs. It is initialized via plsInit() on DOMContentLoaded.
 
@@ -272,9 +283,11 @@ Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 - `commands/organizer.rs` for the Organizer plan/execute/history/undo surface, plus audit export, signed-report verify, policy pack import/export, audit-chain verify, and time-to-value;
 - `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; audiences are Finance/Student/Engineering — see `src-tauri/src/filing/` and `docs/filing-profiles.md`);
 - `commands/updates.rs` for the updater;
+- `commands/intelligence.rs` (feature-gated) for internal suggestion-only OpenAI/Anthropic planning providers;
+- `commands/integrations.rs` (feature-gated) for the Power BI audit-export grant flow, preview, and push (`docs/power-bi-integration.md`);
 - `commands/experimental.rs` for AI, observer mode, cloud sync, analytics, visual checks, and experiments.
 
-`commands/experimental.rs` and its registration in `lib.rs` are gated behind the `experimental` Cargo feature, which is off by default. A stock build exposes only the trusted core; the experimental commands are compiled and registered only with `--features experimental`. The frontend hides the experimental tools panel unless the always-registered `is_experimental_enabled` command reports the feature is on. Keep new experimental commands behind this flag. CI does **not** run an experimental leg — when you touch experimental code, run the checks locally with `--features experimental` and say so in the PR (the PR template has a checkbox for it).
+`commands/experimental.rs`, `commands/intelligence.rs`, `commands/integrations.rs`, and their registrations in `lib.rs` are gated behind the `experimental` Cargo feature, which is off by default. A stock build exposes only the trusted core; these commands are compiled and registered only with `--features experimental`. The frontend hides their UI (the experimental tools panel, the Settings modal's AI Providers and Power BI Export sections) unless the always-registered `is_experimental_enabled` command reports the feature is on — `src-tauri/tests/ipc_contract.rs` has focused tests asserting each gated frontend call site checks `experimentalEnabled` first. Keep new experimental commands behind this flag. CI does **not** run an experimental leg — when you touch experimental code, run the checks locally with `--features experimental` and say so in the PR (the PR template has a checkbox for it).
 
 Before changing commands, read:
 
