@@ -1,4 +1,11 @@
-//! Encrypted persistence for account identity, grants, and token records.
+//! Persistence for account identity, grants, and token records.
+//!
+//! Encrypted at rest once a vault password is configured, via the same
+//! `AuthManager::protect`/`encrypt_bytes` envelope used for workflow files —
+//! and, like those files, left as plaintext until a password is set (see
+//! `AuthManager::encrypt_bytes`'s doc comment). There is currently no warning
+//! surfaced to the user that a linked account's tokens sit unencrypted on
+//! disk in that default, no-password state.
 
 use crate::auth::AuthManager;
 use crate::identity::types::{
@@ -185,8 +192,13 @@ impl IdentityStore {
             grants: vec![grant],
             tokens: vec![token_record],
         };
-        let _ = self.write_bundle(auth, &bundle);
-        let _ = std::fs::remove_file(&legacy_path);
+        // Only remove the legacy file once the new bundle is actually on
+        // disk — if the write fails (e.g. disk full, permissions), leaving
+        // the legacy file in place means the next launch just retries the
+        // migration instead of permanently losing the linked account.
+        if self.write_bundle(auth, &bundle).is_ok() {
+            let _ = std::fs::remove_file(&legacy_path);
+        }
         Some(bundle)
     }
 }
@@ -276,6 +288,42 @@ mod tests {
         assert_eq!(identity.provider, IdentityProvider::Google);
         assert!(!legacy_path.exists());
         assert!(store.path().exists());
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn migration_keeps_legacy_file_when_the_new_bundle_write_fails() {
+        let dir =
+            std::env::temp_dir().join(format!("ghost-identity-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let auth = AuthManager::with_path(dir.join("auth.json"));
+
+        // identity.json is a pre-existing directory, not a file: atomic_write's
+        // rename(tmp, identity.json) then fails on every OS (file -> directory
+        // is a structural type mismatch, not a permission check root can
+        // bypass), forcing write_bundle to fail deterministically.
+        let identity_path = dir.join("identity.json");
+        std::fs::create_dir_all(&identity_path).unwrap();
+        let store = IdentityStore::with_path(identity_path);
+
+        let legacy_path = dir.join("account.json");
+        let legacy = LegacyAccountRecord {
+            provider: "google".to_string(),
+            email: "legacy@example.com".to_string(),
+            name: "Legacy User".to_string(),
+            refresh_token: Some("legacy-refresh".to_string()),
+            linked_at: chrono::Utc::now(),
+        };
+        std::fs::write(&legacy_path, serde_json::to_string(&legacy).unwrap()).unwrap();
+
+        let result = store.identity(&auth);
+
+        // The in-memory migration still succeeds for this call...
+        assert!(result.is_some());
+        // ...but since it couldn't persist, the legacy file must survive so
+        // the next launch retries instead of losing the account entirely.
+        assert!(legacy_path.exists());
 
         std::fs::remove_dir_all(dir).ok();
     }
