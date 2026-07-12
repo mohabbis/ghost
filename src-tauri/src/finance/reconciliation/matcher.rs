@@ -105,7 +105,13 @@ fn score(
     ledger: &LedgerLine,
     tolerance: &MatchTolerance,
 ) -> Option<(f32, MatchReason)> {
-    let amount_delta = (invoice.amount_cents - ledger.amount_cents).abs();
+    // Saturating, not plain subtraction/`abs()`: malformed or extreme
+    // upstream input (e.g. i64::MIN) must never panic this pass — it should
+    // just read as "not a match" instead of crashing the whole batch.
+    let amount_delta = invoice
+        .amount_cents
+        .saturating_sub(ledger.amount_cents)
+        .saturating_abs();
     let date_delta = (invoice.date - ledger.date).num_days().abs();
     let exact_reference = matches!(
         (&invoice.reference, &ledger.reference),
@@ -143,10 +149,15 @@ pub struct AutoApplyRule {
 }
 
 impl AutoApplyRule {
-    fn qualifies(&self, invoice: &InvoiceRecord, m: &ProposedMatch) -> bool {
-        m.confidence >= self.min_confidence
-            && invoice.amount_cents.abs() <= self.max_amount_cents
-            && (!self.requires_exact_reference || m.reason.exact_reference)
+    /// A match qualifies only when it has **no** amount discrepancy at all —
+    /// `MatchTolerance.max_amount_delta_cents` may permit a nonzero delta for
+    /// scoring purposes, but a match with any real mismatch always requires
+    /// a human, regardless of confidence or how permissive the tolerance is.
+    fn qualifies(&self, invoice: &InvoiceRecord, confidence: f32, reason: &MatchReason) -> bool {
+        confidence >= self.min_confidence
+            && reason.amount_delta_cents == 0
+            && invoice.amount_cents.saturating_abs() <= self.max_amount_cents
+            && (!self.requires_exact_reference || reason.exact_reference)
     }
 }
 
@@ -178,19 +189,18 @@ pub fn propose_matches(
         match best {
             Some((confidence, line, reason)) => {
                 claimed.insert(line.id.clone());
-                let mut proposed = ProposedMatch {
-                    ledger_line_id: line.id.clone(),
-                    invoice_id: invoice.id.clone(),
-                    confidence,
-                    reason,
-                    review: ReviewRequirement::RequiresReview,
-                };
-                proposed.review = if auto_apply.qualifies(invoice, &proposed) {
+                let review = if auto_apply.qualifies(invoice, confidence, &reason) {
                     ReviewRequirement::WithinAutoApplyThreshold
                 } else {
                     ReviewRequirement::RequiresReview
                 };
-                matches.push(proposed);
+                matches.push(ProposedMatch {
+                    ledger_line_id: line.id.clone(),
+                    invoice_id: invoice.id.clone(),
+                    confidence,
+                    reason,
+                    review,
+                });
             }
             None => unmatched.push(UnmatchedInvoice {
                 invoice_id: invoice.id.clone(),
@@ -350,5 +360,45 @@ mod tests {
         let (matches, _) = propose_matches(&invoices, &ledger, &MatchTolerance::default(), &strict);
 
         assert_eq!(matches[0].review, ReviewRequirement::RequiresReview);
+    }
+
+    #[test]
+    fn amount_discrepancy_never_auto_applies_even_within_tolerance() {
+        // A wide tolerance can let a mismatched amount score as a plausible
+        // match, but it must never be eligible for the auto-apply bucket:
+        // any real discrepancy always requires a human to look at it.
+        let invoices = vec![invoice("inv-1", None, 5_000, date(2026, 1, 1))];
+        let ledger = vec![ledger_line("ln-1", None, 5_050, date(2026, 1, 1))];
+        let wide_tolerance = MatchTolerance {
+            max_amount_delta_cents: 100,
+            max_date_delta_days: 5,
+        };
+        let permissive = AutoApplyRule {
+            max_amount_cents: 1_000_000,
+            min_confidence: 0.5,
+            requires_exact_reference: false,
+        };
+
+        let (matches, _) = propose_matches(&invoices, &ledger, &wide_tolerance, &permissive);
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].reason.amount_delta_cents, 50);
+        assert_eq!(matches[0].review, ReviewRequirement::RequiresReview);
+    }
+
+    #[test]
+    fn extreme_amounts_do_not_panic() {
+        let invoices = vec![invoice("inv-1", None, i64::MIN, date(2026, 1, 1))];
+        let ledger = vec![ledger_line("ln-1", None, i64::MAX, date(2026, 1, 1))];
+
+        let (matches, unmatched) = propose_matches(
+            &invoices,
+            &ledger,
+            &MatchTolerance::default(),
+            &permissive_auto_apply(),
+        );
+
+        assert!(matches.is_empty());
+        assert_eq!(unmatched.len(), 1);
     }
 }
