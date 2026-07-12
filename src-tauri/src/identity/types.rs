@@ -116,7 +116,10 @@ impl IntegrationGrant {
     }
 }
 
-/// Encrypted token material stored separately from identity metadata.
+/// Token material stored separately from identity metadata. Despite the
+/// field names, these are only actually encrypted once a vault password is
+/// configured (`AuthManager::encrypt_bytes`) — otherwise they're the
+/// plaintext token bytes, unencrypted, same as workflow files in that state.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TokenRecord {
     pub grant_id: String,
