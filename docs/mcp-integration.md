@@ -169,11 +169,15 @@ Execution must verify that:
 
 ## Implementation order
 
-1. Add local read-only MCP tools.
-2. Add Organizer planning and policy-explanation tools.
-3. Add desktop-approval request/status and token-gated execution.
-4. Add internal intelligence providers for Ghost's own UI, separate from MCP.
-5. Consider remote MCP only after local security and approval integrity are tested.
+1. **Partially built:** identity/grant separation, intelligence provider scaffolding, MCP tool/approval types, integration grant checks.
+2. Add local read-only MCP tools (`mcp/server.rs`, stdio transport).
+3. Add Organizer planning and policy-explanation tools.
+4. Add desktop-approval request/status and token-gated execution (signing).
+5. Add OpenAI/Anthropic/local internal intelligence providers + Settings UI.
+6. Add Fabric/Power BI read + approved export.
+7. Consider remote MCP only after local security and approval integrity are tested.
+
+Rust modules: `src-tauri/src/mcp/` (scaffolding), `src-tauri/src/identity/`, `src-tauri/src/integrations/`, `src-tauri/src/intelligence/`.
 
 ## Positioning
 

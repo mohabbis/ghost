@@ -21,8 +21,8 @@
 //! connectors) are future, separately-scoped work — see
 //! `docs/integrations-roadmap.md`.
 
-use crate::accounts::AccountRecord;
-use crate::core::oauth::{self, Provider};
+use crate::accounts::{AccountManager, AccountRecord};
+use crate::core::oauth::Provider;
 use crate::engine::GhostEngine;
 use tauri::State;
 
@@ -70,16 +70,22 @@ pub async fn account_sign_in(
     let provider = Provider::parse(&provider)?;
     let client_id = provider.client_id(&engine.get_config().integrations)?;
 
-    let record =
-        tauri::async_runtime::spawn_blocking(move || oauth::run_sign_in_flow(provider, &client_id))
-            .await
-            .map_err(|e| format!("sign-in task failed: {e}"))?
-            .map_err(|e| e.to_string())?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        AccountManager::run_sign_in(provider, &client_id)
+    })
+    .await
+    .map_err(|e| format!("sign-in task failed: {e}"))?
+    .map_err(|e| e.to_string())?;
 
     engine
         .accounts()
-        .store(&engine.auth(), &record)
+        .store_sign_in_result(&engine.auth(), result)
         .map_err(|e| e.to_string())?;
+
+    let record = engine
+        .accounts()
+        .current(&engine.auth())
+        .ok_or_else(|| "Sign-in succeeded but account could not be loaded".to_string())?;
 
     Ok(AccountStatus::from(record))
 }

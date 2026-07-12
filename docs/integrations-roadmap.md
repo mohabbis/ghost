@@ -15,14 +15,24 @@ Every integration below is additive to that pipeline, never a bypass of it.
 
 ## What exists today
 
-- **Account sign-in** (`commands/account.rs`, `core/oauth.rs`): "Sign in with
+- **Account sign-in** (`commands/account.rs`, `identity/oauth/`): "Sign in with
   Microsoft" / "Sign in with Google" via OAuth 2.0 + PKCE. This establishes
   *identity* — who the user is — so a later integration has someone to ask
   for access on behalf of. It is not, by itself, a data-access grant to
   anything: no Fabric workspace, no Google Cloud project, and no AI-assistant
   session is reachable just because a user signed in. See
-  `docs/core-boundaries.md` and `docs/command-registry.md` for the exact
-  command contract.
+  `docs/microsoft-auth.md`, `docs/core-boundaries.md`, and
+  `docs/command-registry.md`.
+- **Identity / grant separation** (`identity/`): `AccountIdentity`,
+  `IntegrationGrant`, and encrypted `TokenRecord` are stored separately.
+  Signing in creates an `Identity` grant only; Fabric/Power BI require their
+  own grants (`integrations/microsoft/`). Legacy `account.json` migrates to
+  `identity.json` automatically.
+- **Integration module boundaries** (`integrations/`, `intelligence/`, `mcp/`):
+  Layer B business connectors, Layer C internal providers (disabled by default),
+  and MCP tool/approval scaffolding — see `docs/ai-provider-architecture.md`
+  and `docs/integration-threat-model.md`. No Fabric/PBI API calls or MCP
+  transport yet.
 - **Ghost's own MCP-planning surface** (`docs/mcp-integration.md`): the
   existing model for letting an external AI client (an "AI-assistant
   connector," in the language below) drive Ghost — status, Zone listing,
@@ -32,10 +42,10 @@ Every integration below is additive to that pipeline, never a bypass of it.
   the model proposes, Ghost plans and gates, the user approves, Ghost
   executes and audits.
 
-Everything else in this document is **planned, not built** — no Tauri
-commands exist for Fabric, Power BI, Google Cloud, or direct
-Claude/Cursor/Codex/ChatGPT connectors yet. Do not describe them as shipped in
-product copy, and do not wire a command onto them without the same
+Everything else in this document is **planned or partially built** — no Tauri
+commands exist yet for Fabric export, Power BI push, intelligence provider
+configuration, or live MCP stdio transport. Do not describe them as shipped in
+product copy, and do not wire a mutating command onto them without the same
 policy/approval/audit/undo treatment as any other mutating command (see
 `docs/command-registry.md`).
 
