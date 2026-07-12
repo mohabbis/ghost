@@ -41,6 +41,13 @@ pub fn migrate(legacy_path: &Path, new_path: &Path) -> anyhow::Result<()> {
 
     write_txn.commit()?;
 
+    // Close the legacy connection before touching the file it points at.
+    // SQLite holds an OS-level lock on the database file for as long as the
+    // connection is open; on Windows (unlike POSIX) a locked file cannot be
+    // renamed, so skipping this made the rename below silently fail on every
+    // real Windows upgrade.
+    drop(sqlite);
+
     let backup_path = legacy_path.with_extension("db.migrated");
     // Best-effort: if the rename fails (e.g. permissions), the redb database
     // is already fully populated and usable — leaving the old file in place
