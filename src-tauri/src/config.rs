@@ -28,6 +28,10 @@ pub struct GhostConfig {
     /// keeps configs written before this section existed loading cleanly.
     #[serde(default)]
     pub integrations: IntegrationSettings,
+    /// Internal intelligence providers (suggestion-only planning). API keys are
+    /// stored separately in encrypted `intelligence-secrets.json`, not here.
+    #[serde(default)]
+    pub intelligence: IntelligenceSettings,
 }
 
 /// Public-client OAuth identifiers. These are not secrets (PKCE public
@@ -42,6 +46,123 @@ pub struct IntegrationSettings {
     pub microsoft_client_id: Option<String>,
     #[serde(default)]
     pub google_client_id: Option<String>,
+}
+
+/// Settings for Ghost-owned intelligence providers (`intelligence/`).
+/// Keys live in `intelligence/credentials.rs`, never in this file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntelligenceSettings {
+    /// `disabled`, `openai`, or `anthropic`
+    #[serde(default = "default_intelligence_provider")]
+    pub default_provider: String,
+    #[serde(default)]
+    pub openai: OpenAiIntelligenceConfig,
+    #[serde(default)]
+    pub anthropic: AnthropicIntelligenceConfig,
+    #[serde(default)]
+    pub routing: IntelligenceRoutingConfig,
+}
+
+fn default_intelligence_provider() -> String {
+    "disabled".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAiIntelligenceConfig {
+    #[serde(default)]
+    pub api_base: Option<String>,
+    #[serde(default = "default_openai_model")]
+    pub model: String,
+    #[serde(default = "default_provider_timeout")]
+    pub timeout_seconds: u64,
+    #[serde(default = "default_max_input_bytes")]
+    pub max_input_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnthropicIntelligenceConfig {
+    #[serde(default = "default_anthropic_model")]
+    pub model: String,
+    #[serde(default = "default_provider_timeout")]
+    pub timeout_seconds: u64,
+    #[serde(default = "default_max_input_bytes")]
+    pub max_input_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntelligenceRoutingConfig {
+    #[serde(default)]
+    pub allow_fallback: bool,
+    #[serde(default = "default_local_only_sensitive")]
+    pub local_only_for_sensitive_data: bool,
+    #[serde(default = "default_max_remote_payload")]
+    pub maximum_remote_payload_bytes: usize,
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o-mini".to_string()
+}
+
+fn default_anthropic_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+fn default_provider_timeout() -> u64 {
+    60
+}
+
+fn default_max_input_bytes() -> usize {
+    32_768
+}
+
+fn default_local_only_sensitive() -> bool {
+    true
+}
+
+fn default_max_remote_payload() -> usize {
+    32_768
+}
+
+impl Default for OpenAiIntelligenceConfig {
+    fn default() -> Self {
+        Self {
+            api_base: None,
+            model: default_openai_model(),
+            timeout_seconds: default_provider_timeout(),
+            max_input_bytes: default_max_input_bytes(),
+        }
+    }
+}
+
+impl Default for AnthropicIntelligenceConfig {
+    fn default() -> Self {
+        Self {
+            model: default_anthropic_model(),
+            timeout_seconds: default_provider_timeout(),
+            max_input_bytes: default_max_input_bytes(),
+        }
+    }
+}
+
+impl Default for IntelligenceRoutingConfig {
+    fn default() -> Self {
+        Self {
+            allow_fallback: false,
+            local_only_for_sensitive_data: default_local_only_sensitive(),
+            maximum_remote_payload_bytes: default_max_remote_payload(),
+        }
+    }
+}
+
+impl Default for IntelligenceSettings {
+    fn default() -> Self {
+        Self {
+            default_provider: default_intelligence_provider(),
+            openai: OpenAiIntelligenceConfig::default(),
+            anthropic: AnthropicIntelligenceConfig::default(),
+            routing: IntelligenceRoutingConfig::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +347,7 @@ impl Default for GhostConfig {
             // Keep all audit history by default; retention is opt-in.
             audit: AuditSettings::default(),
             integrations: IntegrationSettings::default(),
+            intelligence: IntelligenceSettings::default(),
         }
     }
 }
@@ -289,6 +411,20 @@ impl GhostConfig {
         }
         if self.audit.retention_keep_days == Some(0) {
             anyhow::bail!("Audit retention keep-days must be at least 1 (use null to keep all)");
+        }
+
+        match self.intelligence.default_provider.as_str() {
+            "disabled" | "openai" | "anthropic" => {}
+            other => anyhow::bail!(
+                "Invalid intelligence default provider '{other}' (expected disabled, openai, or anthropic)"
+            ),
+        }
+
+        if self.intelligence.openai.timeout_seconds == 0 {
+            anyhow::bail!("OpenAI intelligence timeout must be at least 1 second");
+        }
+        if self.intelligence.anthropic.timeout_seconds == 0 {
+            anyhow::bail!("Anthropic intelligence timeout must be at least 1 second");
         }
 
         Ok(())

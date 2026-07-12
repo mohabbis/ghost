@@ -32,8 +32,8 @@ src-tauri/src/intelligence/
 ├── registry.rs      built — provider registry (disabled default)
 ├── router.rs        built — user-controlled routing policy
 ├── disabled.rs      built — default no-op provider
-├── openai.rs        planned
-├── anthropic.rs     planned
+├── openai.rs        built — OpenAiProvider
+├── anthropic.rs     built — AnthropicProvider
 └── local/           planned — Ollama, LM Studio, OpenAI-compatible
 ```
 

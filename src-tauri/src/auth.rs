@@ -82,6 +82,11 @@ impl AuthManager {
         self.auth_path.exists()
     }
 
+    /// Path to the on-disk auth envelope (used to align other encrypted stores).
+    pub fn storage_path(&self) -> &PathBuf {
+        &self.auth_path
+    }
+
     /// Whether workflow data is currently accessible. An unconfigured
     /// installation is always "unlocked" (no protection requested).
     pub fn is_unlocked(&self) -> bool {

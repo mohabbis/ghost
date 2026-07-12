@@ -19,9 +19,12 @@ Status: **partially built**
 | Test | Status |
 |---|---|
 | Safe suggestion validation | **built** — `intelligence/schema.rs` |
-| Executable field rejection | **built** |
+| Executable field rejection | **built** — `intelligence/parse.rs` |
+| JSON fence parsing | **built** — `intelligence/parse.rs` |
 | Disabled provider default | **built** — `intelligence/router.rs` |
-| OpenAI/Anthropic timeout/cancel | **planned** |
+| Confidential payload blocked | **built** — `intelligence/router.rs` |
+| Encrypted API key storage | **built** — `intelligence/credentials.rs` |
+| OpenAI/Anthropic live API | manual — `intelligence_test_provider` command |
 | Schema fuzzing | **planned** |
 
 ## MCP — **partially built**
