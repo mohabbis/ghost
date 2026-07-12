@@ -2,6 +2,8 @@
 // management, and Smart Observer. This is the real app UI
 // (not the marketing site — that lives in public/).
 
+import { CompressionReview } from "./compression-review.js";
+
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
 
@@ -26,6 +28,9 @@ let latestGuardReport = null;
 const MAX_TIMELINE_ITEMS = 220;
 const pendingTimelineEvents = [];
 let timelineFlushScheduled = false;
+let compressionReview = null;
+/** Last Guard Desk scan payload (OCR or preset) — used by Auto-fill POS. */
+let guardLastScanData = null;
 
 // Listen for ghost events from the backend
 if (listen) {
@@ -55,11 +60,15 @@ function showNotification(text, kind = "info") {
 
   const notification = document.createElement("div");
   notification.className = `notification notification--${kind}`;
-  const glyph = kind === "error" ? icon("i-alert") : icon("i-check-circle");
+  const glyph =
+    kind === "error" || kind === "warn"
+      ? icon("i-alert")
+      : icon("i-check-circle");
   notification.innerHTML = `<p class="notification__text">${glyph} ${escapeHtml(text)}</p>`;
   notificationsEl.appendChild(notification);
 
-  setTimeout(() => notification.remove(), kind === "error" ? 8000 : 5000);
+  const ttl = kind === "error" ? 8000 : kind === "warn" ? 6500 : 5000;
+  setTimeout(() => notification.remove(), ttl);
 }
 
 
@@ -341,6 +350,7 @@ async function lockApp() {
     await invoke("auth_lock");
   } catch (error) {
     console.error("Failed to lock:", error);
+    toastError("Could not lock: " + formatInvokeError(error));
     return;
   }
   await refreshAuthStatus();
@@ -531,11 +541,13 @@ async function stopRecording() {
     await invoke("stop_recording");
     isRecording = false;
     updateRecordingUI();
+    await refreshTimeline();
     showInsight(`Captured ${recordedEvents.length} event(s). Review the timeline, then replay or save.`);
     updateWorkflowHealth();
     runGhostGuardAudit({ quiet: true });
   } catch (error) {
     console.error("Failed to stop recording:", error);
+    toastError("Could not stop recording: " + formatInvokeError(error));
   }
 
   observerLearnFromSession();
@@ -679,6 +691,7 @@ async function cancelReplay() {
     updateRecordingUI();
   } catch (error) {
     console.error("Failed to cancel replay:", error);
+    toastError("Could not cancel replay: " + formatInvokeError(error));
   }
 }
 
@@ -690,6 +703,7 @@ async function pauseReplay() {
     updateRecordingUI();
   } catch (error) {
     console.error("Failed to pause replay:", error);
+    toastError("Could not pause replay: " + formatInvokeError(error));
   }
 }
 
@@ -701,6 +715,7 @@ async function resumeReplay() {
     updateRecordingUI();
   } catch (error) {
     console.error("Failed to resume replay:", error);
+    toastError("Could not resume replay: " + formatInvokeError(error));
   }
 }
 
@@ -835,7 +850,7 @@ async function loadWorkflow() {
     hasReplayedCurrentWorkflow = false;
     hasSavedCurrentWorkflow = false;
     updateRecordingUI();
-    refreshTimeline();
+    await refreshTimeline();
     showNotification(`Loaded "${name}" — ${recordedEvents.length} events.`);
     runGhostGuardAudit({ quiet: true });
   } catch (error) {
@@ -895,7 +910,7 @@ async function optimizeWorkflow() {
     resetReplayInspectionState();
     guardAuditCompleted = false;
     updateRecordingUI();
-    refreshTimeline();
+    void refreshTimeline();
     showNotification(`Optimized: ${originalCount} events → ${optimized.length} events.`);
   } catch (error) {
     console.error("Failed to optimize workflow:", error);
@@ -904,12 +919,71 @@ async function optimizeWorkflow() {
 }
 
 function refreshTimeline() {
+  return refreshCompressedTimeline();
+}
+
+function initCompressionReview() {
+  if (!compressionReview) {
+    compressionReview = new CompressionReview("events-timeline", invoke);
+  }
+}
+
+async function refreshCompressedTimeline() {
   const timelineEl = document.getElementById("events-timeline");
-  if (timelineEl) {
+  if (!timelineEl) return;
+
+  if (!invoke || recordedEvents.length === 0) {
+    timelineEl.innerHTML =
+      '<p class="events-timeline__empty">Start a recording to see cleaned, human-readable steps here.</p>';
+    updateWorkflowHealth();
+    return;
+  }
+
+  initCompressionReview();
+  try {
+    await compressionReview.compress(recordedEvents);
+  } catch (error) {
+    console.error("Timeline compression failed:", error);
     timelineEl.innerHTML = "";
     recordedEvents.forEach((event) => addEventToTimeline(event));
     trimTimeline();
-    updateWorkflowHealth();
+    toastError("Could not compress timeline — showing raw events.");
+  }
+  updateWorkflowHealth();
+}
+
+async function openWorkflowReview() {
+  if (!invoke) return notAvailable();
+  if (recordedEvents.length === 0) {
+    toastError("Record or load a workflow first");
+    return;
+  }
+
+  const modal = document.getElementById("review-modal");
+  const container = document.getElementById("review-modal-compression");
+  if (!modal || !container) return;
+
+  const reviewBtn = document.getElementById("reviewBtn");
+  if (reviewBtn) {
+    reviewBtn.disabled = true;
+    reviewBtn.textContent = "Reviewing…";
+  }
+
+  try {
+    const panelReview = new CompressionReview("review-modal-compression", invoke);
+    const report = await panelReview.compress(recordedEvents);
+    showModal(modal);
+    showInsight(
+      `Reviewed ${report.compressed_step_count} step(s) — ${(report.reduction_ratio * 100).toFixed(0)}% fewer than raw events.`,
+    );
+  } catch (error) {
+    console.error("Workflow review failed:", error);
+    toastError("Review failed: " + formatInvokeError(error));
+  } finally {
+    if (reviewBtn) {
+      reviewBtn.disabled = recordedEvents.length === 0;
+      reviewBtn.textContent = "Review Steps";
+    }
   }
 }
 
@@ -946,7 +1020,7 @@ async function generateWorkflowFromDescription() {
     hasReplayedCurrentWorkflow = false;
     hasSavedCurrentWorkflow = false;
     updateRecordingUI();
-    refreshTimeline();
+    void refreshTimeline();
     showNotification(`Generated ${events.length} events from your description.${providerNote}`);
     showInsight("Review the generated steps in the timeline, then Replay or Save.");
   } catch (error) {
@@ -1036,7 +1110,7 @@ function displayAnalysisResults(analysis) {
     </ul>
     ` : ""}
 
-    <button data-close-modal="analysis-modal">Close</button>
+    <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button>
   `;
 
   showModal(modal);
@@ -1070,6 +1144,18 @@ function closeModal(modalId = "analysis-modal") {
     lastFocusedBeforeModal.focus();
   }
   lastFocusedBeforeModal = null;
+}
+
+function initModalEscape() {
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const openModal = [...document.querySelectorAll(".modal")].find(
+      (m) => m.style.display === "flex",
+    );
+    if (!openModal) return;
+    event.preventDefault();
+    closeModal(openModal.id);
+  });
 }
 
 // ===== What is Ghost? =====
@@ -1426,7 +1512,7 @@ function describeEvent(event) {
       if (data.modifiers & 0x04) mods.push("⌥");
       if (data.modifiers & 0x01) mods.push("⇧");
       const prefix = mods.length ? mods.join("") + " + " : "";
-      if (data.chars && data.chars.trim()) return `Typed ${prefix}"${data.chars}"`;
+      if (data.chars && data.chars.trim()) return `Typed ${prefix}[redacted]`;
       return `Pressed ${prefix}key ${data.code}`;
     }
     case "Scroll":
@@ -1551,6 +1637,8 @@ function updateRecordingUI() {
   }
   const guardAuditBtn = document.getElementById("guardAuditBtn");
   if (guardAuditBtn) guardAuditBtn.disabled = isRecording || recordedEvents.length === 0;
+  const reviewBtn = document.getElementById("reviewBtn");
+  if (reviewBtn) reviewBtn.disabled = isRecording || recordedEvents.length === 0;
   if (cancelBtn) cancelBtn.disabled = !isPlaying;
   if (pauseBtn) pauseBtn.disabled = !isPlaying || isPaused;
   if (resumeBtn) resumeBtn.disabled = !isPlaying || !isPaused;
@@ -1708,7 +1796,7 @@ function displaySuggestions(suggestions) {
         <button data-create-workflow-from-suggestion data-workflow-name="${escapeAttr(s.suggested_workflow_name)}" data-pattern-id="${escapeAttr(s.pattern_id)}" style="margin-top: 8px; font-size: 0.85rem;">Create This Workflow</button>
       </div>
     `).join("")}
-    <button data-close-modal="analysis-modal">Close</button>
+    <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button>
   `;
 
   showModal(modal);
@@ -1723,6 +1811,7 @@ async function createWorkflowFromSuggestion(name) {
     showNotification(`Workflow "${name}" created.`);
   } catch (error) {
     console.error("Failed to save workflow:", error);
+    toastError("Failed to save workflow: " + formatInvokeError(error));
   }
 }
 
@@ -1759,7 +1848,7 @@ function displayGeekInsights(insights, appName) {
         ${insights.event_timing_analysis.length > 10 ? `<tr><td colspan="3">... and ${insights.event_timing_analysis.length - 10} more</td></tr>` : ""}
       </table>
     </div>
-    <button data-close-modal="analysis-modal">Close</button>
+    <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button>
   `;
 
   showModal(modal);
@@ -1821,7 +1910,7 @@ function loadDemoWorkflow() {
   latestGuardReport = null;
   hasReplayedCurrentWorkflow = false;
   hasSavedCurrentWorkflow = false;
-  refreshTimeline();
+  void refreshTimeline();
   updateRecordingUI();
   showInsight("Demo loaded. This is the shape of a useful Ghost workflow: clear steps, timing, and UI context.");
   showNotification("Demo workflow loaded — audit it, then try recording your own.");
@@ -2499,11 +2588,28 @@ async function organizerRun() {
   );
   if (!ok) return;
 
+  const runBtn = document.getElementById("organizerRunBtn");
+  const prevLabel = runBtn?.textContent;
+  if (runBtn) {
+    runBtn.disabled = true;
+    runBtn.textContent = "Organizing…";
+  }
+
   let res;
   try {
     res = await invoke("organizer_execute", { zoneId: zone.id });
   } catch (err) {
-    return toastError("Organize failed: " + formatInvokeError(err));
+    toastError("Organize failed: " + formatInvokeError(err));
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.textContent = prevLabel || "Approve & Organize";
+    }
+    return;
+  } finally {
+    if (runBtn) {
+      runBtn.disabled = false;
+      runBtn.textContent = prevLabel || "Approve & Organize";
+    }
   }
   const r = res.report || {};
   const auditRows = (r.audit || [])
@@ -3075,6 +3181,7 @@ function wireUpControls() {
   bind("saveAiBtn", saveWorkflowWithMetadata);
   bind("loadBtn", loadWorkflow);
   bind("deleteWorkflowBtn", deleteWorkflow);
+  bind("reviewBtn", openWorkflowReview);
   bind("analyzeBtn", analyzeWorkflow);
   bind("optimizeBtn", optimizeWorkflow);
   bind("generateAiBtn", generateWorkflowFromDescription);
@@ -3264,17 +3371,32 @@ async function installApprovedUpdate(button, statusEl) {
 // is compiled with `--features experimental`. A stock build does not register
 // them, so reveal the panel only when the backend confirms the surface is on.
 // Fail closed: any error leaves the panel hidden rather than showing dead buttons.
+const EXPERIMENTAL_ONLY_CONTROLS = ["replayReliableBtn", "analyzeBtn", "optimizeBtn"];
+
 async function initExperimentalPanel() {
   const panel = document.getElementById("experimentalPanel");
-  if (!panel || !invoke) return;
+  if (!invoke) {
+    EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
+      document.getElementById(id)?.setAttribute("hidden", ""),
+    );
+    return;
+  }
+  let enabled = false;
   try {
-    if (await invoke("is_experimental_enabled")) {
-      panel.hidden = false;
-      // Reveal the matching nav entry so the view is reachable.
-      document.getElementById("navExperimental")?.removeAttribute("hidden");
-    }
+    enabled = await invoke("is_experimental_enabled");
   } catch {
     // Older/stock build without the detection command: keep it hidden.
+  }
+  if (enabled) {
+    panel?.removeAttribute("hidden");
+    document.getElementById("navExperimental")?.removeAttribute("hidden");
+    EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
+      document.getElementById(id)?.removeAttribute("hidden"),
+    );
+  } else {
+    EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
+      document.getElementById(id)?.setAttribute("hidden", ""),
+    );
   }
 }
 
@@ -3826,6 +3948,7 @@ function guardDeskInit() {
     }
     
     guardPopulateVisuals(data);
+    guardLastScanData = data;
     
     // 3. Show visual container
     visualContainer.style.display = "flex";
@@ -3857,8 +3980,11 @@ function guardDeskInit() {
   });
   
   autofillBtn.addEventListener("click", () => {
-    const scenarioKey = selectEl.value;
-    const data = GUARD_SCENARIOS[scenarioKey];
+    const data = guardLastScanData || GUARD_SCENARIOS[selectEl.value];
+    if (!data) {
+      toastError("Run a scan first");
+      return;
+    }
     guardRunAutofillReplay(data);
   });
   
@@ -3870,6 +3996,7 @@ function guardDeskInit() {
     autofillBtn.disabled = true;
     guardCheckImageFile = null;
     guardIdImageFile = null;
+    guardLastScanData = null;
     if (checkInput) checkInput.value = "";
     if (idInput) idInput.value = "";
     guardUpdateUploadStatus();
@@ -4117,11 +4244,27 @@ async function filingPreview() {
     result.innerHTML = `<div class="organizer-summary">Paste one or more file names above to preview how they would be filed.</div>`;
     return;
   }
+  const previewBtn = document.getElementById("filingPreviewBtn");
+  const prevLabel = previewBtn?.textContent;
+  if (previewBtn) {
+    previewBtn.disabled = true;
+    previewBtn.textContent = "Previewing…";
+  }
   let preview;
   try {
     preview = await invoke("preview_file_filing", { audience, root, fileNames });
   } catch (err) {
-    return toastError("Filing preview failed: " + formatInvokeError(err));
+    toastError("Filing preview failed: " + formatInvokeError(err));
+    if (previewBtn) {
+      previewBtn.disabled = false;
+      previewBtn.textContent = prevLabel || "Preview filing";
+    }
+    return;
+  } finally {
+    if (previewBtn) {
+      previewBtn.disabled = false;
+      previewBtn.textContent = prevLabel || "Preview filing";
+    }
   }
   const rows = (preview.items || [])
     .map(
@@ -4153,6 +4296,12 @@ async function filingEstimateSavings() {
   if (!invoke) return notAvailable();
   const result = document.getElementById("savingsResult");
   if (!result) return;
+  const estimateBtn = document.getElementById("savingsEstimateBtn");
+  const prevLabel = estimateBtn?.textContent;
+  if (estimateBtn) {
+    estimateBtn.disabled = true;
+    estimateBtn.textContent = "Estimating…";
+  }
   const errorPct = filingNum("savingsErrorRate");
   const inputs = {
     files_per_period: filingNum("savingsFiles") ?? 0,
@@ -4167,7 +4316,17 @@ async function filingEstimateSavings() {
   try {
     est = await invoke("estimate_filing_savings", { inputs });
   } catch (err) {
-    return toastError("Savings estimate failed: " + formatInvokeError(err));
+    toastError("Savings estimate failed: " + formatInvokeError(err));
+    if (estimateBtn) {
+      estimateBtn.disabled = false;
+      estimateBtn.textContent = prevLabel || "Estimate savings";
+    }
+    return;
+  } finally {
+    if (estimateBtn) {
+      estimateBtn.disabled = false;
+      estimateBtn.textContent = prevLabel || "Estimate savings";
+    }
   }
   const costLine =
     est.cost_saved_per_year != null
@@ -4220,6 +4379,7 @@ window.addEventListener("DOMContentLoaded", () => {
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
+  initModalEscape();
   initViewNav(); // left-nav view switcher
   guardDeskInit(); // Guard Desk + POS Bridge
   filingInit(); // Plan Filing: read-only filing preview + savings estimate

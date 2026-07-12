@@ -80,7 +80,14 @@ pub async fn account_sign_in(
     engine
         .accounts()
         .store_sign_in_result(&engine.auth(), result)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("locked") {
+                "Unlock Ghost with your password before linking an account.".to_string()
+            } else {
+                msg
+            }
+        })?;
 
     let record = engine
         .accounts()
