@@ -33,7 +33,7 @@ Allowed stable areas:
 - workflow event schema and migrations;
 - element inspection and recorded-event review;
 - local authentication and at-rest workflow protection;
-- account sign-in via Microsoft/Google OAuth 2.0 + PKCE (`commands/account.rs`, `core/oauth.rs`) as an identity link, not a data-access grant — it answers "who is the user" for a future stack integration to request access under, and does not itself move workflow/organizer data anywhere (see `docs/integrations-roadmap.md`);
+- account sign-in via Microsoft/Google OAuth 2.0 + PKCE (`commands/account.rs`, `identity/oauth/`) as an identity link, not a data-access grant — `AccountIdentity` is separate from `IntegrationGrant` and encrypted `TokenRecord`; signing in creates identity-only consent, not Fabric/Power BI access (see `docs/microsoft-auth.md`, `docs/integrations-roadmap.md`);
 - diagnostics and safe telemetry export;
 - policy checks and command risk classification;
 - audit log primitives;

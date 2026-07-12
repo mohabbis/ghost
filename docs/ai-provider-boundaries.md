@@ -92,17 +92,20 @@ Do not send by default:
 
 ## Module shape
 
-If implemented, keep provider code isolated from commands and execution:
+**Partially built** — see `docs/ai-provider-architecture.md` for status.
 
 ```text
 src-tauri/src/intelligence/
 ├── mod.rs
-├── provider.rs
-├── schema.rs
-├── redaction.rs
-├── openai.rs
-├── anthropic.rs
-└── local.rs
+├── provider.rs      built — IntelligenceProvider trait
+├── schema.rs        built — PlanningSuggestion (suggestion-only)
+├── redaction.rs     built
+├── registry.rs      built — disabled default
+├── router.rs        built
+├── disabled.rs      built
+├── openai.rs        planned
+├── anthropic.rs     planned
+└── local/           planned
 ```
 
 Provider adapters may produce suggestions only. They must not write files, move files, run shell commands, synthesize input, or call execution paths directly.

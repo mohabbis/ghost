@@ -212,6 +212,42 @@ impl AuthManager {
         Ok(String::from_utf8(plaintext)?)
     }
 
+    /// Encrypt arbitrary bytes for at-rest storage (integration tokens, etc.).
+    /// When no vault password is configured, returns plaintext bytes unchanged.
+    pub fn encrypt_bytes(&self, plaintext: &[u8]) -> anyhow::Result<Vec<u8>> {
+        if !self.is_configured() {
+            return Ok(plaintext.to_vec());
+        }
+        let dek = self.require_dek()?;
+        let mut nonce_bytes = [0u8; NONCE_LEN];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let cipher = Aes256Gcm::new_from_slice(&dek)
+            .map_err(|e| anyhow::anyhow!("cipher init failed: {e}"))?;
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&nonce_bytes), plaintext)
+            .map_err(|_| anyhow::anyhow!("encryption failed"))?;
+        let mut out = nonce_bytes.to_vec();
+        out.extend_from_slice(&ciphertext);
+        Ok(out)
+    }
+
+    /// Inverse of `encrypt_bytes`.
+    pub fn decrypt_bytes(&self, stored: &[u8]) -> anyhow::Result<Vec<u8>> {
+        if !self.is_configured() {
+            return Ok(stored.to_vec());
+        }
+        if stored.len() < NONCE_LEN {
+            anyhow::bail!("corrupt encrypted blob: too short");
+        }
+        let dek = self.require_dek()?;
+        let (nonce_bytes, ciphertext) = stored.split_at(NONCE_LEN);
+        let cipher = Aes256Gcm::new_from_slice(&dek)
+            .map_err(|e| anyhow::anyhow!("cipher init failed: {e}"))?;
+        cipher
+            .decrypt(Nonce::from_slice(nonce_bytes), ciphertext)
+            .map_err(|_| anyhow::anyhow!("decryption failed"))
+    }
+
     fn require_dek(&self) -> anyhow::Result<[u8; KEY_LEN]> {
         self.dek
             .lock()
