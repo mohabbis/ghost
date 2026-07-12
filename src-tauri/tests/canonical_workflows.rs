@@ -191,10 +191,10 @@ mod canonical_workflows {
     ///
     /// It stops one layer short of the `#[tauri::command]` wrappers
     /// themselves: those call `storage::open_default()`, which is hardcoded
-    /// to the OS data directory and has no test seam for an in-memory DB. The
-    /// commands are thin (open a connection, delegate to exactly these
-    /// functions), so this covers the real risk — the trust pipeline logic —
-    /// without touching a developer's real `ghost.db`.
+    /// to the OS data directory. The commands are thin (open a database,
+    /// delegate to exactly these functions), so this covers the real risk —
+    /// the trust pipeline logic — without touching a developer's real
+    /// `ghost.redb`.
     #[test]
     fn test_organizer_trust_pipeline_stages() {
         use ghost_lib::organizer::executor::execute_plan;
@@ -202,9 +202,8 @@ mod canonical_workflows {
         use ghost_lib::organizer::undo::revert;
         use ghost_lib::policy::{DefaultDecision, FolderRule, TrustLevel};
         use ghost_lib::storage::executions::{get_execution, save_execution, verify_chain};
-        use ghost_lib::storage::migrations::migrate;
+        use ghost_lib::storage::open_in_memory;
         use ghost_lib::storage::zones::{add_folder_rule, create_zone};
-        use rusqlite::Connection;
         use std::fs;
         use std::path::{Path, PathBuf};
         use std::sync::atomic::{AtomicU32, Ordering};
@@ -240,8 +239,7 @@ mod canonical_workflows {
             }
         }
 
-        let conn = Connection::open_in_memory().unwrap();
-        migrate(&conn).unwrap();
+        let conn = open_in_memory().unwrap();
 
         let dir = TrustPipelineTempDir::new();
         let report_pdf = dir.file("report.pdf", b"report body");

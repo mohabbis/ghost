@@ -38,9 +38,10 @@ use crate::storage::executions::{
 use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
 use crate::storage::open_default;
 use crate::storage::zones::{
-    add_folder_rule, create_zone, get_zone, list_folder_rules, list_zones, set_rule_trust,
+    add_folder_rule, create_zone, create_zone_with_rules, get_zone, list_folder_rules, list_zones,
+    set_rule_trust,
 };
-use rusqlite::Connection;
+use crate::storage::Db;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -311,7 +312,7 @@ pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
 /// The actual logic behind [`organizer_plan`], taking an already-open
 /// connection so it is testable against an in-memory database instead of the
 /// real OS data directory (`open_default` has no test seam of its own).
-fn organizer_plan_with_conn(conn: &Connection, zone_id: &str) -> Result<OrganizerPlan, String> {
+fn organizer_plan_with_conn(conn: &Db, zone_id: &str) -> Result<OrganizerPlan, String> {
     if get_zone(conn, zone_id)
         .map_err(|e| e.to_string())?
         .is_none()
@@ -365,7 +366,7 @@ pub fn organizer_execute(
 /// instead of losing it — see `organizer_check_unfinished_run` and
 /// `docs/organizer-executor.md`.
 fn organizer_execute_with_conn(
-    conn: &Connection,
+    conn: &Db,
     zone_id: &str,
     retention_keep_last: Option<usize>,
     retention_keep_days: Option<u64>,
@@ -427,10 +428,9 @@ pub fn organizer_check_unfinished_run() -> Result<Option<ExecutionSummary>, Stri
 #[tauri::command]
 pub fn organizer_dismiss_unfinished_run(execution_id: String) -> Result<(), String> {
     let conn = open_default().map_err(|e| e.to_string())?;
-    mark_execution_finished(&conn, &execution_id).map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => format!("no execution with id {execution_id}"),
-        other => other.to_string(),
-    })
+    // mark_execution_finished already fails with "no execution with id {id}"
+    // when the id doesn't exist (see storage::executions::seq_for_id).
+    mark_execution_finished(&conn, &execution_id).map_err(|e| e.to_string())
 }
 
 /// List past executions, newest first, for the history/undo view.
@@ -461,7 +461,7 @@ pub fn organizer_undo(
 /// The actual logic behind [`organizer_undo`], taking an already-open
 /// connection (see [`organizer_plan_with_conn`]) so the lookup -> revert ->
 /// milestone sequence, including the unknown-id error path, is testable.
-fn organizer_undo_with_conn(conn: &Connection, execution_id: &str) -> Result<UndoReport, String> {
+fn organizer_undo_with_conn(conn: &Db, execution_id: &str) -> Result<UndoReport, String> {
     let stored = get_execution(conn, execution_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
@@ -665,33 +665,31 @@ pub fn organizer_import_policy_pack(
     let pack: PolicyPack =
         serde_json::from_str(&pack_json).map_err(|e| format!("invalid policy pack JSON: {e}"))?;
 
-    let mut conn = open_default().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-
-    let zone = create_zone(
-        &tx,
-        &pack.name,
-        pack.description.as_deref(),
-        pack.default_decision,
-        pack.rename_dated,
-    )
-    .map_err(|e| e.to_string())?;
-
-    for rule in &pack.rules {
+    let mut rules = Vec::with_capacity(pack.rules.len());
+    for rule in pack.rules {
         if rule.can_delete {
             return Err("Organizer folder rules cannot grant delete".to_string());
         }
-        let rule = normalize_folder_rule(rule.clone())?;
+        let rule = normalize_folder_rule(rule)?;
         if !path_exists_dir(&rule.path) {
             return Err(format!(
                 "folder does not exist: {}. Pick a real folder that exists on this machine.",
                 rule.path.display()
             ));
         }
-        add_folder_rule(&tx, &zone.id, &rule).map_err(|e| e.to_string())?;
+        rules.push(rule);
     }
 
-    tx.commit().map_err(|e| e.to_string())?;
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let zone = create_zone_with_rules(
+        &conn,
+        &pack.name,
+        pack.description.as_deref(),
+        pack.default_decision,
+        pack.rename_dated,
+        &rules,
+    )
+    .map_err(|e| e.to_string())?;
     Ok(zone)
 }
 

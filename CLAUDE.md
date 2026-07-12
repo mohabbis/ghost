@@ -176,7 +176,9 @@ src-tauri/src/
   policy/
     capability.rs, decision.rs, engine.rs, risk.rs, zone.rs
   storage/
-    migrations.rs, zones.rs, executions.rs, milestones.rs   # milestones.rs: local-only first-touch timing (no network)
+    mod.rs, zones.rs, executions.rs, milestones.rs   # redb-backed (pure Rust, no bundled C lib); milestones.rs: local-only first-touch timing (no network)
+    sqlite_import.rs      # one-time SQLite -> redb migration for pre-redb installs; renames (never deletes) the legacy ghost.db
+    migrations.rs         # legacy-only: brings a pre-redb ghost.db up to its final SQLite schema before sqlite_import reads it
   organizer/
     scanner.rs, classifier.rs, naming.rs, conflict.rs, planner.rs, executor.rs, undo.rs
     testutil.rs          # #[cfg(test)] temp-dir fixtures shared across organizer tests
@@ -196,7 +198,7 @@ src-tauri/src/
 Built so far — the Ghost Organizer trust pipeline is wired end to end:
 
 - `policy/` — pure deny-by-default trust engine (capability/decision/risk/zone + `evaluate`); see `docs/policy-engine.md`.
-- `storage/` — SQLite-backed Zones + folder rules + execution history, versioned migrations.
+- `storage/` — redb-backed Zones + folder rules + execution history + milestones. Existing installs are migrated once from the prior SQLite-backed storage on first launch after upgrade (`storage/sqlite_import.rs`); the legacy `ghost.db` is renamed, never deleted.
 - `organizer/` — read-only planner (scanner/classifier/naming/conflict/planner) that emits a reviewable, policy-evaluated plan that mutates nothing (`docs/organizer-planner.md`), including invoice/receipt/statement folders, opt-in dated renaming, and the client filing preset; plus the executor and undo path (`docs/organizer-executor.md`).
 - `audit/` — append-only audit log and undo journal written for every mutating run.
 

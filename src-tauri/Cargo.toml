@@ -41,9 +41,16 @@ aes-gcm = "0.10"
 # SHA-256 for the tamper-evident audit hash chain over Organizer executions
 # (see storage/executions.rs). RustCrypto, MIT/Apache-2.0 (passes deny.toml).
 sha2 = "0.11"
-# Local trust-boundary storage (Zones + folder rules). `bundled` compiles
-# SQLite from source so there is no system-library dependency and it builds on
-# the headless Linux CI leg. MIT-licensed (passes deny.toml).
+# Local trust-boundary storage (Zones + folder rules), Organizer execution
+# history, and milestones — pure-Rust embedded KV store, no bundled C library.
+# See storage/mod.rs. MIT/Apache-2.0 (passes deny.toml).
+redb = "4"
+# Read-only, one-time-migration use only: opening a pre-redb `ghost.db` SQLite
+# file so its contents can be imported into redb (see storage/sqlite_import.rs
+# and storage/migrations.rs, which still runs the legacy V1-V6 schema
+# migrations against that file before it's read). `bundled` compiles SQLite
+# from source so there is no system-library dependency and it builds on the
+# headless Linux CI leg. MIT-licensed (passes deny.toml).
 # Pinned below 0.40: rusqlite >=0.40.1 requires libsqlite3-sys ^0.38.1, whose
 # build script uses the unstable `cfg_select!` macro and fails to compile on
 # stable Rust (rust-lang/rust#115585). 0.39 pulls libsqlite3-sys 0.37, which

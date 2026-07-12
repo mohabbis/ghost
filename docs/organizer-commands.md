@@ -48,9 +48,9 @@ first_break: { execution_id, reason } | null }`.
 ## Tamper-evidence & retention
 
 Each execution is sealed as it is saved: a SHA-256 `hash` over the run's stored
-row bytes plus the previous run's hash, forming a chain ordered by SQLite
-`rowid` (reliable insertion order — `created_at` is second-granular and `id` is
-a random UUID). `organizer_verify_audit_chain` walks the chain and confirms each
+row bytes plus the previous run's hash, forming a chain ordered by insertion
+sequence (reliable insertion order — `created_at` is second-granular and `id`
+is a random UUID). `organizer_verify_audit_chain` walks the chain and confirms each
 sealed run still matches its seal and links to the one before it, so altered
 history is detectable offline. Rows written before the V5 migration are
 "unsealed" (empty hash) and counted separately, never failing verification.
