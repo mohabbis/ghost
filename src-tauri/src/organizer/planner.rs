@@ -15,7 +15,7 @@
 
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
 use crate::storage::zones::{get_zone, list_folder_rules};
-use rusqlite::Connection;
+use crate::storage::Db;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -89,7 +89,7 @@ pub struct OrganizerPlan {
 }
 
 /// Load the Zone's folder rules from storage and build a plan.
-pub fn plan_zone(conn: &Connection, zone_id: &str) -> anyhow::Result<OrganizerPlan> {
+pub fn plan_zone(conn: &Db, zone_id: &str) -> anyhow::Result<OrganizerPlan> {
     let rename_dated = get_zone(conn, zone_id)?.is_some_and(|z| z.rename_dated);
     let rules = list_folder_rules(conn, zone_id)?;
     Ok(plan_with_rules_and_options(zone_id, &rules, rename_dated))

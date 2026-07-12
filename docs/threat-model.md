@@ -135,7 +135,7 @@ Every operation flows through all 7 stages. No shortcuts.
 
 **Attack vector**:
 - Direct file system access (requires user-level or admin access)
-- SQLite database manipulation
+- Direct database file manipulation
 - Hash collision (cryptographic failure)
 
 **Impact**:
@@ -148,7 +148,9 @@ Every operation flows through all 7 stages. No shortcuts.
 - Tamper detection: if any entry is modified, subsequent hashes break
 - Append-only design (no deletion or in-place modification)
 - User can export and backup audit logs to external storage
-- Immutability at SQLite schema level (only INSERT, no UPDATE/DELETE on audit table)
+- Sealed rows are treated as immutable by the application (`finish_execution`
+  seals a run once; only an in-progress, not-yet-sealed run's row is updated,
+  by the write-ahead durability path — see `storage/executions.rs`)
 
 **Residual risk**: MEDIUM. Attacker with filesystem access can delete entire audit log. **Mitigated by**: user education + regular backups.
 

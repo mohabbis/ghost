@@ -29,7 +29,7 @@ trivially unit-testable without the UI or a database.
   never the reverse).
 - **`TrustLevel`** (`zone.rs`) — `Automate | AskFirst | Never`, the user-facing
   control over how much autonomy a rule's *mutating* grants carry. `AskFirst`
-  is the default (and the serde/SQLite default), so rules created before trust
+  is the default (and the serde/storage default), so rules created before trust
   levels existed keep their original behavior. On a two-sided operation
   (move/rename/copy) the **stricter** of the two rules' trust levels governs.
 - **`RiskLevel`** (`risk.rs`) — `Low | Medium | High | Critical`. Distinct from

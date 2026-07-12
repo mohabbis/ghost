@@ -205,7 +205,7 @@ plan can never reach the filesystem.
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
-| `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local SQLite DB. |
+| `organizer_list_zones` | stable | ✓ | – | – | – | – | – | low | Reads Zones from the local DB. |
 | `organizer_list_folder_rules` | stable | ✓ | – | – | – | – | – | low | Reads a Zone's folder rules (the approved boundaries) from the DB. |
 | `organizer_default_paths` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns real Downloads/home/Documents paths for first-run Organizer UI. |
 | `organizer_create_zone` | stable | ✓ | – | – | – | – | – | low | Inserts a Zone (DB only). Params: `name`, `description`, optional `renameDated` (default `false`). New Zones default to `Ask`; dated renaming only changes previewed destination names when explicitly enabled. |

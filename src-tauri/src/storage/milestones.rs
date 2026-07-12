@@ -11,8 +11,18 @@
 //! stored value is the moment the user first reached that step — the basis for
 //! a "time to first safe cleanup" measurement taken entirely on-device.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use crate::storage::Db;
+use redb::{ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const MILESTONES: TableDefinition<&str, &str> = TableDefinition::new("organizer_milestones");
+
+/// Ensure the table exists. Called once from `storage::open_default`/
+/// `open_in_memory` right after the database is created.
+pub(crate) fn init(write_txn: &WriteTransaction) -> anyhow::Result<()> {
+    write_txn.open_table(MILESTONES)?;
+    Ok(())
+}
 
 /// A named step in the Organizer trust pipeline whose first occurrence is
 /// worth timing. Stored as its stable string key.
@@ -51,30 +61,50 @@ fn now_ts() -> String {
 
 /// Record that a milestone was reached, keeping only the first occurrence.
 /// Idempotent: later calls for the same milestone leave the original time.
-pub fn record_milestone(conn: &Connection, milestone: Milestone) -> rusqlite::Result<()> {
-    conn.execute(
-        "INSERT OR IGNORE INTO organizer_milestones (key, at) VALUES (?1, ?2)",
-        params![milestone.key(), now_ts()],
-    )?;
+pub fn record_milestone(db: &Db, milestone: Milestone) -> anyhow::Result<()> {
+    let write_txn = db.db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(MILESTONES)?;
+        if table.get(milestone.key())?.is_none() {
+            table.insert(milestone.key(), now_ts().as_str())?;
+        }
+    }
+    write_txn.commit()?;
     Ok(())
 }
 
 /// The recorded epoch-seconds string for a milestone, if it has been reached.
-pub fn get_milestone(conn: &Connection, milestone: Milestone) -> rusqlite::Result<Option<String>> {
-    conn.query_row(
-        "SELECT at FROM organizer_milestones WHERE key = ?1",
-        params![milestone.key()],
-        |row| row.get(0),
-    )
-    .optional()
+pub fn get_milestone(db: &Db, milestone: Milestone) -> anyhow::Result<Option<String>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(MILESTONES)?;
+    Ok(table.get(milestone.key())?.map(|g| g.value().to_string()))
 }
 
 /// All recorded milestones as `(key, epoch_seconds)` pairs, for the local
 /// diagnostics/telemetry export. Never includes anything but timestamps.
-pub fn list_milestones(conn: &Connection) -> rusqlite::Result<Vec<(String, String)>> {
-    let mut stmt = conn.prepare("SELECT key, at FROM organizer_milestones ORDER BY key")?;
-    let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-    rows.collect()
+/// redb's `&str` keys iterate in byte-lexicographic order, matching the
+/// original `ORDER BY key`.
+pub fn list_milestones(db: &Db) -> anyhow::Result<Vec<(String, String)>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(MILESTONES)?;
+    let mut out = Vec::new();
+    for entry in table.iter()? {
+        let (k, v) = entry?;
+        out.push((k.value().to_string(), v.value().to_string()));
+    }
+    Ok(out)
+}
+
+/// Import a milestone at its original key/timestamp (used only by the
+/// one-time SQLite migration — see `storage::sqlite_import`).
+pub(crate) fn import_milestone_raw(
+    write_txn: &WriteTransaction,
+    key: &str,
+    at: &str,
+) -> anyhow::Result<()> {
+    let mut table = write_txn.open_table(MILESTONES)?;
+    table.insert(key, at)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -84,40 +114,39 @@ mod tests {
 
     #[test]
     fn milestone_is_recorded_and_read_back() {
-        let conn = open_in_memory().unwrap();
-        assert!(get_milestone(&conn, Milestone::FirstPlan)
-            .unwrap()
-            .is_none());
-        record_milestone(&conn, Milestone::FirstPlan).unwrap();
-        assert!(get_milestone(&conn, Milestone::FirstPlan)
-            .unwrap()
-            .is_some());
+        let db = open_in_memory().unwrap();
+        assert!(get_milestone(&db, Milestone::FirstPlan).unwrap().is_none());
+        record_milestone(&db, Milestone::FirstPlan).unwrap();
+        assert!(get_milestone(&db, Milestone::FirstPlan).unwrap().is_some());
     }
 
     #[test]
     fn recording_twice_keeps_the_first_timestamp() {
-        let conn = open_in_memory().unwrap();
-        record_milestone(&conn, Milestone::FirstRun).unwrap();
-        let first = get_milestone(&conn, Milestone::FirstRun).unwrap().unwrap();
+        let db = open_in_memory().unwrap();
+        record_milestone(&db, Milestone::FirstRun).unwrap();
+        let first = get_milestone(&db, Milestone::FirstRun).unwrap().unwrap();
         // A second record must not overwrite the original.
-        conn.execute(
-            "UPDATE organizer_milestones SET at = '1' WHERE key = 'first_run'",
-            [],
-        )
-        .unwrap();
-        record_milestone(&conn, Milestone::FirstRun).unwrap();
-        let after = get_milestone(&conn, Milestone::FirstRun).unwrap().unwrap();
-        // INSERT OR IGNORE left our manual value in place: proof it didn't rewrite.
+        {
+            let write_txn = db.db.begin_write().unwrap();
+            {
+                let mut table = write_txn.open_table(MILESTONES).unwrap();
+                table.insert("first_run", "1").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+        record_milestone(&db, Milestone::FirstRun).unwrap();
+        let after = get_milestone(&db, Milestone::FirstRun).unwrap().unwrap();
+        // The manual value stuck: proof `record_milestone` didn't rewrite it.
         assert_eq!(after, "1");
         assert_ne!(first, "0");
     }
 
     #[test]
     fn list_milestones_returns_all_recorded_keys() {
-        let conn = open_in_memory().unwrap();
-        record_milestone(&conn, Milestone::FirstZoneCreated).unwrap();
-        record_milestone(&conn, Milestone::FirstUndo).unwrap();
-        let all = list_milestones(&conn).unwrap();
+        let db = open_in_memory().unwrap();
+        record_milestone(&db, Milestone::FirstZoneCreated).unwrap();
+        record_milestone(&db, Milestone::FirstUndo).unwrap();
+        let all = list_milestones(&db).unwrap();
         let keys: Vec<&str> = all.iter().map(|(k, _)| k.as_str()).collect();
         assert!(keys.contains(&"first_zone_created"));
         assert!(keys.contains(&"first_undo"));

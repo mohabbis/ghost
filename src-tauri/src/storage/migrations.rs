@@ -1,5 +1,12 @@
 //! Versioned SQLite migrations, driven by `PRAGMA user_version`.
 //!
+//! Ghost's live storage backend is redb (see `storage::mod`), not SQLite. This
+//! module's only remaining job is bringing a **legacy** pre-redb `ghost.db`
+//! SQLite file up to its final schema before `storage::sqlite_import` reads it
+//! for the one-time migration into redb — so an install that hasn't been
+//! opened since schema V2 still gets a predictable, fully-migrated row shape
+//! to import from.
+//!
 //! `migrate` applies every migration newer than the database's current
 //! `user_version`, in order, then records the new version. It is idempotent:
 //! re-running against an up-to-date database is a no-op.
