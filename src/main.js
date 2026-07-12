@@ -31,6 +31,9 @@ let timelineFlushScheduled = false;
 let compressionReview = null;
 /** Last Guard Desk scan payload (OCR or preset) — used by Auto-fill POS. */
 let guardLastScanData = null;
+/** Cached from `is_experimental_enabled` — gates observer IPC on stock builds. */
+let experimentalEnabled = false;
+let guardScanInProgress = false;
 
 // Listen for ghost events from the backend
 if (listen) {
@@ -576,7 +579,7 @@ function dominantAppName(events) {
 // While Smart Observer is active, every finished recording session feeds the
 // knowledge base automatically — no manual "Observe Session" step needed.
 async function observerLearnFromSession() {
-  if (!invoke || recordedEvents.length === 0) return;
+  if (!invoke || recordedEvents.length === 0 || !experimentalEnabled) return;
 
   try {
     if (!(await invoke("is_observer_active"))) return;
@@ -721,11 +724,15 @@ async function resumeReplay() {
 
 async function setSpeed(factor) {
   if (!invoke) return;
+  const speedSelect = document.getElementById("speedSelect");
+  const prev = playbackSpeed;
   try {
     await invoke("set_playback_speed", { factor });
     playbackSpeed = factor;
   } catch (error) {
     console.error("Failed to set speed:", error);
+    toastError("Could not set playback speed: " + formatInvokeError(error));
+    if (speedSelect) speedSelect.value = String(prev);
   }
 }
 
@@ -1484,6 +1491,10 @@ async function saveSettings() {
   const openaiKey = document.getElementById("cfg-intel-openai-key")?.value?.trim();
   const anthropicKey = document.getElementById("cfg-intel-anthropic-key")?.value?.trim();
 
+  const saveBtn = document.querySelector("[data-save-config]");
+  if (saveBtn?.disabled) return;
+  if (saveBtn) saveBtn.disabled = true;
+
   try {
     if (openaiKey) {
       await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
@@ -1501,6 +1512,8 @@ async function saveSettings() {
   } catch (error) {
     console.error("Failed to save config:", error);
     toastError(`Could not save settings: ${formatInvokeError(error)}`);
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -1542,6 +1555,8 @@ async function testIntelligenceProvider(provider) {
 async function signInWithProvider(provider) {
   if (!invoke) return notAvailable();
   const note = document.getElementById("account-status-note");
+  const btn = document.querySelector(`[data-account-sign-in="${provider}"]`);
+  if (btn) btn.disabled = true;
   if (note) note.textContent = "Opening your browser to sign in…";
   try {
     await invoke("account_sign_in", { provider });
@@ -1551,6 +1566,8 @@ async function signInWithProvider(provider) {
     console.error("Sign-in failed:", error);
     if (note) note.textContent = `Sign-in failed: ${formatInvokeError(error)}`;
     else toastError(`Sign-in failed: ${formatInvokeError(error)}`);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -2609,10 +2626,23 @@ async function organizerExportAudit(executionId, format) {
   }
 }
 
+function organizerPlanHasApplyableActions(plan) {
+  return (plan?.actions || []).some(
+    (a) =>
+      a.decision?.decision === "allow" || a.decision?.decision === "require_confirmation",
+  );
+}
+
 async function organizerScan() {
   if (!invoke) return notAvailable();
   const zone = organizerSelectedZone();
   if (!zone) return toastError("Create a Zone first.");
+  const scanBtn = document.getElementById("organizerScanBtn");
+  const prevLabel = scanBtn?.textContent;
+  if (scanBtn) {
+    scanBtn.disabled = true;
+    scanBtn.textContent = "Scanning…";
+  }
   const result = document.getElementById("organizerResult");
   if (result) result.innerHTML = `<p class="organizer-muted">Scanning… nothing has been changed.</p>`;
 
@@ -2621,12 +2651,23 @@ async function organizerScan() {
     plan = await invoke("organizer_plan", { zoneId: zone.id });
   } catch (err) {
     if (result) result.innerHTML = "";
-    return toastError("Scan failed: " + formatInvokeError(err));
+    toastError("Scan failed: " + formatInvokeError(err));
+    if (scanBtn) {
+      scanBtn.disabled = false;
+      scanBtn.textContent = prevLabel || "Scan folder";
+    }
+    return;
+  } finally {
+    if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
   organizerRenderPlan(plan);
-  organizerHasReviewedPlan = plan.actions.length > 0;
+  organizerHasReviewedPlan = organizerPlanHasApplyableActions(plan);
   organizerUpdateButtons(await safeRules(zone.id));
-  showInsight("Preview ready. Nothing moved yet — review each step, then approve.");
+  if (!organizerHasReviewedPlan) {
+    showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
+  } else {
+    showInsight("Preview ready. Nothing moved yet — review each step, then approve.");
+  }
 }
 
 async function safeRules(zoneId) {
@@ -2709,11 +2750,6 @@ async function organizerRun() {
       runBtn.textContent = prevLabel || "Approve & Organize";
     }
     return;
-  } finally {
-    if (runBtn) {
-      runBtn.disabled = false;
-      runBtn.textContent = prevLabel || "Approve & Organize";
-    }
   }
   const r = res.report || {};
   const auditRows = (r.audit || [])
@@ -2757,6 +2793,7 @@ async function organizerRun() {
   }
   organizerHasReviewedPlan = false;
   organizerUpdateButtons(await safeRules(zone.id));
+  if (runBtn) runBtn.textContent = prevLabel || "Approve & Organize";
   showNotification(`Organized: ${r.applied ?? 0} change(s) applied.`, "info");
 }
 
@@ -3486,18 +3523,18 @@ const EXPERIMENTAL_ONLY_CONTROLS = ["replayReliableBtn", "analyzeBtn", "optimize
 async function initExperimentalPanel() {
   const panel = document.getElementById("experimentalPanel");
   if (!invoke) {
+    experimentalEnabled = false;
     EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
       document.getElementById(id)?.setAttribute("hidden", ""),
     );
     return;
   }
-  let enabled = false;
   try {
-    enabled = await invoke("is_experimental_enabled");
+    experimentalEnabled = await invoke("is_experimental_enabled");
   } catch {
-    // Older/stock build without the detection command: keep it hidden.
+    experimentalEnabled = false;
   }
-  if (enabled) {
+  if (experimentalEnabled) {
     panel?.removeAttribute("hidden");
     document.getElementById("navExperimental")?.removeAttribute("hidden");
     EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
@@ -4033,59 +4070,63 @@ function guardDeskInit() {
   });
   
   scanBtn.addEventListener("click", async () => {
+    if (guardScanInProgress) return;
+    guardScanInProgress = true;
+    scanBtn.disabled = true;
+
     // 1. Reset POS and visual state
     guardResetPosForm();
     analysisResult.style.display = "none";
     autofillBtn.disabled = true;
-    
+
     // 2. Load scenario — real OCR when uploads exist, preset otherwise
     let data;
     const useOcr = guardCheckImageFile || guardIdImageFile;
     if (useOcr) {
-      scanBtn.disabled = true;
       try {
         data = await guardScanFromImages(guardCheckImageFile, guardIdImageFile);
         showNotification("Local OCR scan complete", "info");
       } catch (err) {
-        console.warn("OCR failed, falling back to preset:", err);
-        showNotification(`OCR unavailable — using preset (${err})`, "warn");
-        data = GUARD_SCENARIOS[selectEl.value];
-      } finally {
+        console.warn("OCR failed:", err);
+        toastError(
+          "Could not read the uploaded image(s). Try a clearer photo or use a demo preset without uploads.",
+        );
+        guardScanInProgress = false;
         scanBtn.disabled = false;
+        return;
       }
     } else {
       data = GUARD_SCENARIOS[selectEl.value];
     }
-    
+
     guardPopulateVisuals(data);
     guardLastScanData = data;
-    
+
     // 3. Show visual container
     visualContainer.style.display = "flex";
-    
+
     // 4. Run scan animations
     const checkBar = document.getElementById("guardCheckScanBar");
     const idBar = document.getElementById("guardIdScanBar");
-    
+
     checkBar.style.display = "block";
     idBar.style.display = "block";
-    
+
     checkBar.style.top = "-4px";
     idBar.style.top = "-4px";
-    
-    // Trigger transition Reflow
+
     checkBar.offsetHeight;
     idBar.offsetHeight;
-    
+
     checkBar.style.top = "100%";
     idBar.style.top = "100%";
-    
+
     setTimeout(() => {
       checkBar.style.display = "none";
       idBar.style.display = "none";
-      
-      // 5. Show compliance results
       guardShowComplianceResults(data);
+      guardScanInProgress = false;
+      scanBtn.disabled = false;
     }, 2000);
   });
   

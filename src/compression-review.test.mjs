@@ -17,7 +17,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-globalThis.document = { getElementById: () => null };
+globalThis.document = {
+  getElementById: () => null,
+  createElement: (tag) => {
+    const el = { tagName: tag.toUpperCase(), textContent: "", innerHTML: "" };
+    Object.defineProperty(el, "textContent", {
+      set(v) {
+        this.innerHTML = String(v ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      },
+      get() {
+        return this.innerHTML
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&amp;/g, "&");
+      },
+    });
+    return el;
+  },
+};
 globalThis.window = {};
 
 const { CompressionReview } = await import("./compression-review.js");
@@ -26,14 +48,14 @@ function review() {
   return new CompressionReview(undefined);
 }
 
-test("getStepIcon returns the icon for each known kind and a fallback otherwise", () => {
+test("getStepIcon returns the label for each known kind and a fallback otherwise", () => {
   const r = review();
-  assert.equal(r.getStepIcon("click"), "🖱️");
-  assert.equal(r.getStepIcon("type_text"), "⌨️");
-  assert.equal(r.getStepIcon("shortcut"), "⌘");
-  assert.equal(r.getStepIcon("scroll"), "↕️");
-  assert.equal(r.getStepIcon("wait"), "⏳");
-  assert.equal(r.getStepIcon("unknown"), "❓");
+  assert.equal(r.getStepIcon("click"), "Click");
+  assert.equal(r.getStepIcon("type_text"), "Type");
+  assert.equal(r.getStepIcon("shortcut"), "Key");
+  assert.equal(r.getStepIcon("scroll"), "Scroll");
+  assert.equal(r.getStepIcon("wait"), "Wait");
+  assert.equal(r.getStepIcon("unknown"), "?");
   assert.equal(r.getStepIcon("something_new"), "•");
 });
 
@@ -110,7 +132,10 @@ test("getStepDescription: shortcut, scroll, wait, and unknown kinds", () => {
 test("getStepDescription: an unrecognized kind never silently drops the step", () => {
   const r = review();
   const step = { kind: "future_kind", value: 1 };
-  assert.equal(r.getStepDescription(step), JSON.stringify(step));
+  assert.equal(
+    r.getStepDescription(step),
+    '{&quot;kind&quot;:&quot;future_kind&quot;,&quot;value&quot;:1}',
+  );
 });
 
 test("getWarningText covers every warning kind and falls back for unknown ones", () => {
@@ -128,7 +153,10 @@ test("getWarningText covers every warning kind and falls back for unknown ones",
     /Step 5: typing in secure field/
   );
   const other = { kind: "mystery", step_index: 1 };
-  assert.equal(r.getWarningText(other), JSON.stringify(other));
+  assert.equal(
+    r.getWarningText(other),
+    '{&quot;kind&quot;:&quot;mystery&quot;,&quot;step_index&quot;:1}',
+  );
 });
 
 test("getRiskClass: unknown kind takes precedence over confidence", () => {

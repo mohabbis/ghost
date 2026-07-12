@@ -2,7 +2,7 @@
 //!
 //! The frontend is hand-written vanilla JS with no build step, so nothing
 //! catches a typo'd or unregistered command until a button silently fails at
-//! runtime. This test cross-checks every `invoke("…")` in src/main.js against
+//! runtime. This test cross-checks every `invoke("…")` in frontend JS against
 //! the commands registered in lib.rs's `generate_handler!`, and every invoke
 //! argument key against the command's Rust parameter names (Tauri 2 matches
 //! JS keys against the camelCased Rust names — a snake_case key either errors
@@ -40,8 +40,8 @@ fn read_command_sources() -> String {
     sources.join("\n")
 }
 
-fn registered_commands() -> HashSet<String> {
-    read("src/lib.rs")
+fn parse_command_lines(block: &str) -> HashSet<String> {
+    block
         .lines()
         .filter_map(|line| {
             line.trim()
@@ -51,12 +51,47 @@ fn registered_commands() -> HashSet<String> {
         .collect()
 }
 
+/// Every `commands::…` entry declared in lib.rs — stable block plus the
+/// experimental macro block (present in source even when the feature is off).
+fn registered_commands() -> HashSet<String> {
+    parse_command_lines(&read("src/lib.rs"))
+}
+
+fn experimental_only_commands() -> HashSet<String> {
+    let lib = read("src/lib.rs");
+    let mut in_experimental = false;
+    let mut cmds = HashSet::new();
+    for line in lib.lines() {
+        if line.contains("macro_rules! run_experimental_app") {
+            in_experimental = true;
+            continue;
+        }
+        if in_experimental {
+            if line.trim() == "};" {
+                break;
+            }
+            if let Some(rest) = line.trim().strip_prefix("commands::") {
+                cmds.insert(rest.trim_end_matches(',').to_string());
+            }
+        }
+    }
+    cmds
+}
+
+const FRONTEND_JS: &[&str] = &["../src/main.js", "../src/compression-review.js"];
+
 fn invoked_commands() -> Vec<String> {
-    let js = read("../src/main.js");
     let re = regex::Regex::new(r#"invoke\(\s*"([a-z0-9_]+)""#).unwrap();
-    re.captures_iter(&js)
-        .map(|cap| cap[1].to_string())
-        .collect()
+    let mut out = Vec::new();
+    for path in FRONTEND_JS {
+        let js = read(path);
+        out.extend(
+            re.captures_iter(&js)
+                .map(|cap| cap[1].to_string())
+                .collect::<Vec<_>>(),
+        );
+    }
+    out
 }
 
 #[test]
@@ -75,8 +110,43 @@ fn frontend_invokes_only_registered_commands() {
 
     assert!(
         missing.is_empty(),
-        "src/main.js invokes commands not registered in lib.rs: {:?}",
+        "frontend JS invokes commands not registered in lib.rs: {:?}",
         missing
+    );
+}
+
+/// Automatic post-recording paths must not call experimental IPC in stock builds.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_observer_learn_is_gated() {
+    let js = read("../src/main.js");
+    let re =
+        regex::Regex::new(r"(?s)async function observerLearnFromSession\(\)\s*\{.*?\n\}").unwrap();
+    let body = re
+        .find(&js)
+        .expect("observerLearnFromSession must exist")
+        .as_str();
+    assert!(
+        body.contains("experimentalEnabled"),
+        "observerLearnFromSession must gate on experimentalEnabled in stock builds"
+    );
+}
+
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_compression_review_js_has_no_experimental_invokes() {
+    let experimental = experimental_only_commands();
+    let js = read("../src/compression-review.js");
+    let re = regex::Regex::new(r#"invoke\(\s*"([a-z0-9_]+)""#).unwrap();
+    let bad: Vec<String> = re
+        .captures_iter(&js)
+        .map(|cap| cap[1].to_string())
+        .filter(|name| experimental.contains(name))
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "compression-review.js must not invoke experimental-only commands: {:?}",
+        bad
     );
 }
 
@@ -123,11 +193,12 @@ fn split_top_level(s: &str, sep: char) -> Vec<String> {
 /// param names, minus Tauri-injected params like State/AppHandle/Window).
 fn command_arg_keys() -> HashMap<String, HashSet<String>> {
     let src = read_command_sources();
-    let re = regex::Regex::new(r"(?s)#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\(([^)]*)\)")
-        .unwrap();
+    let re = regex::Regex::new(
+        r"(?s)#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\((.*?)\)\s*(?:->|where|\{)",
+    )
+    .unwrap();
     let mut map = HashMap::new();
     for cap in re.captures_iter(&src) {
-        // Strip `// …` line comments so commas inside them don't split params.
         let params: String = cap[2]
             .lines()
             .map(|l| l.split("//").next().unwrap_or(""))
@@ -160,7 +231,7 @@ fn object_literal_body(js: &str, open_brace: usize) -> Option<&str> {
         let c = bytes[i];
         if let Some(quote) = in_str {
             if c == b'\\' {
-                i += 1; // skip escaped char
+                i += 1;
             } else if c == quote {
                 in_str = None;
             }
@@ -206,16 +277,18 @@ fn object_keys(body: &str) -> Vec<String> {
     keys
 }
 
-/// Every `invoke("cmd", { … })` in main.js with its top-level arg keys.
+/// Every `invoke("cmd", { … })` in frontend JS with its top-level arg keys.
 fn invoked_with_args() -> Vec<(String, Vec<String>)> {
-    let js = read("../src/main.js");
     let re = regex::Regex::new(r#"invoke\(\s*"([a-z0-9_]+)"\s*,\s*\{"#).unwrap();
-    re.captures_iter(&js)
-        .filter_map(|cap| {
+    let mut calls = Vec::new();
+    for path in FRONTEND_JS {
+        let js = read(path);
+        calls.extend(re.captures_iter(&js).filter_map(|cap| {
             let open = cap.get(0).unwrap().end() - 1;
             object_literal_body(&js, open).map(|body| (cap[1].to_string(), object_keys(body)))
-        })
-        .collect()
+        }));
+    }
+    calls
 }
 
 #[test]
@@ -230,14 +303,13 @@ fn frontend_invoke_args_match_command_params() {
     let calls = invoked_with_args();
     assert!(
         calls.len() > 10,
-        "main.js arg parsing looks broken — only found {} invocations with args",
+        "frontend arg parsing looks broken — only found {} invocations with args",
         calls.len()
     );
 
     let mut problems = Vec::new();
     for (cmd, keys) in calls {
         let Some(expected) = commands.get(&cmd) else {
-            // Unregistered commands are caught by the test above.
             continue;
         };
         for key in keys {
@@ -256,12 +328,10 @@ fn frontend_invoke_args_match_command_params() {
 
 #[test]
 fn frontend_actually_uses_the_ipc_bridge() {
-    // Sanity check that the regex is matching real code, so the contract
-    // test above can't silently pass on zero matches.
     let invoked = invoked_commands();
     assert!(
         invoked.len() > 20,
-        "src/main.js invokes parsing looks broken — only found {} invocations",
+        "frontend invoke parsing looks broken — only found {} invocations",
         invoked.len()
     );
 }

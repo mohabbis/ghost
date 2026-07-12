@@ -50,19 +50,19 @@
         </div>
 
         <div class="nav__items" role="tablist" aria-label="Views">
-          <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button">
+          <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button" aria-label="Organize">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span><span>Organize</span>
           </button>
-          <button class="nav__item" data-view="filing" role="tab" aria-selected="false" type="button">
+          <button class="nav__item" data-view="filing" role="tab" aria-selected="false" type="button" aria-label="Plan Filing">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Plan Filing</span>
           </button>
-          <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button">
+          <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button" aria-label="Record and Replay">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span><span>Record &amp; Replay</span>
           </button>
-          <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button">
+          <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button" aria-label="Workflows">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Workflows</span>
           </button>
-          <button class="nav__item" data-view="guard-desk" role="tab" aria-selected="false" type="button">
+          <button class="nav__item" data-view="guard-desk" role="tab" aria-selected="false" type="button" aria-label="Guard Desk">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span><span>Guard Desk</span>
           </button>
           <button class="nav__item" id="navExperimental" data-view="experimental" role="tab" aria-selected="false" type="button" hidden>
@@ -475,7 +475,7 @@
                 <button class="btn btn--ghost btn--small" id="guardAuditBtn" type="button" disabled>Run Audit</button>
               </div>
             </section>
-            <div class="notifications" id="notifications"></div>
+            <div class="notifications" id="notifications" role="status" aria-live="polite"></div>
 
             <div class="workflow-health rail-record" aria-label="Current workflow health">
               <div><span>Steps</span><strong id="healthSteps">0</strong></div>

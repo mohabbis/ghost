@@ -311,6 +311,14 @@ pub fn finish_execution(
 /// durably written by the last `update_execution_progress` before the
 /// crash; there is nothing further to seal).
 pub fn mark_execution_finished(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM organizer_executions WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        return Err(rusqlite::Error::QueryReturnedNoRows);
+    }
     conn.execute(
         "UPDATE organizer_executions SET finished = 1 WHERE id = ?1",
         params![id],

@@ -652,6 +652,16 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   line-height: 1.45;
 }
 
+.app-sidebar .notifications {
+  position: static;
+  top: auto;
+  right: auto;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .events-timeline {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
