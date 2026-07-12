@@ -202,6 +202,33 @@ fn stock_build_test_intelligence_provider_is_gated() {
     );
 }
 
+/// The four Power BI export functions must each refuse to call their
+/// experimental-only command in stock builds — same pattern as
+/// `stock_build_observer_learn_is_gated`.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_power_bi_functions_are_gated() {
+    let js = read("../src/main.js");
+    let functions = [
+        "connectPowerBi",
+        "previewPowerBiExport",
+        "pushPowerBiExport",
+        "revokePowerBiGrant",
+    ];
+    for name in functions {
+        let re =
+            regex::Regex::new(&format!(r"(?s)async function {name}\(\)\s*\{{.*?\n\}}")).unwrap();
+        let body = re
+            .find(&js)
+            .unwrap_or_else(|| panic!("{name} must exist"))
+            .as_str();
+        assert!(
+            body.contains("experimentalEnabled"),
+            "{name} must gate on experimentalEnabled in stock builds"
+        );
+    }
+}
+
 #[cfg(not(feature = "experimental"))]
 #[test]
 fn stock_build_compression_review_js_has_no_experimental_invokes() {
