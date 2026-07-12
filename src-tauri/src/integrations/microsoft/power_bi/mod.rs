@@ -1,4 +1,6 @@
-//! Power BI REST connector (planned — read/export only in phase one).
+//! Power BI REST connector (read/export only in phase one).
+
+pub mod export;
 
 pub struct PowerBiClient;
 
