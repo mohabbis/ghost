@@ -755,9 +755,18 @@ async function replayWorkflow() {
     lastFailedStep = null;
     updateRecordingUI();
     startReplayProgressPolling();
-    await invoke("replay_workflow", { events: recordedEvents });
+    const res = await invoke("execute_routine_action_plan", {
+      events: recordedEvents,
+      workflowName: null,
+    });
     hasReplayedCurrentWorkflow = true;
     await summarizeLastReplayResolution();
+    if (res?.receipt) {
+      showExecutionReceiptModal("Routine replay", res);
+    }
+    if (res?.stopped_early) {
+      toastError(res.stop_reason || "Routine stopped early");
+    }
   } catch (error) {
     console.error("Failed to replay workflow:", error);
     toastError("Replay failed: " + formatInvokeError(error));
@@ -3015,7 +3024,100 @@ async function captureBaseline() {
 
 // ===== Data sources =====
 
-function loadDemoWorkflow() {
+function actionPlanHasApplyableSteps(plan) {
+  return (plan?.steps || []).some((s) => {
+    const d = s.decision || {};
+    return d.kind === "allow" || d.decision === "allow" || d.kind === "require_confirmation";
+  });
+}
+
+function showExecutionReceiptModal(title, res) {
+  const modal = document.getElementById("analysis-modal");
+  const content = modal?.querySelector(".modal-content");
+  if (!content) return;
+  const receiptHtml = res?.receipt ? renderExecutionReceipt(res.receipt) : "";
+  const summary = res?.report_summary || {};
+  const stopped = res?.stopped_early
+    ? `<p class="organizer-muted">Stopped early${res.stop_reason ? `: ${escapeHtml(res.stop_reason)}` : ""}</p>`
+    : "";
+  content.innerHTML = `
+    <h3 style="margin-top:0">${escapeHtml(title)}</h3>
+    ${receiptHtml}
+    <div class="organizer-summary organizer-summary--done">
+      ✓ <strong>${summary.applied ?? 0}</strong> applied ·
+      <strong>${summary.skipped ?? 0}</strong> skipped ·
+      <strong>${summary.failed ?? 0}</strong> failed
+    </div>
+    ${stopped}
+    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+  showModal(modal);
+}
+
+async function loadGhost2Demo() {
+  if (!invoke) return notAvailable();
+  let paths;
+  try {
+    paths = await invoke("organizer_default_paths");
+  } catch (err) {
+    return toastError("Could not resolve Downloads/Documents: " + formatInvokeError(err));
+  }
+  const downloads = paths?.downloads;
+  const financeRoot = paths?.documents || paths?.home;
+  if (!downloads || !financeRoot) {
+    return toastError("Downloads and Documents paths are required for the demo.");
+  }
+
+  let plan;
+  try {
+    plan = await invoke("action_plan_demo", { downloads, financeRoot });
+  } catch (err) {
+    return toastError("Demo plan failed: " + formatInvokeError(err));
+  }
+
+  const modal = document.getElementById("analysis-modal");
+  const content = modal?.querySelector(".modal-content");
+  if (content && plan) {
+    content.innerHTML = `
+      <h3 style="margin-top:0">Ghost 2.0 — Invoice → Finance</h3>
+      ${planSummaryHtml(plan)}
+      ${renderActionPlanSteps(plan)}
+      <p class="organizer-muted">Places a sample invoice in Downloads, moves it to Finance/Invoices, opens TextEdit, inserts a log line, and saves.</p>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn--primary btn--small" id="ghost2DemoRunBtn" type="button">Approve &amp; Run</button>
+        <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal" type="button">Close</button>
+      </div>`;
+    showModal(modal);
+    document.getElementById("ghost2DemoRunBtn")?.addEventListener("click", async () => {
+      closeModal("analysis-modal");
+      await runGhost2Demo(downloads, financeRoot);
+    });
+    return;
+  }
+  await runGhost2Demo(downloads, financeRoot);
+}
+
+async function runGhost2Demo(downloads, financeRoot) {
+  const ok = await ghostConfirm(
+    "Run the Ghost 2.0 invoice demo? Files in Downloads may be renamed and moved; TextEdit will open on macOS.",
+    "Approve & Run",
+  );
+  if (!ok) return;
+  try {
+    const res = await invoke("execute_action_plan", {
+      source: { kind: "demo" },
+      events: null,
+      downloads,
+      financeRoot,
+    });
+    showExecutionReceiptModal("Demo complete", res);
+    showNotification(`Demo: ${res.report_summary?.applied ?? 0} step(s) applied.`, "info");
+  } catch (err) {
+    toastError("Demo failed: " + formatInvokeError(err));
+  }
+}
+
+/** Legacy synthetic CRM demo — kept for routine/replay shape exploration. */
+function loadLegacyRoutineDemo() {
   const now = Date.now();
   resetReplayInspectionState();
   recordedEvents = [
@@ -3032,7 +3134,11 @@ function loadDemoWorkflow() {
   void refreshTimeline();
   updateRecordingUI();
   showInsight("Demo loaded. This is the shape of a useful Ghost workflow: clear steps, timing, and UI context.");
-  showNotification("Demo workflow loaded — audit it, then try recording your own.");
+  showNotification("Legacy routine demo loaded — audit it, then try recording your own.");
+}
+
+async function loadDemoWorkflow() {
+  await loadGhost2Demo();
 }
 
 async function createDataSource() {
@@ -3075,8 +3181,8 @@ async function loadVariablesFromSource() {
 // ===== Ghost Organizer =====
 // The wedge product's trust pipeline, surfaced end-to-end:
 //   Scan -> Preview -> Approve -> Organize -> Audit -> Undo
-// `organizer_plan` is read-only (mutates nothing); `organizer_execute` and
-// `organizer_undo` mutate only inside an approved Zone and the backend
+// `organizer_plan` / `action_plan_from_zone` are read-only (mutates nothing);
+// `execute_action_plan` and `organizer_undo` mutate only inside an approved Zone and the backend
 // re-checks policy on every action, so the UI never decides what is safe.
 
 let organizerZones = [];
@@ -3693,10 +3799,8 @@ async function organizerScan() {
   const result = document.getElementById("organizerResult");
   if (result) result.innerHTML = `<p class="organizer-muted">Scanning… nothing has been changed.</p>`;
 
-  let plan;
   let actionPlan;
   try {
-    plan = await invoke("organizer_plan", { zoneId: zone.id });
     actionPlan = await invoke("action_plan_from_zone", { zoneId: zone.id });
   } catch (err) {
     if (result) result.innerHTML = "";
@@ -3709,9 +3813,13 @@ async function organizerScan() {
   } finally {
     if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
-  organizerRenderPlan(plan);
   if (actionPlan) organizerRenderActionPlan(actionPlan);
-  organizerHasReviewedPlan = organizerPlanHasApplyableActions(plan);
+  if (result) {
+    result.innerHTML = organizerHasReviewedPlan
+      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed.</p>`
+      : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
+  }
+  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
   organizerUpdateButtons(await safeRules(zone.id));
   if (!organizerHasReviewedPlan) {
     showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
@@ -3900,6 +4008,9 @@ async function organizerRun() {
     return;
   }
   const r = res.report_summary || res.report || {};
+  if (res.stopped_early) {
+    toastError(res.stop_reason || "Organize stopped early");
+  }
   const receiptHtml = res.receipt ? renderExecutionReceipt(res.receipt) : "";
   const auditRows = (res.receipt?.steps || [])
     .map((s) => {
@@ -4009,7 +4120,10 @@ async function organizerShowHistory() {
         .map(
           (h) => `<li>
             <div><strong>${escapeHtml(zoneName(h.zone_id))}</strong> — ${h.applied} applied, ${h.skipped} skipped, ${h.failed} failed ${h.sealed ? `<span class="org-seal" title="This run is sealed into the tamper-evident audit chain">${icon("i-seal")} sealed</span>` : ""}</div>
-            <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
+            <div class="btn-row">
+              <button class="btn btn--ghost btn--small" data-receipt-exec="${escapeAttr(h.id)}">Receipt</button>
+              <button class="btn btn--ghost btn--small" data-undo-exec="${escapeAttr(h.id)}">Undo</button>
+            </div>
           </li>`,
         )
         .join("")
@@ -4030,6 +4144,16 @@ async function organizerShowHistory() {
     btn.addEventListener("click", async () => {
       await organizerUndo(btn.dataset.undoExec);
       closeModal("analysis-modal");
+    }),
+  );
+  content.querySelectorAll("[data-receipt-exec]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      try {
+        const receipt = await invoke("get_execution_receipt", { executionId: btn.dataset.receiptExec });
+        showExecutionReceiptModal("Execution receipt", { receipt, report_summary: receipt });
+      } catch (err) {
+        toastError("Receipt unavailable: " + formatInvokeError(err));
+      }
     }),
   );
   const verifyBtn = document.getElementById("organizerVerifyBtn");

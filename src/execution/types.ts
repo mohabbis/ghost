@@ -15,9 +15,31 @@ export interface StepVerification {
   continue_execution: boolean;
 }
 
+export interface UiTarget {
+  app: string;
+  role: string;
+  title?: string | null;
+  fingerprint?: string | null;
+}
+
+export type ActionKind =
+  | { kind: "create_folder"; path: string }
+  | { kind: "move_file"; from: string; to: string }
+  | { kind: "rename_file"; from: string; to: string }
+  | { kind: "open_application"; name: string }
+  | { kind: "semantic_focus"; target: UiTarget }
+  | { kind: "semantic_set_value"; target: UiTarget; value: string }
+  | { kind: "semantic_verify"; target: UiTarget; expected_value?: string | null }
+  | { kind: "type_text"; text: string; app?: string | null }
+  | { kind: "shortcut"; combo: string }
+  | { kind: "wait"; ms: number }
+  | { kind: "verify_path"; path: string; should_exist: boolean }
+  | { kind: "ui_replay"; events: unknown[]; step_index: number };
+
 export interface ActionStep {
   id: string;
   label: string;
+  kind: ActionKind;
   capability: Record<string, unknown>;
   decision: Record<string, unknown>;
   confidence?: number;

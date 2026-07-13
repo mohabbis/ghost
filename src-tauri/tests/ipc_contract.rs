@@ -671,9 +671,11 @@ fn replay_workflow_still_goes_through_policy_approval() {
         "replayWorkflow must gate on confirmPolicyBeforeReplay"
     );
     let confirm_idx = body.find("confirmPolicyBeforeReplay").unwrap();
-    let replay_idx = body.find("replay_workflow").unwrap();
+    let replay_idx = body
+        .find("execute_routine_action_plan")
+        .expect("replayWorkflow must invoke execute_routine_action_plan");
     assert!(
         confirm_idx < replay_idx,
-        "confirmPolicyBeforeReplay must run before replay_workflow"
+        "confirmPolicyBeforeReplay must run before execute_routine_action_plan"
     );
 }

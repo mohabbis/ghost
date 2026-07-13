@@ -256,6 +256,7 @@ mod tests {
                 hash: String::new(),
                 prev_hash: String::new(),
                 finished: true,
+                receipt: None,
             }
         }
     }
