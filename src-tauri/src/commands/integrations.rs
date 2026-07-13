@@ -35,8 +35,7 @@ use crate::integrations::microsoft::power_bi::export::{build_export, AuditExport
 use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
 use crate::integrations::microsoft::MicrosoftIntegrationService;
 use crate::storage::executions::list_full_executions_since;
-use crate::storage::open_default;
-use rusqlite::Connection;
+use crate::storage::{open_default, Db};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -125,20 +124,17 @@ pub fn power_bi_export_preview(
     engine: State<GhostEngine>,
 ) -> Result<AuditExportPayload, String> {
     let _ = &engine; // kept for signature symmetry with the push command
-    let conn = open_default().map_err(|e| e.to_string())?;
-    export_preview_with_conn(&conn, since_days)
+    let db = open_default().map_err(|e| e.to_string())?;
+    export_preview_with_db(&db, since_days)
 }
 
 /// The actual logic behind `power_bi_export_preview`, taking an already-open
-/// connection so it is testable against an in-memory database instead of the
+/// database handle so it is testable against an in-memory one instead of the
 /// real OS data directory (`open_default` has no test seam of its own) —
 /// mirrors `commands/organizer.rs`'s `organizer_plan_with_conn` pattern.
-fn export_preview_with_conn(
-    conn: &Connection,
-    since_days: Option<u32>,
-) -> Result<AuditExportPayload, String> {
-    let executions = list_full_executions_since(conn, since_epoch_secs(since_days))
-        .map_err(|e| e.to_string())?;
+fn export_preview_with_db(db: &Db, since_days: Option<u32>) -> Result<AuditExportPayload, String> {
+    let executions =
+        list_full_executions_since(db, since_epoch_secs(since_days)).map_err(|e| e.to_string())?;
     Ok(build_export(&executions))
 }
 
@@ -164,9 +160,9 @@ pub async fn power_bi_push_audit_export(
         .power_bi_access_token(&auth)
         .map_err(|e| e.to_string())?;
 
-    let conn = open_default().map_err(|e| e.to_string())?;
-    let executions = list_full_executions_since(&conn, since_epoch_secs(since_days))
-        .map_err(|e| e.to_string())?;
+    let db = open_default().map_err(|e| e.to_string())?;
+    let executions =
+        list_full_executions_since(&db, since_epoch_secs(since_days)).map_err(|e| e.to_string())?;
     let payload = build_export(&executions);
 
     let (runs_len, actions_len, policy_len) = (
@@ -245,8 +241,8 @@ mod tests {
 
     #[test]
     fn power_bi_export_preview_is_read_only_and_returns_empty_for_no_executions() {
-        let conn = crate::storage::open_in_memory().unwrap();
-        let payload = export_preview_with_conn(&conn, None).unwrap();
+        let db = crate::storage::open_in_memory().unwrap();
+        let payload = export_preview_with_db(&db, None).unwrap();
         assert!(payload.is_empty());
     }
 

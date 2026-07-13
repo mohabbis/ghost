@@ -613,71 +613,74 @@ pub fn list_executions(db: &Db) -> anyhow::Result<Vec<ExecutionSummary>> {
     Ok(out)
 }
 
+/// True if `created_at` (epoch-seconds text) is at or after `since_epoch_secs`.
+/// A malformed timestamp is treated as "not in range" rather than erroring —
+/// callers are building a best-effort export window, not validating storage.
+fn created_at_since(created_at: &str, since_epoch_secs: u64) -> bool {
+    created_at
+        .parse::<u64>()
+        .is_ok_and(|ts| ts >= since_epoch_secs)
+}
+
 /// List execution summaries created at or after `since_epoch_secs`, newest
-/// first — same shape as [`list_executions`], filtered at the SQL level
-/// (following the `CAST(created_at AS INTEGER)` idiom already used by
-/// [`prune_executions`]) rather than in Rust, since `created_at` is stored
-/// as epoch-seconds text.
+/// first — same shape and iterate-then-sort style as [`list_executions`],
+/// just with a `created_at` filter applied before sorting.
 pub fn list_executions_since(
-    conn: &Connection,
+    db: &Db,
     since_epoch_secs: u64,
-) -> rusqlite::Result<Vec<ExecutionSummary>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, zone_id, created_at, applied, skipped, failed, hash, finished \
-         FROM organizer_executions \
-         WHERE CAST(created_at AS INTEGER) >= ?1 \
-         ORDER BY created_at DESC, id DESC",
-    )?;
-    let rows = stmt.query_map(params![since_epoch_secs as i64], |row| {
-        let hash: String = row.get(6)?;
-        Ok(ExecutionSummary {
-            id: row.get(0)?,
-            zone_id: row.get(1)?,
-            created_at: row.get(2)?,
-            applied: row.get::<_, i64>(3)? as usize,
-            skipped: row.get::<_, i64>(4)? as usize,
-            failed: row.get::<_, i64>(5)? as usize,
-            sealed: !hash.is_empty(),
-            finished: row.get::<_, i64>(7)? != 0,
-        })
-    })?;
-    rows.collect()
+) -> anyhow::Result<Vec<ExecutionSummary>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(EXECUTIONS)?;
+    let mut out = Vec::new();
+    for entry in table.iter()? {
+        let (_k, v) = entry?;
+        let row: ExecutionRow = serde_json::from_slice(v.value())?;
+        if !created_at_since(&row.created_at, since_epoch_secs) {
+            continue;
+        }
+        out.push(ExecutionSummary {
+            id: row.id,
+            zone_id: row.zone_id,
+            created_at: row.created_at,
+            applied: row.applied,
+            skipped: row.skipped,
+            failed: row.failed,
+            sealed: !row.hash.is_empty(),
+            finished: row.finished,
+        });
+    }
+    out.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    Ok(out)
 }
 
 /// Like [`list_executions_since`] but loads full rows (audit log + undo
 /// journal included), for callers that need the actual per-action history —
 /// e.g. building an export payload — rather than just summary counts.
 pub fn list_full_executions_since(
-    conn: &Connection,
+    db: &Db,
     since_epoch_secs: u64,
-) -> rusqlite::Result<Vec<StoredExecution>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json, \
-         hash, prev_hash, finished \
-         FROM organizer_executions \
-         WHERE CAST(created_at AS INTEGER) >= ?1 \
-         ORDER BY created_at DESC, id DESC",
-    )?;
-    let rows = stmt.query_map(params![since_epoch_secs as i64], |row| {
-        let audit_json: String = row.get(6)?;
-        let undo_json: String = row.get(7)?;
-        let audit = serde_json::from_str(&audit_json).map_err(to_sqlite_err)?;
-        let undo = serde_json::from_str(&undo_json).map_err(to_sqlite_err)?;
-        Ok(StoredExecution {
-            id: row.get(0)?,
-            zone_id: row.get(1)?,
-            created_at: row.get(2)?,
-            applied: row.get::<_, i64>(3)? as usize,
-            skipped: row.get::<_, i64>(4)? as usize,
-            failed: row.get::<_, i64>(5)? as usize,
-            audit,
-            undo,
-            hash: row.get(8)?,
-            prev_hash: row.get(9)?,
-            finished: row.get::<_, i64>(10)? != 0,
-        })
-    })?;
-    rows.collect()
+) -> anyhow::Result<Vec<StoredExecution>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(EXECUTIONS)?;
+    let mut out = Vec::new();
+    for entry in table.iter()? {
+        let (_k, v) = entry?;
+        let row: ExecutionRow = serde_json::from_slice(v.value())?;
+        if !created_at_since(&row.created_at, since_epoch_secs) {
+            continue;
+        }
+        out.push(stored_from_row(row)?);
+    }
+    out.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    Ok(out)
 }
 
 /// Load a single past execution with its audit log and undo journal.
@@ -1104,33 +1107,42 @@ mod tests {
 
     #[test]
     fn list_executions_since_excludes_older_runs() {
-        let conn = open_in_memory().unwrap();
+        let db = open_in_memory().unwrap();
         let old_ts = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             - 100 * 86_400)
             .to_string();
-        conn.execute(
-            "INSERT INTO organizer_executions \
-             (id, zone_id, created_at, applied, skipped, failed, audit_json, undo_json) \
-             VALUES ('old', 'z', ?1, 0, 0, 0, '[]', '[]')",
-            params![old_ts],
-        )
-        .unwrap();
+        insert_raw(
+            &db,
+            ExecutionRow {
+                id: "old".to_string(),
+                zone_id: "z".to_string(),
+                created_at: old_ts,
+                applied: 0,
+                skipped: 0,
+                failed: 0,
+                audit_json: "[]".to_string(),
+                undo_json: "[]".to_string(),
+                hash: String::new(),
+                prev_hash: String::new(),
+                finished: true,
+            },
+        );
 
         let tmp = Scratch::new();
         tmp.file("report.pdf", b"a");
         let rules = vec![full_rule(tmp.path())];
         let report = execute_plan(&plan_with_rules("z", &rules), &rules);
-        let fresh = save_execution(&conn, "z", &report).unwrap();
+        let fresh = save_execution(&db, "z", &report).unwrap();
 
         let cutoff = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             - 30 * 86_400;
-        let recent = list_executions_since(&conn, cutoff).unwrap();
+        let recent = list_executions_since(&db, cutoff).unwrap();
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].id, fresh);
     }
@@ -1143,11 +1155,11 @@ mod tests {
         let rules = vec![full_rule(tmp.path())];
         let report = execute_plan(&plan_with_rules("z", &rules), &rules);
 
-        let conn = open_in_memory().unwrap();
-        let id = save_execution(&conn, "z", &report).unwrap();
+        let db = open_in_memory().unwrap();
+        let id = save_execution(&db, "z", &report).unwrap();
 
         let since = 0u64;
-        let full = list_full_executions_since(&conn, since).unwrap();
+        let full = list_full_executions_since(&db, since).unwrap();
         assert_eq!(full.len(), 1);
         assert_eq!(full[0].id, id);
         assert_eq!(full[0].audit, report.audit);
