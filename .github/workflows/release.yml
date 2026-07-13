@@ -250,13 +250,13 @@ jobs:
           echo "Publishing release for $TAG"
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: macos-release
           path: dist
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-release
           path: dist
