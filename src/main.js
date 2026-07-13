@@ -1315,7 +1315,7 @@ async function openSettings() {
   content.innerHTML = `
     <h3>${icon("i-gear")} Settings</h3>
 
-    <h4 style="color: #8d7bff; margin-bottom: 4px;">Account</h4>
+    <h4 style="color: #0e8f78; margin-bottom: 4px;">Account</h4>
     ${
       account.signed_in
         ? `<p class="panel__hint" style="margin: 4px 0 8px;">Signed in as <strong>${escapeAttr(account.name || account.email)}</strong> (${escapeAttr(account.email)}) via ${escapeAttr(account.provider)}.</p>
@@ -1330,7 +1330,7 @@ async function openSettings() {
 
     ${
       experimentalEnabled
-        ? `<h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
+        ? `<h4 style="color: #0e8f78; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
            <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
            <label>Default intelligence provider
              <select id="cfg-intel-default" style="${fieldStyle}">
@@ -1364,7 +1364,7 @@ async function openSettings() {
 
     ${
       experimentalEnabled
-        ? `<h4 style="color: #8d7bff; margin: 12px 0 4px;">Power BI Export</h4>
+        ? `<h4 style="color: #0e8f78; margin: 12px 0 4px;">Power BI Export</h4>
            <p class="panel__hint" style="margin: 4px 0 8px;">Exports a summary of Organizer run history to a push dataset in your own Power BI "My workspace." Requires Microsoft sign-in first, then a separate, revocable Power BI consent. Always preview before pushing.</p>
            ${
              powerBiStatus.active
@@ -1382,7 +1382,7 @@ async function openSettings() {
         : ""
     }
 
-    <h4 style="color: #8d7bff; margin: 12px 0 4px;">Replay</h4>
+    <h4 style="color: #0e8f78; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
       <input id="cfg-default-speed" type="number" step="0.1" min="0.1" max="10"
              value="${escapeAttr(replay.default_speed)}" style="${fieldStyle}">
@@ -1400,7 +1400,7 @@ async function openSettings() {
              value="${escapeAttr(replay.retry_backoff_multiplier)}" style="${fieldStyle}">
     </label>
 
-    <h4 style="color: #8d7bff; margin: 12px 0 4px;">AI</h4>
+    <h4 style="color: #0e8f78; margin: 12px 0 4px;">AI</h4>
     <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
       <input id="cfg-ai-enabled" type="checkbox" ${ai.enabled ? "checked" : ""}>
       AI features enabled
@@ -1433,7 +1433,7 @@ async function openSettings() {
     </label>
     <p class="panel__hint" style="margin: 4px 0 12px;">Runs entirely on device — nothing is uploaded. Requires a build with the experimental feature; otherwise "local_model" falls back to the built-in heuristics. Ghost does not ship or download model weights.</p>
 
-    <h4 style="color: #8d7bff; margin: 12px 0 4px;">Audit retention</h4>
+    <h4 style="color: #0e8f78; margin: 12px 0 4px;">Audit retention</h4>
     <label>Keep only the most recent N runs
       <input id="cfg-audit-keep-last" type="number" step="1" min="1" placeholder="keep all"
              value="${escapeAttr(audit.retention_keep_last ?? "")}" style="${fieldStyle}">
@@ -1843,7 +1843,7 @@ function updateRecordingUI() {
         statusEl.style.color = "#f59e0b";
       } else {
         statusEl.innerHTML = '<span class="pulse" aria-hidden="true"></span> Playing...';
-        statusEl.style.color = "#8d7bff";
+        statusEl.style.color = "#0e8f78";
       }
     } else {
       statusEl.innerHTML = '<span class="pulse" aria-hidden="true" style="display:none"></span> Ready to record';
@@ -2018,7 +2018,7 @@ function displaySuggestions(suggestions) {
   content.innerHTML = `
     <h3>${icon("i-robot")} Proactive Automation Suggestions</h3>
     ${suggestions.map((s, i) => `
-      <div style="margin: 12px 0; padding: 12px; background: rgba(139, 123, 255, 0.1); border-radius: 8px; border-left: 3px solid #8d7bff;">
+      <div style="margin: 12px 0; padding: 12px; background: rgba(14, 143, 120, 0.1); border-radius: 8px; border-left: 3px solid #0e8f78;">
         <p><strong>${i + 1}. ${escapeHtml(s.suggestion)}</strong></p>
         <p style="font-size: 0.9rem; color: #9ca3af;">Suggested workflow: <code>${escapeHtml(s.suggested_workflow_name)}</code></p>
         <p style="font-size: 0.85rem;">Confidence: ${(s.confidence * 100).toFixed(1)}%</p>
@@ -2054,7 +2054,7 @@ function displayGeekInsights(insights, appName) {
   content.innerHTML = `
     <h3>${icon("i-wrench")} Geek Mode: Technical Insights for ${escapeHtml(appName)}</h3>
     <div style="margin: 12px 0;">
-      <h4 style="color: #8d7bff;">Performance Metrics</h4>
+      <h4 style="color: #0e8f78;">Performance Metrics</h4>
       <p>Total Duration: ${insights.performance_metrics.total_duration_ms}ms</p>
       <p>Avg Delay: ${insights.performance_metrics.avg_delay_ms.toFixed(2)}ms</p>
       ${insights.performance_metrics.bottleneck_events.length > 0 ? `
@@ -2062,7 +2062,7 @@ function displayGeekInsights(insights, appName) {
       ` : ""}
     </div>
     <div style="margin: 12px 0;">
-      <h4 style="color: #8d7bff;">Event Timing Analysis</h4>
+      <h4 style="color: #0e8f78;">Event Timing Analysis</h4>
       <table style="width: 100%; font-size: 0.85rem;">
         <tr style="border-bottom: 1px solid #374151;">
           <th>Index</th><th>Action</th><th>Delay Before</th>

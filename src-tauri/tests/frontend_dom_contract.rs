@@ -126,6 +126,85 @@ fn wireup_bind_targets_are_authored() {
     );
 }
 
+fn function_body<'a>(js: &'a str, name: &str) -> &'a str {
+    let start = js
+        .find(&format!("function {name}("))
+        .unwrap_or_else(|| panic!("expected function {name} in src/main.js"));
+    let open = js[start..]
+        .find('{')
+        .map(|idx| start + idx)
+        .unwrap_or_else(|| panic!("expected opening brace for function {name}"));
+
+    let mut depth = 0i32;
+    for (idx, ch) in js[open..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &js[start..=open + idx];
+                }
+            }
+            _ => {}
+        }
+    }
+
+    panic!("expected closing brace for function {name}");
+}
+
+#[test]
+fn module_initializers_wire_static_feature_controls() {
+    let js = read("../src/main.js");
+
+    let guard_init = function_body(&js, "guardDeskInit");
+    for id in [
+        "guardScanBtn",
+        "guardUploadCheckBtn",
+        "guardUploadIdBtn",
+        "guardAutofillBtn",
+        "guardResetBtn",
+    ] {
+        assert!(
+            guard_init.contains(&format!("\"{id}\"")) && guard_init.contains("addEventListener"),
+            "guardDeskInit must wire static Guard Desk control `{id}`"
+        );
+    }
+
+    assert!(
+        guard_init.contains("guardApproveBtn") && js.contains("approveBtn.onclick"),
+        "Guard Desk approve control must be enabled and wired after a scan result"
+    );
+
+    let filing_init = function_body(&js, "filingInit");
+    for id in [
+        "filingPreviewBtn",
+        "filingSampleBtn",
+        "filingClearBtn",
+        "savingsEstimateBtn",
+    ] {
+        assert!(
+            filing_init.contains(&format!("\"{id}\"")) && filing_init.contains("addEventListener"),
+            "filingInit must wire static Plan Filing control `{id}`"
+        );
+    }
+
+    let dom_ready = js
+        .find("window.addEventListener(\"DOMContentLoaded\"")
+        .map(|idx| &js[idx..])
+        .expect("expected DOMContentLoaded bootstrap in src/main.js");
+    for initializer in [
+        "guardDeskInit();",
+        "filingInit();",
+        "organizerInit();",
+        "wireUpControls();",
+    ] {
+        assert!(
+            dom_ready.contains(initializer),
+            "DOMContentLoaded bootstrap must call `{initializer}`"
+        );
+    }
+}
+
 fn data_view_values(html: &str, attr_prefix: &str) -> HashSet<String> {
     let re =
         regex::Regex::new(&format!(r#"{attr_prefix}\s*=\s*["']([A-Za-z0-9_-]+)["']"#)).unwrap();

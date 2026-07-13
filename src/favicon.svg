@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
   <defs>
     <linearGradient id="parrotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8d7bff" />
+      <stop offset="0%" stop-color="#0e8f78" />
       <stop offset="100%" stop-color="#ffb86b" />
     </linearGradient>
   </defs>
