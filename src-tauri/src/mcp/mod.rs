@@ -16,7 +16,10 @@ pub mod token_store;
 pub mod tools;
 
 pub use approval::{issue_approval_token, ApprovalTokenClaims, SignedApprovalToken};
-pub use http::{localhost_http_running, run_localhost_http};
+pub use http::{
+    http_server_status, localhost_http_running, run_localhost_http, start_http_server,
+    stop_http_server, HttpServerOptions, HttpServerStatus,
+};
 pub use pairing::{disable_pairing, enable_pairing, pairing_is_required, pairing_status};
 pub use plan_hash::hash_organizer_plan;
 pub use server::run_stdio;

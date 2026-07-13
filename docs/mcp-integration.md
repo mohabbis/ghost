@@ -89,13 +89,19 @@ Local stdio preserves Ghost's local-first posture: no Ghost cloud account, no pr
 ghost mcp serve http 8787
 ```
 
-Binds to `127.0.0.1` only. `POST /mcp` with a JSON-RPC body — same `handle_message` path as stdio. Pairing rules still apply on `initialize`. Wide-area remote MCP (TLS relay, cloud endpoint) remains planned.
+Binds to `127.0.0.1` only. `POST /mcp` with a JSON-RPC body — same `handle_message` path as stdio. Pairing rules still apply on `initialize`.
 
-## Remote MCP later
+Settings (experimental build) can also start/stop the HTTP server from the desktop UI:
 
-Remote MCP endpoints beyond localhost are out of scope until local approval integrity is proven. A wide-area endpoint adds authentication, pairing, TLS, session expiry, replay protection, cross-origin protections, remote approval spoofing resistance, and network-exposure review.
+- `mcp_start_http_server` / `mcp_stop_http_server` / `mcp_http_server_status`
+- Optional LAN bind (`0.0.0.0`) requires a bearer token on every `POST /mcp` request
+- `POST /fabric/webhook` on the same listener (secret via `X-Ghost-Webhook-Secret`; configure with `fabric_set_webhook_secret`)
 
-Any future remote endpoint must be denied by default, explicitly enabled by the user, documented as higher risk, and covered by an external-agent threat model before shipping.
+TLS for wide-area access is expected via a local reverse proxy (Caddy, nginx) in front of the listener — Ghost does not terminate TLS in-process yet.
+
+## Remote MCP (opt-in LAN)
+
+Binding beyond loopback is **denied by default** in the UI unless the user explicitly enables LAN exposure and sets a bearer token. This is higher risk than stdio: document network exposure, use TLS at the proxy, and keep pairing enabled when possible.
 
 ## Tool surface
 

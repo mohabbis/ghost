@@ -65,6 +65,52 @@ impl GoogleIntegrationService {
             .map_err(|_| IntegrationError::TokenRefreshFailed)
     }
 
+    /// Narrow the active Google Cloud grant to a single export bucket.
+    pub fn bind_export_bucket(
+        &self,
+        auth: &AuthManager,
+        bucket: &str,
+    ) -> Result<(), IntegrationError> {
+        let bucket = bucket.trim();
+        if bucket.is_empty() {
+            return Err(IntegrationError::InvalidResponse);
+        }
+        self.google_grant_active(auth)?;
+        let scope = ResourceScope::Destination {
+            id: bucket.to_string(),
+            label: None,
+        };
+        self.identity
+            .set_grant_resource_scope(auth, IntegrationKind::GoogleCloud, scope)
+            .map_err(|_| IntegrationError::TokenRefreshFailed)
+    }
+
+    /// Bound export bucket when the grant is scoped to `Destination`.
+    pub fn bound_export_bucket(&self, auth: &AuthManager) -> Option<String> {
+        self.identity
+            .active_grant(auth, IntegrationKind::GoogleCloud)
+            .and_then(|g| match g.resource_scope {
+                ResourceScope::Destination { id, .. } => Some(id),
+                ResourceScope::Global => None,
+                _ => None,
+            })
+    }
+
+    /// Ensure push targets match the bound bucket when scope is narrowed.
+    pub fn ensure_push_bucket_allowed(
+        &self,
+        auth: &AuthManager,
+        bucket: &str,
+    ) -> Result<(), IntegrationError> {
+        self.google_grant_active(auth)?;
+        if let Some(bound) = self.bound_export_bucket(auth) {
+            if bound != bucket {
+                return Err(IntegrationError::PermissionDenied);
+            }
+        }
+        Ok(())
+    }
+
     pub fn google_access_token(&self, auth: &AuthManager) -> Result<String, IntegrationError> {
         self.google_grant_active(auth)?;
         let grant_id = self

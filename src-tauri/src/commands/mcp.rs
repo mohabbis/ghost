@@ -73,3 +73,38 @@ pub fn organizer_issue_mcp_approval_token(
     pending::mark_approved_for_zone(&zone_id);
     serde_json::to_string(&signed).map_err(|e| e.to_string())
 }
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_http_server_status() -> crate::mcp::HttpServerStatus {
+    crate::mcp::http_server_status()
+}
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_start_http_server(
+    port: Option<u16>,
+    expose_lan: Option<bool>,
+    bearer_token: Option<String>,
+) -> Result<crate::mcp::HttpServerStatus, String> {
+    let webhook_secret = crate::integrations::microsoft::fabric::webhook::current_secret();
+    let options = crate::mcp::HttpServerOptions {
+        bind_host: if expose_lan.unwrap_or(false) {
+            "0.0.0.0".to_string()
+        } else {
+            "127.0.0.1".to_string()
+        },
+        port: port.unwrap_or(8787),
+        bearer_token,
+        fabric_webhook_secret: webhook_secret,
+    };
+    crate::mcp::start_http_server(options)?;
+    Ok(crate::mcp::http_server_status())
+}
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_stop_http_server() -> crate::mcp::HttpServerStatus {
+    crate::mcp::stop_http_server();
+    crate::mcp::http_server_status()
+}
