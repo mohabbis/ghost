@@ -71,4 +71,4 @@ Ghost records the intent via `triggers::record_intent` and returns the intent JS
 
 Commands: `fabric_set_webhook_secret`, `fabric_webhook_status`.
 
-See `docs/power-bi-integration.md` for the shared export payload shape.
+Eventstream / Activator bridge patterns and sample payloads: `docs/fabric-eventstream-webhook.md`.

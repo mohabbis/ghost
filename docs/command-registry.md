@@ -265,8 +265,11 @@ plan can never reach the filesystem.
 | `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
 | `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (polled by the UI). |
 | `mcp_http_server_status` | experimental | ✓ | – | – | – | – | – | low | Reports MCP/Fabric HTTP listener state (bind, port, LAN exposure). |
-| `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener; LAN requires bearer token. |
+| `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener; LAN requires bearer token; optional in-process TLS PEM paths. |
 | `mcp_stop_http_server` | experimental | ✓ | – | – | – | – | – | low | Stops the HTTP listener started by `mcp_start_http_server`. |
+| `mcp_relay_status` | experimental | ✓ | – | – | – | – | – | low | Reports outbound cloud relay connection state. |
+| `mcp_start_relay` | experimental | ✓ | – | – | – | – | ✓ | high | Outbound HTTPS poll to user-hosted MCP relay (`docs/mcp-relay.md`). |
+| `mcp_stop_relay` | experimental | ✓ | – | – | – | – | – | low | Stops outbound relay client. |
 
 ### `commands/filing.rs` — audience-aware filing preview (stable)
 

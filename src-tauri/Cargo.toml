@@ -76,6 +76,9 @@ tokenizers = { version = "0.23", optional = true }
 # because we call its Rust API, not just the frontend `opener` plugin command.
 # MIT licensed (passes deny.toml).
 open = "5"
+# In-process TLS for the experimental MCP HTTP server (rustls + ring).
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
 
 [dev-dependencies]
 # `tauri::test::mock_app()` + `Manager::manage`/`state` — the only supported
@@ -95,7 +98,12 @@ profiling = ["tracing-chrome"]
 # local-model inference dependencies (core/local_llm.rs) — without this
 # feature, `provider = "local_model"` degrades to the existing heuristic
 # LocalFallback rather than failing to compile.
-experimental = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers"]
+experimental = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:rustls", "dep:rustls-pemfile"]
+
+[[bin]]
+name = "mcp_relay_server"
+path = "src/bin/mcp_relay_server.rs"
+required-features = ["experimental"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

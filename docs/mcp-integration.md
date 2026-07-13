@@ -95,13 +95,16 @@ Settings (experimental build) can also start/stop the HTTP server from the deskt
 
 - `mcp_start_http_server` / `mcp_stop_http_server` / `mcp_http_server_status`
 - Optional LAN bind (`0.0.0.0`) requires a bearer token on every `POST /mcp` request
+- Optional in-process TLS via PEM `tls_cert_path` + `tls_key_path` (rustls)
 - `POST /fabric/webhook` on the same listener (secret via `X-Ghost-Webhook-Secret`; configure with `fabric_set_webhook_secret`)
 
-TLS for wide-area access is expected via a local reverse proxy (Caddy, nginx) in front of the listener — Ghost does not terminate TLS in-process yet.
+## Cloud relay (experimental)
+
+Wide-area MCP without inbound firewall rules: the desktop opens an **outbound HTTPS** poll loop to a user-hosted relay (`mcp_start_relay` / `mcp_stop_relay`). Protocol and reference server: `docs/mcp-relay.md`.
 
 ## Remote MCP (opt-in LAN)
 
-Binding beyond loopback is **denied by default** in the UI unless the user explicitly enables LAN exposure and sets a bearer token. This is higher risk than stdio: document network exposure, use TLS at the proxy, and keep pairing enabled when possible.
+Binding beyond loopback is **denied by default** in the UI unless the user explicitly enables LAN exposure and sets a bearer token. Prefer in-process TLS cert/key paths or a reverse proxy when exposing beyond localhost.
 
 ## Tool surface
 

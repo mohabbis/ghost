@@ -1384,6 +1384,7 @@ async function openSettings() {
   let googleCloudStatus = { active: false };
   let mcpPairingStatus = { enabled: false };
   let mcpHttpStatus = { running: false };
+  let mcpRelayStatus = { connected: false };
   let fabricWebhookStatus = { configured: false };
   try {
     account = await invoke("account_status");
@@ -1420,6 +1421,11 @@ async function openSettings() {
       mcpHttpStatus = await invoke("mcp_http_server_status");
     } catch (error) {
       console.error("Failed to load MCP HTTP status:", error);
+    }
+    try {
+      mcpRelayStatus = await invoke("mcp_relay_status");
+    } catch (error) {
+      console.error("Failed to load MCP relay status:", error);
     }
     try {
       fabricWebhookStatus = await invoke("fabric_webhook_status");
@@ -1644,21 +1650,42 @@ async function openSettings() {
     </div>
     ${
       experimentalEnabled
-        ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `running on ${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN exposed)" : ""}` : "stopped"}</p>
+        ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `${mcpHttpStatus.tls_enabled ? "https" : "http"}://${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN)" : ""}` : "stopped"}</p>
            <label>Port
              <input id="mcp-http-port" type="number" min="1024" max="65535" value="${escapeAttr(mcpHttpStatus.port || 8787)}" style="${fieldStyle}">
            </label>
            <label>Bearer token (required for LAN)
              <input id="mcp-http-bearer" type="password" placeholder="optional on localhost" style="${fieldStyle}">
            </label>
+           <label>TLS certificate (PEM path, optional)
+             <input id="mcp-http-tls-cert" type="text" placeholder="/path/to/ghost-mcp.crt" style="${fieldStyle}">
+           </label>
+           <label>TLS private key (PEM path, optional)
+             <input id="mcp-http-tls-key" type="text" placeholder="/path/to/ghost-mcp.key" style="${fieldStyle}">
+           </label>
            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
              <input id="mcp-http-lan" type="checkbox">
-             Expose on LAN (0.0.0.0) — higher risk; use TLS via reverse proxy
+             Expose on LAN (0.0.0.0) — higher risk; prefer TLS cert/key above
            </label>
            <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
              <button class="btn btn--ghost btn--small" type="button" data-mcp-http-start ${mcpHttpStatus.running ? "disabled" : ""}>Start HTTP server</button>
              <button class="btn btn--ghost btn--small" type="button" data-mcp-http-stop ${mcpHttpStatus.running ? "" : "disabled"}>Stop HTTP server</button>
-           </div>`
+           </div>
+           <p class="panel__hint" style="margin: 8px 0 4px;">Cloud relay: ${mcpRelayStatus.connected ? `connected to ${escapeAttr(mcpRelayStatus.relay_url || "")}` : "disconnected"}</p>
+           <label>Relay URL (HTTPS)
+             <input id="mcp-relay-url" type="url" placeholder="https://relay.example.com" value="${escapeAttr(mcpRelayStatus.relay_url || "")}" style="${fieldStyle}">
+           </label>
+           <label>Device ID
+             <input id="mcp-relay-device-id" type="text" placeholder="my-laptop" value="${escapeAttr(mcpRelayStatus.device_id || "")}" style="${fieldStyle}">
+           </label>
+           <label>Relay token
+             <input id="mcp-relay-token" type="password" placeholder="Bearer token for relay" style="${fieldStyle}">
+           </label>
+           <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+             <button class="btn btn--ghost btn--small" type="button" data-mcp-relay-start ${mcpRelayStatus.connected ? "disabled" : ""}>Connect relay</button>
+             <button class="btn btn--ghost btn--small" type="button" data-mcp-relay-stop ${mcpRelayStatus.connected ? "" : "disabled"}>Disconnect relay</button>
+           </div>
+           <p class="panel__hint" style="margin: 0 0 8px;">See <code>docs/mcp-relay.md</code> for the reference relay server.</p>`
         : ""
     }
     <pre id="mcp-pairing-code" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
@@ -2297,10 +2324,18 @@ async function startMcpHttpServer() {
   if (!experimentalEnabled) return;
   const port = Number(document.getElementById("mcp-http-port")?.value) || 8787;
   const bearerToken = document.getElementById("mcp-http-bearer")?.value?.trim() || null;
+  const tlsCertPath = document.getElementById("mcp-http-tls-cert")?.value?.trim() || null;
+  const tlsKeyPath = document.getElementById("mcp-http-tls-key")?.value?.trim() || null;
   const exposeLan = document.getElementById("mcp-http-lan")?.checked || false;
   const note = document.getElementById("mcp-pairing-note");
   try {
-    const status = await invoke("mcp_start_http_server", { port, exposeLan, bearerToken });
+    const status = await invoke("mcp_start_http_server", {
+      port,
+      exposeLan,
+      bearerToken,
+      tlsCertPath,
+      tlsKeyPath,
+    });
     if (note) {
       note.textContent = `HTTP server running on ${status.bind_host}:${status.port}. POST /mcp for MCP; POST /fabric/webhook for inbound intents.`;
     }
@@ -2323,6 +2358,47 @@ async function stopMcpHttpServer() {
     openSettings();
   } catch (error) {
     toastError(`MCP HTTP stop failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function startMcpRelay() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const relayUrl = document.getElementById("mcp-relay-url")?.value?.trim();
+  const deviceId = document.getElementById("mcp-relay-device-id")?.value?.trim();
+  const deviceToken = document.getElementById("mcp-relay-token")?.value?.trim();
+  if (!relayUrl || !deviceId || !deviceToken) {
+    return toastError("Relay URL, device ID, and token are required.");
+  }
+  const note = document.getElementById("mcp-pairing-note");
+  try {
+    const status = await invoke("mcp_start_relay", {
+      relayUrl,
+      deviceId,
+      deviceToken,
+    });
+    if (note) {
+      note.textContent = `Cloud relay connected to ${status.relay_url} as ${status.device_id}.`;
+    }
+    showNotification("MCP cloud relay connected.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Relay connect failed: ${formatInvokeError(error)}`;
+    else toastError(`MCP relay failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function stopMcpRelay() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("mcp-pairing-note");
+  try {
+    await invoke("mcp_stop_relay");
+    if (note) note.textContent = "Cloud relay disconnected.";
+    showNotification("MCP cloud relay disconnected.");
+    openSettings();
+  } catch (error) {
+    toastError(`MCP relay stop failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -4462,6 +4538,14 @@ function wireUpControls() {
     }
     if (e.target.closest("[data-mcp-http-stop]")) {
       stopMcpHttpServer();
+      return;
+    }
+    if (e.target.closest("[data-mcp-relay-start]")) {
+      startMcpRelay();
+      return;
+    }
+    if (e.target.closest("[data-mcp-relay-stop]")) {
+      stopMcpRelay();
       return;
     }
   });

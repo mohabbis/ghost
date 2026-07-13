@@ -1,7 +1,7 @@
 //! HTTP transport for MCP and inbound Fabric webhooks (experimental remote access).
 //!
 //! Default bind is loopback (`127.0.0.1`). LAN exposure (`0.0.0.0`) requires a
-//! bearer token. TLS is expected via a local reverse proxy in production setups.
+//! bearer token. Optional in-process TLS loads PEM cert/key paths (experimental).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -22,6 +22,8 @@ pub struct HttpServerOptions {
     /// Required when `bind_host` is not loopback.
     pub bearer_token: Option<String>,
     pub fabric_webhook_secret: Option<String>,
+    pub tls_cert_path: Option<String>,
+    pub tls_key_path: Option<String>,
 }
 
 impl Default for HttpServerOptions {
@@ -31,6 +33,8 @@ impl Default for HttpServerOptions {
             port: 8787,
             bearer_token: None,
             fabric_webhook_secret: None,
+            tls_cert_path: None,
+            tls_key_path: None,
         }
     }
 }
@@ -55,11 +59,36 @@ pub fn start_http_server(options: HttpServerOptions) -> Result<(), String> {
             "LAN exposure requires a bearer token — set one before binding beyond localhost".into(),
         );
     }
+    #[cfg(feature = "experimental")]
+    let tls_config = match (
+        options.tls_cert_path.as_deref(),
+        options.tls_key_path.as_deref(),
+    ) {
+        (Some(cert), Some(key)) => Some(super::tls::load_server_config(
+            std::path::Path::new(cert),
+            std::path::Path::new(key),
+        )?),
+        (None, None) => None,
+        _ => {
+            return Err("TLS requires both tls_cert_path and tls_key_path".into());
+        }
+    };
     stop_http_server();
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = Arc::clone(&stop);
     let opts = options.clone();
-    let join = thread::spawn(move || run_http_listener(opts, stop_thread));
+    #[cfg(feature = "experimental")]
+    let tls_for_thread = tls_config.clone();
+    let join = thread::spawn(move || {
+        #[cfg(feature = "experimental")]
+        {
+            run_http_listener(opts, stop_thread, tls_for_thread);
+        }
+        #[cfg(not(feature = "experimental"))]
+        {
+            run_http_listener(opts, stop_thread);
+        }
+    });
     let mut guard = SERVER.lock().unwrap_or_else(|e| e.into_inner());
     *guard = Some(ServerHandle {
         stop,
@@ -89,6 +118,7 @@ pub struct HttpServerStatus {
     pub lan_exposed: bool,
     pub bearer_required: bool,
     pub fabric_webhook_enabled: bool,
+    pub tls_enabled: bool,
 }
 
 pub fn http_server_status() -> HttpServerStatus {
@@ -106,6 +136,7 @@ pub fn http_server_status() -> HttpServerStatus {
                 .fabric_webhook_secret
                 .as_ref()
                 .is_some_and(|s| !s.is_empty()),
+            tls_enabled: handle.options.tls_cert_path.is_some(),
         }
     } else {
         HttpServerStatus {
@@ -115,12 +146,24 @@ pub fn http_server_status() -> HttpServerStatus {
             lan_exposed: false,
             bearer_required: false,
             fabric_webhook_enabled: false,
+            tls_enabled: false,
         }
     }
 }
 
 /// Blocking localhost-only HTTP server (CLI `ghost mcp serve http`).
 pub fn run_localhost_http(port: u16, stop: Arc<AtomicBool>) {
+    #[cfg(feature = "experimental")]
+    run_http_listener(
+        HttpServerOptions {
+            bind_host: "127.0.0.1".to_string(),
+            port,
+            ..Default::default()
+        },
+        stop,
+        None,
+    );
+    #[cfg(not(feature = "experimental"))]
     run_http_listener(
         HttpServerOptions {
             bind_host: "127.0.0.1".to_string(),
@@ -135,7 +178,26 @@ pub fn localhost_http_running() -> bool {
     RUNNING.load(Ordering::SeqCst)
 }
 
+#[cfg(feature = "experimental")]
+fn run_http_listener(
+    options: HttpServerOptions,
+    stop: Arc<AtomicBool>,
+    tls_config: Option<Arc<rustls::ServerConfig>>,
+) {
+    run_http_listener_impl(options, stop, tls_config);
+}
+
+#[cfg(not(feature = "experimental"))]
 fn run_http_listener(options: HttpServerOptions, stop: Arc<AtomicBool>) {
+    run_http_listener_impl(options, stop, None);
+}
+
+fn run_http_listener_impl(
+    options: HttpServerOptions,
+    stop: Arc<AtomicBool>,
+    #[cfg(feature = "experimental")] tls_config: Option<Arc<rustls::ServerConfig>>,
+    #[cfg(not(feature = "experimental"))] _tls_config: Option<()>,
+) {
     let addr = format!("{}:{}", options.bind_host, options.port);
     let listener = match TcpListener::bind(&addr) {
         Ok(l) => l,
@@ -151,17 +213,45 @@ fn run_http_listener(options: HttpServerOptions, stop: Arc<AtomicBool>) {
     } else {
         "LAN"
     };
-    eprintln!("Ghost HTTP listening on http://{addr} ({scope}) — POST /mcp, POST /fabric/webhook");
+    let scheme = {
+        #[cfg(feature = "experimental")]
+        {
+            if tls_config.is_some() {
+                "https"
+            } else {
+                "http"
+            }
+        }
+        #[cfg(not(feature = "experimental"))]
+        {
+            "http"
+        }
+    };
+    eprintln!(
+        "Ghost HTTP listening on {scheme}://{addr} ({scope}) — POST /mcp, POST /fabric/webhook"
+    );
 
     while !stop.load(Ordering::SeqCst) {
         match listener.accept() {
             Ok((stream, _)) => {
                 let opts = options.clone();
-                thread::spawn(move || {
-                    if let Err(err) = handle_connection(stream, &opts) {
-                        eprintln!("HTTP connection error: {err}");
-                    }
-                });
+                #[cfg(feature = "experimental")]
+                {
+                    let tls = tls_config.clone();
+                    thread::spawn(move || {
+                        if let Err(err) = serve_connection(stream, &opts, tls) {
+                            eprintln!("HTTP connection error: {err}");
+                        }
+                    });
+                }
+                #[cfg(not(feature = "experimental"))]
+                {
+                    thread::spawn(move || {
+                        if let Err(err) = serve_connection(stream, &opts) {
+                            eprintln!("HTTP connection error: {err}");
+                        }
+                    });
+                }
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(50));
@@ -172,10 +262,38 @@ fn run_http_listener(options: HttpServerOptions, stop: Arc<AtomicBool>) {
     RUNNING.store(false, Ordering::SeqCst);
 }
 
-fn handle_connection(mut stream: TcpStream, options: &HttpServerOptions) -> Result<(), String> {
+#[cfg(feature = "experimental")]
+fn serve_connection(
+    mut stream: TcpStream,
+    options: &HttpServerOptions,
+    tls_config: Option<Arc<rustls::ServerConfig>>,
+) -> Result<(), String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
         .map_err(|e| e.to_string())?;
+    if let Some(cfg) = tls_config {
+        let mut conn = rustls::ServerConnection::new(cfg).map_err(|e| e.to_string())?;
+        conn.complete_io(&mut stream)
+            .map_err(|e| format!("TLS handshake failed: {e}"))?;
+        let mut tls = rustls::Stream::new(&mut conn, &mut stream);
+        handle_connection_io(&mut tls, options)
+    } else {
+        handle_connection_io(&mut stream, options)
+    }
+}
+
+#[cfg(not(feature = "experimental"))]
+fn serve_connection(mut stream: TcpStream, options: &HttpServerOptions) -> Result<(), String> {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .map_err(|e| e.to_string())?;
+    handle_connection_io(&mut stream, options)
+}
+
+fn handle_connection_io<S: Read + Write>(
+    stream: &mut S,
+    options: &HttpServerOptions,
+) -> Result<(), String> {
     let mut buf = vec![0u8; 16384];
     let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
     let request = std::str::from_utf8(&buf[..n]).map_err(|e| e.to_string())?;
@@ -185,23 +303,23 @@ fn handle_connection(mut stream: TcpStream, options: &HttpServerOptions) -> Resu
 
     if request_line.starts_with("POST /mcp") {
         if let Err(reason) = check_bearer(&headers, options) {
-            return write_response(&mut stream, 401, &format!(r#"{{"error":"{reason}"}}"#));
+            return write_response(stream, 401, &format!(r#"{{"error":"{reason}"}}"#));
         }
         let body = extract_body(request, n);
         let response = handle_message(body.trim());
         let text = serde_json::to_string(&response).unwrap_or_else(|_| "{}".into());
-        return write_response(&mut stream, 200, &text);
+        return write_response(stream, 200, &text);
     }
 
     if request_line.starts_with("POST /fabric/webhook") {
         if let Err(reason) = check_webhook_secret(&headers, options) {
-            return write_response(&mut stream, 401, &format!(r#"{{"error":"{reason}"}}"#));
+            return write_response(stream, 401, &format!(r#"{{"error":"{reason}"}}"#));
         }
         let body = extract_body(request, n);
-        return handle_fabric_webhook(&mut stream, body);
+        return handle_fabric_webhook(stream, body);
     }
 
-    write_response(&mut stream, 404, r#"{"error":"not found"}"#)
+    write_response(stream, 404, r#"{"error":"not found"}"#)
 }
 
 fn check_bearer(headers: &[&str], options: &HttpServerOptions) -> Result<(), &'static str> {
@@ -242,27 +360,12 @@ fn check_webhook_secret(headers: &[&str], options: &HttpServerOptions) -> Result
     }
 }
 
-#[derive(serde::Deserialize)]
-struct FabricWebhookPayload {
-    zone_id: Option<String>,
-    source: Option<String>,
-    summary: String,
-}
-
-fn handle_fabric_webhook(stream: &mut TcpStream, body: &str) -> Result<(), String> {
-    let payload: FabricWebhookPayload = serde_json::from_str(body).map_err(|_| {
-        "invalid JSON body — expected {\"summary\":\"...\", \"zone_id\":?, \"source\":?}"
-    })?;
-    if payload.summary.trim().is_empty() {
-        return write_response(stream, 400, r#"{"error":"summary is required"}"#);
-    }
-    let source = payload
-        .source
-        .unwrap_or_else(|| "fabric-webhook".to_string());
+fn handle_fabric_webhook<S: Write>(stream: &mut S, body: &str) -> Result<(), String> {
+    let parsed = crate::integrations::microsoft::fabric::inbound_payload::parse_inbound_body(body)?;
     let intent = crate::integrations::microsoft::fabric::triggers::record_intent(
-        payload.zone_id,
-        &source,
-        &payload.summary,
+        parsed.zone_id,
+        &parsed.source,
+        &parsed.summary,
     );
     let text = serde_json::to_string(&intent).unwrap_or_else(|_| "{}".into());
     write_response(stream, 200, &text)
@@ -291,7 +394,7 @@ fn extract_body(request: &str, bytes_read: usize) -> &str {
     }
 }
 
-fn write_response(stream: &mut TcpStream, status: u16, body: &str) -> Result<(), String> {
+fn write_response<S: Write>(stream: &mut S, status: u16, body: &str) -> Result<(), String> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -323,6 +426,8 @@ mod tests {
             port: 0,
             bearer_token: None,
             fabric_webhook_secret: None,
+            tls_cert_path: None,
+            tls_key_path: None,
         })
         .unwrap_err();
         assert!(err.contains("bearer"));
