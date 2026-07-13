@@ -4,19 +4,37 @@ use super::engine::evaluate_with_attribution;
 use super::{Capability, FolderRule, PolicyDecision};
 use std::path::{Path, PathBuf};
 
-/// Canonicalize a path for boundary comparison. Existing paths resolve fully;
-/// not-yet-created relocate targets canonicalize via their parent directory.
+/// Canonicalize a path for boundary comparison. Existing paths resolve fully.
+/// If some suffix does not exist yet (typical for a relocate target whose
+/// parent folders were not created), walk up to the nearest existing ancestor,
+/// canonicalize that, and re-join the missing components so macOS
+/// `/var` → `/private/var` (and similar) stay consistent with sources.
 fn canonicalize_relocate_path(path: &Path) -> PathBuf {
-    match path.canonicalize() {
-        Ok(p) => p,
-        Err(_) => match (path.parent(), path.file_name()) {
-            (Some(parent), Some(name)) => parent
-                .canonicalize()
-                .map(|p| p.join(name))
-                .unwrap_or_else(|_| path.to_path_buf()),
-            _ => path.to_path_buf(),
-        },
+    if let Ok(canon) = path.canonicalize() {
+        return canon;
     }
+
+    let mut missing = Vec::new();
+    let mut cur = path;
+    loop {
+        if let Some(name) = cur.file_name() {
+            missing.push(name.to_os_string());
+        }
+        match cur.parent() {
+            Some(parent) if parent != cur => {
+                if let Ok(canon_parent) = parent.canonicalize() {
+                    let mut out = canon_parent;
+                    for name in missing.iter().rev() {
+                        out.push(name);
+                    }
+                    return out;
+                }
+                cur = parent;
+            }
+            _ => break,
+        }
+    }
+    path.to_path_buf()
 }
 
 fn rules_with_canonical_paths(rules: &[FolderRule]) -> Vec<FolderRule> {
@@ -31,6 +49,10 @@ fn rules_with_canonical_paths(rules: &[FolderRule]) -> Vec<FolderRule> {
 
 /// Re-verify that move/rename endpoints still lie inside approved folder rules
 /// after canonicalization — catches symlink/TOCTOU path escapes.
+///
+/// Rule roots are canonicalized too: comparing a canonicalized endpoint against
+/// a non-canonical rule (e.g. `/var/folders/...` vs `/private/var/folders/...`
+/// on macOS) would false-deny in-boundary moves.
 pub fn verify_relocate_at_execution(
     from: &Path,
     to: &Path,
@@ -103,5 +125,14 @@ mod tests {
         let err = verify_relocate_at_execution(&file, &dest, &rules, true).unwrap_err();
         assert!(err.contains("boundary") || err.contains("denied"));
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn nested_missing_parents_still_canonicalize_under_zone() {
+        let tmp = tempdir();
+        let file = tmp.file("doc.pdf", b"x");
+        let nested = tmp.path().join("a").join("b").join("doc.pdf");
+        let rules = vec![full_rule(tmp.path())];
+        assert!(verify_relocate_at_execution(&file, &nested, &rules, true).is_ok());
     }
 }
