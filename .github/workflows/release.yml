@@ -33,13 +33,13 @@ jobs:
       signing_mode: ${{ steps.sign.outputs.signing_mode }}
       notarization: ${{ steps.sign.outputs.notarization }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
@@ -130,7 +130,7 @@ jobs:
           done
 
       - name: Upload macOS build artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@v7
         with:
           name: macos-release
           path: dist/
@@ -143,11 +143,11 @@ jobs:
     outputs:
       windows_signing: ${{ steps.build.outputs.windows_signing }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
@@ -219,7 +219,7 @@ jobs:
           }
 
       - name: Upload Windows build artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: dist/
@@ -231,7 +231,7 @@ jobs:
     needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@v7
 
       - name: Resolve release tag
         id: tag
@@ -250,13 +250,13 @@ jobs:
           echo "Publishing release for $TAG"
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@v7
         with:
           name: macos-release
           path: dist
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@v7
         with:
           name: windows-release
           path: dist
@@ -380,7 +380,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: v${{ steps.tag.outputs.version }}
