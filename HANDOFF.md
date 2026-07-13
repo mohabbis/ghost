@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-13
-**Status:** Cutting **`v1.2.8`** — first release with updater pubkey embedded + `TAURI_SIGNING_*` secrets (expects `latest.json` / `.sig` on publish). Prior [`v1.2.7`](https://github.com/mohabbis/ghost/releases/tag/v1.2.7) remains notarized macOS / unsigned Windows. Marketing aligned (#213); routine replay gated by policy approve (#215). Cursor agents: `.cursor/rules/` + `AGENTS.md`.
+**Status:** **`v1.2.9`** — technical preview. Updater pubkey embedded + `TAURI_SIGNING_*` secrets configured; [`v1.2.9`](https://github.com/mohabbis/ghost/releases/tag/v1.2.9) publishes `latest.json` / `.sig`. macOS notarized; Windows unsigned (SmartScreen may warn). Routine replay gated by policy approve (#215, #231); replay WAL undo in progress (#232). Cursor agents: `.cursor/rules/` + `AGENTS.md`.
 
 ---
 
@@ -34,7 +34,7 @@ For a full technical snapshot see `docs/PROJECT_STATE.md`.
 ## Current Health
 
 - Rust CI + Deploy Website on `master`.
-- **564 tests pass** locally (530 lib + 34 integration suites); `make ci` covers fmt + clippy + test.
+- **~694 tests pass** locally (~627 lib + ~67 integration); `make ci` covers fmt + clippy + test; experimental leg runs in CI on ubuntu.
 - Local Linux needs GTK/webkit deps in `AGENTS.md` plus `libssl-dev` / `pkg-config`.
 - **65+ stable + 30 experimental** Tauri commands registered in `lib.rs` (includes `approve_routine_replay`).
 
@@ -43,7 +43,7 @@ For a full technical snapshot see `docs/PROJECT_STATE.md`.
 ## Immediate Next Steps
 
 1. **Windows Authenticode / Azure Trusted Signing** so `Ghost_Setup.exe` is signed. See `RELEASING.md`.
-2. **Verify `v1.2.8` release** publishes updater artifacts (`latest.json`, `.sig`) now that signing keys are configured. Do not re-tag an already-published version.
+2. **Verify `v1.2.9` release** updater round-trip on a clean macOS install (signed `.app.tar.gz` + `.sig` + `latest.json`). Do not re-tag an already-published version.
 3. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
 4. **Finish the Routines loop** — policy plan + one-shot approve now gate `replay_workflow`; still missing routine undo/vault and app/window Zones. See `docs/PROJECT_STATE.md` §10.
 5. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
@@ -55,7 +55,7 @@ For a full technical snapshot see `docs/PROJECT_STATE.md`.
 - Windows releases are still unsigned until Azure Trusted Signing secrets are configured; macOS v1.2.7 is notarized.
 - Auto-update artifacts appear only on the **next** tagged release after the pubkey commit; stock `v1.2.7` binaries still have no updater key.
 - `parse_id_document` handles PII — keep local and suggestion-only.
-- Experimental commands stay behind `--features experimental`; CI does not run that leg.
+- Experimental commands stay behind `--features experimental`; CI runs an experimental leg on ubuntu (`rust.yml`).
 
 ---
 

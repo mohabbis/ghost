@@ -57,7 +57,7 @@ docs/                   Planning + technical docs (this file lives here).
 | **Policy engine** | `src-tauri/src/policy/` | Pure, deny-by-default trust evaluation. No IO. |
 | **Organizer** | `src-tauri/src/organizer/` | scanner → classifier → naming → conflict → planner → executor → undo |
 | **Audit + undo** | `src-tauri/src/audit/` | Append-only audit log + undo journal (pure data) |
-| **Storage** | `src-tauri/src/storage/` | SQLite: Zones, folder rules, executions (+ tamper-evident chain), migrations |
+| **Storage** | `src-tauri/src/storage/` | redb (`ghost.redb`): Zones, folder rules, executions (+ tamper-evident chain); one-time SQLite import |
 | Recording/replay engine | `src-tauri/src/engine.rs`, `core/replay_support.rs`, `core/execution.rs` | Capture, replay pacing, per-step trace, target resolution |
 | Event compression | `src-tauri/src/core/compression/` | Deterministic raw-input → reviewable steps (no LLM) |
 | OS backends | `src-tauri/src/platform/` | `macos.rs`, `windows.rs`, `headless.rs` (Linux CI) |
@@ -159,17 +159,18 @@ seal and are reported as "unsealed, pre-upgrade" rather than as tampering.
 
 ## 4. Data + storage (`src-tauri/src/storage/`)
 
-SQLite via `rusqlite`, with **forward-only versioned migrations**
-(`migrations.rs`, `LATEST_VERSION = 6`):
+**redb** (`<data_dir>/ghost/ghost.redb`) — pure-Rust embedded KV store. Existing
+installs that still have the pre-redb SQLite database (`ghost.db`) are migrated
+once on first launch (`sqlite_import.rs`); the legacy file is renamed, never
+deleted.
 
-- v1–v3: Zones, folder rules, execution history, `rename_dated` opt-in.
-- v4: per-rule `trust_level` (`automate`/`ask_first`/`never`, CHECK-constrained;
-  existing rules default to `ask_first`) + a local `organizer_milestones` table
-  (time-to-first-value instrumentation).
-- v5: `hash` + `prev_hash` columns for the tamper-evident chain above.
-- v6: `finished` column on `organizer_executions` for write-ahead durability —
-  a crash mid-run leaves a recoverable `finished = 0` row instead of losing the
-  undo journal for already-applied steps.
+Tables / domains persisted:
+
+- Zones and folder rules (trust levels, rename-dated opt-in).
+- Organizer execution history with write-ahead durability (`finished` flag) and
+  tamper-evident hash chain (`hash` + `prev_hash` on each sealed run).
+- Replay run WAL (`storage/replay_runs.rs`) for interrupted routine recovery.
+- Local first-touch milestones (`organizer_milestones`).
 
 All local. No cloud dependency in the stock build.
 
@@ -248,7 +249,7 @@ resolution, double-click preservation.
 - **Local at-rest protection** — `argon2` + `aes-gcm` (see `auth.rs`).
 - **CI green on all three OSes** — Check / Test / Clippy / Rustfmt + a
   `cargo tauri build --no-bundle` smoke test on macOS & Windows (`rust.yml`).
-  616 lib tests + 51 integration-suite tests (`ipc_contract`,
+  ~627 lib tests + ~67 integration-suite tests (`ipc_contract`,
   `resolution_benchmark`, `canonical_workflows`, `frontend_dom_contract`,
   `e2e`, `integration_test`, `mcp_integration`) pass. An IPC-contract test
   asserts the frontend only invokes registered commands with matching params;
@@ -302,8 +303,9 @@ Assume the intent is "we have the accounts; wire the secrets." The touch points:
   Microsoft or Google public-client ID (`integrations.*` config or
   `GHOST_MS_CLIENT_ID` / `GHOST_GOOGLE_CLIENT_ID` for local dev). Ghost ships
   with none of its own; sign-in is unavailable until configured.
-- **Local user data** — SQLite DB + workflows live under the OS app-data dir
-  (`dirs`), optionally encrypted at rest via the local password (`auth.rs`).
+- **Local user data** — redb database (`ghost.redb`) + workflows live under the OS app-data dir
+  (`dirs`), optionally encrypted at rest via the local password (`auth.rs`). Legacy
+  `ghost.db` is migrated once and renamed.
 
 No secrets are required to build, test, or run the core product locally.
 Account sign-in and auto-update are optional and need operator configuration.
@@ -344,7 +346,7 @@ signing), not a rewrite of the trust foundation.
 # System deps (Linux): GTK/webkit + libxdo (see AGENTS.md). macOS/Windows: none extra.
 cargo fmt   --manifest-path src-tauri/Cargo.toml -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --all-targets
-cargo test  --manifest-path src-tauri/Cargo.toml          # 616 lib + 51 integration
+cargo test  --manifest-path src-tauri/Cargo.toml          # ~627 lib + ~67 integration
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo tauri build --no-bundle                             # compile smoke test
 # Makefile shortcuts: `make ci` (fmt+clippy+test), `make check`, `make build`, `make dev`.

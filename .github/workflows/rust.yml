@@ -166,3 +166,30 @@ jobs:
       - name: Run clippy (experimental)
         if: matrix.job == 'clippy'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features experimental -- -D warnings
+
+  version-consistency:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check version alignment
+        run: |
+          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Expected version: $VERSION"
+          for f in src-tauri/Cargo.toml src-tauri/tauri.conf.json README.md public/index.html; do
+            grep -q "$VERSION" "$f" || { echo "Version $VERSION missing from $f"; exit 1; }
+          done
+
+  frontend-contract:
+    name: Frontend contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run compression-review contract tests
+        run: node --test src/compression-review.test.mjs
