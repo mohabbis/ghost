@@ -5,6 +5,7 @@
 
 pub mod export;
 
+pub mod inbound_payload;
 pub mod triggers;
 pub mod webhook;
 

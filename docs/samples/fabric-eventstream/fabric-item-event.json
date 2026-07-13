@@ -1,0 +1,8 @@
+{
+  "type": "Microsoft.Fabric.Capacity.Throttled",
+  "subject": "capacities/abc123",
+  "source": "/subscriptions/00000000-0000-0000-0000-000000000000",
+  "data": {
+    "summary": "Capacity throttled — defer Organizer run"
+  }
+}

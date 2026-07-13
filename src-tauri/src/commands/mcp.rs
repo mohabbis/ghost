@@ -86,6 +86,8 @@ pub fn mcp_start_http_server(
     port: Option<u16>,
     expose_lan: Option<bool>,
     bearer_token: Option<String>,
+    tls_cert_path: Option<String>,
+    tls_key_path: Option<String>,
 ) -> Result<crate::mcp::HttpServerStatus, String> {
     let webhook_secret = crate::integrations::microsoft::fabric::webhook::current_secret();
     let options = crate::mcp::HttpServerOptions {
@@ -97,6 +99,8 @@ pub fn mcp_start_http_server(
         port: port.unwrap_or(8787),
         bearer_token,
         fabric_webhook_secret: webhook_secret,
+        tls_cert_path,
+        tls_key_path,
     };
     crate::mcp::start_http_server(options)?;
     Ok(crate::mcp::http_server_status())
@@ -107,4 +111,32 @@ pub fn mcp_start_http_server(
 pub fn mcp_stop_http_server() -> crate::mcp::HttpServerStatus {
     crate::mcp::stop_http_server();
     crate::mcp::http_server_status()
+}
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_relay_status() -> crate::mcp::RelayStatus {
+    crate::mcp::relay_status()
+}
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_start_relay(
+    relay_url: String,
+    device_id: String,
+    device_token: String,
+) -> Result<crate::mcp::RelayStatus, String> {
+    crate::mcp::start_relay(crate::mcp::RelayOptions {
+        relay_url,
+        device_id,
+        device_token,
+    })?;
+    Ok(crate::mcp::relay_status())
+}
+
+#[cfg(feature = "experimental")]
+#[tauri::command]
+pub fn mcp_stop_relay() -> crate::mcp::RelayStatus {
+    crate::mcp::stop_relay();
+    crate::mcp::relay_status()
 }

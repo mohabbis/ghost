@@ -57,8 +57,10 @@ Every integration below is additive to that pipeline, never a bypass of it.
   (`google_push_audit_export`). See `docs/google-cloud-integration.md`.
 - **MCP HTTP server** (`mcp/http.rs`, `ghost mcp serve http [port]` or
   `mcp_start_http_server`): localhost by default; optional LAN bind with bearer
-  auth; shared listener for `POST /mcp` and `POST /fabric/webhook`. TLS via
-  reverse proxy. See `docs/mcp-integration.md`.
+  auth; optional in-process TLS (PEM cert/key); shared listener for `POST /mcp`
+  and `POST /fabric/webhook`. **Cloud relay** (`mcp/relay.rs`, reference
+  `mcp_relay_server` bin): outbound HTTPS wide-area routing — `docs/mcp-relay.md`.
+  **Fabric Eventstream bridges**: `docs/fabric-eventstream-webhook.md` + samples.
 - **Organizer TOCTOU + boundary hardening** (`organizer/file_identity.rs`,
   `policy/boundary.rs`, `executor.rs`): scan-time dev/ino (or Windows file index)
   re-checked at execution; canonical path zone-boundary re-check after
