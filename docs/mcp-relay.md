@@ -34,7 +34,19 @@ GHOST_RELAY_SECRET=your-long-secret \
   cargo run --bin mcp_relay_server --features experimental -- 8790
 ```
 
-Listens on `http://0.0.0.0:8790`. Terminate TLS at nginx/Caddy in production.
+Listens on `http://0.0.0.0:8790` by default. For in-process TLS on the relay itself:
+
+```bash
+openssl req -x509 -newkey rsa:4096 -keyout relay.key -out relay.crt \
+  -days 365 -nodes -subj "/CN=localhost"
+
+GHOST_RELAY_TLS_CERT=/absolute/path/relay.crt \
+GHOST_RELAY_TLS_KEY=/absolute/path/relay.key \
+GHOST_RELAY_SECRET=your-long-secret \
+  cargo run --bin mcp_relay_server --features experimental -- 8790
+```
+
+Listens on `https://0.0.0.0:8790` when both TLS env vars are set. You can still terminate TLS at nginx/Caddy instead.
 
 ## Protocol (`/v1`)
 
@@ -98,7 +110,7 @@ Returns:
 ## TLS
 
 - Relay **client** requires HTTPS URL.
-- Reference server speaks plain HTTP — put TLS on the reverse proxy.
+- Reference server supports optional in-process TLS via `GHOST_RELAY_TLS_CERT` + `GHOST_RELAY_TLS_KEY`, or plain HTTP when unset. A reverse proxy remains a valid production option.
 - For LAN-only TLS without a relay, use in-process TLS on the MCP HTTP server (`tls_cert_path` / `tls_key_path` on `mcp_start_http_server`).
 
 ## Self-signed cert (local HTTP TLS)

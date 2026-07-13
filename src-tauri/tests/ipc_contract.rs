@@ -341,7 +341,7 @@ fn split_top_level(s: &str, sep: char) -> Vec<String> {
 fn command_arg_keys() -> HashMap<String, HashSet<String>> {
     let src = read_command_sources();
     let re = regex::Regex::new(
-        r"(?s)#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\((.*?)\)\s*(?:->|where|\{)",
+        r"(?s)(?:#\[cfg\([^\)]*\)\]\s*)*#\[tauri::command\]\s*pub (?:async )?fn (\w+)\s*\((.*?)\)\s*(?:->|where|\{)",
     )
     .unwrap();
     let mut map = HashMap::new();
@@ -481,4 +481,93 @@ fn frontend_actually_uses_the_ipc_bridge() {
         "frontend invoke parsing looks broken — only found {} invocations",
         invoked.len()
     );
+}
+
+/// Experimental MCP HTTP/relay commands must accept the camelCased keys the
+/// Settings UI sends (Tauri 2 matches JS keys to Rust param names).
+#[cfg(feature = "experimental")]
+#[test]
+fn experimental_mcp_http_and_relay_ipc_arg_shapes() {
+    use std::collections::HashSet;
+
+    let cmds = command_arg_keys();
+    let http = cmds
+        .get("mcp_start_http_server")
+        .expect("mcp_start_http_server must be parsed from commands/mcp.rs");
+    assert_eq!(
+        http,
+        &HashSet::from([
+            "port".to_string(),
+            "exposeLan".to_string(),
+            "bearerToken".to_string(),
+            "tlsCertPath".to_string(),
+            "tlsKeyPath".to_string(),
+        ])
+    );
+
+    let relay = cmds
+        .get("mcp_start_relay")
+        .expect("mcp_start_relay must be parsed from commands/mcp.rs");
+    assert_eq!(
+        relay,
+        &HashSet::from([
+            "relayUrl".to_string(),
+            "deviceId".to_string(),
+            "deviceToken".to_string(),
+        ])
+    );
+}
+
+/// Frontend invoke keys for experimental MCP commands must match the Rust
+/// command signatures exactly.
+#[cfg(feature = "experimental")]
+#[test]
+fn experimental_frontend_mcp_invoke_args_match_command_params() {
+    let commands = command_arg_keys();
+    let expected_cmds = ["mcp_start_http_server", "mcp_start_relay"];
+    let calls: Vec<_> = invoked_with_args()
+        .into_iter()
+        .filter(|(cmd, _)| expected_cmds.contains(&cmd.as_str()))
+        .collect();
+    assert!(
+        calls.len() >= 2,
+        "expected frontend invocations for mcp_start_http_server and mcp_start_relay, found {:?}",
+        calls.iter().map(|(c, _)| c).collect::<Vec<_>>()
+    );
+
+    let mut problems = Vec::new();
+    for (cmd, keys) in calls {
+        let Some(expected) = commands.get(&cmd) else {
+            problems.push(format!("{cmd} not found in command source parse"));
+            continue;
+        };
+        for key in keys {
+            if !expected.contains(&key) {
+                problems.push(format!(
+                    "invoke(\"{cmd}\") sends key `{key}` but the Rust command accepts {expected:?}"
+                ));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Experimental MCP relay/HTTP commands must be registered in lib.rs.
+#[cfg(feature = "experimental")]
+#[test]
+fn experimental_build_registers_mcp_relay_and_http_commands() {
+    let registered = registered_commands();
+    for cmd in [
+        "mcp_http_server_status",
+        "mcp_start_http_server",
+        "mcp_stop_http_server",
+        "mcp_relay_status",
+        "mcp_start_relay",
+        "mcp_stop_relay",
+    ] {
+        assert!(
+            registered.contains(cmd),
+            "{cmd} must be registered in lib.rs generate_handler!"
+        );
+    }
 }
