@@ -276,6 +276,25 @@ fn open_settings_authors_account_sign_in_controls() {
 }
 
 #[test]
+fn replay_unfinished_banner_exists() {
+    let html = read("../src/index.html");
+    let authored = authored_ids(&html);
+    assert!(
+        authored.contains("replayUnfinishedBanner"),
+        "record view must include replayUnfinishedBanner for crash recovery"
+    );
+}
+
+#[test]
+fn mission_steps_include_policy_gate() {
+    let html = read("../src/index.html");
+    assert!(
+        html.contains("data-mission-step=\"policy\""),
+        "mission steps must include a policy review step"
+    );
+}
+
+#[test]
 fn review_modal_authors_policy_replay_actions() {
     let js = read("../src/main.js");
     let body = function_body(&js, "renderReviewModalActions");

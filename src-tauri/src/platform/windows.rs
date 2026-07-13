@@ -754,6 +754,7 @@ impl ReplayEngine for WindowsReplayer {
                     tracing::debug!("Variable reference: {}", name);
                 }
             }
+            progress.complete_step(idx, event);
         }
 
         Ok(())

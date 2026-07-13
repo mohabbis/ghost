@@ -14,6 +14,7 @@ use std::path::PathBuf;
 pub mod executions;
 pub mod migrations;
 pub mod milestones;
+pub mod replay_runs;
 pub mod sqlite_import;
 pub mod zones;
 
@@ -62,6 +63,7 @@ fn init_tables(database: &Database) -> anyhow::Result<()> {
     zones::init(&write_txn)?;
     milestones::init(&write_txn)?;
     executions::init(&write_txn)?;
+    replay_runs::init(&write_txn)?;
     write_txn.commit()?;
     Ok(())
 }

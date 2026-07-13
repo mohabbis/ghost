@@ -1079,6 +1079,57 @@ async function refreshCompressedTimeline() {
   }
   updateWorkflowHealth();
   updateRecordingUI();
+  updateMissionProgress();
+}
+
+async function replayCheckUnfinishedRun() {
+  const banner = document.getElementById("replayUnfinishedBanner");
+  if (!banner || !invoke) return;
+  let found;
+  try {
+    found = await invoke("replay_check_unfinished_run");
+  } catch (_err) {
+    return;
+  }
+  if (!found || found.events_applied === 0) {
+    banner.innerHTML = "";
+    return;
+  }
+  const reversible = found.reversible_backspaces || 0;
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>Ghost was interrupted mid-replay.</strong> It applied
+      ${found.events_applied} of ${found.events_total} step(s) before stopping.
+      ${
+        reversible > 0
+          ? `Up to ${reversible} typed character(s) may be undoable via backspace.`
+          : "Clicks and other steps are not safely reversible."
+      }</span>
+      <div class="banner__actions">
+        <button class="btn btn--ghost btn--small" id="replayUnfinishedUndoBtn" type="button">Undo typed input</button>
+        <button class="btn btn--ghost btn--small" id="replayUnfinishedDismissBtn" type="button">Leave as-is</button>
+      </div>
+    </section>`;
+  document.getElementById("replayUnfinishedUndoBtn")?.addEventListener("click", async () => {
+    try {
+      const report = await invoke("replay_undo", { runId: found.id });
+      showNotification(
+        `Replay undo: ${report.reversed} reversed, ${report.skipped} skipped (non-reversible).`,
+      );
+    } catch (err) {
+      toastError("Replay undo failed: " + formatInvokeError(err));
+    }
+    await replayCheckUnfinishedRun();
+  });
+  document.getElementById("replayUnfinishedDismissBtn")?.addEventListener("click", async () => {
+    try {
+      await invoke("replay_dismiss_unfinished_run", { runId: found.id });
+      showNotification("Interrupted replay dismissed.");
+    } catch (err) {
+      toastError("Could not dismiss: " + formatInvokeError(err));
+    }
+    await replayCheckUnfinishedRun();
+  });
 }
 
 function renderReviewModalActions(policyPlan) {
@@ -2736,6 +2787,11 @@ function updateMissionProgress({ permissionsGranted } = {}) {
   mark("permissions", permissionDone);
   mark("record", recordedEvents.length > 0);
   mark("audit", guardAuditCompleted);
+  mark(
+    "policy",
+    latestRoutinePolicyPlan?.can_proceed_with_approvals === true ||
+      hasReplayedCurrentWorkflow,
+  );
   mark("replay", hasReplayedCurrentWorkflow || hasSavedCurrentWorkflow);
 }
 
@@ -5745,6 +5801,7 @@ window.addEventListener("DOMContentLoaded", () => {
   syncSpeedFromConfig();
   checkForUpdatesOnLaunch(); // signed, user-approved auto-update
   organizerInit(); // Ghost Organizer: load Zones and wire the trust pipeline
+  replayCheckUnfinishedRun();
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
   initModalEscape();
   initViewNav(); // left-nav view switcher

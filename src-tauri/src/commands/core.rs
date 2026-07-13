@@ -193,6 +193,39 @@ pub fn get_replay_history(
     }
 }
 
+/// Check for a routine replay that began but never finished — almost always a
+/// crash or kill mid-run. Returns summary metadata so the UI can offer undo or
+/// dismiss. Risk class: safe-read (DB only).
+#[tauri::command]
+pub fn replay_check_unfinished_run(
+) -> Result<Option<crate::storage::replay_runs::ReplayRunSummary>, String> {
+    let conn = crate::storage::open_default().map_err(|e| e.to_string())?;
+    crate::storage::replay_runs::find_unfinished_replay_summary(&conn).map_err(|e| e.to_string())
+}
+
+/// Dismiss an interrupted replay run without undoing typed input. Marks the WAL
+/// row finished so it stops surfacing on view load. Risk class: local-mutate.
+#[tauri::command]
+pub fn replay_dismiss_unfinished_run(run_id: String) -> Result<(), String> {
+    let conn = crate::storage::open_default().map_err(|e| e.to_string())?;
+    crate::storage::replay_runs::mark_replay_run_finished(&conn, &run_id).map_err(|e| e.to_string())
+}
+
+/// Best-effort undo for an interrupted or completed replay run: synthesizes
+/// backspaces for literal typed text; clicks and other OS-control steps are
+/// audit-only and skipped. Risk class: os-control.
+#[tauri::command]
+pub fn replay_undo(run_id: String) -> Result<crate::core::replay_undo::ReplayUndoReport, String> {
+    let conn = crate::storage::open_default().map_err(|e| e.to_string())?;
+    let stored =
+        crate::storage::replay_runs::get_replay_run(&conn, &run_id).map_err(|e| e.to_string())?;
+    let report =
+        crate::core::replay_undo::revert_replay(&stored.undo).map_err(|e| e.to_string())?;
+    crate::storage::replay_runs::mark_replay_run_finished(&conn, &run_id)
+        .map_err(|e| e.to_string())?;
+    Ok(report)
+}
+
 /// Snapshot of live replay progress returned by `get_replay_progress`.
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct ReplayProgressView {

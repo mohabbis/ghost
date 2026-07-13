@@ -15,7 +15,9 @@
 
 pub mod audit_log;
 pub mod pii;
+pub mod replay_undo_journal;
 pub mod undo_journal;
 
 pub use audit_log::{ActionOutcome, AuditEvent, AuditLog, Provenance};
+pub use replay_undo_journal::{ReplayRunReport, ReplayUndoJournal, ReplayUndoOp};
 pub use undo_journal::{UndoJournal, UndoOp};

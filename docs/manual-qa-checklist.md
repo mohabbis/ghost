@@ -7,6 +7,11 @@ permissions, and end-to-end trust behavior.
 
 Record pass/fail, build version, OS version, and notes for each section.
 
+**Release gate:** Before tagging a public version, complete at minimum §0 (preflight),
+§1 (Organizer plan/execute/undo), §2a–2e (record → policy review → replay + interrupted
+recovery), and §4 (Settings sign-in if shipping Google OAuth). Do not claim production
+readiness until Windows Authenticode signing is verified on release artifacts.
+
 ```text
 Build: v_____   OS: __________   Tester: __________   Date: __________
 ```
@@ -88,6 +93,9 @@ Trust pipeline: **Record → Compress → Review → Policy plan → Approve →
 ### 2c. Dry-run and policy
 
 - [ ] Dry-run preview shows per-step intent without executing
+- [ ] Compressed timeline shows **Policy** stat and per-step badges
+- [ ] Review modal **Approve & Replay** is disabled when policy denies steps
+- [ ] Mission checklist marks **Policy** complete after a proceedable plan loads
 - [ ] Routine policy plan shows per-step Allow / Deny / Confirm
 - [ ] Replay is blocked until explicit **Approve routine replay**
 
@@ -98,9 +106,16 @@ Trust pipeline: **Record → Compress → Review → Policy plan → Approve →
 - [ ] Replay history records success/failure and resolution trace
 - [ ] Coordinate-fallback steps are flagged in history when semantic match fails
 
-### 2e. Known limitations (expect these)
+### 2e. Interrupted replay recovery
 
-- [ ] Routine replay has **no undo/vault** yet — only Organizer undo is durable
+- [ ] Kill app mid-replay → relaunch → **Record** view shows interrupted-replay banner
+- [ ] **Undo typed input** sends backspaces for literal typed steps (when recording retained chars)
+- [ ] **Leave as-is** dismisses the WAL row without undo
+- [ ] Clicks and scrolls are reported as non-reversible in undo summary
+
+### 2f. Known limitations (expect these)
+
+- [ ] Routine replay undo is **backspace-only** for typed text — clicks are not invertible
 - [ ] Wrong focused window can still cause misfires — verify target app is frontmost
 
 ---

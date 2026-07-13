@@ -5,7 +5,8 @@
 //! Everything here is platform-agnostic and unit-tested; the platform
 //! modules supply only the raw "what element is at (x, y)" lookup.
 
-use crate::core::events::ElementInfo;
+use crate::audit::replay_undo_journal::{ReplayRunReport, ReplayUndoJournal};
+use crate::core::events::{ElementInfo, InputEvent};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
@@ -69,6 +70,14 @@ pub struct ReplayProgress {
     total: AtomicUsize,
     /// Per-click resolution outcomes for the running replay.
     trace: Mutex<Vec<StepResolution>>,
+    /// Write-ahead replay run journal + persistence hook.
+    wal: Mutex<Option<ReplayWalState>>,
+}
+
+struct ReplayWalState {
+    journal: ReplayUndoJournal,
+    events_total: usize,
+    on_update: Box<dyn Fn(&ReplayRunReport) + Send + Sync>,
 }
 
 impl ReplayProgress {
@@ -100,6 +109,36 @@ impl ReplayProgress {
     /// Take the collected resolution trace, leaving it empty.
     pub fn take_trace(&self) -> Vec<StepResolution> {
         std::mem::take(&mut self.trace.lock().unwrap())
+    }
+
+    /// Attach a write-ahead journal that persists after every completed event.
+    pub fn begin_wal<F>(&self, events_total: usize, on_update: F)
+    where
+        F: Fn(&ReplayRunReport) + Send + Sync + 'static,
+    {
+        *self.wal.lock().unwrap() = Some(ReplayWalState {
+            journal: ReplayUndoJournal::new(),
+            events_total,
+            on_update: Box::new(on_update),
+        });
+    }
+
+    /// Clear any attached WAL hook (after replay finishes or aborts).
+    pub fn clear_wal(&self) {
+        *self.wal.lock().unwrap() = None;
+    }
+
+    /// Record a successfully replayed event into the WAL journal.
+    pub fn complete_step(&self, step_index: usize, event: &InputEvent) {
+        if let Some(state) = self.wal.lock().unwrap().as_mut() {
+            state.journal.record_event(step_index, event);
+            let report = ReplayRunReport {
+                events_applied: step_index + 1,
+                events_total: state.events_total,
+                undo: state.journal.clone(),
+            };
+            (state.on_update)(&report);
+        }
     }
 }
 

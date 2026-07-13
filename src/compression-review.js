@@ -181,6 +181,7 @@ export class CompressionReview {
       policyStep?.decision?.decision === "deny" || policyStep?.decision?.decision === "require_confirmation"
         ? policyStep.decision.reason
         : null;
+    const combinedNote = this.combinedReviewNote(idx, policyReason, guardNotes);
 
     return `
       <div class="compression-step ${riskClass}">
@@ -189,11 +190,24 @@ export class CompressionReview {
           <div class="step-text">${description}${policyBadge ? ` ${policyBadge}` : ""}</div>
           ${confidence ? `<div class="step-confidence">confidence: ${confidence}</div>` : ""}
           ${lastRunNote ? `<div class="step-confidence step-lastrun">Last run: ${escapeHtml(lastRunNote)}</div>` : ""}
-          ${policyReason ? `<div class="step-policy-note">${escapeHtml(policyReason)}</div>` : ""}
-          ${guardNotes.map((note) => `<div class="step-guard-note">${note}</div>`).join("")}
+          ${combinedNote ? `<div class="step-policy-note">${escapeHtml(combinedNote)}</div>` : ""}
         </div>
       </div>
     `;
+  }
+
+  combinedReviewNote(stepIdx, policyReason, guardNotes) {
+    const parts = [];
+    if (policyReason) parts.push(`Policy: ${policyReason}`);
+    if (guardNotes.length) {
+      parts.push(
+        `Guard: ${guardNotes
+          .map((n) => n.replace(/^[·!]+ /, ""))
+          .join("; ")}`,
+      );
+    }
+    if (!parts.length) return "";
+    return parts.join(" · ");
   }
 
   routineDecisionBadge(decision) {
