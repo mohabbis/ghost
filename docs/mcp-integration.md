@@ -83,9 +83,17 @@ Example Windows client configuration:
 
 Local stdio preserves Ghost's local-first posture: no Ghost cloud account, no provider upload requirement, and no network listener by default.
 
+## Localhost HTTP (experimental v0)
+
+```bash
+ghost mcp serve http 8787
+```
+
+Binds to `127.0.0.1` only. `POST /mcp` with a JSON-RPC body — same `handle_message` path as stdio. Pairing rules still apply on `initialize`. Wide-area remote MCP (TLS relay, cloud endpoint) remains planned.
+
 ## Remote MCP later
 
-Remote MCP endpoints are out of scope until local approval integrity is proven. A remote endpoint adds authentication, pairing, TLS, session expiry, replay protection, cross-origin protections, remote approval spoofing resistance, and network-exposure review.
+Remote MCP endpoints beyond localhost are out of scope until local approval integrity is proven. A wide-area endpoint adds authentication, pairing, TLS, session expiry, replay protection, cross-origin protections, remote approval spoofing resistance, and network-exposure review.
 
 Any future remote endpoint must be denied by default, explicitly enabled by the user, documented as higher risk, and covered by an external-agent threat model before shipping.
 

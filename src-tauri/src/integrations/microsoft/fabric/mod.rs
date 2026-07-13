@@ -5,6 +5,8 @@
 
 pub mod export;
 
+pub mod triggers;
+
 use crate::identity::IntegrationError;
 use serde::Deserialize;
 

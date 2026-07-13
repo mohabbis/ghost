@@ -213,6 +213,7 @@ mod tests {
             size: 1234,
             modified: None,
             created: None,
+            identity: None,
         }
     }
 

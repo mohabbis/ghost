@@ -45,7 +45,18 @@ Every integration below is additive to that pipeline, never a bypass of it.
   grant, workspace listing (`fabric_list_workspaces`), lakehouse listing
   (`fabric_list_lakehouses`), export preview (`fabric_export_preview`), and
   OneLake push (`fabric_push_audit_export`). Settings UI uses workspace/lakehouse
-  dropdown pickers. See `docs/fabric-integration.md`.
+  dropdown pickers. Inbound intent queue (`fabric_list_inbound_intents`,
+  `fabric_record_inbound_intent`, `fabric_dismiss_inbound_intent`) surfaces
+  external signals without auto-executing. See `docs/fabric-integration.md`.
+- **Google Cloud Storage export** (`integrations/google/`,
+  `commands/integrations.rs`, experimental): separate `GoogleCloud` grant,
+  bucket listing (`google_list_buckets`), export preview, and GCS push
+  (`google_push_audit_export`). See `docs/google-cloud-integration.md`.
+- **Localhost MCP HTTP** (`mcp/http.rs`, `ghost mcp serve http [port]`):
+  experimental JSON-RPC over `127.0.0.1` only — same handlers as stdio MCP.
+- **Organizer TOCTOU hardening** (`organizer/file_identity.rs`,
+  `executor.rs`): scan-time dev/ino (or Windows file index) captured on plan
+  actions and re-checked at execution; symlink sources refused.
 - **Local intelligence providers** (`intelligence/local/`, experimental):
   Ollama, LM Studio, and OpenAI-compatible localhost adapters;
   `intelligence_discover_local` probes localhost only. Settings UI and

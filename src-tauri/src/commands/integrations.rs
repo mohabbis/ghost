@@ -34,7 +34,10 @@
 
 use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
+use crate::integrations::google::export::{GcsExportClient, GcsPushSummary};
+use crate::integrations::google::{GcsBucket, GcsClient, GoogleIntegrationService};
 use crate::integrations::microsoft::fabric::export::{FabricExportClient, FabricPushSummary};
+use crate::integrations::microsoft::fabric::triggers::FabricInboundIntent;
 use crate::integrations::microsoft::fabric::{FabricClient, FabricLakehouse, FabricWorkspace};
 use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
 use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
@@ -50,6 +53,10 @@ const DATASET_NAME: &str = "GhostOperations";
 
 fn service(engine: &GhostEngine) -> MicrosoftIntegrationService {
     MicrosoftIntegrationService::new(engine.accounts().identity_store().clone())
+}
+
+fn google_service(engine: &GhostEngine) -> GoogleIntegrationService {
+    GoogleIntegrationService::new(engine.accounts().identity_store().clone())
 }
 
 /// `since_days` of `None` means "all local history" (cutoff 0); otherwise the
@@ -345,6 +352,130 @@ pub async fn fabric_push_audit_export(
     })
     .await
     .map_err(|e| format!("fabric push task failed: {e}"))?
+}
+
+/// Pending inbound Fabric intents waiting for user review (no auto-execute).
+#[tauri::command]
+pub fn fabric_list_inbound_intents() -> Vec<FabricInboundIntent> {
+    crate::integrations::microsoft::fabric::triggers::list_pending()
+}
+
+/// Dismiss an inbound Fabric intent without acting on it.
+#[tauri::command]
+pub fn fabric_dismiss_inbound_intent(intent_id: String) -> Result<(), String> {
+    crate::integrations::microsoft::fabric::triggers::dismiss_intent(&intent_id)
+}
+
+/// Record an inbound Fabric intent (webhook simulation / manual registration).
+/// Does not execute anything — surfaces in Organizer for user review.
+#[tauri::command]
+pub fn fabric_record_inbound_intent(
+    zone_id: Option<String>,
+    source: String,
+    summary: String,
+) -> FabricInboundIntent {
+    crate::integrations::microsoft::fabric::triggers::record_intent(zone_id, &source, &summary)
+}
+
+#[derive(serde::Serialize, Default)]
+pub struct GoogleGrantStatus {
+    pub active: bool,
+    pub granted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[tauri::command]
+pub fn google_grant_status(engine: State<GhostEngine>) -> GoogleGrantStatus {
+    let auth = engine.auth();
+    let grant = engine
+        .accounts()
+        .identity_store()
+        .active_grants(&auth)
+        .into_iter()
+        .find(|g| g.integration == IntegrationKind::GoogleCloud);
+    match grant {
+        Some(g) => GoogleGrantStatus {
+            active: true,
+            granted_at: Some(g.granted_at),
+            expires_at: g.expires_at,
+        },
+        None => GoogleGrantStatus::default(),
+    }
+}
+
+#[tauri::command]
+pub async fn google_request_grant(
+    engine: State<'_, GhostEngine>,
+) -> Result<GoogleGrantStatus, String> {
+    let config = engine.get_config();
+    let client_id = crate::identity::OAuthProvider::Google.client_id(&config.integrations)?;
+    let auth = engine.auth();
+    let svc = google_service(&engine);
+
+    tauri::async_runtime::spawn_blocking(move || svc.request_google_grant(&auth, &client_id))
+        .await
+        .map_err(|e| format!("google grant request failed: {e}"))?
+        .map_err(|e| e.to_string())?;
+
+    Ok(google_grant_status(engine))
+}
+
+#[tauri::command]
+pub fn google_revoke_grant(engine: State<GhostEngine>) -> Result<(), String> {
+    let auth = engine.auth();
+    google_service(&engine)
+        .revoke_google_grant(&auth)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_list_buckets(
+    project_id: String,
+    engine: State<'_, GhostEngine>,
+) -> Result<Vec<GcsBucket>, String> {
+    let auth = engine.auth();
+    let access_token = google_service(&engine)
+        .google_access_token(&auth)
+        .map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        GcsClient::new().list_buckets(&access_token, &project_id)
+    })
+    .await
+    .map_err(|e| format!("bucket list task failed: {e}"))?
+}
+
+#[tauri::command]
+pub fn google_export_preview(
+    since_days: Option<u32>,
+    engine: State<GhostEngine>,
+) -> Result<AuditExportPayload, String> {
+    let _ = &engine;
+    let db = open_default().map_err(|e| e.to_string())?;
+    export_preview_with_db(&db, since_days)
+}
+
+#[tauri::command]
+pub async fn google_push_audit_export(
+    bucket: String,
+    since_days: Option<u32>,
+    engine: State<'_, GhostEngine>,
+) -> Result<GcsPushSummary, String> {
+    let auth = engine.auth();
+    let access_token = google_service(&engine)
+        .google_access_token(&auth)
+        .map_err(|e| e.to_string())?;
+
+    let db = open_default().map_err(|e| e.to_string())?;
+    let executions =
+        list_full_executions_since(&db, since_epoch_secs(since_days)).map_err(|e| e.to_string())?;
+    let payload = build_export(&executions);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        GcsExportClient::new().push_audit_export(&access_token, &bucket, &payload)
+    })
+    .await
+    .map_err(|e| format!("gcs push task failed: {e}"))?
 }
 
 #[cfg(test)]

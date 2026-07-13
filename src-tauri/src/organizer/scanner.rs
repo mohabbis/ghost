@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use super::file_identity::FileIdentity;
+
 /// The maximum directory depth the scanner descends into. Bounded so a deeply
 /// nested tree cannot make planning unbounded; deeper files are simply not
 /// surfaced (and so are never proposed for a move).
@@ -33,6 +35,9 @@ pub struct ScannedFile {
     pub modified: Option<SystemTime>,
     /// Creation time, when the platform reports it.
     pub created: Option<SystemTime>,
+    /// Stable identity for TOCTOU detection at execution time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<FileIdentity>,
 }
 
 /// Should this entry be skipped regardless of whether it is a file or folder?
@@ -130,6 +135,7 @@ fn describe(path: &Path, file_name: &str) -> Option<ScannedFile> {
         size: meta.len(),
         modified: meta.modified().ok(),
         created: meta.created().ok(),
+        identity: Some(FileIdentity::from_metadata(&meta)),
     })
 }
 
