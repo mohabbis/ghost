@@ -2,66 +2,70 @@
 
 **Status:** design review (docs only). No implementation changes implied by this document.  
 **Audience:** principal engineers and product owners deciding what Ghost becomes over five years.  
-**Relationship to other docs:** This review is the architectural north star where long-horizon ambition conflicts with wedge discipline. The product contract in `AGENTS.md` still governs near-term build order. Ambition wording in [`next-generation-architecture.md`](next-generation-architecture.md) defers to this document on KEEP / REFACTOR / REPLACE / REMOVE and platform ownership.
+**Relationship to other docs:** This review is the architectural north star where long-horizon ambition conflicts with wedge discipline. The product contract in `AGENTS.md` still governs near-term build order. Ambition wording in [`next-generation-architecture.md`](next-generation-architecture.md) defers to this document on category, KEEP / REFACTOR / REPLACE / REMOVE, and ownership boundaries.
 
-**Revision note:** Incorporates a second-pass critique that reframes Ghost as desktop *infrastructure* (a trusted execution kernel), not merely a desktop automation application.
+**Revision history:**  
+1. First pass — trust pipeline + Action IR as missing layer.  
+2. Second pass — Ghost Kernel over a typed Resource Graph; verification-first.  
+3. **This pass** — Kernel and graph remain components. The stronger category is a **transaction system for human-computer work**.
 
 ---
 
 ## North star
 
-> Ghost is not a desktop automation application. Ghost is a **trusted execution kernel** for desktop operating systems. Every interface, planner, workflow, plugin, or AI client must compile intent into a verified Action IR over a typed **Resource Graph** before the kernel deterministically executes it under explicit policy, producing cryptographically verifiable audit and recovery artifacts.
+> Ghost is a **local transaction authority for human-computer work**. It converts intent into bounded, version-aware, proof-carrying transactions over typed desktop resources. It authorizes exact capabilities, executes deterministically through platform agents, verifies observed effects, compensates partial failure, and issues signed receipts. AI, humans, schedulers, and plugins are merely sources of intent. None of them receive execution authority.
 
-That shifts Ghost from “a really good automation tool” into infrastructure that humans, AI clients, and other automation systems depend on — a position much harder to copy than another assistant with a polished UI.
+That is beyond an assistant, beyond automation, and beyond “kernel” as an implementation metaphor.
+
+Ghost is an **ACID-like trust layer for desktop actions**, adapted to a world where perfect atomicity is impossible — so it provides explicit consistency, isolation, durability, compensation, and evidence instead. Fifty years of desktop software omitted this layer. That omission is the opportunity.
+
+```text
+Declare intent
+  → Resolve resources
+  → Construct transaction
+  → Validate invariants
+  → Authorize exact effects
+  → Execute bounded steps
+  → Verify postconditions
+  → Commit or compensate
+  → Issue receipt
+```
+
+The user approves a **transaction**, not a vague workflow.
 
 ---
 
 ## Verdict
 
-Ghost’s trust pipeline is the correctly chosen *ethical* architecture. The implementation is unevenly mature. The first-pass review correctly identified a missing unify layer (Action IR), but that is not the deepest abstraction.
+| Framing | Role |
+|---|---|
+| “Desktop automation” | Undersells; competitors copy UIs and macros |
+| “Trusted execution kernel” | Useful *implementation* shape; still undersells the category |
+| **Transaction authority** | Defensible product category — typed effects, leases, proof, compensation, receipts |
 
-**Deepest missing abstraction:** a typed **Resource Graph** (what exists).  
-**Operating surface over that graph:** a sealed **Action IR** (what to do).  
-**Institutional form:** a **Ghost Kernel** that owns Resource Graph, Capability Registry, Policy, Verification, Action IR, Execution Runtime, Audit, and Undo. Everything else is an adapter.
+Components from prior passes remain necessary and are **subordinate** to the transaction:
 
-The architecture with the highest probability of still being the best trusted desktop execution platform in 2031:
-
-```text
-Ghost Kernel (Rust)
-  ├── Resource Graph
-  ├── Capability Registry
-  ├── Policy Engine
-  ├── Verification Engine   ← centerpiece
-  ├── Action IR
-  ├── Execution Runtime
-  ├── Audit + Undo + Snapshots
-  └── Event Bus + Scheduler (plans only)
-
-Adapters (never peers of the kernel)
-  → Desktop UI / CLI / Voice / App Intents / MCP / Plugins / Shortcuts
-
-Platform products (versioned independently)
-  → Ghost Agent macOS · Ghost Agent Windows · Ghost Agent Linux (CI)
-
-Shell
-  → thin Tauri (or successor) desktop UI
-
-Planners (behind a Planner Interface — AI disappears architecturally)
-  → rules engine · human · OpenAI · Claude · Gemini · MLX · Ollama · …
-```
+| Component | Role under the transaction thesis |
+|---|---|
+| Resource Graph | Typed, versioned world model (read/write sets live here) |
+| Capability Registry | Mutation vocabulary the execution plane alone implements |
+| Action IR | Sealed steps inside a transaction — often proof-carrying |
+| Verification Authority | Preconditions / postconditions / uncertainty gates |
+| Ghost Agents | Platform data-plane drivers |
+| Planner Interface | Produces assumptions + proposed transactions; never executes |
+| Event log | Immutable triggers; never execute |
 
 Philosophy refined:
 
 ```text
 Intent arrives as an event.
-Ghost maps reality onto a Resource Graph.
-A planner proposes Action IR over that graph.
-Ghost verifies assumptions against reality.
-Policy applies trust levels.
-The user approves.
-The kernel executes via named capabilities only.
-Ghost verifies again.
-Audit and recovery artifacts are sealed.
+Ghost resolves versioned resources.
+A planner proposes a transaction (assumptions made explicit).
+Verification proves feasibility against observed versions.
+Policy + approval issue a capability lease and execution token.
+The local execution plane runs bounded, idempotent steps.
+Ghost verifies postconditions, commits or compensates, and signs a receipt.
+No remote party, model, plugin, or UI holds execution authority.
 ```
 
 ---
@@ -79,254 +83,338 @@ Snapshot grounded in the tree at review time (v1.2.9 era):
 | Plugins | **None** (docs only) |
 | Hotspots | `src/main.js` (~5.8k LOC); `src-tauri/src/engine.rs` (~1.6k); `src-tauri/src/platform/macos.rs` (~1.5k) |
 | Scaffolding debt | `enterprise/`, `finance/`, `fraud/`, `checks/`, `compliance/`, `data_protection/` — commandless models, no IPC |
-| Doc drift | Guard vs policy naming; wedge docs disagree (Organizer-first vs replay-first); next-gen doc outruns `AGENTS.md` build order |
-| What does *not* exist yet | Ghost Kernel boundary, Resource Graph, Capability Registry as product surface, Scheduler-as-planner, trust-level ladder, deterministic state snapshots, Planner Interface abstraction |
+| Closest existing approx. of a transaction | Organizer re-plan on execute, per-action policy, undo-before-mutate, sealed audit chain, plan-hash MCP tokens |
+| Not yet present | First-class `Transaction`, control/execution plane split, proof obligations on actions, resource version identity, concurrency leases, sagas / compensation classes, signed receipts as product surface, assumption objects, multi-axis uncertainty, execution classes A–D, event-sourced scheduler, idempotency keys, Ghost Execution Protocol, declarative policy language (Cedar / constrained Rego) |
 
-Today’s Organizer path is the strongest approximation of kernel behavior: server-side re-plan, policy on actions, undo-before-mutate, sealed audit. The architectural work is to stop treating Organizer / Routines / MCP as peer products and make them **clients of one kernel**.
+Organizer is the best seed of transaction semantics in the repo. The architectural work is to stop treating Organizer / Routines / MCP as peer products and grow them into **clients of one transaction authority**.
 
 ---
 
 ## Deliverable 1 — Subsystem verdicts
 
-For every major subsystem: **KEEP**, **REFACTOR**, **REPLACE**, or **REMOVE**.
-
 | Subsystem | Verdict | Why |
 |---|---|---|
-| **Rust** | **KEEP** | Kernel language. Policy, graph, IR, FS mutation, crypto, audit survive five years without GC drama at approval boundaries. |
-| **Tauri 2** | **KEEP** (shell / adapter only) | Fine as a thin desktop adapter. The kernel must not live in the WebView. |
-| **Frontend (vanilla JS)** | **REFACTOR** | Adapter hygiene. Split `main.js`; never rewrite the kernel into React. |
-| **Project structure** | **REFACTOR** → kernel layout | `policy/`, `organizer/`, `audit/`, `mcp/` are seeds. Refactor toward kernel crates/modules; quarantine enterprise scaffolding until a playbook exists. |
-| **Command architecture** | **KEEP** (+ tighten) | Module + risk class remains. All mutating IPC must enter via kernel events / intents — no bypass. |
-| **Security / trust model** | **KEEP** (+ expand) | Deny-by-default and plan-hash tokens stay. Binary approval becomes a **Trust Level** ladder. |
-| **Policy engine** | **KEEP** (+ graph-aware) | Pure `evaluate` is excellent. Bind decisions to Resource Graph nodes and trust levels. |
-| **Planner(s)** | **REFACTOR** | Organizer planner becomes one producer of Action IR via the **Planner Interface**. AI is not special-cased in architecture. |
-| **Audit** | **KEEP** | Hash-chained, export-masked PII. Required kernel output for every mutating run. |
-| **Undo** | **KEEP** + **extend with snapshots** | Action-reverse journals stay. Add optional deterministic state snapshots for verification and stronger recovery. |
-| **Replay / Routines** | **REFACTOR** | Capture / compression / resolution remain. They become event → intent → IR clients of the kernel, not a parallel product. |
-| **MCP** | **KEEP** (narrow adapter) | One AI *ingress* adapter into the kernel — not a second execution engine. No shell tools. |
-| **Plugins** | **REPLACE** (from scratch) | Emit **Intent** only. Compose **Capability Registry** entries. Never implement FS/UI ops. Never emit Action IR directly. |
-| **Platform backends** | **REFACTOR** → **Agent products** | Promote to versioned **Ghost Agent macOS / Windows / Linux** (Linux = CI), not “Swift helper” footnotes. |
-| **Cross-platform** | **KEEP** product focus | Primary: macOS + Windows. Linux agent for CI / headless. Do not pretend headless equals product parity. |
+| **Rust** | **KEEP** | Language of the transaction authority and execution plane. |
+| **Tauri 2** | **KEEP** (UI adapter only) | Instrument panel shell. Trust logic must not live in the WebView. |
+| **Frontend** | **REFACTOR** | Become a **transaction inspector** (assumptions, authority, evidence, recovery) — not a Zapier canvas. Modularize `main.js`. |
+| **Project structure** | **REFACTOR** | Evolve toward control plane / execution plane; Organizer remains the first transaction compiler for FS. |
+| **Command architecture** | **KEEP** (+ tighten) | Mutating IPC enters only as intent → transaction; no bypass. |
+| **Security / trust** | **KEEP** (+ decompose) | Split **permission / capability / lease / approval / execution token** — not one checkbox. |
+| **Policy engine** | **KEEP** → grow into Policy Authority; later **Cedar** (or constrained Rego), not cute YAML. |
+| **Planner(s)** | **REFACTOR** | Emit **assumptions + proposed Transaction**; hide behind Planner Interface. |
+| **Audit** | **REFACTOR** → **signed receipts** | Passive logs become verifiable transaction receipts. |
+| **Undo** | **KEEP** + **sagas** | Exact reverse where possible; compensation plans where not; classify reversibility. |
+| **Replay / Routines** | **REFACTOR** | Event → intent → transaction candidates; same authority as Organizer. |
+| **MCP** | **KEEP** (ingress adapter) | One client of the future **Ghost Execution Protocol** — not the internal architecture. |
+| **Plugins** | **REPLACE** | Emit intent / compose capabilities; never implement ops or emit bare Action IR as execution authority. |
+| **Platform backends** | **REFACTOR** → versioned **Ghost Agents** in the **execution data plane**. |
+| **Cross-platform** | **KEEP** | macOS + Windows product; Linux agent for CI. |
 
 ---
 
-## Deliverable 2 — Ideal architecture: the Ghost Kernel
+## Deliverable 2 — Ideal architecture: transaction authority
 
 ```text
-                    ┌─────────────────────────────────────┐
-                    │           Ghost Kernel              │
-                    │                                     │
- Events ───────────►│  Event Bus                          │
- (FS, UI, MCP,      │       │                             │
-  clipboard,        │       ▼                             │
-  intents, …)       │  Intent Normalizer                  │
-                    │       │                             │
- Scheduler ────────►│       │   (scheduler NEVER executes)│
- (watchers emit     │       ▼                             │
-  intents / plan    │  Resource Graph  ◄── Platform Agents│
-  requests only)    │       │                             │
-                    │       ▼                             │
-                    │  Planner Interface                  │
-                    │   rules | human | any LLM adapter   │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Action IR  (edges over the graph)  │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Verification Engine  (pre)          │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Policy Engine × Trust Levels       │
-                    │       │                             │
-                    │       ▼                             │
-                    │  User Approval → Signed Token       │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Execution Runtime                  │
-                    │   (Capability Registry only)        │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Verification Engine  (post)        │
-                    │       │                             │
-                    │       ▼                             │
-                    │  Audit Chain · Undo · Snapshots     │
-                    └─────────────────────────────────────┘
-                                      ▲
-         ┌────────────┬───────────────┼───────────────┬────────────┐
-         │            │               │               │            │
-    Desktop UI      MCP           Plugins        App Intents     CLI / Voice
-    (adapter)    (adapter)   (intent adapter)     (adapter)      (adapters)
+                         Clients
+     UI / MCP / CLI / App Intents / Schedulers / Plugins
+                            |
+                            v
+                     Intent Gateway
+                            |
+                            v
+                  Transaction Compiler
+           assumptions / resources / action plan
+                            |
+                            v
+                Resource & State Authority
+          identity / versions / leases / snapshots
+                            |
+                            v
+                    Policy Authority
+            permissions / capabilities / constraints
+                            |
+                            v
+                  Verification Authority
+       preconditions / feasibility / uncertainty / proof
+                            |
+                            v
+                    Approval Authority
+       scoped consent / capability lease / signed token
+                            |
+                            v
+                Local Execution Data Plane
+        deterministic steps / checkpoints / idempotency
+                            |
+                 +----------+----------+
+                 |                     |
+                 v                     v
+           Platform Agents      Transaction Journal
+        macOS / Windows          events / compensation
+                 |                     |
+                 +----------+----------+
+                            v
+                 Postcondition Verification
+                            |
+                            v
+                  Commit or Compensate
+                            |
+                            v
+                   Signed Execution Receipt
 ```
 
-### Kernel owns (non-negotiable)
+### Control plane vs execution plane
 
-| Kernel component | Role |
+**Essential split.**
+
+| Control plane owns | Execution plane owns |
 |---|---|
-| **Resource Graph** | Typed nodes: Desktop, Applications, Windows, Controls, Files, Folders, Clipboard, Secrets, Network, Permissions, Zones. Reality Ghost can name. |
-| **Capability Registry** | Named ops the kernel alone implements: `Filesystem.Move`, `UI.Click`, `OCR.Read`, … |
-| **Policy Engine** | Decisions over graph nodes × capabilities × trust levels |
-| **Verification Engine** | Prove assumptions match reality (pre- and post-execution) — the moat |
-| **Action IR** | Sealed, hashable edges over the Resource Graph |
-| **Execution Runtime** | Walks IR via Capability Registry only |
-| **Audit + Undo + Snapshots** | Cryptographically verifiable history and recovery |
-| **Event Bus + Scheduler** | Everything enters as events; scheduler produces plan *requests*, never mutations |
+| Intent interpretation | Deterministic actions |
+| Planning / planner selection | OS interaction via Agents |
+| Plugin composition | Snapshots |
+| Policy evaluation | Verification probes |
+| Approval / lease issuance | Journaling / idempotency |
+| Scheduling / transaction creation | Interruption / rollback / compensate |
+| Resource discovery (orchestration) | Audit receipt sealing |
+| | **Must work with no model, no network, no plugin runtime, no UI** |
 
-### Adapters (clients of the kernel — not peers)
+```text
+Control Plane
+    ↓ signed transaction + execution token
+Execution Plane
+    ↓ evidence + result
+Control Plane
+```
 
-Desktop UI, CLI, Voice, App Intents, Shortcuts, MCP, Plugins, marketing demos — all compile to **events / intents**. Organizer and Routines are **product surfaces** on the kernel, not separate architectures.
+Remote control, MCP, enterprise policy, and multiple UIs become safer **because** the local execution plane retains final authority.
 
-### What must not exist as peer products of the kernel
+### The central object: Transaction
 
-Chat UI, autonomous loops, knowledge bases, IDEs, email clients, browser-agent cores, plugin-owned executors.
+Not a workflow, not an action list, not a chat reply:
+
+```text
+Transaction {
+  id
+  intent
+  assumptions[]
+  reads: ResourceSet
+  writes: ResourceSet
+  actions[]                  // often proof-carrying
+  invariants[]
+  preconditions[]
+  postconditions[]
+  compensation_plan
+  approval_scope
+  evidence_requirements[]
+  execution_class            // A | B | C | D
+  idempotency_key
+}
+```
+
+Desktop concepts almost never exposed today — Ghost must own them: read set, write set, affected resources, invariants, commit criteria, compensation, evidence, exact authorization scope.
 
 ---
 
-## Deliverable 2b — Resource Graph (deeper than Action IR)
+## Deliverable 2b — Proof-carrying actions
 
-Action IR answers **what to do**. The Resource Graph answers **what exists**.
-
-```text
-Desktop
-├── Applications
-│   ├── Finder
-│   ├── Outlook
-│   └── Excel
-├── Windows
-│   ├── Downloads
-│   └── Workbook
-├── Controls
-│   ├── Button
-│   ├── Table
-│   └── TextField
-├── Files / Folders
-├── Clipboard
-├── Secrets
-├── Network
-├── Permissions
-└── Zones
-```
-
-Everything is a **node**. Every approved action is an **edge** between nodes.
-
-Instead of reasoning “Move file,” Ghost reasons:
+Not formal-methods certificates on day one — **proof obligations**.
 
 ```text
-Downloads/file.pdf  ──Filesystem.Move──►  Documents/Invoices/
+action: filesystem.move
+subject:
+  resource_id: file:8c19...
+  expected_hash: a73f...
+destination:
+  resource_id: folder:91ab...
+requires:
+  - source.exists == true
+  - source.hash == a73f...
+  - destination.contains_name("invoice.pdf") == false
+  - capability.filesystem_move == granted
+ensures:
+  - source.exists == false
+  - destination/invoice.pdf.exists == true
+  - destination/invoice.pdf.hash == a73f...
 ```
 
-That graph enables permissions, policies, undo, visualization, explanations, plugin composition, and AI (or rules) planning — because every client shares one ontology of reality.
+The executor **rejects** actions whose obligations cannot be established.
 
-**Action IR operates on the Resource Graph. It does not stand alone.**
-
-First-pass review error corrected: treating Action IR as *the* missing layer under-specified the world model. IR without a graph is a command list. Graph without IR is a inventory. Kernel needs both; the graph is deeper.
-
----
-
-## Deliverable 2c — Verification as centerpiece
-
-First-pass review still orbited execution. Flip the center of gravity:
-
-```text
-Intent
-  → Plan (Action IR over Resource Graph)
-  → Verify (pre)      ← prove reality matches assumptions
-  → Policy × Trust Level
-  → Approve
-  → Execute
-  → Verify (post)     ← prove outcomes match the sealed plan
-  → Audit + recovery artifacts
-```
-
-Ghost’s moat is not “can click buttons.” The moat is **obsessive proof that reality matched the assumptions under which the user approved.** Automation without verification is a macro recorder. Verification without automation is a viewer. The kernel is both, with verification at the center.
-
-Verification Engine responsibilities (elevate from ad-hoc executor checks):
-
-- Node identity / TOCTOU (file identity, window identity, control identity)
-- Canonicalize and boundary re-check
-- Precondition proofs from the Resource Graph
-- Dry-run feasibility where possible
-- Conflict and irreversible-op detection
-- Post-condition proofs and snapshot diffs
-- Failure that refuses to mutate or seals a partial run honestly
-
----
-
-## Deliverable 2d — Events, Scheduler, Trust Levels
-
-### Everything is an event
-
-Ghost currently thinks too often in *workflows*. It should think in **events** that may produce intents:
-
-| Event families (examples) | Downstream |
+| Authority | Question |
 |---|---|
-| FilesystemChanged, FolderHashChanged | Planner request |
-| Mouse / Keyboard / Clipboard | Capture / compression → intent |
-| MCP tool invocation | Intent |
-| Plugin intent emission | Intent |
-| Shortcut / App Intent / Voice | Intent |
-| USBInserted, ScreenUnlocked, AppOpened, UserIdle, CalendarStarts | Scheduler → plan *request* only |
+| Policy | *May* this happen? |
+| Verification | Is the world in the state required for this to happen *safely*? |
 
-Same pipeline after the event bus. No privileged silent path.
+Both are mandatory. Policy alone is theater.
 
-### Scheduler (plans only)
+---
 
-A true scheduler — not “cron for execute”:
+## Deliverable 2c — Resource identity, versions, concurrency
+
+A graph of “Finder, window, button, file” is insufficient without **identity vs appearance**.
+
+Every resource carries at least:
+
+| Field | Purpose |
+|---|---|
+| Logical identity | Stable Ghost id (`file:8c19`, `ui:excel:button:export`) |
+| Observed identity | Path, AX attrs, geometry, window instance |
+| Version | Content hash, inode + volume, UI generation |
+| Provenance | How observed |
+| Confidence | Target-identity confidence (see uncertainty axes) |
+| Freshness | `observed_at` |
+| Authority | Which Agent / plane observed it |
+
+**Concurrency control (major prior omission):** desktop state races Ghost while it plans.
+
+Required equivalents of database controls:
+
+- optimistic locking / resource version checks  
+- leases  
+- stale-plan detection  
+- conflict detection  
+- transaction invalidation  
+- retry **only after re-planning**
 
 ```text
-When Downloads changes
-When Outlook receives attachment
-When USB inserted
-When screen unlocked
-When calendar event starts
-When user idle
-When folder hash changes
-When app opens
+Plan hash valid
+AND resource version changed
+⇒ approval invalidated
 ```
 
-**Hard rule:** Schedulers **never** execute. They emit events / intents that request plans. Execution remains Verify → Policy → Approve → Execute → Verify. Continuous mutation culture (Hazel-without-preview) is explicitly refused.
+A plan approved against version 12 must not execute silently against version 14. This principle outranks model intelligence.
 
-### Trust Level system
+---
 
-Binary approve/deny is too coarse. Kernel trust levels:
+## Deliverable 2d — Authority stack: permission → lease → token
 
-| Level | Name | Default powers |
+Binary approval is too primitive. Distinct objects:
+
+| Object | Meaning |
+|---|---|
+| **Permission** | Broad OS grant (Accessibility, etc.) |
+| **Capability** | What kind of operation exists in the registry |
+| **Lease** | Temporary bounded authority over resources + constraints |
+| **Approval** | User consent for one transaction or class |
+| **Execution token** | Cryptographic artifact consumed by the execution plane |
+
+Example lease:
+
+```text
+capability: filesystem.move
+resources: [zone:downloads, zone:documents/invoices]
+constraints:
+  max_actions: 25
+  overwrite: false
+  delete: false
+  same_volume_only: true
+expires_at: ...
+transaction_hash: sha256:...
+```
+
+This raises convenience without collapsing into “always allow everything” — the inevitable response to approval fatigue.
+
+Trust Levels 0–5 from the prior pass remain a UX ladder over this stack; they do not replace leases/tokens.
+
+---
+
+## Deliverable 2e — Sagas, execution classes, snapshots
+
+### Sagas (not pretend-everything-is-reversible)
+
+Desktop ops cross systems. Some steps cannot undo.
+
+Every action declares:
+
+```text
+reversibility: exact | compensatable | best_effort | irreversible
+```
+
+That classification drives approval and evidence requirements. On partial failure the transaction presents a **human recovery plan**, marks partial commit honestly, and runs the compensation plan (never silently invents external undo such as “retract the email”).
+
+### Execution classes (better than fuzzy low/medium/high)
+
+| Class | Examples | Mandates |
 |---|---|---|
-| **0** | Read only | Graph inspect, safe metadata |
-| **1** | Preview only | Plans, dry-runs, diffs — no mutation |
-| **2** | Reversible mutation | Moves / renames with undo + snapshots allowed |
-| **3** | Irreversible mutation | Deletes / overwrites / sends — explicit, rare |
-| **4** | Admin | Zone / policy pack changes, agent install |
-| **5** | Developer | Experimental surfaces, unsigned plugin install (still no AI self-approve) |
+| **A** Pure read | scan, classify, summarize | No mutation |
+| **B** Locally reversible | rename, move, mkdir | Exact undo + version checks |
+| **C** Compensatable | upload, draft, setting change | Compensation plan + stronger evidence |
+| **D** Irreversible / socially consequential | send email, submit, publish, permanent delete, money | Per-action or elevated approval; forbid unattended when verification is weak |
 
-Policies become simpler: bind capability × resource node class → minimum trust level, then require user elevation / approval tokens for that level. Sticky god-mode remains forbidden.
+### Snapshots
+
+```text
+Snapshot₀ → Execute (idempotent steps) → Snapshot₁ → Compare / Verify
+```
+
+Scope minimized to the transaction write set — never ambient whole-disk imaging.
+
+---
+
+## Deliverable 2f — Assumptions, uncertainty, events, idempotency
+
+### Assumptions as first-class objects
+
+Planners must emit:
+
+```text
+assumptions:
+  - id: a1
+    statement: "…"
+    confidence: 0.88
+    validation: user_confirmed | unresolved | machine_checked
+```
+
+Transactions with unresolved **high-impact** assumptions do not reach the execution plane. Explanations stop being decorative.
+
+### Multi-axis uncertainty (not one ceremonial score)
+
+| Axis | Example policy gate |
+|---|---|
+| Intent confidence | Low → clarify before compile |
+| Target identity confidence | `< 0.85` → manual target confirmation |
+| Expected outcome confidence | Low → tighten evidence requirements |
+| Verification strength | `visual_only` → forbid unattended |
+| Recovery strength | `irreversible` → Class D / per-action approval |
+
+### Event sourcing for triggers
+
+Immutable events: `FolderChanged`, `MailReceived`, `UserRequested`, `TimerElapsed`, `AppOpened`, `MCPRequestReceived`, …
+
+```text
+Event → Intent candidate → Transaction proposal
+```
+
+Enables replay, debugging, deduplication, idempotency, causality, auditability, and “why did Ghost propose this?”  
+**Triggers never execute.**
+
+### Idempotency designed in
+
+Keys: `transaction-id + action-id + resource-version`.
+
+Runtime states (must not collapse uncertainty):
+
+```text
+not_started | started | effect_observed | verified
+| committed | compensated | failed | unknown
+```
+
+`unknown` is first-class. Lying by forcing success/failure is how recovery dies.
 
 ---
 
 ## Deliverable 3 — Platform architecture
 
-**Chosen path:** Rust kernel + versioned **Ghost Agent** products (Option B/C hybrid). Never Option D (SwiftUI-only app rewrite).
+**Local execution data plane** + versioned **Ghost Agents** (macOS / Windows / Linux-CI). UI remains a thin adapter.
 
-| | macOS | Windows | Linux |
-|---|---|---|---|
-| Role | Primary product | Primary product | CI / headless agent |
-| UI adapter | Tauri WebView (near-term) | Tauri WebView | tests only |
-| Platform product | **Ghost Agent macOS** (versioned) | **Ghost Agent Windows** (versioned) | **Ghost Agent Linux** (CI) |
-| Native depth | Swift / ObjC + XPC: AX, Vision, App Intents | Real UI Automation + secure input; C# agent if Rust UIA stays painful | headless constraints documented |
+| Concern | Owner |
+|---|---|
+| Transaction authority (compile, policy, verify, approve, journal, receipt) | **Rust control + execution core** |
+| OS mutation / AX / OCR / input | **Ghost Agent** products |
+| UI | Transaction instrument panel (Tauri/JS near-term) |
+| AI / rules / humans | Planner Interface → proposed transactions only |
+| MCP / App Intents / CLI / Voice | Intent Gateway adapters |
+| Remote clients | May submit intent, inspect, approve leases — **never own execution** |
 
-Think **Docker Engine**, not “Swift helper”: agents version independently, speak a stable protocol to the kernel, and are replaceable without rewriting policy / IR / audit.
-
-### Language ownership
-
-| Concern | Owner | Why |
-|---|---|---|
-| Kernel (graph, IR, policy, verify, execute, audit) | **Rust** | One trust core |
-| UI adapter | JS in Tauri (near-term) | Not the moat |
-| Ghost Agent (accessibility, OCR, input inject) | Platform-native (Swift / UIA / possibly C#) | OS depth ceilings |
-| Filesystem mutations | **Rust kernel via Capability Registry** | Never LLM, plugin, or agent-authored FS logic outside registered caps |
-| AI / planners | **Planner Interface** adapters | Kernel consumes plans; does not know if the planner was a model |
-| Networking | Rust / explicit grants | Same envelope as vault / identity |
-| Persistence | Rust + redb (**KEEP**) | Current truth |
-| MCP / CLI / Voice | Thin adapters into Event Bus | Never bypass kernel |
+Remote “execute X” means: local plane checks token, policy, resource versions, local conditions — then proceeds or refuses.
 
 ---
 
@@ -334,141 +422,102 @@ Think **Docker Engine**, not “Swift helper”: agents version independently, s
 
 Ghost must **never**:
 
-1. Execute arbitrary shell, scripts, or model-generated code.
-2. Let AI, plugins, or schedulers mutate files / OS input directly.
-3. Bypass or auto-grant approval (no AI self-approval, no sticky trust-level 5 without ceremony).
-4. Silently observe (always-on screen / email / browser / mic / camera).
-5. Become a general chatbot or second-brain / memory product.
-6. Become a browser-agent company (DOM automation as core).
-7. Own user cloud storage for workflows / Organizer data by default.
-8. Ship plugins that implement capabilities or emit Action IR.
-9. Treat Delete / Overwrite as silent defaults (Trust Level 3+ only).
-10. Claim production / enterprise compliance for Guard Desk / POS simulations.
-11. Grow Linux into a third consumer OS before macOS + Windows kernel + agent parity is boring.
-12. Add features that do not strengthen Event → Intent → Graph → IR → Verify → Policy → Approve → Execute → Verify → Audit.
-13. Allow a Scheduler to call Execution Runtime.
-14. Special-case “AI” as a privileged peer of the kernel.
-
-Strong boundaries *are* the category definition.
+1. Give execution authority to AI, plugins, schedulers, or remote clients.  
+2. Execute shell / model-generated code.  
+3. Collapses permission / capability / lease / approval / token into one checkbox.  
+4. Execute against stale resource versions after approval.  
+5. Pretend irreversible steps are undoable.  
+6. Let triggers or watchers call the execution plane.  
+7. Treat MCP as the internal architecture (it is an ingress).  
+8. Ship ambient observation (camera / mic / always-on screen / silent email read).  
+9. Become a chatbot, IDE, knowledge base, or browser-agent company.  
+10. Center the product on a visual workflow canvas instead of transaction review.  
+11. Invent an ad-hoc authorization YAML dialect when Cedar (or constrained Rego) exists.  
+12. Collapse `unknown` runtime state into fake success/failure.  
+13. Claim Organizer-grade trust for surfaces that lack version checks, proof obligations, and receipts.  
+14. Weaken verification because “models got better.”
 
 ---
 
-## Deliverable 5 — Missing layers (corrected stack)
+## Deliverable 5 — Missing layers (stack, deepest first)
 
-Ordered by depth:
+1. **Transaction authority** — category and central object.  
+2. **Control / execution plane split** — safety boundary.  
+3. **Resource & State Authority** — identity, versions, freshness, concurrency.  
+4. **Proof-carrying Action IR** — obligations, not vibes.  
+5. **Capability leases + execution tokens** — exact authority.  
+6. **Verification Authority** — pre and post; uncertainty-gated.  
+7. **Saga / compensation model** — honesty about irreversibility.  
+8. **Signed receipts** — durable proof for humans and enterprises.  
+9. **Ghost Execution Protocol** — public, versioned envelopes (Intent, Resource Descriptor, Action IR, Policy Decision, Approval Lease, Execution Result, Evidence, Receipt). MCP becomes one client of this protocol.  
+10. **Declarative policy language** (Cedar preferred) — when hard-coded Rust policies saturate.
 
-### 1. Ghost Kernel (institutional form)
+Kernel / Resource Graph / Capability Registry from the prior pass are **how** you build this — not the product category.
 
-The largest first-pass omission. Organizer, Routines, MCP, Plugins, App Intents must become **clients**, not peer architectures. Without a kernel boundary, feature accumulation recreates five trust paths.
+**Moat (not AI, not polish):**
 
-### 2. Resource Graph (deepest world model)
+```text
+Typed resources
++ Versioned state
++ Proof-carrying actions
++ Capability leases
++ Transaction semantics
++ Verification evidence
++ Compensation
++ Signed receipts
+```
 
-What exists. Nodes for apps, windows, controls, files, clipboard, secrets, network, permissions, zones. Enables policy, undo, explanation, plugins, and planning.
-
-### 3. Capability Registry (execution vocabulary)
-
-Ghost owns `Filesystem.Move`, `Filesystem.Copy`, `Filesystem.Delete`, `UI.Click`, `UI.Type`, `OCR.Read`, `Clipboard.Copy`, …. Plugins *compose* capabilities; they never *implement* them. This matters more than a Plugin API.
-
-### 4. Action IR (sealed edges over the graph)
-
-Typed, hash-stable, reviewable, trust-annotated. Only approveable mutation artifact. Executable without trusting the client. Journalable.
-
-### 5. Verification Engine (centerpiece behavior)
-
-Pre/post proof against the Resource Graph and optional snapshots. Moat vs macro recorders and chat agents.
-
-### Why this beats “add more AI”
-
-AI (and every other planner) becomes an adapter behind the Planner Interface. Graph + capabilities + verify + trust levels remain valuable if models vanish tomorrow and become *more* valuable if models improve — because denser proposals still must compile onto a shared reality model and survive proof.
+Competitors copy UIs, prompts, MCP tools, and Swift glue. They struggle to copy years of failure handling under this trust model.
 
 ---
 
 ## Deliverable 6 — Technology review
 
-No fence-sitting.
-
 | Tech | Decision | Why |
 |---|---|---|
-| Swift | **Adopt** inside **Ghost Agent macOS** | Versioned agent, not temp scripts |
-| SwiftUI | **Avoid** (app rewrite) | Wrong bet; UI is an adapter |
-| App Intents | **Experiment** (adapter → Event Bus) | Native entry; kernel still approves |
-| XPC | **Adopt** | Isolate agent privileges from kernel process where useful |
-| ScreenCaptureKit | **Avoid** as default | No-hidden-capture posture |
-| Accessibility API | **Adopt** (deepen in Agent) | Resource Graph nodes for UI |
-| Vision | **Adopt** (via Agent) | OCR nodes / capabilities |
-| CoreML / MLX | **Avoid** in kernel; **Experiment** as Planner Interface backends | Suggestion only |
-| WinUI | **Avoid** near-term | Tauri adapter sufficient |
-| Windows UI Automation | **Adopt** in **Ghost Agent Windows** | Real control graph nodes |
-| C# | **Experiment** for Windows Agent if needed | Agent product, not kernel rewrite |
-| React / Solid / Svelte | **Avoid** | Adapter rewrite tax |
-| TypeScript | **Experiment** (UI adapter contracts) | Not a strategy rewrite |
-| SQLite | **Avoid** return | redb stays |
-| SQLCipher | **Experiment** under enterprise threat only | — |
-| WASM Component Model | **Adopt** for plugins | Intent/composition only; capability-bounded |
-| gRPC | **Experiment** for Agent↔Kernel if local ABI needs it; else keep simple | Don’t overbuild early |
-| JSON-RPC | **Adopt** / keep | MCP + possibly agent protocol |
-| Cap’n Proto / FlatBuffers | **Avoid** near-term | Versioned serde IR + graph schema first |
-| Rhai / Lua / Python | **Avoid** as extension runtimes | Script execution is the anti-product |
-| Go / Zig | **Avoid** | No second kernel language |
+| Cedar | **Adopt** (policy language direction) | Resource / principal / action / context fit; avoid DIY YAML auth |
+| Rego | **Experiment** only under strict constraints | Powerful; easy to create unsound policy sprawl |
+| Swift / XPC / AX / Vision | **Adopt** in Ghost Agent macOS | Execution data plane |
+| Windows UI Automation / possible C# | **Adopt / Experiment** in Ghost Agent Windows | Control identity |
+| SwiftUI / WinUI app rewrite | **Avoid** | UI is instrument panel, not category |
+| ScreenCaptureKit ambient | **Avoid** | Observation boundary |
+| WASM plugins | **Adopt** later | Intent + composition only |
+| JSON-RPC | **Adopt** | MCP + possibly Agent protocol |
+| gRPC | **Experiment** | Agent↔core if needed |
+| Cap’n Proto / FlatBuffers | **Avoid** early | Versioned serde protocol first |
+| Rhai / Lua / Python executors | **Avoid** | Anti-product |
+| React remakes | **Avoid** | Does not create transactions |
+| redb | **KEEP** | Persistence; receipts/journals evolve here |
+| Ed25519 (or existing envelope crypto) | **Adopt** for receipt / token signatures | Align with vault/auth primitives already in tree |
+| Formal theorem provers | **Avoid** near-term | Proof *obligations* first; formal methods later if ever |
 
 ---
 
-## Deliverable 7 — Plugins and the Capability Registry
+## Deliverable 7 — Plugins, planners, protocol
 
-**Plugins: yes, eventually** — after Resource Graph, Capability Registry, and verification-first IR exist.
+| Source | May do | Must not do |
+|---|---|---|
+| Plugin | Emit intent; compose registered capabilities | Implement FS/UI; emit executable IR as authority; approve |
+| Planner (AI or not) | Propose Transaction + assumptions | Execute; self-approve; skip unresolved high-impact assumptions |
+| Scheduler | Append events → transaction candidates | Call execution plane |
+| MCP / remote | Intent, inspect, approve leases, monitor | Own the machine |
+| UI | Transaction review / instrument panel | Be the source of truth for plans (execution plane re-validates) |
 
-### Correct composition
-
-```text
-Wrong (first-pass):   Plugin ──► Action IR
-Right:                Plugin ──► Intent ──► Planner Interface ──► Action IR
-                      Plugin composes Capability Registry entries; never implements them
-```
-
-| Dimension | Rule |
-|---|---|
-| Form | WASM Component Model |
-| Emits | **Intent** (+ optional planning hints) — never Action IR, never capabilities |
-| Composes | Capability Registry names declared in manifest |
-| Forbidden | FS/UI/network implementation, approve, scheduler execute, native `.dylib`/`.dll`, Python executors |
-| Permissions | Per Zone / resource-node scopes; user-granted |
-| Limits | CPU / memory / time sandbox |
-| Trust | Signed packages; unsigned → Trust Level 5 developer path only |
-| Updates | Explicit; no silent hot-patch of kernel or capabilities |
-
-**Capability Registry > Plugin API.** If the registry is right, plugins are small. If plugins must invent Move/Delete, the kernel has already failed.
+**Ghost Execution Protocol** (versioned public envelopes) is the durable integration surface. MCP is not Ghost’s spinal cord.
 
 ---
 
-## Deliverable 8 — AI disappears architecturally
+## Deliverable 8 — AI extremes (unchanged law, sharper)
 
-First-pass sketch still had a privileged `AI → Planner` edge. Replace it:
+**AI disappears architecturally** behind the Planner Interface. The transaction authority does not know or care whether the planner was Claude, a rules engine, or a human checklist.
 
-```text
-Planner Interface
-  ├── Rules engine
-  ├── Human (manual plan authoring / edits)
-  ├── OpenAI / Claude / Gemini / …
-  ├── MLX / Ollama / local OpenAI-compatible
-  └── Future planners…
-         │
-         ▼
-   Action IR over Resource Graph
-         │
-         ▼
-   Verification Engine (does not care who proposed)
-```
+**If models are 100× better:** denser intents and better assumption lists — Ghost’s value rises because leases, version checks, proof, and receipts remain scarce. Do not thin approval.
 
-**If LLMs become 100× better:** denser intents and plans; kernel value rises because proof, trust levels, and recovery remain scarce. Do not thin approval.
-
-**If LLMs disappear tomorrow:** rules engine + human planners + Organizer/Routines still work. MCP goes quiet. Kernel remains desktop infrastructure.
-
-Design law:
+**If models vanish:** Organizer-class transactions, human planning, rules, receipts, and compensation still work.
 
 ```text
 Planner quality scales proposal density.
-Kernel quality scales refusal and proof quality.
-Ghost must not know or care whether a planner is AI.
+Transaction authority quality scales refusal, proof, and recovery.
 ```
 
 ---
@@ -477,116 +526,116 @@ Ghost must not know or care whether a planner is AI.
 
 | Product | Copy | Refuse |
 |---|---|---|
-| Apple Shortcuts | Intent surfaces, App Intents, clear permission prompts | Closed ecosystem; no portable kernel thesis |
-| Keyboard Maestro | Macro reliability | Power without verify / audit defaults |
-| Hazel | Folder watch elegance | Silent continuous *execution* — steal triggers, not auto-mutate |
-| Power Automate Desktop | Connector gravity (later, via capabilities) | Cloud-first RPA sprawl |
-| Raycast AI | Fast launcher UX | Chat / omnibox identity |
-| Open Interpreter | — | Shell-from-LLM |
-| Claude Desktop | MCP client habit | Chat-as-product |
-| Cursor | Review feedback UX | Competing as IDE |
-| Mycroft / Open Voice OS | — | Voice-assistant identity |
-| OpenAI Operator / Browser Use / Stagehand | Targeting lessons | Browser-agent category |
-| Microsoft Copilot | OS integration ambition | Ambient OS assistant persona |
-| OpenAdapt | Recording lineage | Unbounded observe / automate |
-| Docker / OS kernels (analogy only) | Versioned engine + thin clients | Literally becoming an OS |
+| Apple Shortcuts / App Intents | Intent entry, permission clarity | Closed ecosystem without portable transaction receipts |
+| Keyboard Maestro | Reliability of macros | Power without proof / leases |
+| Hazel | Event triggers | Auto-execute watchers |
+| Power Automate | Connector gravity later | Cloud RPA without local execution authority |
+| Zapier-like canvases | — | Workflow-canvas-as-product |
+| Open Interpreter / Operator / Browser Use | — | Shell / DOM freestyle authority |
+| Claude Desktop / Copilot | Client habits (MCP) | Chat-as-authority |
+| Databases / ledger systems (analogy) | Transactions, isolation, durability, receipts | Pretending the desktop is ACID-atomic |
 
-Steal **trigger ergonomics** and **permission clarity**. Refuse ambient autonomy. Position against all of them as **infrastructure they cannot safely replace**.
+Steal **authorization ergonomics**. Refuse **ambient execution**. Compete as **infrastructure they cannot safely replace**.
 
 ---
 
 ## Deliverable 10 — Three-year roadmap (risk reduction)
 
-Platform evolution that reduces architectural risk — not feature accumulation.
-
 ```text
-Y1 Kernel seed + parity
-  → Declare kernel module boundary in-tree (even before perfect purity)
-  → Resource Graph v0 (files/folders/zones first; UI nodes stubbed)
-  → Capability Registry v0 (lift Organizer FS ops into named caps)
-  → Action IR over that graph (extract from PlanAction)
-  → Routines become event→intent→IR clients; app/window Zones
-  → Trust Level ladder replaces binary approval UX incrementally
-  → Modularize main.js (adapter hygiene)
-  → Release signing honesty (Authenticode)
+Y1 — Transaction seed (from Organizer)
+  → Name control vs execution plane in-tree
+  → Transaction object v0 (reads/writes/actions/assumptions/compensation stub)
+  → Resource version identity for files (hash/inode) on Organizer path
+  → Stale-plan invalidation on version change
+  → Execution classes A/B for Organizer; D still denied by default
+  → Receipt v0 (hash-chain evolved into signed transaction receipt)
+  → Idempotency keys on executor actions
+  → UI: transaction review surfaces (assumptions, authority, undo class)
+  → Authenticode / signing honesty
 
-Y2 Verification + Agents + Planner Interface
-  → Verification Engine first-class (pre/post); optional state snapshots
-  → Scheduler v0: watchers emit plan requests only
-  → Ghost Agent macOS / Windows as versioned products
-  → Planner Interface; AI adapters are not special
-  → MCP and UI speak events/intents only; remote MCP stays experimental until boring
-  → Universal approval tokens bound to IR hash + trust level
+Y2 — Proof, leases, agents, concurrency
+  → Proof obligations on FS actions; verification authority crate
+  → Capability leases + execution tokens (decompose today’s one-shot approve)
+  → Event-sourced triggers; scheduler candidates never execute
+  → Saga/compensation for Class C; explicit irreversible labeling
+  → Ghost Agents versioned; multi-axis uncertainty gates
+  → Ghost Execution Protocol draft; MCP speaks it
+  → Planner Interface; assumptions required
 
-Y3 Extensibility without surrender
-  → WASM plugins emit Intent; compose Capability Registry
-  → Snapshot-assisted recovery matures
-  → Multi-device only via user-hosted relay patterns — never silent cloud execution
-  → Enterprise policy packs as kernel config, not new products
+Y3 — Protocol + policy language + ecosystem
+  → Cedar (or constrained Rego) for Policy Authority
+  → WASM plugins (intent-only)
+  → Remote approve / local execute proven
+  → Receipts suitable for enterprise export without becoming cloud-first
+  → Class D paths only with mandatory evidence + elevated leases
 ```
 
-Each year closes a risk class: peer-product sprawl → proof gaps → agent depth → plugin attack surface.
+Each year removes a failure class: vague workflows → stale races → weak authority mash → protocol lock-in / policy chaos.
 
 ---
 
 ## Deliverable 11 — Critical review
 
-Assume the current architecture is wrong enough to hurt.
-
-1. **Peer-product sprawl without a kernel.** Organizer, Routines, MCP, experimental AI, and future plugins each invent trust. Marketing will speak as if they are equal; they are not.
-2. **Command lists without a world model.** Organizer `PlanAction` is strong but File-shaped. Without a Resource Graph, UI automation and FS automation never share ontology.
-3. **Execution-centered storytelling.** Docs and UI celebrate “Approve & Organize / Replay.” The scarce skill is verification. Center that in architecture and UX.
-4. **Binary approval.** Everything interesting lives between “read” and “irreversible.” Lack of trust levels forces either nag fatigue or silent stretch of permissions.
-5. **Workflow orthodoxy.** Thinking only in saved workflows under-models FS watchers, App Intents, MCP, and clipboard. Event-first is the durable ingress.
-6. **Plugin IR temptation.** Letting plugins emit Action IR makes them mini-executors. Intent-only is the firewall.
-7. **Capability leakage.** If plugins or agents implement Move/Click themselves, the Capability Registry is theater.
-8. **“Swift helper” under-ambition.** Ephemeral scripts and Win32 point-lookup are not Agent products. Depth debt compounds.
-9. **Undo without snapshots.** Reverse journals fail when the world moves; verification without snapshots is weaker than it must be.
-10. **AI as architectural celebrity.** Hard-wiring AI→Planner brands Ghost as an assistant. Planner Interface keeps Ghost infrastructure even when the cleverest planner is a human checklist.
-11. **`main.js` monolith + enterprise scaffolding.** Adapter bloat and roadmap cosplay both distract from kernel extraction.
-12. **Scheduler danger.** The day a watcher calls execute directly, Ghost becomes Hazel-with-AI and exits the category.
+1. **Category under-sell.** Shipping “automation with good prompts” invites copycats. Transaction authority is harder and worth it.  
+2. **Workflow-as-center.** Workflows hide assumptions, versions, and partial failure. Transactions force them into the open.  
+3. **No concurrency model.** The desktop is adversarial mid-plan. Without version checks, approved plans are lies.  
+4. **Authority mush.** One approve button ≠ permission ≠ capability ≠ lease ≠ token.  
+5. **Undo fantasy.** Pretending uploads and emails reverse cleanly destroys trust at the first saga.  
+6. **Audit as log file.** Without signed receipts, “we logged it” is not proof.  
+7. **Ceremonial confidence.** One float is not enforceable risk. Multi-axis uncertainty is.  
+8. **MCP spine temptation.** External protocol ≠ internal architecture.  
+9. **Remote execution creep.** Convenience will demand it; local plane must refuse by design.  
+10. **Policy in ad-hoc Rust forever.** Will calcify; plan Cedar, don’t invent YAML.  
+11. **Canvas UI distraction.** Instrument panel first — checklist / transaction inspector.  
+12. **Idempotency last.** Crash mid-run without keys produces double moves and forged success.  
+13. **Unknown state collapsed.** Systems that cannot admit `unknown` cannot recover.  
+14. **Two products without one authority.** Organizer vs Routines without shared transaction semantics recreates today’s trust gap.
 
 ---
 
-## Deterministic state snapshots
+## UI: instrument panel, not workflow canvas
 
-Complement action-reverse undo:
+Primary surfaces show:
 
-```text
-Snapshot₀  →  Execute (capability-bound)  →  Snapshot₁  →  Compare / Verify
-```
+- What Ghost believes (Resource & State Authority)  
+- What it plans (Transaction)  
+- Assumptions and their validation state  
+- Authority required (lease scope)  
+- What could go wrong / reversibility class  
+- Evidence to be collected  
+- What actually happened (receipt)
 
-Snapshots improve post-verification, explainability, and recovery when reverse ops are insufficient (partial runs, external interference, irreversible edges denied after the fact). They do not replace journals; they reinforce proof.
-
-Privacy default: snapshot scope is minimized to Resource Graph nodes touched by the sealed plan — never whole-disk ambient imaging.
+Graph editors may exist later as power tools. They are not the product center.
 
 ---
 
 ## Final recommendation
 
-Build Ghost as a **trusted execution kernel for desktop operating systems**:
+Build Ghost as the **local transaction authority for human-computer work**:
 
-- typed **Resource Graph** as the world model;
-- **Capability Registry** as the only mutation vocabulary;
-- **Action IR** as sealed edges over that graph;
-- **Verification** (pre and post) as the centerpiece;
-- **Trust Levels** instead of binary permission theater;
-- **Events + Scheduler** that never execute;
-- **Planner Interface** so AI disappears as a special case;
-- **Ghost Agents** as versioned platform products;
-- every UI, MCP client, plugin, and App Intent as an **adapter**.
+- typed, versioned resources;  
+- proof-carrying actions;  
+- capability leases and execution tokens;  
+- control plane vs execution plane;  
+- verification before and after;  
+- sagas and honest compensation;  
+- event-sourced triggers that never execute;  
+- signed receipts;  
+- a public Ghost Execution Protocol;  
 
-Do not become an assistant. Do not become a shell. Do not become Zapier. Do not become Hazel-with-chat.
+with AI, humans, schedulers, and plugins as **intent sources only**.
 
-Outlast models and fashion by owning **reality, refusal, proof, and recovery**.
+Do not become an assistant. Do not become Zapier. Do not become a kernel metaphor without transaction semantics.
+
+Outlast fashion by owning **exact authorization, versioned reality, proof, compensation, and receipt**.
 
 ---
 
 ## Reading order
 
-1. `AGENTS.md` — product contract and near-term build order  
-2. This document — five-year kernel north star  
-3. [`trust-pipeline.md`](trust-pipeline.md) — stage definitions (reinterpret with Verify-first and Trust Levels)  
+1. `AGENTS.md` — near-term wedge and non-negotiables  
+2. This document — five-year category and architecture  
+3. [`trust-pipeline.md`](trust-pipeline.md) — reinterpret stages as transaction phases  
 4. [`core-boundaries.md`](core-boundaries.md) — stable vs experimental  
-5. [`next-generation-architecture.md`](next-generation-architecture.md) — MCP / marketplace ambition (defers here on conflicts)  
+5. [`next-generation-architecture.md`](next-generation-architecture.md) — MCP ambition as **protocol client**  
 6. [`full-repo-audit-2026-07-13.md`](full-repo-audit-2026-07-13.md) — as-built gaps  
