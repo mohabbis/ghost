@@ -7,7 +7,15 @@
 //! ```bash
 //! GHOST_RELAY_SECRET=your-secret cargo run --bin mcp_relay_server --features experimental -- 8790
 //! ```
+//!
+//! Optional in-process TLS (both env vars required):
+//!
+//! ```bash
+//! GHOST_RELAY_TLS_CERT=/path/to/cert.pem GHOST_RELAY_TLS_KEY=/path/to/key.pem \
+//!   GHOST_RELAY_SECRET=your-secret cargo run --bin mcp_relay_server --features experimental -- 8790
+//! ```
 
+use ghost_lib::mcp::tls::load_server_config_from_env;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -40,20 +48,31 @@ fn main() {
         eprintln!("Warning: GHOST_RELAY_SECRET not set — using dev-only default");
         "ghost-relay-dev-secret".into()
     });
+    let tls_config = load_server_config_from_env("GHOST_RELAY_TLS_CERT", "GHOST_RELAY_TLS_KEY")
+        .unwrap_or_else(|e| {
+            eprintln!("TLS configuration error: {e}");
+            std::process::exit(1);
+        });
     let state = Arc::new(Mutex::new(RelayState {
         devices: HashMap::new(),
         pending_responses: HashMap::new(),
     }));
     let addr = format!("0.0.0.0:{port}");
     let listener = TcpListener::bind(&addr).expect("bind relay");
-    eprintln!("Ghost MCP relay listening on http://{addr}");
+    let scheme = if tls_config.is_some() {
+        "https"
+    } else {
+        "http"
+    };
+    eprintln!("Ghost MCP relay listening on {scheme}://{addr}");
     eprintln!("Protocol: docs/mcp-relay.md");
 
     for stream in listener.incoming().flatten() {
         let state = Arc::clone(&state);
         let secret = secret.clone();
+        let tls = tls_config.clone();
         thread::spawn(move || {
-            if let Err(e) = handle_client(stream, state, &secret) {
+            if let Err(e) = handle_client(stream, state, &secret, tls) {
                 eprintln!("relay client error: {e}");
             }
         });
@@ -61,13 +80,35 @@ fn main() {
 }
 
 fn handle_client(
-    mut stream: TcpStream,
+    stream: TcpStream,
+    state: Arc<Mutex<RelayState>>,
+    secret: &str,
+    tls_config: Option<Arc<rustls::ServerConfig>>,
+) -> Result<(), String> {
+    if let Some(cfg) = tls_config {
+        let mut stream = stream;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(65)))
+            .map_err(|e| e.to_string())?;
+        let mut conn = rustls::ServerConnection::new(cfg).map_err(|e| e.to_string())?;
+        conn.complete_io(&mut stream)
+            .map_err(|e| format!("TLS handshake failed: {e}"))?;
+        let mut tls = rustls::Stream::new(&mut conn, &mut stream);
+        handle_connection(&mut tls, state, secret)
+    } else {
+        let mut stream = stream;
+        stream
+            .set_read_timeout(Some(Duration::from_secs(65)))
+            .map_err(|e| e.to_string())?;
+        handle_connection(&mut stream, state, secret)
+    }
+}
+
+fn handle_connection<S: Read + Write>(
+    stream: &mut S,
     state: Arc<Mutex<RelayState>>,
     secret: &str,
 ) -> Result<(), String> {
-    stream
-        .set_read_timeout(Some(Duration::from_secs(65)))
-        .map_err(|e| e.to_string())?;
     let mut buf = vec![0u8; 65536];
     let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
     let request = std::str::from_utf8(&buf[..n]).map_err(|e| e.to_string())?;
@@ -80,23 +121,23 @@ fn handle_client(
         .unwrap_or("");
     let token = auth.strip_prefix("Bearer ").unwrap_or("");
     if token != secret {
-        return write_json(&mut stream, 401, r#"{"error":"unauthorized"}"#);
+        return write_json(stream, 401, r#"{"error":"unauthorized"}"#);
     }
 
     let body = extract_body(request, n);
     let path = request_line.split_whitespace().nth(1).unwrap_or("");
 
     match (request_line.split_whitespace().next(), path) {
-        (Some("POST"), "/v1/device/register") => handle_register(&mut stream, state, body),
-        (Some("GET"), p) if p.starts_with("/v1/device/poll") => handle_poll(&mut stream, state, p),
-        (Some("POST"), "/v1/device/respond") => handle_respond(&mut stream, state, body),
-        (Some("POST"), "/v1/mcp") => handle_mcp(&mut stream, state, body),
-        _ => write_json(&mut stream, 404, r#"{"error":"not found"}"#),
+        (Some("POST"), "/v1/device/register") => handle_register(stream, state, body),
+        (Some("GET"), p) if p.starts_with("/v1/device/poll") => handle_poll(stream, state, p),
+        (Some("POST"), "/v1/device/respond") => handle_respond(stream, state, body),
+        (Some("POST"), "/v1/mcp") => handle_mcp(stream, state, body),
+        _ => write_json(stream, 404, r#"{"error":"not found"}"#),
     }
 }
 
-fn handle_register(
-    stream: &mut TcpStream,
+fn handle_register<S: Write>(
+    stream: &mut S,
     state: Arc<Mutex<RelayState>>,
     body: &str,
 ) -> Result<(), String> {
@@ -111,8 +152,8 @@ fn handle_register(
     write_json(stream, 200, r#"{"ok":true}"#)
 }
 
-fn handle_poll(
-    stream: &mut TcpStream,
+fn handle_poll<S: Write>(
+    stream: &mut S,
     state: Arc<Mutex<RelayState>>,
     path: &str,
 ) -> Result<(), String> {
@@ -140,8 +181,8 @@ fn handle_poll(
     }
 }
 
-fn handle_respond(
-    stream: &mut TcpStream,
+fn handle_respond<S: Write>(
+    stream: &mut S,
     state: Arc<Mutex<RelayState>>,
     body: &str,
 ) -> Result<(), String> {
@@ -164,8 +205,8 @@ fn handle_respond(
     write_json(stream, 200, r#"{"ok":true}"#)
 }
 
-fn handle_mcp(
-    stream: &mut TcpStream,
+fn handle_mcp<S: Write>(
+    stream: &mut S,
     state: Arc<Mutex<RelayState>>,
     body: &str,
 ) -> Result<(), String> {
@@ -237,7 +278,7 @@ fn extract_body(request: &str, bytes_read: usize) -> &str {
     }
 }
 
-fn write_json(stream: &mut TcpStream, status: u16, body: &str) -> Result<(), String> {
+fn write_json<S: Write>(stream: &mut S, status: u16, body: &str) -> Result<(), String> {
     let reason = match status {
         200 => "OK",
         401 => "Unauthorized",

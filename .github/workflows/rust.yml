@@ -128,3 +128,41 @@ jobs:
 
       - name: Compile desktop app without packaging installers
         run: cargo tauri build --no-bundle
+
+  experimental:
+    name: Experimental (${{ matrix.job }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [check, test, clippy]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev g++ libstdc++-13-dev
+
+      - name: Check (experimental)
+        if: matrix.job == 'check'
+        run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets --features experimental
+
+      - name: Run unit tests (experimental)
+        if: matrix.job == 'test'
+        env:
+          CXX: g++
+          CC: gcc
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features experimental
+
+      - name: Run clippy (experimental)
+        if: matrix.job == 'clippy'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features experimental -- -D warnings
