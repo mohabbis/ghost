@@ -61,16 +61,16 @@ pub fn handle_tool(name: &str, arguments: &Value) -> Result<Value, String> {
         McpToolKind::ExecuteApprovedPlan => {
             let token = arg_string(arguments, "approval_token")?;
             let zone_id = arg_string(arguments, "zone_id")?;
-            super::approval::verify_execution_token(&token, &zone_id)?;
-            Err(
-                "Execution from MCP requires the Ghost desktop app to be running with a valid approval token"
-                    .to_string(),
-            )
+            super::execute::execute_approved_plan(&zone_id, &token).map_err(|e| e.to_string())
         }
-        McpToolKind::GetRun | McpToolKind::UndoRun => Err(
-            "Run history and undo require the Ghost desktop app — use the Organizer History view"
-                .to_string(),
-        ),
+        McpToolKind::GetRun => {
+            let execution_id = arg_string(arguments, "execution_id")?;
+            super::execute::get_run_summary(&execution_id)
+        }
+        McpToolKind::UndoRun => {
+            let execution_id = arg_string(arguments, "execution_id")?;
+            super::execute::undo_run(&execution_id)
+        }
     }
 }
 
@@ -86,6 +86,8 @@ pub fn list_tools() -> Vec<Value> {
                     "properties": {
                         "zone_id": { "type": "string" },
                         "approval_token": { "type": "string" },
+                        "execution_id": { "type": "string" },
+                        "pairing_code": { "type": "string" },
                     },
                 },
             })

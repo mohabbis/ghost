@@ -17,7 +17,7 @@ Ghost audit history
   -> local audit entry
 ```
 
-v1 ships: grant, workspace list, and export preview only. Push to a Fabric lakehouse/warehouse is not wired yet.
+v1 ships: grant, workspace list, lakehouse list, export preview, and **push** to a lakehouse `Files/ghost-export/` folder via OneLake (experimental).
 
 ## Module layout — **built**
 
@@ -38,6 +38,8 @@ Commands (`commands/integrations.rs`, experimental):
 | `fabric_revoke_grant` | `local-mutate` | Local revoke only |
 | `fabric_list_workspaces` | `safe-read` | Requires active Fabric grant |
 | `fabric_export_preview` | `safe-read` | Reuses `power_bi/export.rs` row shapes |
+| `fabric_list_lakehouses` | `safe-read` | Lists lakehouse items in a workspace |
+| `fabric_push_audit_export` | `external-mutate` | Uploads JSON export files to OneLake Files (preview first) |
 
 ## Grant requirement — **built**
 
@@ -45,9 +47,9 @@ Commands (`commands/integrations.rs`, experimental):
 
 ## Not in scope (v1)
 
-- Push export rows to Fabric destinations
 - Inbound Fabric-triggered file mutations
 - Notebook/pipeline direct desktop control
 - Silent export
+- Workspace/lakehouse picker UI beyond manual ID fields
 
 See `docs/power-bi-integration.md` for the shared export payload shape.

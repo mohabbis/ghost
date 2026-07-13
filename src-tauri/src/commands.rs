@@ -16,6 +16,7 @@ mod filing;
 mod integrations;
 #[cfg(feature = "experimental")]
 mod intelligence;
+mod mcp;
 mod organizer;
 mod updates;
 
@@ -31,5 +32,6 @@ pub use filing::*;
 pub use integrations::*;
 #[cfg(feature = "experimental")]
 pub use intelligence::*;
+pub use mcp::*;
 pub use organizer::*;
 pub use updates::*;

@@ -34,7 +34,8 @@
 
 use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
-use crate::integrations::microsoft::fabric::{FabricClient, FabricWorkspace};
+use crate::integrations::microsoft::fabric::export::{FabricExportClient, FabricPushSummary};
+use crate::integrations::microsoft::fabric::{FabricClient, FabricLakehouse, FabricWorkspace};
 use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
 use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
 use crate::integrations::microsoft::MicrosoftIntegrationService;
@@ -298,6 +299,52 @@ pub fn fabric_export_preview(
     let _ = &engine;
     let db = open_default().map_err(|e| e.to_string())?;
     export_preview_with_db(&db, since_days)
+}
+
+/// List lakehouses in a Fabric workspace. Requires an active Fabric grant.
+#[tauri::command]
+pub async fn fabric_list_lakehouses(
+    workspace_id: String,
+    engine: State<'_, GhostEngine>,
+) -> Result<Vec<FabricLakehouse>, String> {
+    let auth = engine.auth();
+    let svc = service(&engine);
+    let access_token = svc.fabric_access_token(&auth).map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        FabricClient::new()
+            .list_lakehouses(&access_token, &workspace_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("lakehouse list task failed: {e}"))?
+}
+
+/// Push the audit export into a lakehouse Files folder via OneLake.
+/// Re-derives the payload server-side; requires preview review in the UI first.
+#[tauri::command]
+pub async fn fabric_push_audit_export(
+    workspace_id: String,
+    lakehouse_id: String,
+    since_days: Option<u32>,
+    engine: State<'_, GhostEngine>,
+) -> Result<FabricPushSummary, String> {
+    let auth = engine.auth();
+    let svc = service(&engine);
+    let access_token = svc.fabric_access_token(&auth).map_err(|e| e.to_string())?;
+
+    let db = open_default().map_err(|e| e.to_string())?;
+    let executions =
+        list_full_executions_since(&db, since_epoch_secs(since_days)).map_err(|e| e.to_string())?;
+    let payload = build_export(&executions);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        FabricExportClient::new()
+            .push_audit_export(&access_token, &workspace_id, &lakehouse_id, &payload)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("fabric push task failed: {e}"))?
 }
 
 #[cfg(test)]

@@ -196,6 +196,8 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `fabric_revoke_grant` | experimental | ✓ | – | – | – | ✓ | – | low | Local Fabric grant revoke only. |
 | `fabric_list_workspaces` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists Fabric workspaces; requires active Fabric grant. |
 | `fabric_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview (same row shapes as Power BI). No network. |
+| `fabric_list_lakehouses` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists lakehouse items in a workspace; requires Fabric grant. |
+| `fabric_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Uploads JSON export files to a lakehouse `Files/ghost-export/` path via OneLake. Re-derives payload server-side; requires preview in UI first. |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 
@@ -240,6 +242,15 @@ plan can never reach the filesystem.
 | `organizer_export_audit` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns a past run's audit log as `json` or `csv` text (each row: action, outcome, the rule that fired, automated/user-approved provenance), with the run's tamper-evidence seal (`hash`/`prev_hash`) as export metadata. Writes nothing itself — the caller saves the returned text. |
 | `organizer_time_to_value` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns local first-touch milestone timestamps (first zone/plan/run/undo) for the diagnostics view. Local-only: timestamps, no paths or content, no network. |
 | `organizer_verify_audit_chain` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Recomputes the execution hash chain and reports whether every sealed run still matches its seal and links to the previous run (`intact`, `sealed_count`, `unsealed_count`, `first_break`). Offline tamper-evidence check; no network. |
+| `organizer_issue_mcp_approval_token` | stable | ✓ | – | – | – | ✓ | – | medium | **safe-read.** Issues a signed, short-lived, single-use MCP token bound to the current server-side plan hash. Requires vault unlock; user must have reviewed the plan in Organizer. |
+
+### `commands/mcp.rs` — MCP pairing (stable)
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `mcp_pairing_status` | stable | ✓ | – | – | – | – | – | low | Reports whether MCP stdio clients must supply a pairing code on `initialize`. |
+| `mcp_enable_pairing` | stable | ✓ | – | – | – | – | – | low | Generates and persists a pairing code; shown once to the user. |
+| `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
 
 ### `commands/filing.rs` — audience-aware filing preview (stable)
 
