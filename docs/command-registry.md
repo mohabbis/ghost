@@ -223,6 +223,13 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `get_telemetry_stats` | stable | – | – | – | – | – | – | low | Local in-memory counters. |
 | `export_telemetry` | stable | ✓ | – | – | – | – | – | low | Exports anonymized telemetry; opt-in. |
 | `get_performance_summary` | stable | – | – | – | – | – | – | low | In-memory performance metrics. |
+| `is_experimental_enabled` | stable | – | – | – | – | – | – | low | **safe-read.** Reports whether this build registered experimental commands (`cfg!(feature = "experimental")`). Frontend uses it to hide experimental UI instead of calling missing commands. |
+
+### `commands/compression.rs` — event compression (stable)
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `compress_workflow` | stable | – | – | – | – | – | – | low | **safe-read.** Deterministic raw `InputEvent` → `CompressedStep` timeline (no LLM/network). Redacts typed text by default; secure fields never retained. Errors on empty input. |
 
 ### `commands/updates.rs` — signed auto-update (stable)
 
@@ -257,6 +264,9 @@ plan can never reach the filesystem.
 | `organizer_export_audit` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns a past run's audit log as `json` or `csv` text (each row: action, outcome, the rule that fired, automated/user-approved provenance), with the run's tamper-evidence seal (`hash`/`prev_hash`) as export metadata. Writes nothing itself — the caller saves the returned text. |
 | `organizer_time_to_value` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns local first-touch milestone timestamps (first zone/plan/run/undo) for the diagnostics view. Local-only: timestamps, no paths or content, no network. |
 | `organizer_verify_audit_chain` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Recomputes the execution hash chain and reports whether every sealed run still matches its seal and links to the previous run (`intact`, `sealed_count`, `unsealed_count`, `first_break`). Offline tamper-evidence check; no network. |
+| `organizer_export_policy_pack` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Exports a Zone and its folder rules as portable JSON for backup or another machine. DB read only. |
+| `organizer_import_policy_pack` | stable | ✓ | – | – | – | ~ | – | medium | **local-mutate (DB only).** Imports a policy pack JSON string, creating the Zone and rules after validation (no delete rules; paths must exist). Requires vault unlock when configured. |
+| `organizer_verify_signed_report` | stable | – | – | – | – | – | – | low | **safe-read.** Verifies the machine-local signature on an exported compliance report; returns `false` on tamper or mismatch. Writes nothing. |
 | `organizer_issue_mcp_approval_token` | stable | ✓ | – | – | – | ✓ | – | medium | **safe-read.** Issues a signed, short-lived, single-use MCP token bound to the current server-side plan hash. Requires vault unlock; user must have reviewed the plan in Organizer. |
 
 ### `commands/mcp.rs` — MCP pairing (stable)

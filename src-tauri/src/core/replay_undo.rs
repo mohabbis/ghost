@@ -25,16 +25,25 @@ pub struct ReplayUndoReport {
 /// Replay the journal in reverse. Typed text is undone via backspace; everything
 /// else is audit-only and counted as skipped.
 pub fn revert_replay(journal: &ReplayUndoJournal) -> anyhow::Result<ReplayUndoReport> {
-    let mut enigo = Enigo::new(&Settings::default())?;
     let mut report = ReplayUndoReport {
         reversed: 0,
         skipped: 0,
         steps: Vec::new(),
     };
 
+    let needs_input = journal.reversible_backspace_count() > 0;
+    let mut enigo = if needs_input {
+        Some(Enigo::new(&Settings::default())?)
+    } else {
+        None
+    };
+
     for op in journal.reversed() {
         match op {
             ReplayUndoOp::Backspace { count } => {
+                let enigo = enigo
+                    .as_mut()
+                    .expect("backspace undo requires an input backend");
                 for _ in 0..*count {
                     enigo.key(Key::Backspace, Direction::Click)?;
                 }
