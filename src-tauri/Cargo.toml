@@ -35,7 +35,7 @@ threadpool = "1.8"
 base64 = "0.22"
 async-trait = "0.1"
 regex = "1.10"
-dirs = "5"
+dirs = "6"
 argon2 = "0.5"
 aes-gcm = "0.10"
 # SHA-256 for the tamper-evident audit hash chain over Organizer executions
