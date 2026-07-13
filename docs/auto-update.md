@@ -57,9 +57,12 @@ updater artifacts, and the app stays quiet.
 
 ## One-time maintainer setup (enables auto-update)
 
-Auto-update stays inert until a maintainer completes these steps. They require
-a private signing key that only the maintainer holds — it cannot be done from
-CI or by an agent.
+Auto-update stays inert until a maintainer completes these steps **and cuts a
+release that embeds the pubkey**. Private key material must stay out of git.
+
+**Status (2026-07-13):** the repo pubkey + GitHub `TAURI_SIGNING_*` secrets are
+configured. Existing `v1.2.7` installers were built before the pubkey commit and
+will not offer updates; the next tagged release publishes `latest.json`.
 
 1. **Generate the updater keypair:**
 

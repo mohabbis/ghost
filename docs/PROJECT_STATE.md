@@ -257,17 +257,13 @@ resolution, double-click preservation.
 
 ## 8. What does NOT work / is incomplete ⚠️
 
-- **Ghost Guard routing of compressed steps** — event compression produces the
-  reviewable timeline, and the guard audits that semantic timeline
-  (`guard::audit_compressed` / `ghost_guard_audit_compressed`). Per-step
-  **policy** preview is now available via `policy::routines` /
-  `routine_policy_plan` (maps steps → `os_*` capabilities → `PolicyDecision`).
-  Binding that plan into replay approval + undo (so `replay_workflow` cannot
-  run without an approved plan) is still follow-up work.
-- **Routines replay is not yet a first-class, guarded, approvable product** the
-  way Organizer is. The capture/replay/trace plumbing exists; the
-  review→guard→policy→approve→execute→vault→undo loop for arbitrary cross-app
-  routines is not fully closed.
+- **Ghost Guard + policy gating of compressed steps** — event compression produces the
+  reviewable timeline; Guard audits it (`ghost_guard_audit_compressed`);
+  `routine_policy_plan` maps steps → `os_*` capabilities; `approve_routine_replay`
+  + `replay_workflow` refuse `Deny` and require a one-shot server approval.
+  **Routine undo/vault** and app/window Zones for bare `Allow` are still follow-up.
+- **Routines replay is approaching Organizer's trust shape** for the approve→execute
+  segment, but is not yet a first-class product with undo/vault the way Organizer is.
 - **AI / Intelligence layer is experimental and off by default** — `core/ai.rs`,
   `llm.rs`, `cloud.rs`, `vision.rs`, `knowledge.rs` compile only under
   `--features experimental`, and **CI does not run the experimental leg**. Treat
@@ -279,9 +275,10 @@ resolution, double-click preservation.
 - **Organizer destination model is MVP-simple** — first folder rule granting
   create+move is the destination root; files sort into
   `<root>/<Category>/`. Richer routing/rules are not built.
-- **Signing/notarization not proven in this repo** — checklists exist
-  (`docs/macos-signing-checklist.md`, `docs/windows-signing-checklist.md`) but
-  releases are developer-signed until the signing keys/secrets are configured.
+- **Signing/notarization** — macOS Developer ID + notarization is enabled for
+  `v1.2.7`. Windows Authenticode / Azure Trusted Signing is still unconfigured.
+  Updater pubkey + `TAURI_SIGNING_*` secrets are set for builds from the key
+  commit forward; `latest.json` publishes on the next tag.
 
 ---
 

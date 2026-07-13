@@ -113,7 +113,7 @@ An experimental command can move toward the stable core only after:
 
 ## Risk inventory
 
-Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI. The **Ghost Organizer** commands (`commands/organizer.rs`) route every proposed and executed filesystem action through `policy::evaluate`. Recorded routines now have a preview path too: `routine_policy_plan` compresses events and evaluates each semantic step as an `os-*` capability (deny / require confirmation / allow wait). Binding that plan into `replay_workflow` approval + undo remains follow-up work.
+Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI. The **Ghost Organizer** commands (`commands/organizer.rs`) route every proposed and executed filesystem action through `policy::evaluate`. Recorded routines: `routine_policy_plan` previews per-step `os-*` decisions; `approve_routine_replay` stores a one-shot server-side approval; `replay_workflow` re-derives the plan, refuses `Deny`, and consumes that approval before synthesizing input. Undo/vault for routines remains follow-up work.
 
 Legend — what the command touches: **Files** = local filesystem · **OS** = OS input synthesis/capture · **Scr** = screen contents / accessibility tree · **Net** = network · **Auth** = authentication or secrets · **Win** = app/window state. `✓` yes · `–` no · `~` conditional.
 
@@ -123,7 +123,8 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `start_recording` | stable | – | ✓ | – | – | – | ✓ | high | Captures keys/clicks; requires visible active state + granted permissions. Fails closed if accessibility/input-monitoring denied. |
 | `stop_recording` | stable | – | ✓ | – | – | – | ✓ | low | Ends capture; no-op if not recording. |
-| `replay_workflow` | stable | – | ✓ | – | – | – | ✓ | critical | Synthesizes real input. Must route through policy before broad use; wrong focused app/window can misfire. |
+| `replay_workflow` | stable | – | ✓ | – | – | – | ✓ | critical | Synthesizes real input. Re-derives policy plan; refuses `Deny`; requires a matching one-shot `approve_routine_replay` token. Wrong focused app/window can still misfire. |
+| `approve_routine_replay` | stable | – | – | – | – | – | – | high | Records a TTL-bound, fingerprint-keyed approval after re-deriving the policy plan. Does not execute. Consumed by `replay_workflow`. |
 | `ghost_guard_audit` | stable | – | – | – | – | – | – | low | Pure deterministic risk audit of recorded events. |
 | `ghost_guard_audit_compressed` | stable | – | – | – | – | – | – | low | Pure deterministic risk audit of the compressed **semantic timeline**: compresses events server-side (no LLM/network) and audits the resulting steps, so findings map to review-timeline step indices, not raw events. |
 | `routine_policy_plan` | stable | – | – | – | – | – | – | low | Preview-only: compresses events server-side and evaluates each semantic step through `policy::evaluate` as `os_*` capabilities. Never executes. Secure-field typing and unknown steps are denied; other OS steps require confirmation until app Zones exist. |

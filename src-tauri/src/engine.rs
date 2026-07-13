@@ -21,12 +21,20 @@ use image::DynamicImage;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn workflow_file_path(workflows_dir: &std::path::Path, name: &str) -> anyhow::Result<PathBuf> {
     let safe_name = crate::core::security::sanitize_workflow_path(name)?;
     Ok(workflows_dir.join(safe_name).with_extension("json"))
 }
+
+/// One-shot approval that authorizes `replay_workflow` for a specific event list.
+struct PendingRoutineApproval {
+    fingerprint: String,
+    expires_at: Instant,
+}
+
+const ROUTINE_APPROVAL_TTL: Duration = Duration::from_secs(300);
 
 /// Half-width of the screenshot crop captured around a recorded click for
 /// `ElementInfo::template_png` — 64x64 total, small enough to keep workflow
@@ -115,6 +123,8 @@ pub struct GhostEngine {
     auth: Arc<AuthManager>,
     /// Linked Microsoft/Google account (sign-in identity), separate from `auth`
     accounts: Arc<crate::accounts::AccountManager>,
+    /// One-shot approval for routine replay (policy plan → user approve → consume).
+    routine_approval: Mutex<Option<PendingRoutineApproval>>,
 }
 
 impl GhostEngine {
@@ -185,6 +195,7 @@ impl GhostEngine {
             recording_start: Arc::new(Mutex::new(None)),
             auth: Arc::new(AuthManager::new()),
             accounts: Arc::new(crate::accounts::AccountManager::new()),
+            routine_approval: Mutex::new(None),
         }
     }
 
@@ -196,6 +207,34 @@ impl GhostEngine {
     /// Access the linked-account manager (Microsoft/Google sign-in identity).
     pub fn accounts(&self) -> Arc<crate::accounts::AccountManager> {
         Arc::clone(&self.accounts)
+    }
+
+    /// Record a one-shot approval for the given event fingerprint (TTL-bound).
+    pub fn store_routine_approval(&self, fingerprint: String) {
+        *self.routine_approval.lock().unwrap() = Some(PendingRoutineApproval {
+            fingerprint,
+            expires_at: Instant::now() + ROUTINE_APPROVAL_TTL,
+        });
+    }
+
+    /// Consume a matching unexpired approval, or error if missing/stale/mismatched.
+    pub fn consume_routine_approval(&self, fingerprint: &str) -> Result<(), String> {
+        let mut slot = self.routine_approval.lock().unwrap();
+        match slot.take() {
+            Some(pending)
+                if pending.fingerprint == fingerprint && pending.expires_at > Instant::now() =>
+            {
+                Ok(())
+            }
+            Some(_) => Err(
+                "Routine replay approval does not match these events (or expired). Re-approve the policy plan, then replay."
+                    .into(),
+            ),
+            None => Err(
+                "Routine replay requires an approved policy plan. Review the plan and approve before replaying."
+                    .into(),
+            ),
+        }
     }
 
     /// Test-only engine with its `AuthManager` rooted at `auth_path` instead

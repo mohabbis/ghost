@@ -100,15 +100,43 @@ pub fn stop_recording(engine: State<GhostEngine>) {
 ///
 /// `workflow_name` is optional and only labels the run in execution history;
 /// omitting it records the run under an "Unsaved workflow" label.
+///
+/// Risk class: `os-control`. Refuses policy `Deny` steps and requires a prior
+/// one-shot [`approve_routine_replay`] for the same event list (Organizer-style:
+/// plan is re-derived server-side; the client cannot supply `approved: true`).
 #[tauri::command]
 pub fn replay_workflow(
     events: Vec<InputEvent>,
     workflow_name: Option<String>,
     engine: State<GhostEngine>,
 ) -> Result<(), String> {
+    let report = crate::core::compression::compress(&events);
+    let plan = crate::policy::evaluate_compressed(&report);
+    crate::policy::ensure_replayable(&plan)?;
+    engine.consume_routine_approval(&crate::policy::fingerprint_events(&events))?;
     engine
         .replay(&events, workflow_name)
         .map_err(|e| e.to_string())
+}
+
+/// Approve a routine replay after the user has reviewed the policy plan.
+///
+/// Re-derives the plan from `events` (never trusts a client-supplied plan).
+/// Stores a one-shot, TTL-bound approval keyed to the event fingerprint that
+/// [`replay_workflow`] must consume. Returns the plan so the UI can show what
+/// was approved.
+///
+/// Risk class: `os-control` — records approval only; does not synthesize input.
+#[tauri::command]
+pub fn approve_routine_replay(
+    events: Vec<InputEvent>,
+    engine: State<GhostEngine>,
+) -> Result<crate::policy::RoutinePolicyPlan, String> {
+    let report = crate::core::compression::compress(&events);
+    let plan = crate::policy::evaluate_compressed(&report);
+    crate::policy::ensure_replayable(&plan)?;
+    engine.store_routine_approval(crate::policy::fingerprint_events(&events));
+    Ok(plan)
 }
 
 /// Run Ghost Guard's local privacy/cybersecurity audit against a workflow.
