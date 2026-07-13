@@ -430,6 +430,72 @@ mod tests {
     }
 
     #[test]
+    fn unicode_filename_round_trips_through_plan_and_execute() {
+        let tmp = tempdir();
+        tmp.file("日本語 📷 café.pdf", b"x");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+
+        assert_eq!(report.failed, 0);
+        let after = listing(tmp.path());
+        assert!(
+            after.contains(&"Documents/日本語 📷 café.pdf".to_string()),
+            "Unicode filename must survive move byte-for-byte: {after:?}"
+        );
+    }
+
+    /// A stand-in for a real Windows file-lock error: making the target
+    /// directory unwritable makes `fs::rename` fail for the same reason a
+    /// locked/in-use file would on that platform, exercising the same
+    /// `Outcome::Failed` path.
+    #[cfg(unix)]
+    #[test]
+    fn apply_one_fails_when_target_dir_is_not_writable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempdir();
+        let locked_dir = tmp.dir("Documents");
+        tmp.file("report.pdf", b"x");
+
+        std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        // Root ignores POSIX permission bits (this dev container runs as
+        // root); probe first and skip rather than assert on a false
+        // premise. CI's ubuntu/macos `Test` jobs run as a normal user, so
+        // the real assertion below still executes there.
+        let probe = locked_dir.join("probe");
+        let probe_write_succeeded = std::fs::write(&probe, b"x").is_ok();
+        let _ = std::fs::remove_file(&probe);
+        if probe_write_succeeded {
+            std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+            eprintln!(
+                "skipping apply_one_fails_when_target_dir_is_not_writable: \
+                 running as a user that bypasses permission bits (root)"
+            );
+            return;
+        }
+
+        let mut undo = UndoJournal::new();
+        let outcome = relocate(
+            &tmp.path().join("report.pdf"),
+            &locked_dir.join("report.pdf"),
+            &mut undo,
+        );
+
+        // Restore before any assertion can panic and skip cleanup, so
+        // TempDir::drop's remove_dir_all doesn't fail afterward.
+        std::fs::set_permissions(&locked_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert!(matches!(outcome, Outcome::Failed(_)));
+        assert!(undo.is_empty(), "a failed move must not create undo");
+        assert!(
+            tmp.path().join("report.pdf").exists(),
+            "source must be left in place on failure"
+        );
+    }
+
+    #[test]
     fn missing_source_is_skipped_with_no_undo() {
         let tmp = tempdir();
         let mut undo = UndoJournal::new();
