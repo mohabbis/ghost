@@ -190,8 +190,48 @@ async function checkPermissions() {
 }
 
 let _permAutoPrompted = false;
+/** After Grant Access, checks often stay false until Quit & Reopen — guide the user there. */
+let _permAwaitingRelaunch = false;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function nextMissingPermission({ accessibility, inputMonitoring }) {
+  if (!accessibility) return "accessibility";
+  if (!inputMonitoring) return "input_monitoring";
+  return null;
+}
+
+function permissionBannerCopy({ accessibility, inputMonitoring }) {
+  const ax = accessibility ? "Accessibility: on" : "Accessibility: off";
+  const im = inputMonitoring ? "Input Monitoring: on" : "Input Monitoring: off";
+  const status = `${ax} · ${im}.`;
+
+  if (accessibility && inputMonitoring) {
+    return status;
+  }
+
+  if (_permAwaitingRelaunch) {
+    return `${status} If you already enabled Ghost in System Settings, click Quit & Reopen — macOS applies these grants only after relaunch (use the Ghost entry that matches this build).`;
+  }
+
+  const next =
+    nextMissingPermission({ accessibility, inputMonitoring }) === "accessibility"
+      ? "Accessibility"
+      : "Input Monitoring";
+  return `${status} Click Grant Access for ${next}, enable Ghost in that list, then Quit & Reopen. Organizer file filing works without them.`;
+}
+
+function updateGrantButtonLabel({ accessibility, inputMonitoring }) {
+  const grant = document.getElementById("perm-grant");
+  const onboardingGrant = document.getElementById("onboardingGrant");
+  const next = nextMissingPermission({ accessibility, inputMonitoring });
+  let label = "Grant Access";
+  if (next === "accessibility") label = "Grant Accessibility";
+  else if (next === "input_monitoring") label = "Grant Input Monitoring";
+  else label = "Permissions OK";
+  if (grant) grant.textContent = label;
+  if (onboardingGrant) onboardingGrant.textContent = label;
+}
 
 async function refreshPermissionBanner() {
   if (!invoke) return;
@@ -200,36 +240,43 @@ async function refreshPermissionBanner() {
   if (!banner) return;
 
   try {
-    const { accessibility, inputMonitoring } = await checkPermissions();
+    const perms = await checkPermissions();
+    const { accessibility, inputMonitoring } = perms;
     const allGranted = accessibility && inputMonitoring;
     banner.hidden = allGranted;
     updateMissionProgress({ permissionsGranted: allGranted });
+    updateGrantButtonLabel(perms);
 
-    if (!allGranted) {
-      const missing = [];
-      if (!accessibility) missing.push("Accessibility");
-      if (!inputMonitoring) missing.push("Input Monitoring");
+    if (allGranted) {
+      _permAwaitingRelaunch = false;
+      return;
+    }
 
-      const text = document.getElementById("perm-text");
-      if (text) {
-        text.textContent = `Ghost needs ${missing.join(" and ")} permission${missing.length > 1 ? "s" : ""}. Click "Grant Access" below, enable Ghost in System Settings, then click "Quit & Reopen".`;
+    const text = document.getElementById("perm-text");
+    if (text) text.textContent = permissionBannerCopy(perms);
+
+    const restart = document.getElementById("perm-restart");
+    if (restart) {
+      restart.classList.toggle("btn--primary", _permAwaitingRelaunch);
+      restart.classList.toggle("btn--ghost", !_permAwaitingRelaunch);
+    }
+
+    // Auto-prompt once on startup — only the first missing permission so we
+    // never overwrite Accessibility Settings with Input Monitoring a moment later.
+    if (!_permAutoPrompted) {
+      _permAutoPrompted = true;
+      const next = nextMissingPermission(perms);
+      if (next === "accessibility") {
+        await invoke("request_accessibility").catch(() => {});
+        _permAwaitingRelaunch = true;
+      } else if (next === "input_monitoring") {
+        await invoke("request_input_monitoring").catch(() => {});
+        _permAwaitingRelaunch = true;
       }
-
-      // On the very first detection of missing permissions (app startup),
-      // automatically trigger the system permission prompt + open Settings.
-      // This removes the dead-end where users can't figure out what to do.
-      if (!_permAutoPrompted) {
-        _permAutoPrompted = true;
-        if (!accessibility) {
-          await invoke("request_accessibility").catch(() => {});
-          // macOS can drop or hide back-to-back privacy prompts. Give the
-          // Accessibility prompt/System Settings navigation time to settle
-          // before requesting Input Monitoring.
-          await wait(500);
-        }
-        if (!inputMonitoring) {
-          await invoke("request_input_monitoring").catch(() => {});
-        }
+      if (text) text.textContent = permissionBannerCopy(await checkPermissions());
+      if (restart && _permAwaitingRelaunch) {
+        restart.classList.add("btn--primary");
+        restart.classList.remove("btn--ghost");
       }
     }
   } catch (error) {
@@ -237,39 +284,52 @@ async function refreshPermissionBanner() {
   }
 }
 
+/** Request exactly one missing permission per click (never race two Settings panes). */
 async function requestAccessibility() {
   if (!invoke) {
     notAvailable();
     return;
   }
   try {
-    const { accessibility, inputMonitoring } = await checkPermissions();
-    // macOS shows each permission prompt only once per app; afterwards the
-    // backend opens the matching System Settings pane instead.
-    if (!accessibility) {
-      await invoke("request_accessibility");
-      // Avoid racing two macOS privacy prompts/panes when both grants are
-      // missing. Users need to see and respond to each grant separately.
-      await wait(500);
-    }
-    if (!inputMonitoring) {
-      await invoke("request_input_monitoring").catch(() => {});
+    const before = await checkPermissions();
+    const next = nextMissingPermission(before);
+
+    if (!next) {
+      _permAwaitingRelaunch = false;
+      showNotification("Accessibility and Input Monitoring are both granted.");
+      return;
     }
 
-    await wait(500);
-    const after = await checkPermissions();
-    if (!after.accessibility || !after.inputMonitoring) {
-      // The grant only takes effect after a relaunch. Point the user at the
-      // "Quit & Reopen" button rather than leaving a dead-end instruction.
+    if (next === "accessibility") {
+      await invoke("request_accessibility");
+      _permAwaitingRelaunch = true;
       showNotification(
-        "Enable Ghost under System Settings → Privacy & Security (Accessibility + Input Monitoring), then use Quit & Reopen so macOS applies it.",
+        "Enable Ghost under Accessibility, then Quit & Reopen. We'll ask for Input Monitoring next if needed.",
+      );
+    } else {
+      await invoke("request_input_monitoring");
+      _permAwaitingRelaunch = true;
+      showNotification(
+        "Enable Ghost under Input Monitoring, then Quit & Reopen so macOS applies the grant.",
+      );
+    }
+
+    await wait(400);
+    const after = await checkPermissions();
+    // Still false is normal until relaunch — don't treat it as failure.
+    if (!after.accessibility || !after.inputMonitoring) {
+      showInsight(
+        "macOS usually keeps permissions “off” in the running app until Quit & Reopen — even after you flip the switch.",
       );
     }
   } catch (error) {
     console.error("Failed to request permissions:", error);
-    showNotification("Couldn't open the permission settings automatically. Open System Settings → Privacy & Security → Accessibility and enable Ghost.", "error");
+    showNotification(
+      "Couldn't open permission settings. Open System Settings → Privacy & Security, enable Ghost, then Quit & Reopen.",
+      "error",
+    );
   } finally {
-    refreshPermissionBanner();
+    await refreshPermissionBanner();
   }
 }
 
@@ -450,15 +510,16 @@ async function onboardingSetPassword() {
 
 async function refreshOnboardingPermStatus() {
   if (!invoke) return;
-  let granted = false;
+  let accessibility = false;
+  let inputMonitoring = false;
   try {
-    const { accessibility, inputMonitoring } = await checkPermissions();
-    granted = accessibility && inputMonitoring;
+    ({ accessibility, inputMonitoring } = await checkPermissions());
   } catch (error) {
     console.error("Failed to check permissions:", error);
     return;
   }
 
+  const granted = accessibility && inputMonitoring;
   const status = document.getElementById("onboardingPermStatus");
   const text = document.getElementById("onboardingPermStatusText");
   const next = document.getElementById("onboardingPermNext");
@@ -466,11 +527,25 @@ async function refreshOnboardingPermStatus() {
   if (!status) return;
 
   status.dataset.granted = granted ? "true" : "false";
-  if (text) text.textContent = granted ? "✓ Access granted" : "Not granted yet";
+  updateGrantButtonLabel({ accessibility, inputMonitoring });
+
+  if (text) {
+    if (granted) {
+      text.textContent = "Access granted";
+    } else if (_permAwaitingRelaunch) {
+      text.textContent = "Toggle is on? Click Quit & Reopen — macOS applies grants at launch";
+    } else {
+      const parts = [];
+      parts.push(accessibility ? "Accessibility on" : "Accessibility off");
+      parts.push(inputMonitoring ? "Input Monitoring on" : "Input Monitoring off");
+      text.textContent = parts.join(" · ");
+    }
+  }
 
   // Once granted, make "Next" the obvious action and de-emphasize "Grant".
   if (granted) {
     stopPermPolling();
+    _permAwaitingRelaunch = false;
     if (next) {
       next.classList.add("btn--primary");
       next.classList.remove("btn--ghost");
@@ -4082,9 +4157,9 @@ function wireUpControls() {
   bind("aboutBtn", openAbout);
   bind("lockBtn", lockApp);
 
-  // Returning from System Settings should re-check permissions automatically, so
-  // the banner clears the moment the OS reflects a grant (no relaunch needed when
-  // macOS already picked it up).
+  // Returning from System Settings re-checks. Accessibility (and often Input
+  // Monitoring) usually still report false until Quit & Reopen — refresh still
+  // updates banner copy toward the relaunch CTA when `_permAwaitingRelaunch`.
   window.addEventListener("focus", refreshPermissionBanner);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refreshPermissionBanner();

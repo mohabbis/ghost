@@ -279,31 +279,70 @@ impl MacosBackend {
         granted
     }
 
+    /// Build modern (macOS 13+) and legacy System Settings privacy URLs.
+    ///
+    /// Exposed for unit tests so the scheme/anchor contract cannot silently drift.
+    pub(crate) fn privacy_pane_urls(anchor: &str) -> (String, String) {
+        let modern = format!(
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?{anchor}"
+        );
+        let legacy = format!("x-apple.systempreferences:com.apple.preference.security?{anchor}");
+        (modern, legacy)
+    }
+
+    /// Best-effort macOS major version (`14` from `14.5`). `None` if `sw_vers` fails.
+    fn macos_major_version() -> Option<u32> {
+        let output = std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        text.trim()
+            .split('.')
+            .next()
+            .and_then(|major| major.parse().ok())
+    }
+
+    fn open_url(url: &str) -> bool {
+        match std::process::Command::new("open").arg(url).status() {
+            Ok(status) => status.success(),
+            Err(e) => {
+                eprintln!("Failed to spawn `open` for {url}: {e}");
+                false
+            }
+        }
+    }
+
     /// Open System Settings → Privacy & Security at the given anchor.
     ///
-    /// macOS 13+ (Ventura through Tahoe) uses the `com.apple.settings` scheme;
-    /// older releases use `com.apple.preference.security`. We try the modern
-    /// scheme first and fall back if it fails.
+    /// Uses `open`'s exit status (not just spawn success). On Sequoia+ (15+),
+    /// privacy deep-links are flaky — open twice with a short delay. Falls back
+    /// to the legacy `com.apple.preference.security` scheme when the modern
+    /// URL fails.
     fn open_privacy_pane(anchor: &str) {
-        // Modern macOS 13+ scheme
-        let modern_url = format!(
-            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?{}",
-            anchor
-        );
-        // Legacy macOS 12- scheme
-        let legacy_url = format!(
-            "x-apple.systempreferences:com.apple.preference.security?{}",
-            anchor
-        );
+        let (modern_url, legacy_url) = Self::privacy_pane_urls(anchor);
+        let major = Self::macos_major_version().unwrap_or(13);
+        let (primary, secondary) = if major >= 13 {
+            (&modern_url, &legacy_url)
+        } else {
+            (&legacy_url, &modern_url)
+        };
 
-        if std::process::Command::new("open")
-            .arg(&modern_url)
-            .spawn()
-            .is_err()
-        {
-            if let Err(e) = std::process::Command::new("open").arg(&legacy_url).spawn() {
-                eprintln!("Failed to open System Settings ({}): {}", anchor, e);
+        let opened = Self::open_url(primary);
+        if !opened {
+            if !Self::open_url(secondary) {
+                eprintln!("Failed to open System Settings privacy pane ({anchor})");
             }
+            return;
+        }
+
+        // Sequoia / Tahoe: first deep-link often lands on Privacy root only.
+        if major >= 15 {
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            let _ = Self::open_url(primary);
         }
     }
 }
@@ -1476,5 +1515,16 @@ mod tests {
         // But a high surrogate at the end of a string that FITS is kept:
         // that's genuinely what the event contained.
         assert_eq!(utf16_capture_len(&buf, 8), 8);
+    }
+
+    #[test]
+    fn privacy_pane_urls_use_modern_and_legacy_schemes() {
+        let (modern, legacy) = MacosBackend::privacy_pane_urls("Privacy_Accessibility");
+        assert!(
+            modern.contains("com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility")
+        );
+        assert!(legacy.contains("com.apple.preference.security?Privacy_Accessibility"));
+        let (modern_im, _) = MacosBackend::privacy_pane_urls("Privacy_ListenEvent");
+        assert!(modern_im.ends_with("Privacy_ListenEvent"));
     }
 }
