@@ -1,0 +1,14 @@
+---
+description: Desktop app and marketing frontend conventions
+globs: src/**/*.{js,html,css},public/**/*.{js,html,css}
+alwaysApply: false
+---
+
+# Frontend conventions
+
+- No bundler: `src/` is served raw by Tauri; `public/` is the marketing site
+- Keep IPC invokes aligned with registered commands (IPC contract tests enforce this)
+- Every `getElementById` used in JS must exist in markup (DOM contract tests)
+- Do not auto-execute from Guard Desk / ID-scan / AI suggestions — preview only
+- Prefer surgical edits in `src/main.js`; avoid wholesale reflows of shared UI
+- Marketing copy must match shipped capability (preview vs notarized, version tags)

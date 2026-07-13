@@ -1,0 +1,53 @@
+---
+description: Ghost product contract and coding direction for all agents
+alwaysApply: true
+---
+
+# Ghost coding direction
+
+Canonical detail lives in `AGENTS.md`. Follow that file if anything conflicts.
+
+## Product promise
+
+Local-first desktop automation (macOS + Windows). Not a silent autonomous agent.
+
+```text
+Record -> Inspect -> Approve -> Replay -> Audit -> Undo
+```
+
+Current wedge: **Ghost Organizer** — scan → plan → review → approve → move/rename → audit → undo.
+
+## Non-negotiables
+
+- No hidden observation, camera, or mic.
+- AI may propose; deterministic code executes only approved plans.
+- No silent delete/overwrite/upload/send.
+- New Tauri commands need a module, owner boundary, and risk class.
+- Experimental features stay behind `--features experimental` / labeled UI.
+- Do not promise more in README/marketing than the repo supports.
+
+## Trust pipeline (every meaningful mutation)
+
+```text
+Intent -> Plan -> Policy check -> User approval -> Execution -> Audit log -> Undo path
+```
+
+Risk classes: `safe-read` | `sensitive-read` | `local-mutate` | `external-mutate` | `os-control` | `experimental`. When unsure, pick the higher-risk class.
+
+## Build order (do not skip ahead)
+
+1. Keep CI green
+2. Keep commands small and classified
+3. Policy / Zones / folder rules
+4. Organizer polish
+5. Replay reliability + semantic targeting
+6. Release signing / installers
+7. AI suggestions last (gated, suggestion-only)
+
+## Working style
+
+- Prefer small, single-purpose PRs; rebase onto `origin/master` before push.
+- Touch `lib.rs` `generate_handler!` and `src/main.js` surgically — no reflows.
+- Update matching docs in the same change (`docs/command-registry.md`, `core-boundaries.md`, etc.).
+- Validate with `make ci` (or fmt + clippy `-D warnings` + test) before claiming done.
+- Report SHA, checks run, and known gaps — never claim signing/notarization without proof.
