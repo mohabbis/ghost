@@ -38,6 +38,12 @@ Before `ghost.execute_approved_plan`:
 
 MCP execution calls `organizer/pipeline.rs::execute_zone` — the same path as `organizer_execute`.
 
+## Pending approval requests — **built**
+
+`ghost.request_approval` writes a file-backed pending request (`mcp/pending.rs`). The desktop app polls `mcp_list_pending_approvals` and focuses Organizer when a new request arrives. `organizer_issue_mcp_approval_token` marks the matching request **approved**; MCP clients poll `ghost.get_approval_status` until approved, then the user supplies the issued token.
+
+MCP `ghost.undo_run` uses the undo journal only — no approval token is required (reversible by design).
+
 ## MCP integration
 
 See `docs/mcp-integration.md` — `ghost.execute_approved_plan` requires a valid token; clients cannot approve plans themselves.

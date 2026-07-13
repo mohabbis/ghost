@@ -8,7 +8,7 @@
 //! Command: `mcp_disable_pairing` | risk: `local-mutate`
 
 use crate::engine::GhostEngine;
-use crate::mcp::{hash_organizer_plan, issue_approval_token, pairing};
+use crate::mcp::{hash_organizer_plan, issue_approval_token, pairing, pending};
 use crate::organizer::planner::plan_zone;
 use crate::storage::open_default;
 use tauri::State;
@@ -52,6 +52,12 @@ pub fn mcp_disable_pairing() {
     pairing::disable_pairing();
 }
 
+/// Pending MCP approval requests waiting for desktop review.
+#[tauri::command]
+pub fn mcp_list_pending_approvals() -> Vec<pending::PendingApprovalRequest> {
+    pending::list_pending()
+}
+
 /// Issue a signed, short-lived approval token for the current server-side plan.
 /// The user must have reviewed the plan in the Organizer UI first.
 #[tauri::command]
@@ -64,5 +70,6 @@ pub fn organizer_issue_mcp_approval_token(
     let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
     let plan_hash = hash_organizer_plan(&plan);
     let signed = issue_approval_token(&format!("plan_{zone_id}"), &plan_hash);
+    pending::mark_approved_for_zone(&zone_id);
     serde_json::to_string(&signed).map_err(|e| e.to_string())
 }
