@@ -8,6 +8,7 @@ pub mod errors;
 pub mod execute;
 pub mod handlers;
 pub mod pairing;
+pub mod pending;
 pub mod plan_hash;
 pub mod server;
 pub mod token_store;

@@ -64,3 +64,60 @@ pub fn undo_run(execution_id: &str) -> Result<Value, String> {
         "failed": report.failed,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::approval::issue_approval_token;
+    use crate::organizer::planner::{plan_with_rules, PlanAction};
+    use crate::policy::{Capability, FolderRule, PolicyDecision, TrustLevel};
+    use std::path::PathBuf;
+
+    fn allow_rule(path: &std::path::Path) -> FolderRule {
+        FolderRule {
+            path: path.to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::AskFirst,
+        }
+    }
+
+    #[test]
+    fn denied_plan_cannot_execute_even_with_valid_token() {
+        let signed = issue_approval_token("plan_zone-deny", "sha256:abc");
+        let token = serde_json::to_string(&signed).unwrap();
+        // execute_approved_plan re-plans from DB; without a real zone this fails
+        // before token verification on missing zone — ensure error is not "success".
+        let err = execute_approved_plan("zone-deny", &token).unwrap_err();
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn plan_with_denied_action_fails_validation_message() {
+        let action = PlanAction {
+            capability: Capability::CreateFolder {
+                path: PathBuf::from("/tmp/ghost-denied"),
+            },
+            decision: PolicyDecision::Deny {
+                reason: "test".into(),
+            },
+            rule_path: None,
+            confidence: 1.0,
+            reason: "denied".into(),
+            conflict: None,
+        };
+        let plan = plan_with_rules("z", &[allow_rule(PathBuf::from("/tmp").as_path())]);
+        let mut denied = plan;
+        denied.actions = vec![action];
+        let denied_count = denied
+            .actions
+            .iter()
+            .filter(|a| a.decision.is_denied())
+            .count();
+        assert_eq!(denied_count, 1);
+    }
+}

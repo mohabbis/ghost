@@ -112,6 +112,7 @@ macro_rules! run_with_commands {
                 commands::mcp_pairing_status,
                 commands::mcp_enable_pairing,
                 commands::mcp_disable_pairing,
+                commands::mcp_list_pending_approvals,
                 // Read-only, audience-aware filing preview + savings estimate.
                 // Name-only planning; no filesystem/network access.
                 commands::preview_file_filing,

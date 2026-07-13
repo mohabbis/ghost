@@ -251,6 +251,7 @@ plan can never reach the filesystem.
 | `mcp_pairing_status` | stable | ✓ | – | – | – | – | – | low | Reports whether MCP stdio clients must supply a pairing code on `initialize`. |
 | `mcp_enable_pairing` | stable | ✓ | – | – | – | – | – | low | Generates and persists a pairing code; shown once to the user. |
 | `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
+| `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (polled by the UI). |
 
 ### `commands/filing.rs` — audience-aware filing preview (stable)
 

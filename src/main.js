@@ -1478,19 +1478,23 @@ async function openSettings() {
            <p class="panel__hint" id="power-bi-note" style="margin: 8px 0 12px;"></p>
 
            <h4 style="color: #0e8f78; margin: 12px 0 4px;">Microsoft Fabric</h4>
-           <p class="panel__hint" style="margin: 4px 0 8px;">List workspaces, pick IDs below, preview, then push JSON export files into the lakehouse Files folder.</p>
+           <p class="panel__hint" style="margin: 4px 0 8px;">List workspaces, pick from the dropdowns, preview, then push JSON export files into the lakehouse Files folder.</p>
            ${
              fabricStatus.active
                ? `<p class="panel__hint" style="margin: 4px 0 8px;">Fabric connected${fabricStatus.granted_at ? ` (granted ${escapeAttr(new Date(fabricStatus.granted_at).toLocaleDateString())})` : ""}.</p>
-                  <label>Workspace ID
-                    <input id="fabric-workspace-id" type="text" placeholder="from List workspaces" style="${fieldStyle}">
+                  <label>Workspace
+                    <select id="fabric-workspace-id" style="${fieldStyle}">
+                      <option value="">Select workspace…</option>
+                    </select>
                   </label>
-                  <label>Lakehouse ID
-                    <input id="fabric-lakehouse-id" type="text" placeholder="from List lakehouses" style="${fieldStyle}">
+                  <label>Lakehouse
+                    <select id="fabric-lakehouse-id" style="${fieldStyle}" disabled>
+                      <option value="">Select lakehouse…</option>
+                    </select>
                   </label>
                   <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-workspaces>List workspaces</button>
-                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-lakehouses>List lakehouses</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-workspaces>Refresh workspaces</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-lakehouses>Refresh lakehouses</button>
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-preview>Preview export</button>
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-push disabled>Push to lakehouse</button>
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-revoke>Disconnect</button>
@@ -1585,6 +1589,10 @@ async function openSettings() {
   `;
 
   showModal(modal);
+
+  if (experimentalEnabled && fabricStatus.active) {
+    void listFabricWorkspaces();
+  }
 
   // Best-effort version label (Tauri 2 global API). Never blocks settings.
   try {
@@ -1860,23 +1868,76 @@ async function listFabricWorkspaces() {
   if (!invoke) return notAvailable();
   if (!experimentalEnabled) return;
   const note = document.getElementById("fabric-note");
-  const pre = document.getElementById("fabric-workspaces");
+  const select = document.getElementById("fabric-workspace-id");
+  const lhSelect = document.getElementById("fabric-lakehouse-id");
   try {
     const workspaces = await invoke("fabric_list_workspaces");
-    if (pre) {
-      pre.style.display = "block";
-      pre.textContent = workspaces.length
-        ? workspaces.map((w) => `${w.display_name} (${w.id})`).join("\n")
-        : "No workspaces returned.";
+    if (select) {
+      const prev = select.value;
+      select.innerHTML =
+        '<option value="">Select workspace…</option>' +
+        workspaces
+          .map(
+            (w) =>
+              `<option value="${escapeAttr(w.id)}">${escapeHtml(w.display_name)}</option>`,
+          )
+          .join("");
+      if (prev && workspaces.some((w) => w.id === prev)) {
+        select.value = prev;
+      } else if (workspaces[0]?.id) {
+        select.value = workspaces[0].id;
+      }
     }
-    if (workspaces[0]?.id) {
-      const wsInput = document.getElementById("fabric-workspace-id");
-      if (wsInput && !wsInput.value.trim()) wsInput.value = workspaces[0].id;
+    if (lhSelect) {
+      lhSelect.innerHTML = '<option value="">Select lakehouse…</option>';
+      lhSelect.disabled = !select?.value;
     }
-    if (note) note.textContent = "";
+    if (select?.value) {
+      await listFabricLakehouses();
+    }
+    if (note) note.textContent = workspaces.length ? "" : "No workspaces returned.";
   } catch (error) {
     if (note) note.textContent = `Workspace list failed: ${formatInvokeError(error)}`;
     else toastError(`Fabric workspace list failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function listFabricLakehouses() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const workspaceId = document.getElementById("fabric-workspace-id")?.value?.trim();
+  const note = document.getElementById("fabric-note");
+  const select = document.getElementById("fabric-lakehouse-id");
+  if (!workspaceId) {
+    if (select) {
+      select.innerHTML = '<option value="">Select lakehouse…</option>';
+      select.disabled = true;
+    }
+    return;
+  }
+  try {
+    const lakehouses = await invoke("fabric_list_lakehouses", { workspaceId });
+    if (select) {
+      const prev = select.value;
+      select.disabled = false;
+      select.innerHTML =
+        '<option value="">Select lakehouse…</option>' +
+        lakehouses
+          .map(
+            (lh) =>
+              `<option value="${escapeAttr(lh.id)}">${escapeHtml(lh.display_name)}</option>`,
+          )
+          .join("");
+      if (prev && lakehouses.some((lh) => lh.id === prev)) {
+        select.value = prev;
+      } else if (lakehouses[0]?.id) {
+        select.value = lakehouses[0].id;
+      }
+    }
+    if (note) note.textContent = lakehouses.length ? "" : "No lakehouses in this workspace.";
+  } catch (error) {
+    if (note) note.textContent = `Lakehouse list failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric lakehouse list failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -1901,32 +1962,6 @@ async function previewFabricExport() {
   }
 }
 
-async function listFabricLakehouses() {
-  if (!invoke) return notAvailable();
-  if (!experimentalEnabled) return;
-  const workspaceId = document.getElementById("fabric-workspace-id")?.value?.trim();
-  if (!workspaceId) return toastError("Enter a workspace ID first (use List workspaces).");
-  const note = document.getElementById("fabric-note");
-  const pre = document.getElementById("fabric-lakehouses");
-  try {
-    const lakehouses = await invoke("fabric_list_lakehouses", { workspaceId });
-    if (pre) {
-      pre.style.display = "block";
-      pre.textContent = lakehouses.length
-        ? lakehouses.map((lh) => `${lh.display_name} (${lh.id})`).join("\n")
-        : "No lakehouses returned for this workspace.";
-    }
-    if (lakehouses[0]?.id) {
-      const lhInput = document.getElementById("fabric-lakehouse-id");
-      if (lhInput && !lhInput.value.trim()) lhInput.value = lakehouses[0].id;
-    }
-    if (note) note.textContent = "";
-  } catch (error) {
-    if (note) note.textContent = `Lakehouse list failed: ${formatInvokeError(error)}`;
-    else toastError(`Fabric lakehouse list failed: ${formatInvokeError(error)}`);
-  }
-}
-
 async function pushFabricExport() {
   if (!invoke) return notAvailable();
   if (!experimentalEnabled) return;
@@ -1934,7 +1969,7 @@ async function pushFabricExport() {
   const workspaceId = document.getElementById("fabric-workspace-id")?.value?.trim();
   const lakehouseId = document.getElementById("fabric-lakehouse-id")?.value?.trim();
   if (!workspaceId || !lakehouseId) {
-    return toastError("Workspace ID and lakehouse ID are required.");
+    return toastError("Select a workspace and lakehouse first.");
   }
   const note = document.getElementById("fabric-note");
   if (note) note.textContent = "Pushing to Fabric lakehouse…";
@@ -4042,6 +4077,12 @@ function wireUpControls() {
       return;
     }
   });
+
+  document.addEventListener("change", (e) => {
+    if (e.target?.id === "fabric-workspace-id") {
+      void listFabricLakehouses();
+    }
+  });
 }
 
 // --- Signed auto-update (suggest -> user approves -> apply) -----------------
@@ -4144,6 +4185,30 @@ async function initExperimentalPanel() {
 
 // Left-nav view switcher: one focused view visible at a time. Pure DOM, no
 // backend — nav buttons and view sections are paired by `data-view`.
+const seenMcpApprovalRequests = new Set();
+
+async function pollMcpPendingApprovals() {
+  if (!invoke) return;
+  try {
+    const pending = await invoke("mcp_list_pending_approvals");
+    for (const req of pending || []) {
+      if (!seenMcpApprovalRequests.has(req.request_id)) {
+        seenMcpApprovalRequests.add(req.request_id);
+        window.dispatchEvent(
+          new CustomEvent("ghost:mcp-approval-request", { detail: req }),
+        );
+      }
+    }
+  } catch (_) {
+    /* ignore polling errors */
+  }
+}
+
+function initMcpApprovalPolling() {
+  void pollMcpPendingApprovals();
+  setInterval(pollMcpPendingApprovals, 5000);
+}
+
 function initViewNav() {
   const items = document.querySelectorAll(".nav__item");
   const views = document.querySelectorAll(".view");
@@ -4165,6 +4230,20 @@ function initViewNav() {
   items.forEach((b) => {
     b.addEventListener("click", () => b.dataset.view && show(b.dataset.view));
   });
+
+  window.addEventListener("ghost:mcp-approval-request", (event) => {
+    const req = event.detail;
+    show("organize");
+    if (req?.zone_id) {
+      organizerSelectedZoneId = req.zone_id;
+      void organizerRefreshZones().then(() => {
+        showNotification(
+          "An MCP client requested plan approval — scan, review, then issue an MCP token.",
+        );
+      });
+    }
+  });
+
   show("organize");
 }
 
@@ -5127,6 +5206,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initExperimentalPanel(); // reveal experimental tools only in experimental builds
   initModalEscape();
   initViewNav(); // left-nav view switcher
+  initMcpApprovalPolling();
   guardDeskInit(); // Guard Desk + POS Bridge
   filingInit(); // Plan Filing: read-only filing preview + savings estimate
 });

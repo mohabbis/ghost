@@ -185,6 +185,12 @@ fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
 /// after the move succeeds and its postcondition is verified.
 fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
     // (2) Verify state. The plan may have been approved a while ago.
+    if from.is_symlink() {
+        return Outcome::Skipped(format!(
+            "source is a symlink, refusing to move: {}",
+            from.display()
+        ));
+    }
     if !from.exists() {
         return Outcome::Skipped(format!("source no longer exists: {}", from.display()));
     }
@@ -634,6 +640,26 @@ mod tests {
                 to: ok_from
             }]
         );
+    }
+
+    /// Refuse to relocate symlink sources — prevents TOCTOU escape if a real
+    /// file is swapped for a symlink between scan and execute.
+    #[cfg(unix)]
+    #[test]
+    fn relocate_skips_symlink_source() {
+        let tmp = tempdir();
+        let real = tmp.file("secret.pdf", b"secret");
+        let link = tmp.symlink_file("link.pdf", &real);
+        tmp.dir("dest");
+        let to = tmp.path().join("dest/link.pdf");
+        let mut undo = UndoJournal::new();
+
+        let outcome = relocate(&link, &to, &mut undo);
+
+        assert!(matches!(outcome, Outcome::Skipped(_)));
+        assert!(link.exists());
+        assert!(!to.exists());
+        assert!(undo.is_empty());
     }
 
     #[test]

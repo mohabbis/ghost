@@ -24,6 +24,7 @@ export class CompressionReview {
     this.container = document.getElementById(containerId);
     this.invoke = invokeFn;
     this.report = null;
+    this.guardReport = null;
   }
 
   async compress(events) {
@@ -32,7 +33,15 @@ export class CompressionReview {
     }
     try {
       this.eventCount = events.length;
-      this.report = await this.invoke("compress_workflow", { events });
+      const [report, guardReport] = await Promise.all([
+        this.invoke("compress_workflow", { events }),
+        this.invoke("ghost_guard_audit_compressed", { events }).catch((err) => {
+          console.warn("Ghost Guard compressed audit failed:", err);
+          return null;
+        }),
+      ]);
+      this.report = report;
+      this.guardReport = guardReport;
       this.render();
       return this.report;
     } catch (err) {
@@ -61,7 +70,30 @@ export class CompressionReview {
             <span class="stat-label">Redacted</span>
             <span class="stat-value">${this.report.redacted_fields}</span>
           </div>
+          ${
+            this.guardReport
+              ? `<div class="compression-stat compression-stat--guard">
+            <span class="stat-label">Guard</span>
+            <span class="stat-value">${this.guardReport.score}/100</span>
+          </div>`
+              : ""
+          }
         </div>
+
+        ${
+          this.guardReport?.findings?.length
+            ? `
+          <div class="compression-guard">
+            <div class="guard-title">Ghost Guard · ${escapeHtml(this.guardReport.risk_level)} risk</div>
+            <div class="guard-summary">${escapeHtml(this.guardReport.summary)}</div>
+            ${this.guardReport.findings
+              .slice(0, 6)
+              .map((f) => this.renderGuardFinding(f))
+              .join("")}
+          </div>
+        `
+            : ""
+        }
 
         ${
           this.report.warnings.length > 0
@@ -112,6 +144,7 @@ export class CompressionReview {
     const riskClass = this.getRiskClass(step);
     const confidence =
       step.confidence !== undefined ? `${(step.confidence * 100).toFixed(0)}%` : "";
+    const guardNotes = this.guardFindingsForStep(idx);
 
     return `
       <div class="compression-step ${riskClass}">
@@ -120,9 +153,28 @@ export class CompressionReview {
           <div class="step-text">${description}</div>
           ${confidence ? `<div class="step-confidence">confidence: ${confidence}</div>` : ""}
           ${lastRunNote ? `<div class="step-confidence step-lastrun">Last run: ${escapeHtml(lastRunNote)}</div>` : ""}
+          ${guardNotes.map((note) => `<div class="step-guard-note">${note}</div>`).join("")}
         </div>
       </div>
     `;
+  }
+
+  guardFindingsForStep(stepIdx) {
+    if (!this.guardReport?.findings?.length) return [];
+    return this.guardReport.findings
+      .filter((f) => f.step_index === stepIdx)
+      .map((f) => `${this.guardSeverityLabel(f.severity)} ${escapeHtml(f.title)}`);
+  }
+
+  guardSeverityLabel(severity) {
+    const labels = { low: "·", medium: "!", high: "!!", critical: "!!!" };
+    return labels[severity] || "·";
+  }
+
+  renderGuardFinding(finding) {
+    const step =
+      finding.step_index != null ? ` (step ${finding.step_index + 1})` : "";
+    return `<div class="guard-finding guard-finding--${escapeHtml(finding.severity)}">${this.guardSeverityLabel(finding.severity)} ${escapeHtml(finding.title)}${step}</div>`;
   }
 
   renderWarning(warning) {
@@ -219,5 +271,6 @@ export class CompressionReview {
       this.container.innerHTML = "";
     }
     this.report = null;
+    this.guardReport = null;
   }
 }

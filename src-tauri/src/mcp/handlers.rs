@@ -1,6 +1,8 @@
 //! Headless MCP tool handlers — domain logic only, no Tauri.
 
+use crate::mcp::pending::ApprovalRequestStatus;
 use crate::mcp::tools::McpToolKind;
+use crate::mcp::{hash_organizer_plan, pending};
 use crate::organizer::planner::{plan_zone, OrganizerPlan};
 use crate::storage::open_default;
 use crate::storage::zones::list_zones;
@@ -54,10 +56,34 @@ pub fn handle_tool(name: &str, arguments: &Value) -> Result<Value, String> {
                 "message": "Ghost produces deterministic plans from Zone rules. Approve in the desktop UI before execution.",
             }))
         }
-        McpToolKind::RequestApproval | McpToolKind::GetApprovalStatus => Err(
-            "Approval must be completed in the Ghost desktop UI — MCP clients cannot approve plans"
-                .to_string(),
-        ),
+        McpToolKind::RequestApproval => {
+            let zone_id = arg_string(arguments, "zone_id")?;
+            let db = open_default().map_err(|e| e.to_string())?;
+            let plan = plan_zone(&db, &zone_id).map_err(|e| e.to_string())?;
+            let plan_hash = hash_organizer_plan(&plan);
+            let req = pending::create_request(&zone_id, &plan_hash);
+            Ok(json!({
+                "request_id": req.request_id,
+                "zone_id": zone_id,
+                "plan_id": req.plan_id,
+                "status": "pending",
+                "expires_at": req.expires_at.to_rfc3339(),
+                "message": "Open Ghost Organizer, review the plan for this Zone, and issue an MCP approval token.",
+            }))
+        }
+        McpToolKind::GetApprovalStatus => {
+            let request_id = arg_string(arguments, "request_id")?;
+            let req = pending::get_request(&request_id)
+                .ok_or_else(|| format!("Unknown approval request '{request_id}'"))?;
+            Ok(json!({
+                "request_id": req.request_id,
+                "zone_id": req.zone_id,
+                "plan_id": req.plan_id,
+                "status": approval_status_label(&req.status),
+                "expires_at": req.expires_at.to_rfc3339(),
+                "approved_at": req.approved_at.map(|t| t.to_rfc3339()),
+            }))
+        }
         McpToolKind::ExecuteApprovedPlan => {
             let token = arg_string(arguments, "approval_token")?;
             let zone_id = arg_string(arguments, "zone_id")?;
@@ -85,6 +111,7 @@ pub fn list_tools() -> Vec<Value> {
                     "type": "object",
                     "properties": {
                         "zone_id": { "type": "string" },
+                        "request_id": { "type": "string" },
                         "approval_token": { "type": "string" },
                         "execution_id": { "type": "string" },
                         "pairing_code": { "type": "string" },
@@ -108,6 +135,15 @@ fn arg_string(args: &Value, key: &str) -> Result<String, String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .ok_or_else(|| format!("Missing required argument '{key}'"))
+}
+
+fn approval_status_label(status: &ApprovalRequestStatus) -> &'static str {
+    match status {
+        ApprovalRequestStatus::Pending => "pending",
+        ApprovalRequestStatus::Approved => "approved",
+        ApprovalRequestStatus::Denied => "denied",
+        ApprovalRequestStatus::Expired => "expired",
+    }
 }
 
 fn plan_to_json(plan: &OrganizerPlan) -> Value {

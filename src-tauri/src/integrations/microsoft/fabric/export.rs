@@ -1,6 +1,7 @@
 //! Push audit export payloads into a Fabric lakehouse via OneLake Files API.
 
 use crate::identity::IntegrationError;
+use crate::integrations::microsoft::fabric::{fabric_error_message, FabricOperation};
 use crate::integrations::microsoft::power_bi::export::AuditExportPayload;
 use serde_json::Value;
 
@@ -30,7 +31,7 @@ impl FabricExportClient {
         workspace_id: &str,
         lakehouse_id: &str,
         payload: &AuditExportPayload,
-    ) -> Result<FabricPushSummary, IntegrationError> {
+    ) -> Result<FabricPushSummary, String> {
         let prefix = format!(
             "ghost-export/{}",
             chrono::Utc::now().format("%Y%m%dT%H%M%SZ")
@@ -76,8 +77,9 @@ impl FabricExportClient {
         lakehouse_id: &str,
         relative_path: &str,
         rows: &[Value],
-    ) -> Result<(), IntegrationError> {
-        let body = serde_json::to_vec(rows).map_err(|_| IntegrationError::InvalidResponse)?;
+    ) -> Result<(), String> {
+        let body =
+            serde_json::to_vec(rows).map_err(|_| IntegrationError::InvalidResponse.to_string())?;
         let url = format!(
             "{ONELAKE_DFS}/{workspace_id}/{lakehouse_id}.Lakehouse/Files/{relative_path}?resource=file"
         );
@@ -90,14 +92,15 @@ impl FabricExportClient {
             .bearer_auth(access_token)
             .body(body)
             .send()
-            .map_err(|_| IntegrationError::NetworkUnavailable)?;
+            .map_err(|_| IntegrationError::NetworkUnavailable.to_string())?;
         let status = res.status();
         if status.is_success() || status.as_u16() == 201 {
             Ok(())
-        } else if status.as_u16() == 401 || status.as_u16() == 403 {
-            Err(IntegrationError::ConsentRequired)
         } else {
-            Err(IntegrationError::InvalidResponse)
+            Err(fabric_error_message(
+                status.as_u16(),
+                FabricOperation::PushExport,
+            ))
         }
     }
 }
