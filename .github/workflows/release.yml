@@ -101,16 +101,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p dist
+          # `app` is required for updater .app.tar.gz/.sig. `--bundles dmg` alone
+          # is not an updater-enabled target — Tauri warns and skips signatures.
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "Updater signing key present -> producing signed updater artifacts"
-            cargo tauri build --target universal-apple-darwin --bundles dmg \
+            cargo tauri build --target universal-apple-darwin --bundles app,dmg \
               --config '{"bundle":{"createUpdaterArtifacts":true}}'
           else
             echo "No updater signing key -> skipping updater artifacts"
-            cargo tauri build --target universal-apple-darwin --bundles dmg
+            cargo tauri build --target universal-apple-darwin --bundles app,dmg
           fi
 
       - name: Stage macOS assets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           mkdir -p dist
           DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" -print -quit)
@@ -128,6 +132,17 @@ jobs:
             cp "$f" "dist/$(basename "$f")"
             echo "Staged updater artifact: $(basename "$f")"
           done
+
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            tgz=(dist/*.app.tar.gz)
+            sig=(dist/*.app.tar.gz.sig)
+            if [ ${#tgz[@]} -eq 0 ] || [ ${#sig[@]} -eq 0 ]; then
+              echo "TAURI_SIGNING_PRIVATE_KEY is set but macOS updater artifacts were not produced" >&2
+              echo "Bundle tree:" >&2
+              find src-tauri/target/universal-apple-darwin/release/bundle -maxdepth 3 -type f 2>/dev/null | head -80 >&2
+              exit 1
+            fi
+          fi
 
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v7

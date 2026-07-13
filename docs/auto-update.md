@@ -61,8 +61,10 @@ Auto-update stays inert until a maintainer completes these steps **and cuts a
 release that embeds the pubkey**. Private key material must stay out of git.
 
 **Status (2026-07-13):** the repo pubkey + GitHub `TAURI_SIGNING_*` secrets are
-configured. Existing `v1.2.7` installers were built before the pubkey commit and
-will not offer updates; `v1.2.8+` publishes `latest.json` and can update onward.
+configured. Existing `v1.2.7`/`v1.2.8` installers were built before macOS updater
+tarballs shipped (or before the pubkey commit) and will not offer updates;
+`v1.2.9+` publishes `latest.json` (requires macOS `--bundles app,dmg`) and can
+update onward.
 
 1. **Generate the updater keypair:**
 

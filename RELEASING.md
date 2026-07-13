@@ -197,8 +197,10 @@ embedded in `tauri.conf.json`).
 
 When `TAURI_SIGNING_PRIVATE_KEY` is set, both build jobs pass
 `--config '{"bundle":{"createUpdaterArtifacts":true}}'`, producing the
-`.app.tar.gz`/`.sig` (macOS) and `-setup.exe.sig` (Windows). The publish job
-assembles `latest.json` automatically when both platform signatures are present.
+`.app.tar.gz`/`.sig` (macOS) and `-setup.exe.sig` (Windows). The macOS job
+must build `--bundles app,dmg` — `dmg` alone is not an updater-enabled target
+and will skip signatures. The publish job assembles `latest.json` automatically
+when both platform signatures are present.
 
 Until the pubkey placeholder is replaced and the private key secret is set,
 auto-update stays inactive — installers still publish normally.
