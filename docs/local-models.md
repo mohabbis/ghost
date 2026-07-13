@@ -1,41 +1,47 @@
 # Local Models
 
-Status: **planned** (architecture only)
+Status: **built** (experimental — gated behind `--features experimental`)
 
 ## Principle
 
 **Locality is not permission.** A local model has the same suggestion-only boundary as remote providers.
 
-## Planned backends
+## Backends
 
-| Backend | Adapter module |
-|---|---|
-| Ollama | `intelligence/local/ollama.rs` |
-| LM Studio | `intelligence/local/lm_studio.rs` |
-| OpenAI-compatible endpoint | `intelligence/local/openai_compatible.rs` |
+| Backend | Config value | Default endpoint |
+|---|---|---|
+| Ollama | `ollama` | `http://127.0.0.1:11434/v1` |
+| LM Studio | `lm_studio` | `http://127.0.0.1:1234/v1` |
+| OpenAI-compatible | `openai_compatible` | user-supplied |
 
-## Discovery — **planned**
+All three share `intelligence/local/openai_compatible.rs` (`LocalCompatibleProvider`).
 
-- Probe common localhost ports only
-- Never scan LAN without explicit consent
-- Warn before sending metadata to non-local endpoints
-- Health check without mutation
+## Discovery — **built**
 
-## Configuration shape — **planned**
+`intelligence_discover_local` probes localhost only:
 
-```rust
-pub struct LocalProviderConfig {
-    pub backend: LocalBackend,
-    pub base_url: String,
-    pub model: String,
-    pub timeout_seconds: u64,
-    pub allow_network_lan: bool,
-}
-```
+- Ollama: `127.0.0.1:11434/api/tags`
+- LM Studio: `127.0.0.1:1234/v1/models`
 
-## Routing — **partially built**
+Never scans LAN without `allow_network_lan` in config.
 
-`RoutingPolicy::local_only_for_sensitive_data` exists; enforcement when providers are implemented.
+## Configuration
+
+Stored in `GhostConfig.intelligence.local` (`config.rs`):
+
+- `backend`, `base_url`, `model`, `api_key` (optional), `timeout_seconds`, `allow_network_lan`, `max_input_bytes`
+
+Default intelligence provider values: `local_ollama`, `local_lm_studio`, `local_openai_compatible`.
+
+Non-localhost endpoints are rejected unless `allow_network_lan` is enabled.
+
+## Settings UI — **built**
+
+Experimental Settings panel: backend/base URL/model fields, LAN toggle, discover button, health test.
+
+## Routing — **built**
+
+`RoutingPolicy::local_only_for_sensitive_data` is enforced in `ProviderRouter` when selecting providers for sensitive metadata.
 
 ## Related
 

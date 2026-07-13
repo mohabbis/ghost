@@ -1305,6 +1305,7 @@ async function openSettings() {
   let account = { signed_in: false };
   let intelStatus = { default_provider: "disabled", providers: [] };
   let powerBiStatus = { active: false };
+  let fabricStatus = { active: false };
   try {
     account = await invoke("account_status");
   } catch (error) {
@@ -1321,6 +1322,11 @@ async function openSettings() {
     } catch (error) {
       console.error("Failed to load Power BI grant status:", error);
     }
+    try {
+      fabricStatus = await invoke("fabric_grant_status");
+    } catch (error) {
+      console.error("Failed to load Fabric grant status:", error);
+    }
   }
 
   const modal = document.getElementById("settings-modal");
@@ -1333,12 +1339,27 @@ async function openSettings() {
     default_provider: "disabled",
     openai: { model: "gpt-4o-mini", api_base: null, timeout_seconds: 60, max_input_bytes: 32768 },
     anthropic: { model: "claude-sonnet-4-20250514", timeout_seconds: 60, max_input_bytes: 32768 },
+    local: {
+      backend: "ollama",
+      base_url: "http://127.0.0.1:11434/v1",
+      model: "llama3.2",
+      timeout_seconds: 60,
+      max_input_bytes: 32768,
+      allow_network_lan: false,
+    },
     routing: { allow_fallback: false, local_only_for_sensitive_data: true, maximum_remote_payload_bytes: 32768 },
   };
   // `audit` may be absent in configs written before the retention feature.
   const audit = settingsConfig.audit || {};
   const providers = ["local", "openai", "anthropic", "local_model"];
-  const intelProviders = ["disabled", "openai", "anthropic"];
+  const intelProviders = [
+    "disabled",
+    "openai",
+    "anthropic",
+    "local_ollama",
+    "local_lm_studio",
+    "local_openai_compatible",
+  ];
   const fieldStyle =
     "width: 100%; margin: 4px 0 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);";
 
@@ -1402,6 +1423,32 @@ async function openSettings() {
              <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
            </label>
            <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
+           <h5 style="margin: 16px 0 4px;">Local models</h5>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Ollama, LM Studio, or any OpenAI-compatible localhost endpoint. Locality is not permission — suggestions still require your review before any file moves.</p>
+           <label>Local backend
+             <select id="cfg-intel-local-backend" style="${fieldStyle}">
+               ${["ollama", "lm_studio", "openai_compatible"]
+                 .map(
+                   (b) =>
+                     `<option value="${b}" ${b === (intelligence.local?.backend || "ollama") ? "selected" : ""}>${b}</option>`,
+                 )
+                 .join("")}
+             </select>
+           </label>
+           <label>Local base URL
+             <input id="cfg-intel-local-base-url" type="text" value="${escapeAttr(intelligence.local?.base_url ?? "http://127.0.0.1:11434/v1")}" style="${fieldStyle}">
+           </label>
+           <label>Local model
+             <input id="cfg-intel-local-model" type="text" value="${escapeAttr(intelligence.local?.model ?? "llama3.2")}" style="${fieldStyle}">
+           </label>
+           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+             <input id="cfg-intel-local-allow-lan" type="checkbox" ${intelligence.local?.allow_network_lan ? "checked" : ""}>
+             Allow non-localhost endpoints (LAN)
+           </label>
+           <p class="panel__hint" style="margin: 0 0 4px;">Local · ${escapeAttr(intelStatusLine("local_ollama"))}</p>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-discover-local>Discover local runtimes</button>
+           <pre id="intel-local-discover" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-test="local_ollama">Test local connection</button>
            <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>`
         : ""
     }
@@ -1422,7 +1469,24 @@ async function openSettings() {
                : `<button class="btn btn--ghost btn--small" type="button" data-power-bi-connect ${account.signed_in ? "" : "disabled"}>Connect Power BI</button>
                   ${!account.signed_in ? '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Microsoft above first.</p>' : ""}`
            }
-           <p class="panel__hint" id="power-bi-note" style="margin: 8px 0 12px;"></p>`
+           <p class="panel__hint" id="power-bi-note" style="margin: 8px 0 12px;"></p>
+
+           <h4 style="color: #0e8f78; margin: 12px 0 4px;">Microsoft Fabric</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">List workspaces and preview audit exports for Fabric. Requires Microsoft sign-in, then a separate Fabric consent. Export push to Fabric destinations is not wired yet — preview only.</p>
+           ${
+             fabricStatus.active
+               ? `<p class="panel__hint" style="margin: 4px 0 8px;">Fabric connected${fabricStatus.granted_at ? ` (granted ${escapeAttr(new Date(fabricStatus.granted_at).toLocaleDateString())})` : ""}.</p>
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-workspaces>List workspaces</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-preview>Preview export</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-revoke>Disconnect</button>
+                  </div>
+                  <pre id="fabric-workspaces" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+                  <pre id="fabric-preview" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>`
+               : `<button class="btn btn--ghost btn--small" type="button" data-fabric-connect ${account.signed_in ? "" : "disabled"}>Connect Fabric</button>
+                  ${!account.signed_in ? '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Microsoft above first.</p>' : ""}`
+           }
+           <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>`
         : ""
     }
 
@@ -1563,6 +1627,19 @@ async function saveSettings() {
   settingsConfig.intelligence.anthropic.model =
     document.getElementById("cfg-intel-anthropic-model")?.value?.trim() ||
     settingsConfig.intelligence.anthropic.model;
+  if (!settingsConfig.intelligence.local) settingsConfig.intelligence.local = {};
+  settingsConfig.intelligence.local.backend =
+    document.getElementById("cfg-intel-local-backend")?.value ||
+    settingsConfig.intelligence.local.backend ||
+    "ollama";
+  settingsConfig.intelligence.local.base_url =
+    document.getElementById("cfg-intel-local-base-url")?.value?.trim() ||
+    settingsConfig.intelligence.local.base_url;
+  settingsConfig.intelligence.local.model =
+    document.getElementById("cfg-intel-local-model")?.value?.trim() ||
+    settingsConfig.intelligence.local.model;
+  settingsConfig.intelligence.local.allow_network_lan =
+    !!document.getElementById("cfg-intel-local-allow-lan")?.checked;
 
   const openaiKey = document.getElementById("cfg-intel-openai-key")?.value?.trim();
   const anthropicKey = document.getElementById("cfg-intel-anthropic-key")?.value?.trim();
@@ -1628,6 +1705,39 @@ async function testIntelligenceProvider(provider) {
   } catch (error) {
     if (note) note.textContent = `${provider} test failed.`;
     toastError(formatInvokeError(error));
+  }
+}
+
+async function discoverLocalRuntimes() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const pre = document.getElementById("intel-local-discover");
+  if (pre) {
+    pre.style.display = "block";
+    pre.textContent = "Scanning localhost for Ollama and LM Studio…";
+  }
+  try {
+    const found = await invoke("intelligence_discover_local");
+    if (!found?.length) {
+      if (pre) pre.textContent = "No local runtimes found on 127.0.0.1 (Ollama :11434, LM Studio :1234).";
+      return;
+    }
+    const lines = found.map(
+      (r) =>
+        `${r.backend} @ ${r.base_url}\n  models: ${(r.models || []).slice(0, 5).join(", ")}${(r.models || []).length > 5 ? "…" : ""}`,
+    );
+    if (pre) pre.textContent = lines.join("\n\n");
+    const first = found[0];
+    const backendEl = document.getElementById("cfg-intel-local-backend");
+    const baseEl = document.getElementById("cfg-intel-local-base-url");
+    const modelEl = document.getElementById("cfg-intel-local-model");
+    if (backendEl && first.backend) backendEl.value = first.backend;
+    if (baseEl && first.base_url) baseEl.value = first.base_url;
+    if (modelEl && first.models?.[0]) modelEl.value = first.models[0];
+    showNotification(`Found ${found.length} local runtime(s).`);
+  } catch (error) {
+    if (pre) pre.textContent = `Discovery failed: ${formatInvokeError(error)}`;
+    else toastError(formatInvokeError(error));
   }
 }
 
@@ -1701,6 +1811,72 @@ async function revokePowerBiGrant() {
     openSettings();
   } catch (error) {
     toastError(`Power BI disconnect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+// --- Microsoft Fabric (grant + workspace list + export preview) ---------------
+async function connectFabric() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("fabric-note");
+  if (note) note.textContent = "Opening your browser to connect Fabric…";
+  try {
+    await invoke("fabric_request_grant");
+    showNotification("Fabric connected.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Connect failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric connect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function listFabricWorkspaces() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("fabric-note");
+  const pre = document.getElementById("fabric-workspaces");
+  try {
+    const workspaces = await invoke("fabric_list_workspaces");
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = workspaces.length
+        ? workspaces.map((w) => `${w.display_name} (${w.id})`).join("\n")
+        : "No workspaces returned.";
+    }
+    if (note) note.textContent = "";
+  } catch (error) {
+    if (note) note.textContent = `Workspace list failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric workspace list failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function previewFabricExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("fabric-note");
+  const pre = document.getElementById("fabric-preview");
+  try {
+    const payload = await invoke("fabric_export_preview", { sinceDays: null });
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = `${payload.runs.length} run(s), ${payload.actions.length} action(s), ${payload.policy_events.length} policy event(s) would be exported.`;
+    }
+    if (note) note.textContent = "";
+  } catch (error) {
+    if (note) note.textContent = `Preview failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric preview failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function revokeFabricGrant() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  try {
+    await invoke("fabric_revoke_grant");
+    showNotification("Fabric disconnected.");
+    openSettings();
+  } catch (error) {
+    toastError(`Fabric disconnect failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -2404,9 +2580,11 @@ async function organizerSetRuleTrust(path, trust) {
 function organizerUpdateButtons(rules) {
   const scanBtn = document.getElementById("organizerScanBtn");
   const runBtn = document.getElementById("organizerRunBtn");
+  const aiBtn = document.getElementById("organizerAiSuggestBtn");
   const hasFolders = Array.isArray(rules) && rules.length > 0;
   if (scanBtn) scanBtn.disabled = !organizerSelectedZone() || !hasFolders;
   if (runBtn) runBtn.disabled = !organizerHasReviewedPlan;
+  if (aiBtn) aiBtn.disabled = !organizerSelectedZone() || !hasFolders;
 }
 
 async function organizerCreateZone() {
@@ -2819,6 +2997,68 @@ async function organizerScan() {
     showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
   } else {
     showInsight("Preview ready. Nothing moved yet — review each step, then approve.");
+  }
+}
+
+function organizerRenderAiSuggestion(result) {
+  const resultEl = document.getElementById("organizerResult");
+  if (!resultEl) return;
+  const s = result.suggestion || {};
+  const classifications = (s.classifications || [])
+    .map(
+      (c) =>
+        `<li><code>${escapeHtml(c.zone_relative_path)}</code> → <strong>${escapeHtml(c.category)}</strong>${typeof c.confidence === "number" ? ` (${Math.round(c.confidence * 100)}%)` : ""}</li>`,
+    )
+    .join("");
+  const rules = (s.proposed_rules || [])
+    .map((r) => `<li>${escapeHtml(r.description)}${r.pattern_hint ? ` <span class="organizer-muted">(${escapeHtml(r.pattern_hint)})</span>` : ""}</li>`)
+    .join("");
+  const uncertainty = (s.uncertainty || [])
+    .map((u) => `<li><code>${escapeHtml(u.zone_relative_path)}</code>: ${escapeHtml(u.reason)}</li>`)
+    .join("");
+  const assumptions = (s.assumptions || []).map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+
+  resultEl.innerHTML = `
+    <div class="organizer-summary">
+      <strong>AI suggestions</strong> · ${result.files_considered ?? 0} file(s) considered
+      <span class="organizer-muted"> — suggestion only, nothing moved</span>
+    </div>
+    <p class="organizer-muted">${escapeHtml(s.objective || "")}</p>
+    ${classifications ? `<h4 class="organizer-muted">Suggested classifications</h4><ul>${classifications}</ul>` : ""}
+    ${rules ? `<h4 class="organizer-muted">Suggested rules</h4><ul>${rules}</ul>` : ""}
+    ${assumptions ? `<h4 class="organizer-muted">Assumptions</h4><ul>${assumptions}</ul>` : ""}
+    ${uncertainty ? `<h4 class="organizer-muted">Uncertain items</h4><ul>${uncertainty}</ul>` : ""}
+    <p class="organizer-muted">Run <strong>Scan &amp; Preview</strong> to see Ghost's deterministic plan from your Zone rules. AI output never executes directly.</p>
+  `;
+}
+
+async function organizerAiSuggest() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return toastError("AI suggestions require an experimental build.");
+  const zone = organizerSelectedZone();
+  if (!zone) return toastError("Create a Zone first.");
+  const btn = document.getElementById("organizerAiSuggestBtn");
+  const prevLabel = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Thinking…";
+  }
+  const result = document.getElementById("organizerResult");
+  if (result) result.innerHTML = `<p class="organizer-muted">Requesting suggestions… nothing has been changed.</p>`;
+  try {
+    const suggestion = await invoke("organizer_intelligence_suggest", { zoneId: zone.id });
+    organizerRenderAiSuggestion(suggestion);
+    organizerHasReviewedPlan = false;
+    organizerUpdateButtons(await safeRules(zone.id));
+    showInsight("AI suggestions are advisory only — scan for the deterministic plan before approving.");
+  } catch (err) {
+    if (result) result.innerHTML = "";
+    toastError("AI suggestions failed: " + formatInvokeError(err));
+  } finally {
+    if (btn) {
+      btn.textContent = prevLabel || "AI suggestions";
+      organizerUpdateButtons(await safeRules(zone.id));
+    }
   }
 }
 
@@ -3523,6 +3763,7 @@ function wireUpControls() {
   bind("organizerBrowseBtn", organizerBrowseFolder);
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
+  bind("organizerAiSuggestBtn", organizerAiSuggest);
   bind("organizerRunBtn", organizerRun);
   bind("organizerHistoryBtn", organizerShowHistory);
   const zoneSelect = document.getElementById("organizerZoneSelect");
@@ -3608,6 +3849,11 @@ function wireUpControls() {
       return;
     }
 
+    if (e.target.closest("[data-intel-discover-local]")) {
+      discoverLocalRuntimes();
+      return;
+    }
+
     if (e.target.closest("[data-power-bi-connect]")) {
       connectPowerBi();
       return;
@@ -3622,6 +3868,22 @@ function wireUpControls() {
     }
     if (e.target.closest("[data-power-bi-revoke]")) {
       revokePowerBiGrant();
+      return;
+    }
+    if (e.target.closest("[data-fabric-connect]")) {
+      connectFabric();
+      return;
+    }
+    if (e.target.closest("[data-fabric-list-workspaces]")) {
+      listFabricWorkspaces();
+      return;
+    }
+    if (e.target.closest("[data-fabric-preview]")) {
+      previewFabricExport();
+      return;
+    }
+    if (e.target.closest("[data-fabric-revoke]")) {
+      revokeFabricGrant();
     }
   });
 }
@@ -3690,7 +3952,12 @@ async function installApprovedUpdate(button, statusEl) {
 // is compiled with `--features experimental`. A stock build does not register
 // them, so reveal the panel only when the backend confirms the surface is on.
 // Fail closed: any error leaves the panel hidden rather than showing dead buttons.
-const EXPERIMENTAL_ONLY_CONTROLS = ["replayReliableBtn", "analyzeBtn", "optimizeBtn"];
+const EXPERIMENTAL_ONLY_CONTROLS = [
+  "replayReliableBtn",
+  "analyzeBtn",
+  "optimizeBtn",
+  "organizerAiSuggestBtn",
+];
 
 async function initExperimentalPanel() {
   const panel = document.getElementById("experimentalPanel");

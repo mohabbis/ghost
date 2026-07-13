@@ -5,8 +5,8 @@ pub mod identity {
 }
 
 pub mod fabric {
-    /// Placeholder — exact Fabric scopes to be finalized against Microsoft docs.
-    pub const SCOPES: &[&str] = &[];
+    /// Fabric REST API delegated scope (workspace read + item metadata).
+    pub const SCOPES: &[&str] = &["https://api.fabric.microsoft.com/.default"];
 }
 
 pub mod power_bi {

@@ -1,6 +1,7 @@
 use super::anthropic::AnthropicProvider;
 use super::capability::ProviderId;
 use super::credentials::CredentialStore;
+use super::local::LocalCompatibleProvider;
 use super::openai::OpenAiProvider;
 use super::registry::ProviderRegistry;
 use super::router::{ProviderRouter, RoutingPolicy};
@@ -12,7 +13,18 @@ pub fn provider_id_from_config(s: &str) -> ProviderId {
     match s {
         "openai" => ProviderId::OpenAi,
         "anthropic" => ProviderId::Anthropic,
+        "local_ollama" => ProviderId::LocalOllama,
+        "local_lm_studio" => ProviderId::LocalLmStudio,
+        "local" | "local_openai_compatible" => ProviderId::LocalOpenAiCompatible,
         _ => ProviderId::Disabled,
+    }
+}
+
+fn local_provider_id(backend: &str) -> ProviderId {
+    match backend {
+        "ollama" => ProviderId::LocalOllama,
+        "lm_studio" => ProviderId::LocalLmStudio,
+        _ => ProviderId::LocalOpenAiCompatible,
     }
 }
 
@@ -34,6 +46,13 @@ pub fn build_router(config: &GhostConfig, auth_path: PathBuf) -> ProviderRouter 
         auth_path,
     ) {
         registry.register(std::sync::Arc::new(anthropic));
+    }
+
+    if config.intelligence.local.endpoint_is_allowed() {
+        let id = local_provider_id(&config.intelligence.local.backend);
+        if let Ok(local) = LocalCompatibleProvider::new(config.intelligence.local.clone(), id) {
+            registry.register(std::sync::Arc::new(local));
+        }
     }
 
     let routing = RoutingPolicy {

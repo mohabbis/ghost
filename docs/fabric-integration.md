@@ -1,51 +1,53 @@
 # Fabric Integration
 
-Status: **planned** (module boundaries **partially built**)
+Status: **partially built** (grant flow, workspace list, export preview — experimental)
 
 ## Product rule
 
 Fabric is a **business-system connector** (Layer B), not an intelligence provider. Fabric pipelines must not trigger desktop mutations without Ghost's full approval pipeline.
 
-## First use case (planned)
+## First use case
 
 ```text
 Ghost audit history
   -> user selects date range
   -> structured summary
   -> user reviews export preview
-  -> user approves
-  -> Ghost writes to selected Fabric destination
+  -> user approves (push to Fabric destination — planned)
   -> local audit entry
 ```
 
-## Module layout — **partially built**
+v1 ships: grant, workspace list, and export preview only. Push to a Fabric lakehouse/warehouse is not wired yet.
+
+## Module layout — **built**
 
 ```text
 src-tauri/src/integrations/microsoft/
 ├── fabric/
-│   └── mod.rs        FabricClient stub
-├── scopes.rs         fabric scope placeholders
-└── mod.rs            grant check: identity alone ≠ Fabric access
+│   └── mod.rs        FabricClient::list_workspaces
+├── scopes.rs         fabric::SCOPES = api.fabric.microsoft.com/.default
+└── mod.rs            grant flow + fabric_access_token
 ```
 
-## Phase-one capabilities — **planned**
+Commands (`commands/integrations.rs`, experimental):
 
-- List accessible workspaces (read-only)
-- Inspect workspace metadata
-- List selected Fabric items
-- Validate workspace access
-- Export approved audit summaries
-- Persist selected workspace as scoped setting
-- Audit every outbound export locally
+| Command | Risk | Notes |
+|---|---|---|
+| `fabric_grant_status` | `safe-read` | Local grant metadata |
+| `fabric_request_grant` | `external-mutate` | Incremental OAuth consent |
+| `fabric_revoke_grant` | `local-mutate` | Local revoke only |
+| `fabric_list_workspaces` | `safe-read` | Requires active Fabric grant |
+| `fabric_export_preview` | `safe-read` | Reuses `power_bi/export.rs` row shapes |
 
 ## Grant requirement — **built**
 
-`MicrosoftIntegrationService::fabric_grant_active` returns `ConsentRequired` when only an identity grant exists.
+`MicrosoftIntegrationService::fabric_grant_active` returns `ConsentRequired` when only an identity grant exists. `request_fabric_grant` persists a separate `IntegrationKind::MicrosoftFabric` grant.
 
-## Not in scope (phase one)
+## Not in scope (v1)
 
+- Push export rows to Fabric destinations
 - Inbound Fabric-triggered file mutations
 - Notebook/pipeline direct desktop control
 - Silent export
 
-See `docs/power-bi-integration.md` for related Power BI export shape.
+See `docs/power-bi-integration.md` for the shared export payload shape.

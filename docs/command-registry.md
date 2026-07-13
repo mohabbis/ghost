@@ -33,7 +33,7 @@ Use the right module, then re-export/register from the registry layer.
 | `commands/diagnostics.rs` | Config summaries, telemetry export, performance/debug data | read-first, redacted, user-initiated export |
 | `commands/updates.rs` | Signed auto-update: read-only check + user-approved install | signature-verified, user-gated install |
 | `commands/organizer.rs` | Ghost Organizer: Zone/rule management + plan/execute/undo for safe file organization | policy-gated, read-only plan, audited + undoable execution |
-| `commands/integrations.rs` | Power BI audit export: grant flow, preview, push — **experimental**, gated behind `--features experimental` | explicit revocable grant separate from identity, preview-before-push, PII-masked, re-derives export payload server-side rather than trusting the frontend |
+| `commands/integrations.rs` | Power BI + Fabric audit export: grant flow, preview, push (Power BI only) — **experimental**, gated behind `--features experimental` | explicit revocable grant separate from identity, preview-before-push, PII-masked, re-derives export payload server-side rather than trusting the frontend |
 | `commands/experimental.rs` | AI, observer mode, cloud sync, analytics, visual checks, data sources, research features | gated, labeled, not default product UI |
 
 ## Required command metadata
@@ -179,6 +179,8 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `intelligence_clear_api_key` | experimental | ✓ | – | – | – | ✓ | – | low | Removes one provider key from local storage. |
 | `intelligence_test_provider` | experimental | – | – | – | ✓ | ✓ | – | medium | Network health check (OpenAI models list; Anthropic configured check). |
 | `intelligence_propose_plan` | experimental | ~ | – | – | ✓ | ✓ | – | high | Sends redacted file metadata to the configured provider; returns a `PlanningSuggestion` only — **never executes**. Blocks confidential/secret payloads when local-only routing is enabled. |
+| `intelligence_discover_local` | experimental | ✓ | – | – | ~ | ✓ | – | low | Probes localhost Ollama/LM Studio ports only; returns discovered models. |
+| `organizer_intelligence_suggest` | experimental | ~ | – | – | ✓/local | ✓ | – | high | Scans Zone file metadata, calls the configured intelligence provider, returns suggestion-only output validated by `suggestion_is_safe`. Never executes. |
 
 ### `commands/integrations.rs` — Power BI audit export (experimental, network-write)
 
@@ -189,6 +191,11 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `power_bi_revoke_grant` | experimental | ✓ | – | – | – | ✓ | – | low | Local unlink only (`revoked_at`); does not revoke provider-side consent. |
 | `power_bi_export_preview` | experimental | ✓ | – | – | – | – | – | low | Pure, read-only: assembles the exact `GhostRuns`/`GhostActions`/`GhostPolicyEvents` payload a push would send from local Organizer execution history, PII-masked. No network. `since_days` bounds the window (omit for all history). |
 | `power_bi_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | The only command that performs the network write. Requires an active Power BI grant; re-derives the export payload server-side (never trusts a frontend-supplied snapshot — same principle `organizer_execute` applies to Organizer plans) and pushes to a dataset named `GhostOperations` in the signed-in user's own Power BI workspace, creating it on first use. |
+| `fabric_grant_status` | experimental | ✓ | – | – | – | ✓ | – | low | Reads local Fabric grant metadata only. |
+| `fabric_request_grant` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Incremental OAuth consent for `api.fabric.microsoft.com/.default`. Requires Microsoft sign-in first. |
+| `fabric_revoke_grant` | experimental | ✓ | – | – | – | ✓ | – | low | Local Fabric grant revoke only. |
+| `fabric_list_workspaces` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists Fabric workspaces; requires active Fabric grant. |
+| `fabric_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview (same row shapes as Power BI). No network. |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 
