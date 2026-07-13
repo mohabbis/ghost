@@ -95,21 +95,29 @@ jobs:
             echo "macOS signing: ADHOC (no Developer ID cert — preview build)"
           fi
 
+      - name: Build GhostAXHelper sidecar
+        run: |
+          chmod +x scripts/build-ghost-ax-helper.sh
+          bash scripts/build-ghost-ax-helper.sh
+          test -f src-tauri/bin/ghost-ax-helper-aarch64-apple-darwin
+          test -f src-tauri/bin/ghost-ax-helper-x86_64-apple-darwin
+
       - name: Build universal macOS DMG
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p dist
+          BUNDLE_CFG='{"externalBin":["bin/ghost-ax-helper"]}'
           # `app` is required for updater .app.tar.gz/.sig. `--bundles dmg` alone
           # is not an updater-enabled target — Tauri warns and skips signatures.
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "Updater signing key present -> producing signed updater artifacts"
-            cargo tauri build --target universal-apple-darwin --bundles app,dmg \
-              --config '{"bundle":{"createUpdaterArtifacts":true}}'
+            CFG=$(python3 -c 'import json; print(json.dumps({"bundle":{"createUpdaterArtifacts":true,"externalBin":["bin/ghost-ax-helper"]}}))')
+            cargo tauri build --target universal-apple-darwin --bundles app,dmg --config "$CFG"
           else
             echo "No updater signing key -> skipping updater artifacts"
-            cargo tauri build --target universal-apple-darwin --bundles app,dmg
+            cargo tauri build --target universal-apple-darwin --bundles app,dmg --config "$BUNDLE_CFG"
           fi
 
       - name: Stage macOS assets
@@ -362,6 +370,7 @@ jobs:
             echo "### Build integrity"
             echo "- macOS signing: **${MAC_MODE}** (notarization: **${NOTARY}**)"
             echo "- Windows signing: **${WIN_MODE}**"
+            echo "- GhostAXHelper: **bundled** in \`Ghost.app/Contents/MacOS/ghost-ax-helper\` (grant Accessibility to Ghost on first semantic demo)"
             echo "- Checksums: see \`SHA256SUMS.txt\` attached to this release"
             echo ""
             if [ ! -f dist/latest.json ]; then

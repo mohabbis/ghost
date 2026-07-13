@@ -82,19 +82,36 @@ pub struct ResolvedTarget {
 }
 
 #[cfg(target_os = "macos")]
-fn helper_path() -> Option<PathBuf> {
+fn helper_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
     if let Ok(path) = std::env::var("GHOST_AX_HELPER") {
-        let p = PathBuf::from(path);
-        if p.is_file() {
-            return Some(p);
+        out.push(PathBuf::from(path));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // Tauri externalBin sidecar: Ghost.app/Contents/MacOS/ghost-ax-helper
+            out.push(dir.join("ghost-ax-helper"));
+            if dir.ends_with("MacOS") {
+                if let Some(contents) = dir.parent() {
+                    out.push(contents.join("Resources").join("ghost-ax-helper"));
+                }
+            }
         }
     }
-    [
+    out.extend([
         PathBuf::from("native/macos/ghost-ax-helper"),
         PathBuf::from("../native/macos/ghost-ax-helper"),
-    ]
-    .into_iter()
-    .find(|c| c.is_file())
+        PathBuf::from("src-tauri/bin/ghost-ax-helper-aarch64-apple-darwin"),
+        PathBuf::from("src-tauri/bin/ghost-ax-helper-x86_64-apple-darwin"),
+        PathBuf::from("bin/ghost-ax-helper-aarch64-apple-darwin"),
+        PathBuf::from("bin/ghost-ax-helper-x86_64-apple-darwin"),
+    ]);
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn helper_path() -> Option<PathBuf> {
+    helper_candidates().into_iter().find(|c| c.is_file())
 }
 
 fn call_helper(req: &AxRequest) -> Result<AxResponse, SemanticError> {
@@ -110,7 +127,7 @@ fn call_helper(req: &AxRequest) -> Result<AxResponse, SemanticError> {
     {
         let path = helper_path().ok_or_else(|| {
             SemanticError::HelperUnavailable(
-                "GhostAXHelper binary not found (set GHOST_AX_HELPER)".into(),
+                "GhostAXHelper not found — rebuild on macOS or set GHOST_AX_HELPER".into(),
             )
         })?;
         let mut child = Command::new(&path)
@@ -281,6 +298,16 @@ mod tests {
     fn semantic_errors_display_usefully() {
         let err = SemanticError::Ambiguous(3);
         assert!(err.to_string().contains("ambiguous"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn helper_candidates_include_dev_and_bundle_paths() {
+        let candidates = helper_candidates();
+        assert!(candidates.iter().any(|p| p.ends_with("ghost-ax-helper")));
+        assert!(candidates
+            .iter()
+            .any(|p| p.ends_with("native/macos/ghost-ax-helper")));
     }
 
     #[test]

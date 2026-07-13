@@ -23,6 +23,11 @@ The marketing site download buttons resolve
    - Marketing site strings in `public/index.html` and `public/main.js`
    - `README.md` current-version line (if present)
 
+   macOS releases automatically compile **GhostAXHelper** via
+   `scripts/build-ghost-ax-helper.sh` and bundle it with
+   `--config '{"bundle":{"externalBin":["bin/ghost-ax-helper"]}}'` before
+   `cargo tauri build` (keeps Linux/Windows CI free of macOS-only sidecars).
+
 3. Tag and push (semver):
 
        git tag v1.2.7

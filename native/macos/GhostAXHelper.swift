@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 // GhostAXHelper — macOS Accessibility semantic automation helper (Ghost 2.0).
-// Build: swiftc -o ghost-ax-helper native/macos/GhostAXHelper.swift
+// Build: make ax-helper  (or bash scripts/build-ghost-ax-helper.sh)
+// Bundled via Tauri externalBin as Ghost.app/Contents/MacOS/ghost-ax-helper
 // Protocol: one JSON object per line on stdin → one JSON object per line on stdout.
 
 import Foundation
