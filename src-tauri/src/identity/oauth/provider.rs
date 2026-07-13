@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn client_id_prefers_config_over_env() {
-        std::env::set_var("GHOST_MS_CLIENT_ID", "env-id");
+        let _env = crate::test_support::EnvVarGuard::set("GHOST_MS_CLIENT_ID", "env-id");
         let config = crate::config::IntegrationSettings {
             microsoft_client_id: Some("configured-id".to_string()),
             google_client_id: None,
@@ -129,23 +129,21 @@ mod tests {
             OAuthProvider::Microsoft.client_id(&config).unwrap(),
             "configured-id"
         );
-        std::env::remove_var("GHOST_MS_CLIENT_ID");
     }
 
     #[test]
     fn client_id_falls_back_to_env_var() {
-        std::env::set_var("GHOST_GOOGLE_CLIENT_ID", "env-google-id");
+        let _env = crate::test_support::EnvVarGuard::set("GHOST_GOOGLE_CLIENT_ID", "env-google-id");
         let config = crate::config::IntegrationSettings::default();
         assert_eq!(
             OAuthProvider::Google.client_id(&config).unwrap(),
             "env-google-id"
         );
-        std::env::remove_var("GHOST_GOOGLE_CLIENT_ID");
     }
 
     #[test]
     fn client_id_errors_when_unconfigured() {
-        std::env::remove_var("GHOST_MS_CLIENT_ID");
+        let _env = crate::test_support::EnvVarGuard::remove("GHOST_MS_CLIENT_ID");
         let config = crate::config::IntegrationSettings::default();
         let err = OAuthProvider::Microsoft.client_id(&config).unwrap_err();
         assert!(err.contains("Microsoft"));

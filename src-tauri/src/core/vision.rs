@@ -3,6 +3,7 @@
 
 use image::{DynamicImage, GenericImageView};
 use std::path::Path;
+use std::sync::OnceLock;
 
 /// Default display bounds (width, height) used when the real primary-display
 /// size can't be queried — e.g. headless / CI with no display server.
@@ -14,15 +15,22 @@ pub const DEFAULT_DISPLAY_BOUNDS: (i32, i32) = (1920, 1080);
 /// bounded by hardcoded constants (1600×1080 / 1000×1000), which missed
 /// elements on larger displays. This queries the real display via `enigo` and
 /// falls back to [`DEFAULT_DISPLAY_BOUNDS`] when no display is available.
+///
+/// Cached process-wide: `enigo` display queries are not safe to hammer from
+/// parallel unit tests (observed heap corruption on Linux CI when OCR tests
+/// called this concurrently).
 pub fn display_bounds() -> (i32, i32) {
-    use enigo::{Enigo, Mouse, Settings};
-    match Enigo::new(&Settings::default()) {
-        Ok(enigo) => match enigo.main_display() {
-            Ok((w, h)) if w > 0 && h > 0 => (w, h),
-            _ => DEFAULT_DISPLAY_BOUNDS,
-        },
-        Err(_) => DEFAULT_DISPLAY_BOUNDS,
-    }
+    static CACHE: OnceLock<(i32, i32)> = OnceLock::new();
+    *CACHE.get_or_init(|| {
+        use enigo::{Enigo, Mouse, Settings};
+        match Enigo::new(&Settings::default()) {
+            Ok(enigo) => match enigo.main_display() {
+                Ok((w, h)) if w > 0 && h > 0 => (w, h),
+                _ => DEFAULT_DISPLAY_BOUNDS,
+            },
+            Err(_) => DEFAULT_DISPLAY_BOUNDS,
+        }
+    })
 }
 
 /// Calculate SSIM (Structural Similarity Index) between two images
