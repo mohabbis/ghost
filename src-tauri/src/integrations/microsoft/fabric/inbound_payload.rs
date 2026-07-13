@@ -163,6 +163,7 @@ mod tests {
             "docs/samples/fabric-eventstream/ghost-native.json",
             "docs/samples/fabric-eventstream/cloudevents-pipeline-done.json",
             "docs/samples/fabric-eventstream/fabric-item-event.json",
+            "docs/samples/fabric-eventstream/eventstream-row-bridge.json",
         ];
         for rel in samples {
             let path = root.join(rel);

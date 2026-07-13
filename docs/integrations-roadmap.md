@@ -62,8 +62,8 @@ Every integration below is additive to that pipeline, never a bypass of it.
   `mcp_relay_server` bin): outbound HTTPS wide-area routing — `docs/mcp-relay.md`.
   **Fabric Eventstream bridges**: `docs/fabric-eventstream-webhook.md` + samples.
 - **Organizer TOCTOU + boundary hardening** (`organizer/file_identity.rs`,
-  `policy/boundary.rs`, `executor.rs`): scan-time dev/ino (or Windows file index)
-  re-checked at execution; canonical path zone-boundary re-check after
+  `policy/boundary.rs`, `executor.rs`): scan-time dev/ino (or Windows NTFS
+  timestamps) re-checked at execution; canonical path zone-boundary re-check after
   `canonicalize`; symlink sources refused.
 - **Local intelligence providers** (`intelligence/local/`, experimental):
   Ollama, LM Studio, and OpenAI-compatible localhost adapters;

@@ -33,7 +33,7 @@ resulting risk classes in `docs/command-registry.md`.
    parent folder must already exist from an explicit, policy-checked
    `CreateFolder` action; the move/rename step never creates missing parent
    folders implicitly because that would be an unaudited mutation. Move/rename
-   also re-checks **file identity** (dev/ino on Unix, file index on Windows) when
+   also re-checks **file identity** (dev/ino on Unix, NTFS timestamps on Windows) when
    the plan captured a scan-time identity, refusing a TOCTOU inode swap. Finally,
    `policy::verify_relocate_at_execution` canonicalizes `from`/`to` and re-runs
    policy so symlink or path-escape tricks cannot bypass Zone boundaries at
