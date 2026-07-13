@@ -656,6 +656,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn case_variant_files_get_distinct_targets_on_case_sensitive_fs() {
         let tmp = tempdir();
         tmp.file("report.pdf", b"lower");

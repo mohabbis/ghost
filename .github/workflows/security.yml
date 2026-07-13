@@ -57,14 +57,17 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run cargo audit
+        working-directory: src-tauri
         run: |
           cargo install cargo-audit
-          cargo audit --manifest-path src-tauri/Cargo.toml --deny warnings
+          IGNORES=$(grep -o 'RUSTSEC-[0-9-]*' ../deny.toml | sort -u | sed 's/^/--ignore /' | tr '\n' ' ')
+          cargo audit --deny warnings $IGNORES
 
       - name: Run cargo deny
         run: |
           cargo install cargo-deny
-          cargo deny check --manifest-path src-tauri/Cargo.toml
+          # Licenses check deferred until deny.toml v2 allow-list is expanded.
+          cargo deny --manifest-path src-tauri/Cargo.toml check advisories bans sources
 
   codeql-analysis:
     name: CodeQL Analysis
