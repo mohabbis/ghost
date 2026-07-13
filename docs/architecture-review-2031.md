@@ -7,7 +7,8 @@
 **Revision history:**  
 1. First pass — trust pipeline + Action IR as missing layer.  
 2. Second pass — Ghost Kernel over a typed Resource Graph; verification-first.  
-3. **This pass** — Kernel and graph remain components. The stronger category is a **transaction system for human-computer work**.
+3. Third pass — Kernel and graph remain components. The stronger category is a **transaction system for human-computer work**.  
+4. **Fourth pass (specialist)** — Verifiable transaction authority under regulated financial-operations pressure. See [`financial-transaction-authority.md`](financial-transaction-authority.md). Does not change the product north star; it defines guarantee limits, consistency (not “ACID-like”), OutcomeKnowledge, reconciliation, evidence strength, adapter tiers, claims boundaries, and a cut line between current Ghost and bank-adjacent ambition.
 
 ---
 
@@ -17,7 +18,9 @@
 
 That is beyond an assistant, beyond automation, and beyond “kernel” as an implementation metaphor.
 
-Ghost is an **ACID-like trust layer for desktop actions**, adapted to a world where perfect atomicity is impossible — so it provides explicit consistency, isolation, durability, compensation, and evidence instead. Fifty years of desktop software omitted this layer. That omission is the opportunity.
+**Amendment (fourth pass):** Do **not** describe Ghost as “ACID-like.” Distributed desktop and SaaS work is not a database. Ghost’s defined consistency model is **GCM** (version-bound resources, evidence-classified outcomes, capability-scoped authorization, tamper-evident execution, reconciliation-aware recovery, attested outcomes with uncertainty disclosed) — fully specified in [`financial-transaction-authority.md`](financial-transaction-authority.md). Atomicity across unrelated systems is **not** promised; compensating atomicity, indeterminate outcomes, and reconciliation are.
+
+**Ambition vs implementation:** The north star is architecture. Current shipping Ghost (Organizer plan → policy → approve → execute → sealed audit / undo) is a *seed* of transaction semantics, not bank-grade G0–G6 guarantees. Visual/UI automation must never be equated with API-confirmed commits. Claims boundaries and the Current / Financial-services-ready / Long-term cut line live in the fourth-pass document.
 
 ```text
 Declare intent
@@ -635,7 +638,9 @@ Outlast fashion by owning **exact authorization, versioned reality, proof, compe
 
 1. `AGENTS.md` — near-term wedge and non-negotiables  
 2. This document — five-year category and architecture  
-3. [`trust-pipeline.md`](trust-pipeline.md) — reinterpret stages as transaction phases  
-4. [`core-boundaries.md`](core-boundaries.md) — stable vs experimental  
-5. [`next-generation-architecture.md`](next-generation-architecture.md) — MCP ambition as **protocol client**  
-6. [`full-repo-audit-2026-07-13.md`](full-repo-audit-2026-07-13.md) — as-built gaps  
+3. [`financial-transaction-authority.md`](financial-transaction-authority.md) — fourth-pass guarantee model, GCM, OutcomeKnowledge, reconciliation, SoD, evidence tiers, claims boundary, cut line  
+4. [`trust-pipeline.md`](trust-pipeline.md) — reinterpret stages as transaction phases  
+5. [`core-boundaries.md`](core-boundaries.md) — stable vs experimental  
+6. [`next-generation-architecture.md`](next-generation-architecture.md) — MCP ambition as **protocol client**  
+7. [`enterprise-financial-operations.md`](enterprise-financial-operations.md) — scaffolding limits (no IPC until playbooks + cut line)  
+8. [`full-repo-audit-2026-07-13.md`](full-repo-audit-2026-07-13.md) — as-built gaps  
