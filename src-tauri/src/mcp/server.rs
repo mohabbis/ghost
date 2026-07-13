@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 
 use super::handlers;
+use super::pairing::verify_pairing_code;
 
 /// Run the MCP server on stdin/stdout until EOF.
 pub fn run_stdio() {
@@ -41,11 +42,22 @@ fn handle_message(line: &str) -> Value {
     }
 
     let result = match method {
-        "initialize" => Ok(json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": { "tools": {} },
-            "serverInfo": { "name": "ghost", "version": env!("CARGO_PKG_VERSION") },
-        })),
+        "initialize" => {
+            let params = request.get("params").cloned().unwrap_or(json!({}));
+            let pairing_code = params
+                .pointer("/capabilities/ghost/pairing_code")
+                .or_else(|| params.get("pairing_code"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if !verify_pairing_code(pairing_code) {
+                return json_rpc_error(id, -32001, "MCP pairing code is required or invalid");
+            }
+            Ok(json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": { "tools": {} },
+                "serverInfo": { "name": "ghost", "version": env!("CARGO_PKG_VERSION") },
+            }))
+        }
         "tools/list" => Ok(json!({ "tools": handlers::list_tools() })),
         "tools/call" => {
             let params = request.get("params").cloned().unwrap_or(json!({}));

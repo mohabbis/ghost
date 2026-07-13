@@ -84,6 +84,15 @@ pub fn verify_execution_token(
     token_json: &str,
     zone_id: &str,
 ) -> Result<ApprovalTokenClaims, String> {
+    verify_execution_token_with_hash(token_json, zone_id, None)
+}
+
+/// Verify signature, expiry, zone binding, optional plan hash, and single-use nonce.
+pub fn verify_execution_token_with_hash(
+    token_json: &str,
+    zone_id: &str,
+    expected_plan_hash: Option<&str>,
+) -> Result<ApprovalTokenClaims, String> {
     let signed: SignedApprovalToken = serde_json::from_str(token_json)
         .map_err(|_| "Invalid approval token format".to_string())?;
     let expected = sign_claims(&signed.claims, &load_or_create_signing_key());
@@ -96,6 +105,12 @@ pub fn verify_execution_token(
     if !signed.claims.plan_id.contains(zone_id) {
         return Err("Approval token does not match the requested Zone".to_string());
     }
+    if let Some(expected_hash) = expected_plan_hash {
+        if signed.claims.plan_hash != expected_hash {
+            return Err("Plan has changed since approval — request a new token".to_string());
+        }
+    }
+    super::token_store::consume_nonce(&signed.claims.nonce)?;
     Ok(signed.claims)
 }
 

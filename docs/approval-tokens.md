@@ -1,6 +1,6 @@
 # Approval Tokens
 
-Status: **partially built** (claims shape + expiry helper; signing/verification **planned**)
+Status: **built** (signing, verification, plan-hash binding, single-use nonces)
 
 ## Purpose
 
@@ -21,21 +21,26 @@ pub struct ApprovalTokenClaims {
 
 Module: `src-tauri/src/mcp/approval.rs`
 
-## Execution verification — **planned**
+## Issuing tokens — **built**
 
-Before `execute_approved_plan`:
+`organizer_issue_mcp_approval_token` (stable) hashes the current server-side plan via `mcp/plan_hash.rs` and returns a signed JSON token (~5 minute TTL). The Organizer UI exposes **MCP token** after the user scans and reviews a plan.
 
-1. Plan exists and hash matches
-2. Token signature valid (local signing key)
+## Execution verification — **built**
+
+Before `ghost.execute_approved_plan`:
+
+1. Re-plan server-side and hash must match `claims.plan_hash`
+2. Token signature valid (local signing key at `data_dir/ghost/mcp-signing.key`)
 3. Token not expired
-4. Token not consumed (when single-use)
-5. Policy result unchanged
-6. Referenced resources still match
-7. No plan drift since approval
+4. Token nonce not already consumed (`mcp/token_store.rs`)
+5. Zone id matches `plan_id`
+6. Plan has no denied operations
+
+MCP execution calls `organizer/pipeline.rs::execute_zone` — the same path as `organizer_execute`.
 
 ## MCP integration
 
-See `docs/mcp-integration.md` — `ghost_execute_approved_plan` requires a valid token; clients cannot call `ghost_request_approval` and auto-accept.
+See `docs/mcp-integration.md` — `ghost.execute_approved_plan` requires a valid token; clients cannot approve plans themselves.
 
 ## Threat scenarios
 

@@ -5,10 +5,16 @@
 
 pub mod approval;
 pub mod errors;
+pub mod execute;
 pub mod handlers;
+pub mod pairing;
+pub mod plan_hash;
 pub mod server;
+pub mod token_store;
 pub mod tools;
 
 pub use approval::{issue_approval_token, ApprovalTokenClaims, SignedApprovalToken};
+pub use pairing::{disable_pairing, enable_pairing, pairing_is_required, pairing_status};
+pub use plan_hash::hash_organizer_plan;
 pub use server::run_stdio;
 pub use tools::McpToolKind;

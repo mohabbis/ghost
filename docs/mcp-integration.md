@@ -51,7 +51,9 @@ Phase 1 is a local stdio server launched by the installed app or CLI:
 ghost mcp serve
 ```
 
-Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan tools), `approval.rs` (signed execution tokens).
+Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan/execute/undo tools), `approval.rs` (signed tokens + plan hash), `pairing.rs` (optional initialize gate).
+
+Optional pairing: enable in Settings → MCP access; clients must pass `pairing_code` in `initialize` params (`capabilities.ghost.pairing_code` or top-level `pairing_code`).
 
 Example macOS client configuration:
 

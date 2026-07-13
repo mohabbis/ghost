@@ -108,6 +108,10 @@ macro_rules! run_with_commands {
                 commands::organizer_import_policy_pack,
                 commands::organizer_time_to_value,
                 commands::organizer_verify_audit_chain,
+                commands::organizer_issue_mcp_approval_token,
+                commands::mcp_pairing_status,
+                commands::mcp_enable_pairing,
+                commands::mcp_disable_pairing,
                 // Read-only, audience-aware filing preview + savings estimate.
                 // Name-only planning; no filesystem/network access.
                 commands::preview_file_filing,
@@ -159,6 +163,8 @@ macro_rules! run_experimental_app {
             commands::fabric_revoke_grant,
             commands::fabric_list_workspaces,
             commands::fabric_export_preview,
+            commands::fabric_list_lakehouses,
+            commands::fabric_push_audit_export,
             commands::get_audit_logs,
             commands::get_execution_history,
             commands::get_all_executions,

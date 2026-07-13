@@ -26,14 +26,14 @@
 //! deterministic backend against the same persisted rules.
 
 use crate::engine::GhostEngine;
-use crate::organizer::executor::{execute_plan_with_progress, ExecutionReport};
+use crate::organizer::executor::ExecutionReport;
+use crate::organizer::pipeline::{execute_zone, undo_zone_run};
 use crate::organizer::planner::{plan_zone, OrganizerPlan};
-use crate::organizer::undo::{revert, UndoReport};
+use crate::organizer::undo::UndoReport;
 use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use crate::storage::executions::{
-    begin_execution, find_unfinished_execution, finish_execution, get_execution, list_executions,
-    mark_execution_finished, prune_executions, update_execution_progress, verify_chain,
-    ChainVerification, ExecutionSummary,
+    find_unfinished_execution, get_execution, list_executions, mark_execution_finished,
+    verify_chain, ChainVerification, ExecutionSummary,
 };
 use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
 use crate::storage::open_default;
@@ -371,28 +371,10 @@ fn organizer_execute_with_conn(
     retention_keep_last: Option<usize>,
     retention_keep_days: Option<u64>,
 ) -> Result<ExecutionResult, String> {
-    let rules = list_folder_rules(conn, zone_id).map_err(|e| e.to_string())?;
-    let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
-
-    let execution_id = begin_execution(conn, zone_id).map_err(|e| e.to_string())?;
-    let report = execute_plan_with_progress(&plan, &rules, |partial| {
-        // Best-effort: the filesystem mutation already happened and was
-        // verified before this fires, so a failed durability write here is
-        // strictly less bad than a failed mutation would be. The next
-        // snapshot (or finish_execution) catches up regardless.
-        let _ = update_execution_progress(conn, &execution_id, partial);
-    });
-    finish_execution(conn, &execution_id, zone_id, &report).map_err(|e| e.to_string())?;
-    let _ = record_milestone(conn, Milestone::FirstRun);
-
-    // Enforce the user's retention policy, if any. Deleting the user's own audit
-    // history is opt-in (both bounds default to None = keep all); a prune failure
-    // must not fail an otherwise-successful run.
-    let _ = prune_executions(conn, retention_keep_last, retention_keep_days);
-
+    let outcome = execute_zone(conn, zone_id, retention_keep_last, retention_keep_days)?;
     Ok(ExecutionResult {
-        execution_id,
-        report,
+        execution_id: outcome.execution_id,
+        report: outcome.report,
     })
 }
 
@@ -462,17 +444,7 @@ pub fn organizer_undo(
 /// connection (see [`organizer_plan_with_conn`]) so the lookup -> revert ->
 /// milestone sequence, including the unknown-id error path, is testable.
 fn organizer_undo_with_conn(conn: &Db, execution_id: &str) -> Result<UndoReport, String> {
-    let stored = get_execution(conn, execution_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("no execution with id {execution_id}"))?;
-    let report = revert(&stored.undo);
-    let _ = record_milestone(conn, Milestone::FirstUndo);
-    // Undoing an interrupted run resolves it — it no longer needs recovery
-    // attention even though it was never sealed by finish_execution.
-    if !stored.finished {
-        let _ = mark_execution_finished(conn, execution_id);
-    }
-    Ok(report)
+    undo_zone_run(conn, execution_id)
 }
 
 /// Report the local, first-touch milestone timestamps used to measure

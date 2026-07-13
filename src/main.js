@@ -1306,10 +1306,16 @@ async function openSettings() {
   let intelStatus = { default_provider: "disabled", providers: [] };
   let powerBiStatus = { active: false };
   let fabricStatus = { active: false };
+  let mcpPairingStatus = { enabled: false };
   try {
     account = await invoke("account_status");
   } catch (error) {
     console.error("Failed to load account status:", error);
+  }
+  try {
+    mcpPairingStatus = await invoke("mcp_pairing_status");
+  } catch (error) {
+    console.error("Failed to load MCP pairing status:", error);
   }
   if (experimentalEnabled) {
     try {
@@ -1472,16 +1478,25 @@ async function openSettings() {
            <p class="panel__hint" id="power-bi-note" style="margin: 8px 0 12px;"></p>
 
            <h4 style="color: #0e8f78; margin: 12px 0 4px;">Microsoft Fabric</h4>
-           <p class="panel__hint" style="margin: 4px 0 8px;">List workspaces and preview audit exports for Fabric. Requires Microsoft sign-in, then a separate Fabric consent. Export push to Fabric destinations is not wired yet — preview only.</p>
+           <p class="panel__hint" style="margin: 4px 0 8px;">List workspaces, pick IDs below, preview, then push JSON export files into the lakehouse Files folder.</p>
            ${
              fabricStatus.active
                ? `<p class="panel__hint" style="margin: 4px 0 8px;">Fabric connected${fabricStatus.granted_at ? ` (granted ${escapeAttr(new Date(fabricStatus.granted_at).toLocaleDateString())})` : ""}.</p>
+                  <label>Workspace ID
+                    <input id="fabric-workspace-id" type="text" placeholder="from List workspaces" style="${fieldStyle}">
+                  </label>
+                  <label>Lakehouse ID
+                    <input id="fabric-lakehouse-id" type="text" placeholder="from List lakehouses" style="${fieldStyle}">
+                  </label>
                   <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-list-workspaces>List workspaces</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-list-lakehouses>List lakehouses</button>
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-preview>Preview export</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-push disabled>Push to lakehouse</button>
                     <button class="btn btn--ghost btn--small" type="button" data-fabric-revoke>Disconnect</button>
                   </div>
                   <pre id="fabric-workspaces" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+                  <pre id="fabric-lakehouses" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
                   <pre id="fabric-preview" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>`
                : `<button class="btn btn--ghost btn--small" type="button" data-fabric-connect ${account.signed_in ? "" : "disabled"}>Connect Fabric</button>
                   ${!account.signed_in ? '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Microsoft above first.</p>' : ""}`
@@ -1489,6 +1504,16 @@ async function openSettings() {
            <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>`
         : ""
     }
+
+    <h4 style="color: #0e8f78; margin: 12px 0 4px;">MCP access</h4>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> and can scan Zones or execute a plan you approved in Organizer. Issue an MCP token after reviewing a plan, or enable pairing so only clients with your code can connect.</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Pairing: ${mcpPairingStatus.enabled ? `enabled (${escapeAttr(mcpPairingStatus.code_hint || "active")})` : "disabled — any local client can connect"}</p>
+    <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+      <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>Enable pairing code</button>
+      <button class="btn btn--ghost btn--small" type="button" data-mcp-disable-pairing ${mcpPairingStatus.enabled ? "" : "disabled"}>Disable pairing</button>
+    </div>
+    <pre id="mcp-pairing-code" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+    <p class="panel__hint" id="mcp-pairing-note" style="margin: 8px 0 12px;"></p>
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1746,6 +1771,7 @@ async function discoverLocalRuntimes() {
 // Power BI consent. Always preview before pushing — the push button only
 // enables after a preview has been shown for the current session.
 let powerBiPreviewShown = false;
+let fabricPreviewShown = false;
 
 async function connectPowerBi() {
   if (!invoke) return notAvailable();
@@ -1843,6 +1869,10 @@ async function listFabricWorkspaces() {
         ? workspaces.map((w) => `${w.display_name} (${w.id})`).join("\n")
         : "No workspaces returned.";
     }
+    if (workspaces[0]?.id) {
+      const wsInput = document.getElementById("fabric-workspace-id");
+      if (wsInput && !wsInput.value.trim()) wsInput.value = workspaces[0].id;
+    }
     if (note) note.textContent = "";
   } catch (error) {
     if (note) note.textContent = `Workspace list failed: ${formatInvokeError(error)}`;
@@ -1861,10 +1891,66 @@ async function previewFabricExport() {
       pre.style.display = "block";
       pre.textContent = `${payload.runs.length} run(s), ${payload.actions.length} action(s), ${payload.policy_events.length} policy event(s) would be exported.`;
     }
+    fabricPreviewShown = true;
+    const pushBtn = document.querySelector("[data-fabric-push]");
+    if (pushBtn) pushBtn.disabled = false;
     if (note) note.textContent = "";
   } catch (error) {
     if (note) note.textContent = `Preview failed: ${formatInvokeError(error)}`;
     else toastError(`Fabric preview failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function listFabricLakehouses() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const workspaceId = document.getElementById("fabric-workspace-id")?.value?.trim();
+  if (!workspaceId) return toastError("Enter a workspace ID first (use List workspaces).");
+  const note = document.getElementById("fabric-note");
+  const pre = document.getElementById("fabric-lakehouses");
+  try {
+    const lakehouses = await invoke("fabric_list_lakehouses", { workspaceId });
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = lakehouses.length
+        ? lakehouses.map((lh) => `${lh.display_name} (${lh.id})`).join("\n")
+        : "No lakehouses returned for this workspace.";
+    }
+    if (lakehouses[0]?.id) {
+      const lhInput = document.getElementById("fabric-lakehouse-id");
+      if (lhInput && !lhInput.value.trim()) lhInput.value = lakehouses[0].id;
+    }
+    if (note) note.textContent = "";
+  } catch (error) {
+    if (note) note.textContent = `Lakehouse list failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric lakehouse list failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function pushFabricExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  if (!fabricPreviewShown) return;
+  const workspaceId = document.getElementById("fabric-workspace-id")?.value?.trim();
+  const lakehouseId = document.getElementById("fabric-lakehouse-id")?.value?.trim();
+  if (!workspaceId || !lakehouseId) {
+    return toastError("Workspace ID and lakehouse ID are required.");
+  }
+  const note = document.getElementById("fabric-note");
+  if (note) note.textContent = "Pushing to Fabric lakehouse…";
+  try {
+    const result = await invoke("fabric_push_audit_export", {
+      workspaceId,
+      lakehouseId,
+      sinceDays: null,
+    });
+    if (note) {
+      note.textContent = `Pushed ${result.runs_pushed} run(s) to ${result.export_prefix}.`;
+    }
+    showNotification("Pushed to Fabric lakehouse.");
+  } catch (error) {
+    if (note) note.textContent = `Push failed: ${formatInvokeError(error)}`;
+    else toastError(`Fabric push failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -1873,10 +1959,39 @@ async function revokeFabricGrant() {
   if (!experimentalEnabled) return;
   try {
     await invoke("fabric_revoke_grant");
+    fabricPreviewShown = false;
     showNotification("Fabric disconnected.");
     openSettings();
   } catch (error) {
     toastError(`Fabric disconnect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function enableMcpPairing() {
+  if (!invoke) return notAvailable();
+  const note = document.getElementById("mcp-pairing-note");
+  const pre = document.getElementById("mcp-pairing-code");
+  try {
+    const result = await invoke("mcp_enable_pairing");
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = `Pairing code (copy into your MCP client initialize params):\n${result.code}`;
+    }
+    if (note) note.textContent = "Pairing enabled. Clients must send this code on initialize.";
+    showNotification("MCP pairing enabled.");
+  } catch (error) {
+    toastError(`Could not enable MCP pairing: ${formatInvokeError(error)}`);
+  }
+}
+
+async function disableMcpPairing() {
+  if (!invoke) return notAvailable();
+  try {
+    await invoke("mcp_disable_pairing");
+    showNotification("MCP pairing disabled.");
+    openSettings();
+  } catch (error) {
+    toastError(`Could not disable MCP pairing: ${formatInvokeError(error)}`);
   }
 }
 
@@ -2581,10 +2696,12 @@ function organizerUpdateButtons(rules) {
   const scanBtn = document.getElementById("organizerScanBtn");
   const runBtn = document.getElementById("organizerRunBtn");
   const aiBtn = document.getElementById("organizerAiSuggestBtn");
+  const mcpBtn = document.getElementById("organizerMcpTokenBtn");
   const hasFolders = Array.isArray(rules) && rules.length > 0;
   if (scanBtn) scanBtn.disabled = !organizerSelectedZone() || !hasFolders;
   if (runBtn) runBtn.disabled = !organizerHasReviewedPlan;
   if (aiBtn) aiBtn.disabled = !organizerSelectedZone() || !hasFolders;
+  if (mcpBtn) mcpBtn.disabled = !organizerHasReviewedPlan;
 }
 
 async function organizerCreateZone() {
@@ -3059,6 +3176,27 @@ async function organizerAiSuggest() {
       btn.textContent = prevLabel || "AI suggestions";
       organizerUpdateButtons(await safeRules(zone.id));
     }
+  }
+}
+
+async function organizerIssueMcpToken() {
+  if (!invoke) return notAvailable();
+  const zone = organizerSelectedZone();
+  if (!zone) return toastError("Create a Zone first.");
+  if (!organizerHasReviewedPlan) {
+    return toastError("Scan and review a plan first — the token binds to the current server-side plan.");
+  }
+  try {
+    const token = await invoke("organizer_issue_mcp_approval_token", { zoneId: zone.id });
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(token);
+      showNotification("MCP approval token copied (valid ~5 minutes, single use).");
+    } else {
+      showInsight("MCP approval token issued — copy from the console.");
+      console.info("MCP approval token:", token);
+    }
+  } catch (err) {
+    toastError("Could not issue MCP token: " + formatInvokeError(err));
   }
 }
 
@@ -3764,6 +3902,7 @@ function wireUpControls() {
   bind("organizerAddFolderBtn", organizerAddFolder);
   bind("organizerScanBtn", organizerScan);
   bind("organizerAiSuggestBtn", organizerAiSuggest);
+  bind("organizerMcpTokenBtn", organizerIssueMcpToken);
   bind("organizerRunBtn", organizerRun);
   bind("organizerHistoryBtn", organizerShowHistory);
   const zoneSelect = document.getElementById("organizerZoneSelect");
@@ -3882,8 +4021,25 @@ function wireUpControls() {
       previewFabricExport();
       return;
     }
+    if (e.target.closest("[data-fabric-push]")) {
+      pushFabricExport();
+      return;
+    }
+    if (e.target.closest("[data-fabric-list-lakehouses]")) {
+      listFabricLakehouses();
+      return;
+    }
     if (e.target.closest("[data-fabric-revoke]")) {
       revokeFabricGrant();
+      return;
+    }
+    if (e.target.closest("[data-mcp-enable-pairing]")) {
+      enableMcpPairing();
+      return;
+    }
+    if (e.target.closest("[data-mcp-disable-pairing]")) {
+      disableMcpPairing();
+      return;
     }
   });
 }
