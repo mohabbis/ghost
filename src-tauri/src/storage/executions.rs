@@ -613,6 +613,76 @@ pub fn list_executions(db: &Db) -> anyhow::Result<Vec<ExecutionSummary>> {
     Ok(out)
 }
 
+/// True if `created_at` (epoch-seconds text) is at or after `since_epoch_secs`.
+/// A malformed timestamp is treated as "not in range" rather than erroring —
+/// callers are building a best-effort export window, not validating storage.
+fn created_at_since(created_at: &str, since_epoch_secs: u64) -> bool {
+    created_at
+        .parse::<u64>()
+        .is_ok_and(|ts| ts >= since_epoch_secs)
+}
+
+/// List execution summaries created at or after `since_epoch_secs`, newest
+/// first — same shape and iterate-then-sort style as [`list_executions`],
+/// just with a `created_at` filter applied before sorting.
+pub fn list_executions_since(
+    db: &Db,
+    since_epoch_secs: u64,
+) -> anyhow::Result<Vec<ExecutionSummary>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(EXECUTIONS)?;
+    let mut out = Vec::new();
+    for entry in table.iter()? {
+        let (_k, v) = entry?;
+        let row: ExecutionRow = serde_json::from_slice(v.value())?;
+        if !created_at_since(&row.created_at, since_epoch_secs) {
+            continue;
+        }
+        out.push(ExecutionSummary {
+            id: row.id,
+            zone_id: row.zone_id,
+            created_at: row.created_at,
+            applied: row.applied,
+            skipped: row.skipped,
+            failed: row.failed,
+            sealed: !row.hash.is_empty(),
+            finished: row.finished,
+        });
+    }
+    out.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    Ok(out)
+}
+
+/// Like [`list_executions_since`] but loads full rows (audit log + undo
+/// journal included), for callers that need the actual per-action history —
+/// e.g. building an export payload — rather than just summary counts.
+pub fn list_full_executions_since(
+    db: &Db,
+    since_epoch_secs: u64,
+) -> anyhow::Result<Vec<StoredExecution>> {
+    let read_txn = db.db.begin_read()?;
+    let table = read_txn.open_table(EXECUTIONS)?;
+    let mut out = Vec::new();
+    for entry in table.iter()? {
+        let (_k, v) = entry?;
+        let row: ExecutionRow = serde_json::from_slice(v.value())?;
+        if !created_at_since(&row.created_at, since_epoch_secs) {
+            continue;
+        }
+        out.push(stored_from_row(row)?);
+    }
+    out.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    Ok(out)
+}
+
 /// Load a single past execution with its audit log and undo journal.
 pub fn get_execution(db: &Db, id: &str) -> anyhow::Result<Option<StoredExecution>> {
     let read_txn = db.db.begin_read()?;
@@ -1033,6 +1103,67 @@ mod tests {
         let deleted = prune_executions(&db, None, None).unwrap();
         assert_eq!(deleted, 0);
         assert_eq!(list_executions(&db).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn list_executions_since_excludes_older_runs() {
+        let db = open_in_memory().unwrap();
+        let old_ts = (SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 100 * 86_400)
+            .to_string();
+        insert_raw(
+            &db,
+            ExecutionRow {
+                id: "old".to_string(),
+                zone_id: "z".to_string(),
+                created_at: old_ts,
+                applied: 0,
+                skipped: 0,
+                failed: 0,
+                audit_json: "[]".to_string(),
+                undo_json: "[]".to_string(),
+                hash: String::new(),
+                prev_hash: String::new(),
+                finished: true,
+            },
+        );
+
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![full_rule(tmp.path())];
+        let report = execute_plan(&plan_with_rules("z", &rules), &rules);
+        let fresh = save_execution(&db, "z", &report).unwrap();
+
+        let cutoff = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 30 * 86_400;
+        let recent = list_executions_since(&db, cutoff).unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].id, fresh);
+    }
+
+    #[test]
+    fn list_full_executions_since_includes_audit_and_undo() {
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        tmp.file("song.mp3", b"b");
+        let rules = vec![full_rule(tmp.path())];
+        let report = execute_plan(&plan_with_rules("z", &rules), &rules);
+
+        let db = open_in_memory().unwrap();
+        let id = save_execution(&db, "z", &report).unwrap();
+
+        let since = 0u64;
+        let full = list_full_executions_since(&db, since).unwrap();
+        assert_eq!(full.len(), 1);
+        assert_eq!(full[0].id, id);
+        assert_eq!(full[0].audit, report.audit);
+        assert_eq!(full[0].undo, report.undo);
     }
 
     /// Pre-V5 rows have no seal; they are counted as unsealed, and the sealed

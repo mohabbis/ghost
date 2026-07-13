@@ -38,8 +38,35 @@ pub struct SignInResult {
     pub scopes: Vec<&'static str>,
 }
 
-/// Run the full interactive sign-in flow. Blocks up to `CALLBACK_TIMEOUT`.
-pub fn run_sign_in_flow(provider: OAuthProvider, client_id: &str) -> anyhow::Result<SignInResult> {
+/// Result of an incremental-consent grant flow: tokens only — the caller
+/// already has an `AccountIdentity` from a prior sign-in, so there's no
+/// profile to (re)fetch.
+pub struct GrantResult {
+    pub tokens: TokenMaterial,
+}
+
+/// Tokens from a completed PKCE + loopback authorization, plus the HTTP
+/// client used to obtain them (reused by callers that need a follow-up
+/// request, e.g. the userinfo fetch during sign-in).
+struct AuthorizedTokens {
+    http: reqwest::blocking::Client,
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Shared core of every OAuth flow Ghost runs: bind a loopback listener, open
+/// the system browser to `provider`'s consent screen for `scope`, wait for
+/// the redirect, and exchange the code for tokens. Blocks up to
+/// `CALLBACK_TIMEOUT`. Used by both sign-in (base identity scopes) and
+/// integration-grant requests (e.g. Power BI's scope) — the two differ only
+/// in which scope string they request and what they do with the resulting
+/// access token afterward.
+fn authorize_and_exchange(
+    provider: OAuthProvider,
+    client_id: &str,
+    scope: &str,
+) -> anyhow::Result<AuthorizedTokens> {
     let listener = TcpListener::bind((REDIRECT_HOST, 0))?;
     let port = listener.local_addr()?.port();
     let redirect_uri = format!("http://{REDIRECT_HOST}:{port}/callback");
@@ -53,7 +80,7 @@ pub fn run_sign_in_flow(provider: OAuthProvider, client_id: &str) -> anyhow::Res
         provider.authorize_endpoint(),
         urlencoding_encode(&client_id_owned),
         urlencoding_encode(&redirect_uri),
-        urlencoding_encode(provider.identity_scopes()),
+        urlencoding_encode(scope),
         urlencoding_encode(&state),
         urlencoding_encode(&challenge),
     );
@@ -88,9 +115,22 @@ pub fn run_sign_in_flow(provider: OAuthProvider, client_id: &str) -> anyhow::Res
         .expires_in
         .map(|secs| chrono::Utc::now() + chrono::Duration::seconds(secs as i64));
 
-    let profile_res = http
+    Ok(AuthorizedTokens {
+        http,
+        access_token: token_res.access_token,
+        refresh_token: token_res.refresh_token,
+        expires_at,
+    })
+}
+
+/// Run the full interactive sign-in flow. Blocks up to `CALLBACK_TIMEOUT`.
+pub fn run_sign_in_flow(provider: OAuthProvider, client_id: &str) -> anyhow::Result<SignInResult> {
+    let authorized = authorize_and_exchange(provider, client_id, provider.identity_scopes())?;
+
+    let profile_res = authorized
+        .http
         .get(provider.userinfo_endpoint())
-        .bearer_auth(&token_res.access_token)
+        .bearer_auth(&authorized.access_token)
         .send()?
         .error_for_status()?;
 
@@ -133,10 +173,29 @@ pub fn run_sign_in_flow(provider: OAuthProvider, client_id: &str) -> anyhow::Res
             linked_at,
         },
         tokens: TokenMaterial {
-            access_token: token_res.access_token,
-            refresh_token: token_res.refresh_token,
-            expires_at,
+            access_token: authorized.access_token,
+            refresh_token: authorized.refresh_token,
+            expires_at: authorized.expires_at,
         },
         scopes: provider.identity_scope_list(),
+    })
+}
+
+/// Run the PKCE + loopback consent flow for an additional scope (e.g. Power
+/// BI), reusing the same browser/listener/token-exchange plumbing as sign-in.
+/// Does not touch `AccountIdentity` or fetch a profile — the caller already
+/// has an identity from a prior `run_sign_in_flow` call.
+pub fn run_grant_flow(
+    provider: OAuthProvider,
+    client_id: &str,
+    scope: &str,
+) -> anyhow::Result<GrantResult> {
+    let authorized = authorize_and_exchange(provider, client_id, scope)?;
+    Ok(GrantResult {
+        tokens: TokenMaterial {
+            access_token: authorized.access_token,
+            refresh_token: authorized.refresh_token,
+            expires_at: authorized.expires_at,
+        },
     })
 }

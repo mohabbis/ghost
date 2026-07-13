@@ -1260,15 +1260,23 @@ async function openSettings() {
 
   let account = { signed_in: false };
   let intelStatus = { default_provider: "disabled", providers: [] };
+  let powerBiStatus = { active: false };
   try {
     account = await invoke("account_status");
   } catch (error) {
     console.error("Failed to load account status:", error);
   }
-  try {
-    intelStatus = await invoke("intelligence_provider_status");
-  } catch (error) {
-    console.error("Failed to load intelligence provider status:", error);
+  if (experimentalEnabled) {
+    try {
+      intelStatus = await invoke("intelligence_provider_status");
+    } catch (error) {
+      console.error("Failed to load intelligence provider status:", error);
+    }
+    try {
+      powerBiStatus = await invoke("power_bi_grant_status");
+    } catch (error) {
+      console.error("Failed to load Power BI grant status:", error);
+    }
   }
 
   const modal = document.getElementById("settings-modal");
@@ -1320,35 +1328,59 @@ async function openSettings() {
     }
     <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;"></p>
 
-    <h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
-    <label>Default intelligence provider
-      <select id="cfg-intel-default" style="${fieldStyle}">
-        ${intelProviders
-          .map(
-            (p) =>
-              `<option value="${p}" ${p === (intelligence.default_provider || "disabled") ? "selected" : ""}>${p}</option>`,
-          )
-          .join("")}
-      </select>
-    </label>
-    <label>OpenAI model
-      <input id="cfg-intel-openai-model" type="text" value="${escapeAttr(intelligence.openai?.model ?? "gpt-4o-mini")}" style="${fieldStyle}">
-    </label>
-    <p class="panel__hint" style="margin: 0 0 4px;">OpenAI · ${escapeAttr(intelStatusLine("openai"))}</p>
-    <label>OpenAI API key (stored encrypted locally; leave blank to keep current)
-      <input id="cfg-intel-openai-key" type="password" autocomplete="off" placeholder="sk-…" style="${fieldStyle}">
-    </label>
-    <button class="btn btn--ghost btn--small" type="button" data-intel-test="openai">Test OpenAI connection</button>
-    <label style="margin-top: 12px;">Anthropic model
-      <input id="cfg-intel-anthropic-model" type="text" value="${escapeAttr(intelligence.anthropic?.model ?? "claude-sonnet-4-20250514")}" style="${fieldStyle}">
-    </label>
-    <p class="panel__hint" style="margin: 0 0 4px;">Anthropic · ${escapeAttr(intelStatusLine("anthropic"))}</p>
-    <label>Anthropic API key (stored encrypted locally; leave blank to keep current)
-      <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
-    </label>
-    <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
-    <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>
+    ${
+      experimentalEnabled
+        ? `<h4 style="color: #8d7bff; margin: 12px 0 4px;">AI Providers (Organizer planning)</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Suggestion-only — models propose categories and rules; Ghost plans, you approve, deterministic code executes. Only zone-relative file metadata is sent by default.</p>
+           <label>Default intelligence provider
+             <select id="cfg-intel-default" style="${fieldStyle}">
+               ${intelProviders
+                 .map(
+                   (p) =>
+                     `<option value="${p}" ${p === (intelligence.default_provider || "disabled") ? "selected" : ""}>${p}</option>`,
+                 )
+                 .join("")}
+             </select>
+           </label>
+           <label>OpenAI model
+             <input id="cfg-intel-openai-model" type="text" value="${escapeAttr(intelligence.openai?.model ?? "gpt-4o-mini")}" style="${fieldStyle}">
+           </label>
+           <p class="panel__hint" style="margin: 0 0 4px;">OpenAI · ${escapeAttr(intelStatusLine("openai"))}</p>
+           <label>OpenAI API key (stored encrypted locally; leave blank to keep current)
+             <input id="cfg-intel-openai-key" type="password" autocomplete="off" placeholder="sk-…" style="${fieldStyle}">
+           </label>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-test="openai">Test OpenAI connection</button>
+           <label style="margin-top: 12px;">Anthropic model
+             <input id="cfg-intel-anthropic-model" type="text" value="${escapeAttr(intelligence.anthropic?.model ?? "claude-sonnet-4-20250514")}" style="${fieldStyle}">
+           </label>
+           <p class="panel__hint" style="margin: 0 0 4px;">Anthropic · ${escapeAttr(intelStatusLine("anthropic"))}</p>
+           <label>Anthropic API key (stored encrypted locally; leave blank to keep current)
+             <input id="cfg-intel-anthropic-key" type="password" autocomplete="off" placeholder="sk-ant-…" style="${fieldStyle}">
+           </label>
+           <button class="btn btn--ghost btn--small" type="button" data-intel-test="anthropic">Test Anthropic connection</button>
+           <p class="panel__hint" id="intel-test-note" style="margin: 8px 0 12px;"></p>`
+        : ""
+    }
+
+    ${
+      experimentalEnabled
+        ? `<h4 style="color: #8d7bff; margin: 12px 0 4px;">Power BI Export</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Exports a summary of Organizer run history to a push dataset in your own Power BI "My workspace." Requires Microsoft sign-in first, then a separate, revocable Power BI consent. Always preview before pushing.</p>
+           ${
+             powerBiStatus.active
+               ? `<p class="panel__hint" style="margin: 4px 0 8px;">Power BI connected${powerBiStatus.granted_at ? ` (granted ${escapeAttr(new Date(powerBiStatus.granted_at).toLocaleDateString())})` : ""}.</p>
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <button class="btn btn--ghost btn--small" type="button" data-power-bi-preview>Preview export</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-power-bi-push disabled>Push to Power BI</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-power-bi-revoke>Disconnect</button>
+                  </div>
+                  <pre id="power-bi-preview" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>`
+               : `<button class="btn btn--ghost btn--small" type="button" data-power-bi-connect ${account.signed_in ? "" : "disabled"}>Connect Power BI</button>
+                  ${!account.signed_in ? '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Microsoft above first.</p>' : ""}`
+           }
+           <p class="panel__hint" id="power-bi-note" style="margin: 8px 0 12px;"></p>`
+        : ""
+    }
 
     <h4 style="color: #8d7bff; margin: 12px 0 4px;">Replay</h4>
     <label>Default speed (0.1–10)
@@ -1496,11 +1528,13 @@ async function saveSettings() {
   if (saveBtn) saveBtn.disabled = true;
 
   try {
-    if (openaiKey) {
-      await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
-    }
-    if (anthropicKey) {
-      await invoke("intelligence_set_api_key", { provider: "anthropic", apiKey: anthropicKey });
+    if (experimentalEnabled) {
+      if (openaiKey) {
+        await invoke("intelligence_set_api_key", { provider: "openai", apiKey: openaiKey });
+      }
+      if (anthropicKey) {
+        await invoke("intelligence_set_api_key", { provider: "anthropic", apiKey: anthropicKey });
+      }
     }
     await invoke("update_config", { config: settingsConfig });
     // Reflect the new default speed in the picker and live state.
@@ -1534,6 +1568,7 @@ async function signOutAccount() {
 
 async function testIntelligenceProvider(provider) {
   if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
   const note = document.getElementById("intel-test-note");
   if (note) note.textContent = `Testing ${provider}…`;
   try {
@@ -1549,6 +1584,79 @@ async function testIntelligenceProvider(provider) {
   } catch (error) {
     if (note) note.textContent = `${provider} test failed.`;
     toastError(formatInvokeError(error));
+  }
+}
+
+// --- Power BI audit export (grant flow + preview + push) --------------------
+// Experimental. Requires Microsoft sign-in first, then a separate, revocable
+// Power BI consent. Always preview before pushing — the push button only
+// enables after a preview has been shown for the current session.
+let powerBiPreviewShown = false;
+
+async function connectPowerBi() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("power-bi-note");
+  if (note) note.textContent = "Opening your browser to connect Power BI…";
+  try {
+    await invoke("power_bi_request_grant");
+    showNotification("Power BI connected.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Connect failed: ${formatInvokeError(error)}`;
+    else toastError(`Power BI connect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function previewPowerBiExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("power-bi-note");
+  const pre = document.getElementById("power-bi-preview");
+  try {
+    const payload = await invoke("power_bi_export_preview", { sinceDays: null });
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = `${payload.runs.length} run(s), ${payload.actions.length} action(s), ${payload.policy_events.length} policy event(s) would be sent.`;
+    }
+    powerBiPreviewShown = true;
+    const pushBtn = document.querySelector("[data-power-bi-push]");
+    if (pushBtn) pushBtn.disabled = false;
+    if (note) note.textContent = "";
+  } catch (error) {
+    if (note) note.textContent = `Preview failed: ${formatInvokeError(error)}`;
+    else toastError(`Power BI preview failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function pushPowerBiExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  if (!powerBiPreviewShown) return;
+  const note = document.getElementById("power-bi-note");
+  if (note) note.textContent = "Pushing to Power BI…";
+  try {
+    const result = await invoke("power_bi_push_audit_export", { sinceDays: null });
+    if (note) {
+      note.textContent = `Pushed ${result.runs_pushed} run(s), ${result.actions_pushed} action(s), ${result.policy_events_pushed} policy event(s).`;
+    }
+    showNotification("Pushed to Power BI.");
+  } catch (error) {
+    if (note) note.textContent = `Push failed: ${formatInvokeError(error)}`;
+    else toastError(`Power BI push failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function revokePowerBiGrant() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  try {
+    await invoke("power_bi_revoke_grant");
+    powerBiPreviewShown = false;
+    showNotification("Power BI disconnected.");
+    openSettings();
+  } catch (error) {
+    toastError(`Power BI disconnect failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -3450,6 +3558,23 @@ function wireUpControls() {
     const intelTestTarget = e.target.closest("[data-intel-test]");
     if (intelTestTarget) {
       testIntelligenceProvider(intelTestTarget.dataset.intelTest);
+      return;
+    }
+
+    if (e.target.closest("[data-power-bi-connect]")) {
+      connectPowerBi();
+      return;
+    }
+    if (e.target.closest("[data-power-bi-preview]")) {
+      previewPowerBiExport();
+      return;
+    }
+    if (e.target.closest("[data-power-bi-push]")) {
+      pushPowerBiExport();
+      return;
+    }
+    if (e.target.closest("[data-power-bi-revoke]")) {
+      revokePowerBiGrant();
     }
   });
 }

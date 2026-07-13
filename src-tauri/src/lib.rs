@@ -76,12 +76,6 @@ macro_rules! run_with_commands {
                 commands::account_status,
                 commands::account_sign_in,
                 commands::account_sign_out,
-                // Internal intelligence providers (suggestion-only planning).
-                commands::intelligence_provider_status,
-                commands::intelligence_set_api_key,
-                commands::intelligence_clear_api_key,
-                commands::intelligence_test_provider,
-                commands::intelligence_propose_plan,
                 // Configuration, telemetry, and diagnostics.
                 commands::get_config,
                 commands::update_config,
@@ -141,6 +135,21 @@ macro_rules! run_experimental_app {
             commands::cloud_authenticate,
             commands::cloud_sync_workflows,
             commands::create_workspace,
+            // Internal intelligence providers (suggestion-only planning; sends
+            // redacted metadata to a remote provider once configured).
+            commands::intelligence_provider_status,
+            commands::intelligence_set_api_key,
+            commands::intelligence_clear_api_key,
+            commands::intelligence_test_provider,
+            commands::intelligence_propose_plan,
+            // Power BI audit-export: grant flow, preview, and push (real
+            // network write to a third-party paid service — see
+            // docs/power-bi-integration.md).
+            commands::power_bi_grant_status,
+            commands::power_bi_request_grant,
+            commands::power_bi_revoke_grant,
+            commands::power_bi_export_preview,
+            commands::power_bi_push_audit_export,
             commands::get_audit_logs,
             commands::get_execution_history,
             commands::get_all_executions,

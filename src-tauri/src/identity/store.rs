@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 const BUNDLE_VERSION: u32 = 1;
 
+#[derive(Clone)]
 pub struct IdentityStore {
     path: PathBuf,
 }
@@ -85,6 +86,86 @@ impl IdentityStore {
             tokens: vec![token_record],
         };
         self.write_bundle(auth, &bundle)
+    }
+
+    /// Add a new integration grant (and its encrypted token record) to the
+    /// existing bundle, preserving the account identity and any other
+    /// grants. Errors if no identity is linked yet — a grant is meaningless
+    /// without an identity to attach it to. A grant of the same
+    /// `IntegrationKind` as an existing one supersedes it (re-granting
+    /// replaces rather than accumulates).
+    pub fn add_grant(
+        &self,
+        auth: &AuthManager,
+        grant: IntegrationGrant,
+        tokens: TokenMaterial,
+    ) -> anyhow::Result<()> {
+        let mut bundle = self
+            .load(auth)
+            .filter(|b| b.identity.is_some())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no linked account — sign in before requesting an integration grant"
+                )
+            })?;
+
+        let token_record = self.encrypt_tokens(auth, &grant.grant_id, &tokens)?;
+
+        let superseded_grant_ids: Vec<String> = bundle
+            .grants
+            .iter()
+            .filter(|g| g.integration == grant.integration)
+            .map(|g| g.grant_id.clone())
+            .collect();
+        bundle.grants.retain(|g| g.integration != grant.integration);
+        bundle
+            .tokens
+            .retain(|t| !superseded_grant_ids.contains(&t.grant_id));
+
+        bundle.grants.push(grant);
+        bundle.tokens.push(token_record);
+        self.write_bundle(auth, &bundle)
+    }
+
+    /// Revoke (locally) the active grant of the given kind, if any. Sets
+    /// `revoked_at` rather than deleting the record, so it stays visible in
+    /// status/history views. Does not contact the provider — the token
+    /// itself is not invalidated server-side.
+    pub fn revoke_grant(&self, auth: &AuthManager, kind: IntegrationKind) -> anyhow::Result<()> {
+        let Some(mut bundle) = self.load(auth) else {
+            return Ok(());
+        };
+        let now = chrono::Utc::now();
+        let mut changed = false;
+        for grant in bundle.grants.iter_mut() {
+            if grant.integration == kind && grant.is_active(now) {
+                grant.revoked_at = Some(now);
+                changed = true;
+            }
+        }
+        if changed {
+            self.write_bundle(auth, &bundle)?;
+        }
+        Ok(())
+    }
+
+    /// Decrypt and return the current access token for an active grant, if
+    /// any. Returns `None` (not an error) when the grant is missing,
+    /// revoked, expired, has no matching token record, or fails to decrypt
+    /// — callers treat all of those as "not available right now."
+    pub fn access_token_for_grant(&self, auth: &AuthManager, grant_id: &str) -> Option<String> {
+        let bundle = self.load(auth)?;
+        let now = chrono::Utc::now();
+        let grant = bundle
+            .grants
+            .iter()
+            .find(|g| g.grant_id == grant_id && g.is_active(now))?;
+        let record = bundle
+            .tokens
+            .iter()
+            .find(|t| t.grant_id == grant.grant_id)?;
+        let plaintext = auth.decrypt_bytes(&record.access_token_encrypted).ok()?;
+        String::from_utf8(plaintext).ok()
     }
 
     pub fn clear(&self) -> anyhow::Result<()> {
@@ -289,6 +370,230 @@ mod tests {
         assert!(!legacy_path.exists());
         assert!(store.path().exists());
 
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    fn sample_grant(account_id: &str, kind: IntegrationKind) -> IntegrationGrant {
+        IntegrationGrant {
+            grant_id: uuid::Uuid::new_v4().to_string(),
+            account_id: account_id.to_string(),
+            integration: kind,
+            scopes: vec!["https://analysis.windows.net/powerbi/api/.default".to_string()],
+            resource_scope: ResourceScope::Global,
+            granted_at: chrono::Utc::now(),
+            expires_at: None,
+            revoked_at: None,
+        }
+    }
+
+    #[test]
+    fn add_grant_preserves_existing_identity_and_grants() {
+        let (store, auth, dir) = temp_store();
+        let identity = sample_identity();
+        store
+            .store_sign_in(
+                &auth,
+                identity.clone(),
+                &["openid", "email", "profile"],
+                TokenMaterial::default(),
+            )
+            .unwrap();
+
+        let grant = sample_grant(&identity.account_id, IntegrationKind::MicrosoftPowerBi);
+        store
+            .add_grant(
+                &auth,
+                grant.clone(),
+                TokenMaterial {
+                    access_token: "pbi-access-token".to_string(),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+
+        let loaded_identity = store.identity(&auth).unwrap();
+        assert_eq!(loaded_identity.email, identity.email);
+
+        let grants = store.active_grants(&auth);
+        assert_eq!(grants.len(), 2);
+        assert!(grants
+            .iter()
+            .any(|g| g.integration == IntegrationKind::Identity));
+        assert!(grants
+            .iter()
+            .any(|g| g.integration == IntegrationKind::MicrosoftPowerBi));
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn add_grant_without_identity_errors() {
+        let (store, auth, dir) = temp_store();
+        let grant = sample_grant("no-identity", IntegrationKind::MicrosoftPowerBi);
+        let err = store
+            .add_grant(&auth, grant, TokenMaterial::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("sign in"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn re_granting_the_same_kind_supersedes_rather_than_accumulates() {
+        let (store, auth, dir) = temp_store();
+        let identity = sample_identity();
+        store
+            .store_sign_in(
+                &auth,
+                identity.clone(),
+                &["openid"],
+                TokenMaterial::default(),
+            )
+            .unwrap();
+
+        let first = sample_grant(&identity.account_id, IntegrationKind::MicrosoftPowerBi);
+        store
+            .add_grant(
+                &auth,
+                first.clone(),
+                TokenMaterial {
+                    access_token: "first-token".to_string(),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+
+        let second = sample_grant(&identity.account_id, IntegrationKind::MicrosoftPowerBi);
+        store
+            .add_grant(
+                &auth,
+                second.clone(),
+                TokenMaterial {
+                    access_token: "second-token".to_string(),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+
+        let grants = store.active_grants(&auth);
+        let pbi_grants: Vec<_> = grants
+            .iter()
+            .filter(|g| g.integration == IntegrationKind::MicrosoftPowerBi)
+            .collect();
+        assert_eq!(pbi_grants.len(), 1);
+        assert_eq!(pbi_grants[0].grant_id, second.grant_id);
+        assert_eq!(
+            store
+                .access_token_for_grant(&auth, &second.grant_id)
+                .as_deref(),
+            Some("second-token")
+        );
+        assert!(store
+            .access_token_for_grant(&auth, &first.grant_id)
+            .is_none());
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn access_token_for_grant_round_trips() {
+        let (store, auth, dir) = temp_store();
+        let identity = sample_identity();
+        store
+            .store_sign_in(
+                &auth,
+                identity.clone(),
+                &["openid"],
+                TokenMaterial::default(),
+            )
+            .unwrap();
+
+        let grant = sample_grant(&identity.account_id, IntegrationKind::MicrosoftPowerBi);
+        store
+            .add_grant(
+                &auth,
+                grant.clone(),
+                TokenMaterial {
+                    access_token: "pbi-access-token".to_string(),
+                    refresh_token: Some("pbi-refresh-token".to_string()),
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+
+        let token = store.access_token_for_grant(&auth, &grant.grant_id);
+        assert_eq!(token.as_deref(), Some("pbi-access-token"));
+
+        let raw = std::fs::read_to_string(store.path()).unwrap();
+        assert!(!raw.contains("pbi-access-token"));
+        assert!(!raw.contains("pbi-refresh-token"));
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn access_token_for_grant_returns_none_when_revoked() {
+        let (store, auth, dir) = temp_store();
+        let identity = sample_identity();
+        store
+            .store_sign_in(
+                &auth,
+                identity.clone(),
+                &["openid"],
+                TokenMaterial::default(),
+            )
+            .unwrap();
+
+        let grant = sample_grant(&identity.account_id, IntegrationKind::MicrosoftPowerBi);
+        store
+            .add_grant(
+                &auth,
+                grant.clone(),
+                TokenMaterial {
+                    access_token: "pbi-access-token".to_string(),
+                    refresh_token: None,
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+
+        assert!(store
+            .access_token_for_grant(&auth, &grant.grant_id)
+            .is_some());
+
+        store
+            .revoke_grant(&auth, IntegrationKind::MicrosoftPowerBi)
+            .unwrap();
+
+        assert!(store
+            .access_token_for_grant(&auth, &grant.grant_id)
+            .is_none());
+        // Revoking keeps the record visible (not deleted) — just inactive.
+        let bundle_grants = store.load(&auth).unwrap().grants;
+        assert!(bundle_grants
+            .iter()
+            .any(|g| g.grant_id == grant.grant_id && g.revoked_at.is_some()));
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn revoke_grant_with_no_matching_grant_is_a_no_op() {
+        let (store, auth, dir) = temp_store();
+        store
+            .store_sign_in(
+                &auth,
+                sample_identity(),
+                &["openid"],
+                TokenMaterial::default(),
+            )
+            .unwrap();
+        // No Power BI grant exists yet — revoking must not error.
+        store
+            .revoke_grant(&auth, IntegrationKind::MicrosoftPowerBi)
+            .unwrap();
         std::fs::remove_dir_all(dir).ok();
     }
 

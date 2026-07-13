@@ -5,5 +5,5 @@ pub mod flow;
 pub mod pkce;
 pub mod provider;
 
-pub use flow::{run_sign_in_flow, SignInResult};
+pub use flow::{run_grant_flow, run_sign_in_flow, GrantResult, SignInResult};
 pub use provider::OAuthProvider;

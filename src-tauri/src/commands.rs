@@ -12,6 +12,9 @@ mod diagnostics;
 #[cfg(feature = "experimental")]
 mod experimental;
 mod filing;
+#[cfg(feature = "experimental")]
+mod integrations;
+#[cfg(feature = "experimental")]
 mod intelligence;
 mod organizer;
 mod updates;
@@ -24,6 +27,9 @@ pub use diagnostics::*;
 #[cfg(feature = "experimental")]
 pub use experimental::*;
 pub use filing::*;
+#[cfg(feature = "experimental")]
+pub use integrations::*;
+#[cfg(feature = "experimental")]
 pub use intelligence::*;
 pub use organizer::*;
 pub use updates::*;

@@ -9,7 +9,7 @@ pub mod store;
 pub mod types;
 
 pub use errors::IntegrationError;
-pub use oauth::{run_sign_in_flow, OAuthProvider};
+pub use oauth::{run_grant_flow, run_sign_in_flow, GrantResult, OAuthProvider};
 pub use store::IdentityStore;
 pub use types::{
     AccountIdentity, IdentityBundle, IdentityProvider, IntegrationGrant, IntegrationKind,
