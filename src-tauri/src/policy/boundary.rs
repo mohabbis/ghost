@@ -4,8 +4,29 @@ use super::engine::evaluate_with_attribution;
 use super::{Capability, FolderRule, PolicyDecision};
 use std::path::{Path, PathBuf};
 
-fn canonicalize_best_effort(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+/// Canonicalize a path for boundary comparison. Existing paths resolve fully;
+/// not-yet-created relocate targets canonicalize via their parent directory.
+fn canonicalize_relocate_path(path: &Path) -> PathBuf {
+    match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => match (path.parent(), path.file_name()) {
+            (Some(parent), Some(name)) => parent
+                .canonicalize()
+                .map(|p| p.join(name))
+                .unwrap_or_else(|_| path.to_path_buf()),
+            _ => path.to_path_buf(),
+        },
+    }
+}
+
+fn rules_with_canonical_paths(rules: &[FolderRule]) -> Vec<FolderRule> {
+    rules
+        .iter()
+        .map(|rule| FolderRule {
+            path: canonicalize_relocate_path(&rule.path),
+            ..rule.clone()
+        })
+        .collect()
 }
 
 /// Re-verify that move/rename endpoints still lie inside approved folder rules
@@ -16,8 +37,9 @@ pub fn verify_relocate_at_execution(
     rules: &[FolderRule],
     is_move: bool,
 ) -> Result<(), String> {
-    let from = canonicalize_best_effort(from);
-    let to = canonicalize_best_effort(to);
+    let from = canonicalize_relocate_path(from);
+    let to = canonicalize_relocate_path(to);
+    let rules = rules_with_canonical_paths(rules);
     let cap = if is_move {
         Capability::MoveFile {
             from: from.clone(),
@@ -29,7 +51,7 @@ pub fn verify_relocate_at_execution(
             to: to.clone(),
         }
     };
-    let evaluation = evaluate_with_attribution(&cap, rules);
+    let evaluation = evaluate_with_attribution(&cap, &rules);
     if evaluation.decision.is_denied() {
         Err(match evaluation.decision {
             PolicyDecision::Deny { reason } => reason,
