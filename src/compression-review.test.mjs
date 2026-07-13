@@ -277,3 +277,46 @@ test("guardSeverityLabel uses escalating markers by severity", () => {
   assert.equal(r.guardSeverityLabel("low"), "·");
   assert.equal(r.guardSeverityLabel("critical"), "!!!");
 });
+
+test("routineDecisionBadge maps policy decisions to Organizer-style badges", () => {
+  const r = review();
+  assert.match(r.routineDecisionBadge({ decision: "allow" }), /Allowed/);
+  assert.match(
+    r.routineDecisionBadge({ decision: "deny", reason: "outside zone" }),
+    /Denied/
+  );
+  assert.match(
+    r.routineDecisionBadge({ decision: "require_confirmation", risk: "high" }),
+    /Needs approval/
+  );
+  assert.equal(r.routineDecisionBadge(null), "");
+});
+
+test("policySummaryText prefers denied then confirm then allow counts", () => {
+  const r = review();
+  r.policyPlan = { denied_count: 2, confirmation_count: 1, allow_count: 3 };
+  assert.equal(r.policySummaryText(), "2 denied");
+  r.policyPlan = { denied_count: 0, confirmation_count: 4, allow_count: 3 };
+  assert.equal(r.policySummaryText(), "4 confirm");
+  r.policyPlan = { denied_count: 0, confirmation_count: 0, allow_count: 5 };
+  assert.equal(r.policySummaryText(), "5 allowed");
+});
+
+test("getRiskClass: policy deny takes precedence over compression heuristics", () => {
+  const r = review();
+  assert.equal(
+    r.getRiskClass({ kind: "click", confidence: 0.99 }, { decision: "deny" }),
+    "step-policy-deny"
+  );
+  assert.equal(
+    r.getRiskClass(
+      { kind: "click", confidence: 0.99 },
+      { decision: "require_confirmation", risk: "high" }
+    ),
+    "step-policy-confirm step-policy-confirm-high"
+  );
+  assert.equal(
+    r.getRiskClass({ kind: "unknown", confidence: 0.1 }, { decision: "allow" }),
+    "step-unknown"
+  );
+});

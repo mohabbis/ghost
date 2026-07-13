@@ -571,3 +571,79 @@ fn experimental_build_registers_mcp_relay_and_http_commands() {
         );
     }
 }
+
+/// Account sign-in is stable core — `account_status` must load unconditionally in
+/// Settings, not behind the experimental feature gate.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_open_settings_calls_account_status_unconditionally() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function openSettings\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("openSettings must exist").as_str();
+    let idx = body
+        .find("account_status")
+        .expect("openSettings must invoke account_status");
+    let before = &body[..idx];
+    assert!(
+        !before.contains("if (experimentalEnabled)"),
+        "account_status must not be gated on experimentalEnabled"
+    );
+}
+
+#[test]
+fn open_settings_account_section_uses_availability_fields() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function openSettings\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("openSettings must exist").as_str();
+    for marker in [
+        "google_sign_in_available",
+        "microsoft_sign_in_available",
+        "data-account-sign-in=\"google\"",
+        "data-account-sign-in=\"microsoft\"",
+        "account-status-note",
+        "data-account-sign-out",
+    ] {
+        assert!(
+            body.contains(marker),
+            "openSettings must render account availability wiring `{marker}`"
+        );
+    }
+}
+
+#[test]
+fn sign_in_with_provider_guards_disabled_buttons() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function signInWithProvider\(provider\)\s*\{.*?\n\}")
+        .unwrap();
+    let body = re
+        .find(&js)
+        .expect("signInWithProvider must exist")
+        .as_str();
+    assert!(
+        body.contains("btn?.disabled"),
+        "signInWithProvider must refuse disabled provider buttons"
+    );
+    assert!(
+        body.contains("account-status-note"),
+        "signInWithProvider must surface availability hints on account-status-note"
+    );
+    let invoke_idx = body
+        .find("account_sign_in")
+        .expect("must call account_sign_in");
+    let disabled_idx = body
+        .find("btn?.disabled")
+        .expect("must check disabled before invoke");
+    assert!(
+        disabled_idx < invoke_idx,
+        "signInWithProvider must check btn?.disabled before account_sign_in"
+    );
+}
+
+#[test]
+fn compression_review_js_invokes_routine_policy_plan() {
+    let js = read("../src/compression-review.js");
+    assert!(
+        js.contains("routine_policy_plan"),
+        "compression-review.js must fetch routine_policy_plan for the review timeline"
+    );
+}

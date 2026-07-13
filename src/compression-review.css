@@ -84,6 +84,69 @@
   color: #ffb454;
 }
 
+.compression-stat--policy .stat-value {
+  color: #83f6c4;
+}
+
+.compression-stat--policy-blocked .stat-value {
+  color: #ff8da0;
+}
+
+.compression-policy {
+  padding: 10px 12px;
+  border-left: 3px solid rgba(131, 246, 196, 0.5);
+  background: rgba(131, 246, 196, 0.08);
+  border-radius: 8px;
+}
+
+.compression-policy--blocked {
+  border-left-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.policy-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #83f6c4;
+  margin-bottom: 4px;
+}
+
+.compression-policy--blocked .policy-title {
+  color: #ff8da0;
+}
+
+.policy-summary {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.policy-blocked {
+  font-size: 0.78rem;
+  color: #ff8da0;
+  margin-top: 6px;
+}
+
+.step-policy-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.compression-step.step-policy-deny {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.compression-step.step-policy-confirm {
+  border-color: rgba(255, 184, 107, 0.5);
+  background: rgba(255, 184, 107, 0.1);
+}
+
+.compression-step.step-policy-confirm-high {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
 .compression-warnings {
   padding: 10px 12px;
   border-left: 3px solid var(--accent-warm);

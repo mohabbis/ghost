@@ -194,4 +194,35 @@ mod tests {
         account_sign_out(app.state()).unwrap();
         assert!(!account_status(app.state()).signed_in);
     }
+
+    #[test]
+    fn account_status_reflects_availability_when_signed_in() {
+        let app = managed_test_app();
+        let engine = app.state::<GhostEngine>();
+        let record = AccountRecord {
+            provider: "google".to_string(),
+            email: "user@example.com".to_string(),
+            name: "User".to_string(),
+            refresh_token: None,
+            linked_at: chrono::Utc::now(),
+        };
+        engine.accounts().store(&engine.auth(), &record).unwrap();
+
+        let status = account_status(app.state());
+        assert!(status.signed_in);
+        assert!(status.google_sign_in_available);
+        assert!(!status.microsoft_sign_in_available);
+    }
+
+    #[test]
+    fn account_status_microsoft_available_when_configured() {
+        use crate::test_support::EnvVarGuard;
+
+        let _guard = EnvVarGuard::set("GHOST_MS_CLIENT_ID", "test-ms-client-id");
+        let app = managed_test_app();
+        let status = account_status(app.state());
+        assert!(!status.signed_in);
+        assert!(status.google_sign_in_available);
+        assert!(status.microsoft_sign_in_available);
+    }
 }

@@ -25,6 +25,7 @@ export class CompressionReview {
     this.invoke = invokeFn;
     this.report = null;
     this.guardReport = null;
+    this.policyPlan = null;
   }
 
   async compress(events) {
@@ -33,15 +34,20 @@ export class CompressionReview {
     }
     try {
       this.eventCount = events.length;
-      const [report, guardReport] = await Promise.all([
+      const [report, guardReport, policyPlan] = await Promise.all([
         this.invoke("compress_workflow", { events }),
         this.invoke("ghost_guard_audit_compressed", { events }).catch((err) => {
           console.warn("Ghost Guard compressed audit failed:", err);
           return null;
         }),
+        this.invoke("routine_policy_plan", { events }).catch((err) => {
+          console.warn("Routine policy plan failed:", err);
+          return null;
+        }),
       ]);
       this.report = report;
       this.guardReport = guardReport;
+      this.policyPlan = policyPlan;
       this.render();
       return this.report;
     } catch (err) {
@@ -78,7 +84,31 @@ export class CompressionReview {
           </div>`
               : ""
           }
+          ${
+            this.policyPlan
+              ? `<div class="compression-stat compression-stat--policy${this.policyPlan.can_proceed_with_approvals ? "" : " compression-stat--policy-blocked"}">
+            <span class="stat-label">Policy</span>
+            <span class="stat-value">${this.policySummaryText()}</span>
+          </div>`
+              : ""
+          }
         </div>
+
+        ${
+          this.policyPlan
+            ? `
+          <div class="compression-policy${this.policyPlan.can_proceed_with_approvals ? "" : " compression-policy--blocked"}">
+            <div class="policy-title">Routine policy</div>
+            <div class="policy-summary">${escapeHtml(this.policyBlockSummary())}</div>
+            ${
+              !this.policyPlan.can_proceed_with_approvals
+                ? `<div class="policy-blocked">Replay blocked until denied steps are removed or re-recorded.</div>`
+                : ""
+            }
+          </div>
+        `
+            : ""
+        }
 
         ${
           this.guardReport?.findings?.length
@@ -141,22 +171,59 @@ export class CompressionReview {
   renderStep(step, idx, lastRunNote) {
     const icon = this.getStepIcon(step.kind);
     const description = this.getStepDescription(step);
-    const riskClass = this.getRiskClass(step);
+    const policyStep = this.policyPlan?.steps?.find((s) => s.step_index === idx);
+    const riskClass = this.getRiskClass(step, policyStep?.decision);
     const confidence =
       step.confidence !== undefined ? `${(step.confidence * 100).toFixed(0)}%` : "";
     const guardNotes = this.guardFindingsForStep(idx);
+    const policyBadge = this.routineDecisionBadge(policyStep?.decision);
+    const policyReason =
+      policyStep?.decision?.decision === "deny" || policyStep?.decision?.decision === "require_confirmation"
+        ? policyStep.decision.reason
+        : null;
 
     return `
       <div class="compression-step ${riskClass}">
         <span class="step-icon">${icon}</span>
         <div class="step-content">
-          <div class="step-text">${description}</div>
+          <div class="step-text">${description}${policyBadge ? ` ${policyBadge}` : ""}</div>
           ${confidence ? `<div class="step-confidence">confidence: ${confidence}</div>` : ""}
           ${lastRunNote ? `<div class="step-confidence step-lastrun">Last run: ${escapeHtml(lastRunNote)}</div>` : ""}
+          ${policyReason ? `<div class="step-policy-note">${escapeHtml(policyReason)}</div>` : ""}
           ${guardNotes.map((note) => `<div class="step-guard-note">${note}</div>`).join("")}
         </div>
       </div>
     `;
+  }
+
+  routineDecisionBadge(decision) {
+    if (!decision) return "";
+    if (decision.decision === "allow") {
+      return `<span class="org-badge org-badge--allow">Allowed</span>`;
+    }
+    if (decision.decision === "deny") {
+      return `<span class="org-badge org-badge--deny" title="${escapeHtml(decision.reason || "")}">Denied</span>`;
+    }
+    if (decision.decision === "require_confirmation") {
+      return `<span class="org-badge org-badge--confirm">Needs approval · ${escapeHtml(decision.risk || "")}</span>`;
+    }
+    return "";
+  }
+
+  policySummaryText() {
+    if (!this.policyPlan) return "";
+    const { denied_count: denied = 0, confirmation_count: confirm = 0, allow_count: allow = 0 } =
+      this.policyPlan;
+    if (denied > 0) return `${denied} denied`;
+    if (confirm > 0) return `${confirm} confirm`;
+    return `${allow} allowed`;
+  }
+
+  policyBlockSummary() {
+    if (!this.policyPlan) return "";
+    const { allow_count: allow = 0, confirmation_count: confirm = 0, denied_count: denied = 0 } =
+      this.policyPlan;
+    return `${allow} allowed · ${confirm} need approval · ${denied} denied`;
   }
 
   guardFindingsForStep(stepIdx) {
@@ -245,7 +312,13 @@ export class CompressionReview {
     }
   }
 
-  getRiskClass(step) {
+  getRiskClass(step, policyDecision) {
+    if (policyDecision?.decision === "deny") return "step-policy-deny";
+    if (policyDecision?.decision === "require_confirmation") {
+      const risk = policyDecision.risk || "";
+      if (risk === "high" || risk === "critical") return "step-policy-confirm step-policy-confirm-high";
+      return "step-policy-confirm";
+    }
     if (step.kind === "unknown") return "step-unknown";
     if (step.confidence !== undefined && step.confidence < 0.5) return "step-low-confidence";
     if (step.kind === "type_text" && step.secure_field) return "step-secure";
@@ -272,5 +345,6 @@ export class CompressionReview {
     }
     this.report = null;
     this.guardReport = null;
+    this.policyPlan = null;
   }
 }

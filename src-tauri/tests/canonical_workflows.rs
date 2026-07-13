@@ -643,4 +643,261 @@ mod canonical_workflows {
         assert!(link.exists());
         assert!(secret.exists());
     }
+
+    /// Unicode filenames must survive the full Organizer trust pipeline.
+    #[test]
+    fn test_unicode_filename_survives_trust_pipeline() {
+        use ghost_lib::organizer::executor::execute_plan;
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::policy::{DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::open_in_memory;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_unicode_pipeline_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                if let Some(parent) = p.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let conn = open_in_memory().unwrap();
+        let dir = TempDir::new();
+        let unicode_name = "日本語 📷 café.pdf";
+        dir.file(unicode_name, b"unicode-body");
+
+        let zone = create_zone(&conn, "Unicode", None, DefaultDecision::Ask, false).unwrap();
+        let rule = FolderRule {
+            path: dir.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::Automate,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
+        let report = execute_plan(&plan, &[rule]);
+        assert_eq!(
+            report.failed, 0,
+            "unicode move should succeed: {:?}",
+            report
+        );
+
+        let moved = dir.path().join("Documents").join(unicode_name);
+        assert!(moved.exists(), "unicode filename must exist after execute");
+        assert_eq!(fs::read(&moved).unwrap(), b"unicode-body");
+    }
+
+    /// Target collision created after plan must not be overwritten at execute time.
+    #[test]
+    fn test_execute_refuses_move_when_target_appears_after_plan() {
+        use ghost_lib::audit::ActionOutcome;
+        use ghost_lib::organizer::executor::execute_plan;
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::policy::{Capability, DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::open_in_memory;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_target_collision_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                if let Some(parent) = p.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+            fn dir(&self, rel: &str) -> PathBuf {
+                let p = self.0.join(rel);
+                fs::create_dir_all(&p).unwrap();
+                p
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let conn = open_in_memory().unwrap();
+        let dir = TempDir::new();
+        let source = dir.file("report.pdf", b"source");
+        dir.dir("Documents");
+
+        let zone = create_zone(&conn, "Zone", None, DefaultDecision::Ask, false).unwrap();
+        let rule = FolderRule {
+            path: dir.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::Automate,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
+        dir.file("Documents/report.pdf", b"collision");
+
+        let report = execute_plan(&plan, &[rule]);
+        let move_skipped = report.audit.events().iter().any(|e| {
+            matches!(&e.capability, Capability::MoveFile { from, .. } if *from == source)
+                && matches!(&e.outcome, ActionOutcome::Skipped { .. })
+        });
+        assert!(move_skipped, "post-plan target collision must skip move");
+        assert!(source.exists(), "source must remain when target collides");
+        assert_eq!(
+            fs::read(dir.path().join("Documents/report.pdf")).unwrap(),
+            b"collision",
+            "existing target must not be overwritten"
+        );
+    }
+
+    /// Locked target directory: execute must fail cleanly without undo or data loss.
+    #[test]
+    #[cfg(unix)]
+    fn test_execute_fails_cleanly_when_target_dir_not_writable() {
+        use ghost_lib::audit::ActionOutcome;
+        use ghost_lib::organizer::executor::execute_plan;
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::policy::{Capability, DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::open_in_memory;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_locked_target_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                if let Some(parent) = p.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+            fn dir(&self, rel: &str) -> PathBuf {
+                let p = self.0.join(rel);
+                fs::create_dir_all(&p).unwrap();
+                p
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let conn = open_in_memory().unwrap();
+        let dir = TempDir::new();
+        dir.file("report.pdf", b"source");
+        let documents = dir.dir("Documents");
+
+        let zone = create_zone(&conn, "Zone", None, DefaultDecision::Ask, false).unwrap();
+        let rule = FolderRule {
+            path: dir.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::Automate,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
+
+        fs::set_permissions(&documents, fs::Permissions::from_mode(0o555)).unwrap();
+        let probe = documents.join("probe");
+        let probe_write_succeeded = fs::write(&probe, b"x").is_ok();
+        let _ = fs::remove_file(&probe);
+        if probe_write_succeeded {
+            fs::set_permissions(&documents, fs::Permissions::from_mode(0o755)).unwrap();
+            eprintln!(
+                "skipping test_execute_fails_cleanly_when_target_dir_not_writable: \
+                 running as a user that bypasses permission bits (root)"
+            );
+            return;
+        }
+
+        let report = execute_plan(&plan, &[rule]);
+        fs::set_permissions(&documents, fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert_eq!(report.failed, 1, "locked target dir should fail the move");
+        let move_failed = report.audit.events().iter().any(|e| {
+            matches!(&e.capability, Capability::MoveFile { .. })
+                && matches!(&e.outcome, ActionOutcome::Failed { .. })
+        });
+        assert!(move_failed, "audit must record Failed for locked target");
+        assert!(
+            dir.path().join("report.pdf").exists(),
+            "source must remain after failed move"
+        );
+    }
 }

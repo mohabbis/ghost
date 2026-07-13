@@ -255,3 +255,53 @@ fn compression_review_container_ids_exist() {
         );
     }
 }
+
+#[test]
+fn open_settings_authors_account_sign_in_controls() {
+    let js = read("../src/main.js");
+    let body = function_body(&js, "openSettings");
+    for marker in [
+        "data-account-sign-in=\"google\"",
+        "data-account-sign-in=\"microsoft\"",
+        "google_sign_in_available",
+        "microsoft_sign_in_available",
+        "id=\"account-status-note\"",
+        "data-account-sign-out",
+    ] {
+        assert!(
+            body.contains(marker),
+            "openSettings must render account control `{marker}`"
+        );
+    }
+}
+
+#[test]
+fn review_modal_authors_policy_replay_actions() {
+    let js = read("../src/main.js");
+    let body = function_body(&js, "renderReviewModalActions");
+    for marker in [
+        "review-modal-actions",
+        "review-modal-approve-replay",
+        "Approve & Replay",
+        "can_proceed_with_approvals",
+    ] {
+        assert!(
+            body.contains(marker),
+            "renderReviewModalActions must wire policy replay controls `{marker}`"
+        );
+    }
+}
+
+#[test]
+fn wireup_delegates_account_sign_in_and_out() {
+    let js = read("../src/main.js");
+    let body = function_body(&js, "wireUpControls");
+    assert!(
+        body.contains("[data-account-sign-in]") && body.contains("signInWithProvider"),
+        "wireUpControls must delegate account sign-in clicks"
+    );
+    assert!(
+        body.contains("[data-account-sign-out]") && body.contains("signOutAccount"),
+        "wireUpControls must delegate account sign-out clicks"
+    );
+}
