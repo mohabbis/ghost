@@ -32,6 +32,27 @@ pub struct AccountStatus {
     pub provider: Option<String>,
     pub email: Option<String>,
     pub name: Option<String>,
+    /// Whether "Sign in with Google" can run (bundled or configured client ID).
+    pub google_sign_in_available: bool,
+    /// Whether "Sign in with Microsoft" can run (requires operator Entra app).
+    pub microsoft_sign_in_available: bool,
+}
+
+impl AccountStatus {
+    fn with_availability(integrations: &crate::config::IntegrationSettings) -> Self {
+        use crate::core::oauth::Provider;
+        Self {
+            google_sign_in_available: Provider::parse("google")
+                .ok()
+                .and_then(|p| p.client_id(integrations).ok())
+                .is_some(),
+            microsoft_sign_in_available: Provider::parse("microsoft")
+                .ok()
+                .and_then(|p| p.client_id(integrations).ok())
+                .is_some(),
+            ..Self::default()
+        }
+    }
 }
 
 impl From<AccountRecord> for AccountStatus {
@@ -41,6 +62,8 @@ impl From<AccountRecord> for AccountStatus {
             provider: Some(record.provider),
             email: Some(record.email),
             name: Some(record.name),
+            google_sign_in_available: true,
+            microsoft_sign_in_available: true,
         }
     }
 }
@@ -48,11 +71,23 @@ impl From<AccountRecord> for AccountStatus {
 /// Whether an account is currently linked, and who.
 #[tauri::command]
 pub fn account_status(engine: State<GhostEngine>) -> AccountStatus {
+    let integrations = &engine.get_config().integrations;
     engine
         .accounts()
         .current(&engine.auth())
-        .map(AccountStatus::from)
-        .unwrap_or_default()
+        .map(|record| {
+            let mut status = AccountStatus::from(record);
+            status.google_sign_in_available = Provider::parse("google")
+                .ok()
+                .and_then(|p| p.client_id(integrations).ok())
+                .is_some();
+            status.microsoft_sign_in_available = Provider::parse("microsoft")
+                .ok()
+                .and_then(|p| p.client_id(integrations).ok())
+                .is_some();
+            status
+        })
+        .unwrap_or_else(|| AccountStatus::with_availability(integrations))
 }
 
 /// Run the interactive OAuth + PKCE sign-in flow for `provider`
@@ -128,6 +163,8 @@ mod tests {
         let status = account_status(app.state());
         assert!(!status.signed_in);
         assert!(status.email.is_none());
+        assert!(status.google_sign_in_available);
+        assert!(!status.microsoft_sign_in_available);
     }
 
     #[test]

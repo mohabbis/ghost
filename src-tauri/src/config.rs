@@ -40,12 +40,30 @@ pub struct GhostConfig {
 /// corresponding "Sign in with ..." option is unavailable until an operator
 /// registers an app and fills these in (or sets `GHOST_MS_CLIENT_ID` /
 /// `GHOST_GOOGLE_CLIENT_ID`, which take priority for local dev).
+///
+/// Google sign-in also falls back to [`BUNDLED_GOOGLE_CLIENT_ID`] when unset.
+pub const BUNDLED_GOOGLE_CLIENT_ID: &str =
+    "126188596343-s62mdpmhghit8q66pmujpifg9mlqqtur.apps.googleusercontent.com";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct IntegrationSettings {
     #[serde(default)]
     pub microsoft_client_id: Option<String>,
     #[serde(default)]
     pub google_client_id: Option<String>,
+}
+
+impl IntegrationSettings {
+    /// Fill bundled OAuth client IDs when the on-disk config predates them.
+    pub fn ensure_bundled_defaults(&mut self) {
+        if self
+            .google_client_id
+            .as_ref()
+            .is_none_or(|id| id.trim().is_empty())
+        {
+            self.google_client_id = Some(BUNDLED_GOOGLE_CLIENT_ID.to_string());
+        }
+    }
 }
 
 /// Settings for Ghost-owned intelligence providers (`intelligence/`).
@@ -413,7 +431,10 @@ impl Default for GhostConfig {
             },
             // Keep all audit history by default; retention is opt-in.
             audit: AuditSettings::default(),
-            integrations: IntegrationSettings::default(),
+            integrations: IntegrationSettings {
+                microsoft_client_id: None,
+                google_client_id: Some(BUNDLED_GOOGLE_CLIENT_ID.to_string()),
+            },
             intelligence: IntelligenceSettings::default(),
         }
     }
@@ -426,7 +447,8 @@ impl GhostConfig {
 
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let config: GhostConfig = serde_json::from_str(&content)?;
+            let mut config: GhostConfig = serde_json::from_str(&content)?;
+            config.integrations.ensure_bundled_defaults();
             Ok(config)
         } else {
             let config = Self::default();
@@ -580,6 +602,16 @@ mod tests {
         let config: GhostConfig = serde_json::from_value(value).unwrap();
         assert_eq!(config.audit.retention_keep_last, None);
         assert_eq!(config.audit.retention_keep_days, None);
+    }
+
+    #[test]
+    fn ensure_bundled_defaults_fills_missing_google_client_id() {
+        let mut integrations = IntegrationSettings::default();
+        integrations.ensure_bundled_defaults();
+        assert_eq!(
+            integrations.google_client_id.as_deref(),
+            Some(BUNDLED_GOOGLE_CLIENT_ID)
+        );
     }
 }
 

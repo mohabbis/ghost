@@ -1491,12 +1491,22 @@ async function openSettings() {
         ? `<p class="panel__hint" style="margin: 4px 0 8px;">Signed in as <strong>${escapeAttr(account.name || account.email)}</strong> (${escapeAttr(account.email)}) via ${escapeAttr(account.provider)}.</p>
            <button class="btn btn--ghost btn--small" data-account-sign-out>Sign out</button>`
         : `<p class="panel__hint" style="margin: 4px 0 8px;">Sign in to connect Ghost with your Microsoft or Google identity. This links who you are — it does not move your workflow or Organizer data anywhere.</p>
-           <div style="display: flex; gap: 8px;">
-             <button class="btn btn--ghost btn--small" data-account-sign-in="microsoft">Sign in with Microsoft</button>
-             <button class="btn btn--ghost btn--small" data-account-sign-in="google">Sign in with Google</button>
+           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+             <button class="btn btn--ghost btn--small" data-account-sign-in="google" ${account.google_sign_in_available ? "" : "disabled"}>Sign in with Google</button>
+             <button class="btn btn--ghost btn--small" data-account-sign-in="microsoft" ${account.microsoft_sign_in_available ? "" : "disabled"}>Sign in with Microsoft</button>
            </div>`
     }
-    <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;"></p>
+    <p class="panel__hint" id="account-status-note" style="margin: 4px 0 12px;">${
+      account.signed_in
+        ? ""
+        : account.google_sign_in_available && !account.microsoft_sign_in_available
+          ? "Google sign-in is ready. Microsoft requires an Entra app client ID in config."
+          : !account.google_sign_in_available && account.microsoft_sign_in_available
+            ? "Microsoft sign-in is ready. Google client ID is not configured."
+            : !account.google_sign_in_available && !account.microsoft_sign_in_available
+              ? "No sign-in providers are configured yet."
+              : ""
+    }</p>
 
     ${
       experimentalEnabled
@@ -2417,6 +2427,15 @@ async function signInWithProvider(provider) {
   if (!invoke) return notAvailable();
   const note = document.getElementById("account-status-note");
   const btn = document.querySelector(`[data-account-sign-in="${provider}"]`);
+  if (btn?.disabled) {
+    const msg =
+      provider === "microsoft"
+        ? "Microsoft sign-in is not configured yet. Add integrations.microsoft_client_id in config or set GHOST_MS_CLIENT_ID for local dev."
+        : "Google sign-in is not configured.";
+    if (note) note.textContent = msg;
+    else toastError(msg);
+    return;
+  }
   if (btn) btn.disabled = true;
   if (note) note.textContent = "Opening your browser to sign in…";
   try {

@@ -255,13 +255,25 @@ test("lastRunOutcomes: only the first fallback per step is kept", () => {
   assert.equal(outcomes.get(0), "lost its element last run — clicked recorded coordinates");
 });
 
-test("lastRunOutcomes: non-fallback trace entries (e.g. RecordedPoint) are ignored", () => {
+test("guardFindingsForStep maps findings onto compressed step indices", () => {
   const r = review();
-  r.eventCount = 2;
-  r.report = { raw_spans: [[0, 2]] };
-  globalThis.window.__ghostLastReplayTrace = {
-    eventCount: 2,
-    trace: [{ kind: "RecordedPoint", step_index: 0 }],
+  r.guardReport = {
+    findings: [
+      { step_index: 1, severity: "high", title: "Sensitive field" },
+      { step_index: 1, severity: "medium", title: "Coordinate fallback" },
+      { step_index: 3, severity: "low", title: "Long wait" },
+    ],
   };
-  assert.equal(r.lastRunOutcomes().size, 0);
+  const notes = r.guardFindingsForStep(1);
+  assert.equal(notes.length, 2);
+  assert.match(notes[0], /Sensitive field/);
+  assert.match(notes[1], /Coordinate fallback/);
+  assert.equal(r.guardFindingsForStep(0).length, 0);
+  assert.equal(r.guardFindingsForStep(3).length, 1);
+});
+
+test("guardSeverityLabel uses escalating markers by severity", () => {
+  const r = review();
+  assert.equal(r.guardSeverityLabel("low"), "·");
+  assert.equal(r.guardSeverityLabel("critical"), "!!!");
 });

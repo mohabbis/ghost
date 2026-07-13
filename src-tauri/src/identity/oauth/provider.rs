@@ -92,6 +92,9 @@ impl OAuthProvider {
                 return Ok(id);
             }
         }
+        if matches!(self, OAuthProvider::Google) {
+            return Ok(crate::config::BUNDLED_GOOGLE_CLIENT_ID.to_string());
+        }
         Err(format!(
             "Sign in with {} isn't configured yet — set integrations.{}_client_id in Settings \
              (or {env_var} for local development) to a client ID from your own app registration.",
@@ -147,5 +150,15 @@ mod tests {
         let config = crate::config::IntegrationSettings::default();
         let err = OAuthProvider::Microsoft.client_id(&config).unwrap_err();
         assert!(err.contains("Microsoft"));
+    }
+
+    #[test]
+    fn google_client_id_falls_back_to_bundled_default() {
+        let _env = crate::test_support::EnvVarGuard::remove("GHOST_GOOGLE_CLIENT_ID");
+        let config = crate::config::IntegrationSettings::default();
+        assert_eq!(
+            OAuthProvider::Google.client_id(&config).unwrap(),
+            crate::config::BUNDLED_GOOGLE_CLIENT_ID
+        );
     }
 }
