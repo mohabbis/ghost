@@ -8,6 +8,8 @@ Intent -> Plan -> Policy check -> User approval -> Deterministic execution -> Au
 
 Enterprise features must remain local-first, explainable, auditable, reversible where practical, and explicitly controlled by authorized users. Ghost must not become hidden surveillance, an uncontrolled autonomous agent, or a black-box financial decision maker.
 
+For the guarantee model, OutcomeKnowledge, reconciliation, adapter trust tiers, claims boundaries, and Current vs Financial-services-ready cut line, see [`financial-transaction-authority.md`](financial-transaction-authority.md). This file remains the scaffolding/playbook boundary only.
+
 ## Initial architecture
 
 The enterprise architecture is split into narrow Rust module boundaries:
