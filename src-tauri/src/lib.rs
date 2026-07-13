@@ -144,6 +144,8 @@ macro_rules! run_experimental_app {
             commands::intelligence_clear_api_key,
             commands::intelligence_test_provider,
             commands::intelligence_propose_plan,
+            commands::intelligence_discover_local,
+            commands::organizer_intelligence_suggest,
             // Power BI audit-export: grant flow, preview, and push (real
             // network write to a third-party paid service — see
             // docs/power-bi-integration.md).
@@ -152,6 +154,11 @@ macro_rules! run_experimental_app {
             commands::power_bi_revoke_grant,
             commands::power_bi_export_preview,
             commands::power_bi_push_audit_export,
+            commands::fabric_grant_status,
+            commands::fabric_request_grant,
+            commands::fabric_revoke_grant,
+            commands::fabric_list_workspaces,
+            commands::fabric_export_preview,
             commands::get_audit_logs,
             commands::get_execution_history,
             commands::get_all_executions,

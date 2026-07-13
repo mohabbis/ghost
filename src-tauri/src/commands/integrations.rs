@@ -4,6 +4,9 @@
 //! `commands/experimental.rs`'s `cloud_authenticate`/`cloud_sync_workflows`
 //! ("sends local data outward") than to the identity-only `account_sign_in`.
 //!
+//! Fabric commands follow the same grant/preview pattern (read + export preview
+//! only in v1; no inbound Fabric-triggered mutations).
+//!
 //! Command: `power_bi_grant_status` | risk: `safe-read` | reads: local grant
 //! metadata only | mutates: no | network: no | approval: none.
 //!
@@ -31,6 +34,7 @@
 
 use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
+use crate::integrations::microsoft::fabric::{FabricClient, FabricWorkspace};
 use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
 use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
 use crate::integrations::microsoft::MicrosoftIntegrationService;
@@ -212,6 +216,90 @@ pub async fn power_bi_push_audit_export(
     })
 }
 
+#[derive(serde::Serialize, Default)]
+pub struct FabricGrantStatus {
+    pub active: bool,
+    pub granted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Whether a Fabric grant is currently active.
+#[tauri::command]
+pub fn fabric_grant_status(engine: State<GhostEngine>) -> FabricGrantStatus {
+    let auth = engine.auth();
+    let grant = engine
+        .accounts()
+        .identity_store()
+        .active_grants(&auth)
+        .into_iter()
+        .find(|g| g.integration == IntegrationKind::MicrosoftFabric);
+    match grant {
+        Some(g) => FabricGrantStatus {
+            active: true,
+            granted_at: Some(g.granted_at),
+            expires_at: g.expires_at,
+        },
+        None => FabricGrantStatus::default(),
+    }
+}
+
+/// Run incremental consent for Fabric and persist the resulting grant.
+#[tauri::command]
+pub async fn fabric_request_grant(
+    engine: State<'_, GhostEngine>,
+) -> Result<FabricGrantStatus, String> {
+    let config = engine.get_config();
+    let client_id = crate::identity::OAuthProvider::Microsoft.client_id(&config.integrations)?;
+    let auth = engine.auth();
+    let svc = service(&engine);
+
+    tauri::async_runtime::spawn_blocking(move || svc.request_fabric_grant(&auth, &client_id))
+        .await
+        .map_err(|e| format!("grant request task failed: {e}"))?
+        .map_err(|e| e.to_string())?;
+
+    Ok(fabric_grant_status(engine))
+}
+
+/// Revoke the local Fabric grant. Does not contact Microsoft.
+#[tauri::command]
+pub fn fabric_revoke_grant(engine: State<GhostEngine>) -> Result<(), String> {
+    let auth = engine.auth();
+    service(&engine)
+        .revoke_fabric_grant(&auth)
+        .map_err(|e| e.to_string())
+}
+
+/// List Fabric workspaces the user can access. Requires an active Fabric grant.
+#[tauri::command]
+pub async fn fabric_list_workspaces(
+    engine: State<'_, GhostEngine>,
+) -> Result<Vec<FabricWorkspace>, String> {
+    let auth = engine.auth();
+    let svc = service(&engine);
+    let access_token = svc.fabric_access_token(&auth).map_err(|e| e.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        FabricClient::new()
+            .list_workspaces(&access_token)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("workspace list task failed: {e}"))?
+}
+
+/// Pure, read-only preview of the audit export payload Fabric would receive.
+/// Reuses the same row shapes as Power BI (`power_bi/export.rs`).
+#[tauri::command]
+pub fn fabric_export_preview(
+    since_days: Option<u32>,
+    engine: State<GhostEngine>,
+) -> Result<AuditExportPayload, String> {
+    let _ = &engine;
+    let db = open_default().map_err(|e| e.to_string())?;
+    export_preview_with_db(&db, since_days)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,12 +339,25 @@ mod tests {
         let app = managed_test_app();
         let engine = app.state::<GhostEngine>();
         let auth = engine.auth();
-        // No grant stored — power_bi_access_token must fail before any
-        // network call is attempted.
         let err = service(&engine).power_bi_access_token(&auth).unwrap_err();
         assert_eq!(
             err,
             crate::identity::IntegrationError::AuthenticationRequired
         );
+    }
+
+    #[test]
+    fn fabric_grant_status_reports_none_without_a_grant() {
+        let app = managed_test_app();
+        let status = fabric_grant_status(app.state());
+        assert!(!status.active);
+        assert!(status.granted_at.is_none());
+    }
+
+    #[test]
+    fn fabric_export_preview_is_read_only_and_returns_empty_for_no_executions() {
+        let db = crate::storage::open_in_memory().unwrap();
+        let payload = export_preview_with_db(&db, None).unwrap();
+        assert!(payload.is_empty());
     }
 }

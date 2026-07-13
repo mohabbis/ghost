@@ -39,14 +39,26 @@ Every integration below is additive to that pipeline, never a bypass of it.
   Organizer execution history server-side — never trusting a frontend-
   supplied snapshot — and PII-masks every string field before sending. v1
   always targets the signed-in user's own "My workspace," with no
-  workspace/dataset picker yet. See `docs/power-bi-integration.md`. Fabric
-  export remains unbuilt scaffolding only.
+  workspace/dataset picker yet. See `docs/power-bi-integration.md`.
+- **Fabric connector (partial)** (`integrations/microsoft/fabric/`,
+  `commands/integrations.rs`, experimental): separate `MicrosoftFabric`
+  grant, workspace listing (`fabric_list_workspaces`), and export preview
+  (`fabric_export_preview`). Push to Fabric destinations is not wired yet.
+  See `docs/fabric-integration.md`.
+- **Local intelligence providers** (`intelligence/local/`, experimental):
+  Ollama, LM Studio, and OpenAI-compatible localhost adapters;
+  `intelligence_discover_local` probes localhost only. Settings UI and
+  `organizer_intelligence_suggest` (Organizer AI suggestions button) are
+  built. See `docs/local-models.md`.
+- **Local MCP stdio server** (`mcp/server.rs`, `main.rs` `ghost mcp serve`):
+  JSON-RPC tools for status, Zone listing, plan creation/validation, and
+  signed-token-gated execution requests (execution still requires desktop
+  approval). See `docs/mcp-integration.md`.
 - **Integration module boundaries** (`integrations/`, `intelligence/`, `mcp/`):
-  Layer B business connectors (Power BI now real; Fabric still scaffolding),
-  Layer C internal providers (disabled by default, gated behind
-  `--features experimental`), and MCP tool/approval scaffolding — see
-  `docs/ai-provider-architecture.md` and `docs/integration-threat-model.md`.
-  No Fabric API calls or MCP transport yet.
+  Layer B business connectors (Power BI + partial Fabric), Layer C internal
+  providers (disabled by default, gated behind `--features experimental`),
+  and MCP server — see `docs/ai-provider-architecture.md` and
+  `docs/integration-threat-model.md`.
 - **Ghost's own MCP-planning surface** (`docs/mcp-integration.md`): the
   existing model for letting an external AI client (an "AI-assistant
   connector," in the language below) drive Ghost — status, Zone listing,
@@ -56,12 +68,10 @@ Every integration below is additive to that pipeline, never a bypass of it.
   the model proposes, Ghost plans and gates, the user approves, Ghost
   executes and audits.
 
-Everything else in this document is **planned or partially built** — no Tauri
-commands exist yet for Fabric export, intelligence provider configuration
-outside `--features experimental`, or live MCP stdio transport. Do not
-describe them as shipped in product copy, and do not wire a mutating command
-onto them without the same policy/approval/audit/undo treatment as any other
-mutating command (see `docs/command-registry.md`).
+Everything else in this document is **planned or partially built** — stock
+builds do not register intelligence, Fabric, Power BI, or MCP commands unless
+compiled with `--features experimental`. Do not describe experimental
+integrations as shipped in default product copy.
 
 ## Setting up sign-in for local development
 
@@ -92,14 +102,16 @@ scopes and endpoints used.
    — never a second login. **Built** for Power BI
    (`IntegrationKind::MicrosoftPowerBi`); Fabric's grant type
    (`IntegrationKind::MicrosoftFabric`) exists in the type system but its
-   exact scopes are still a placeholder (`integrations/microsoft/scopes.rs`).
+   exact scopes are set (`integrations/microsoft/scopes.rs` —
+   `https://api.fabric.microsoft.com/.default`).
 2. **Read surface first**: exporting Organizer audit history / execution
    summaries into a Fabric workspace or a Power BI dataset (e.g. "how much
    filing time did Ghost save this month") is a safe first cut — it's Ghost
    sending its own audit data outward, not Fabric reaching in to trigger
    mutations. **Built for Power BI** (`power_bi_export_preview` +
    `power_bi_push_audit_export`, gated behind `--features experimental`).
-   **Planned for Fabric.**
+   **Partial for Fabric** — grant, workspace list, and export preview only
+   (`fabric_export_preview`); push to Fabric is planned.
 3. **Write surface later, if ever, stays gated**: anything that would let a
    Fabric/Power BI trigger *cause* Ghost to move files or run a routine has
    to enter through the same `Intent -> Plan -> Policy check -> User approval`

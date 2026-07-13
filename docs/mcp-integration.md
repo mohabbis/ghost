@@ -45,11 +45,13 @@ Denied client actions:
 
 ## Local MCP first
 
-Phase 1 should be a local stdio server launched by the installed app or CLI:
+Phase 1 is a local stdio server launched by the installed app or CLI:
 
 ```bash
 ghost mcp serve
 ```
+
+Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan tools), `approval.rs` (signed execution tokens).
 
 Example macOS client configuration:
 

@@ -95,6 +95,12 @@ pub fn plan_zone(conn: &Db, zone_id: &str) -> anyhow::Result<OrganizerPlan> {
     Ok(plan_with_rules_and_options(zone_id, &rules, rename_dated))
 }
 
+/// Scan readable source folders in a Zone and return file metadata (read-only).
+pub fn scan_zone_files(conn: &Db, zone_id: &str) -> anyhow::Result<Vec<ScannedFile>> {
+    let rules = list_folder_rules(conn, zone_id)?;
+    Ok(scan_sources(&rules))
+}
+
 /// Build a plan from an explicit set of folder rules (no storage dependency).
 ///
 /// Exposed separately so the planner is fully testable without a database or

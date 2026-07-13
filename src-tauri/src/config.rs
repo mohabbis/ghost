@@ -60,6 +60,8 @@ pub struct IntelligenceSettings {
     #[serde(default)]
     pub anthropic: AnthropicIntelligenceConfig,
     #[serde(default)]
+    pub local: LocalIntelligenceConfig,
+    #[serde(default)]
     pub routing: IntelligenceRoutingConfig,
 }
 
@@ -87,6 +89,70 @@ pub struct AnthropicIntelligenceConfig {
     pub timeout_seconds: u64,
     #[serde(default = "default_max_input_bytes")]
     pub max_input_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalIntelligenceConfig {
+    /// `ollama`, `lm_studio`, or `openai_compatible`
+    #[serde(default = "default_local_backend")]
+    pub backend: String,
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
+    #[serde(default = "default_local_model")]
+    pub model: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default = "default_provider_timeout")]
+    pub timeout_seconds: u64,
+    #[serde(default)]
+    pub allow_network_lan: bool,
+    #[serde(default = "default_max_input_bytes")]
+    pub max_input_bytes: usize,
+}
+
+impl LocalIntelligenceConfig {
+    pub fn is_localhost(&self) -> bool {
+        let url = self.base_url.to_lowercase();
+        url.starts_with("http://127.0.0.1")
+            || url.starts_with("http://localhost")
+            || url.starts_with("http://[::1]")
+    }
+
+    pub fn endpoint_is_allowed(&self) -> bool {
+        if self.base_url.trim().is_empty() || self.model.trim().is_empty() {
+            return false;
+        }
+        if self.is_localhost() {
+            return true;
+        }
+        self.allow_network_lan
+    }
+}
+
+fn default_local_backend() -> String {
+    "ollama".to_string()
+}
+
+fn default_ollama_base_url() -> String {
+    "http://127.0.0.1:11434/v1".to_string()
+}
+
+fn default_local_model() -> String {
+    "llama3.2".to_string()
+}
+
+impl Default for LocalIntelligenceConfig {
+    fn default() -> Self {
+        Self {
+            backend: default_local_backend(),
+            base_url: default_ollama_base_url(),
+            model: default_local_model(),
+            api_key: None,
+            timeout_seconds: default_provider_timeout(),
+            allow_network_lan: false,
+            max_input_bytes: default_max_input_bytes(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +226,7 @@ impl Default for IntelligenceSettings {
             default_provider: default_intelligence_provider(),
             openai: OpenAiIntelligenceConfig::default(),
             anthropic: AnthropicIntelligenceConfig::default(),
+            local: LocalIntelligenceConfig::default(),
             routing: IntelligenceRoutingConfig::default(),
         }
     }
@@ -414,9 +481,15 @@ impl GhostConfig {
         }
 
         match self.intelligence.default_provider.as_str() {
-            "disabled" | "openai" | "anthropic" => {}
+            "disabled"
+            | "openai"
+            | "anthropic"
+            | "local_ollama"
+            | "local_lm_studio"
+            | "local"
+            | "local_openai_compatible" => {}
             other => anyhow::bail!(
-                "Invalid intelligence default provider '{other}' (expected disabled, openai, or anthropic)"
+                "Invalid intelligence default provider '{other}' (expected disabled, openai, anthropic, or local_*)"
             ),
         }
 
@@ -425,6 +498,16 @@ impl GhostConfig {
         }
         if self.intelligence.anthropic.timeout_seconds == 0 {
             anyhow::bail!("Anthropic intelligence timeout must be at least 1 second");
+        }
+        if self.intelligence.local.timeout_seconds == 0 {
+            anyhow::bail!("Local intelligence timeout must be at least 1 second");
+        }
+        if !self.intelligence.local.base_url.trim().is_empty()
+            && !self.intelligence.local.endpoint_is_allowed()
+        {
+            anyhow::bail!(
+                "Local model endpoint must be localhost unless allow_network_lan is enabled"
+            );
         }
 
         Ok(())

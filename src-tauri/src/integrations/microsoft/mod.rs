@@ -31,6 +31,63 @@ impl MicrosoftIntegrationService {
         self.require_grant(auth, IntegrationKind::MicrosoftPowerBi)
     }
 
+    /// Run incremental consent for Fabric and persist the resulting grant.
+    pub fn request_fabric_grant(
+        &self,
+        auth: &AuthManager,
+        client_id: &str,
+    ) -> Result<(), IntegrationError> {
+        let account_id = self
+            .identity
+            .identity(auth)
+            .ok_or(IntegrationError::AuthenticationRequired)?
+            .account_id;
+
+        let scope = scopes::fabric::SCOPES.join(" ");
+        let result = identity::run_grant_flow(OAuthProvider::Microsoft, client_id, &scope)
+            .map_err(|_| IntegrationError::ProviderUnavailable)?;
+
+        let grant = IntegrationGrant {
+            grant_id: uuid::Uuid::new_v4().to_string(),
+            account_id,
+            integration: IntegrationKind::MicrosoftFabric,
+            scopes: scopes::fabric::SCOPES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            resource_scope: ResourceScope::Global,
+            granted_at: chrono::Utc::now(),
+            expires_at: result.tokens.expires_at,
+            revoked_at: None,
+        };
+
+        self.identity
+            .add_grant(auth, grant, result.tokens)
+            .map_err(|_| IntegrationError::TokenRefreshFailed)
+    }
+
+    /// Revoke the local Fabric grant (does not contact Microsoft).
+    pub fn revoke_fabric_grant(&self, auth: &AuthManager) -> Result<(), IntegrationError> {
+        self.identity
+            .revoke_grant(auth, IntegrationKind::MicrosoftFabric)
+            .map_err(|_| IntegrationError::TokenRefreshFailed)
+    }
+
+    /// Decrypted access token for the active Fabric grant, if any.
+    pub fn fabric_access_token(&self, auth: &AuthManager) -> Result<String, IntegrationError> {
+        self.fabric_grant_active(auth)?;
+        let grant_id = self
+            .identity
+            .active_grants(auth)
+            .into_iter()
+            .find(|g| g.integration == IntegrationKind::MicrosoftFabric)
+            .map(|g| g.grant_id)
+            .ok_or(IntegrationError::ConsentRequired)?;
+        self.identity
+            .access_token_for_grant(auth, &grant_id)
+            .ok_or(IntegrationError::TokenExpired)
+    }
+
     /// Run incremental consent for Power BI (the `power_bi::SCOPES` API
     /// scope, on top of whatever identity scopes sign-in already granted)
     /// and persist the resulting grant. Requires an existing signed-in

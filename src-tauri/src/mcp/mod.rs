@@ -5,7 +5,10 @@
 
 pub mod approval;
 pub mod errors;
+pub mod handlers;
+pub mod server;
 pub mod tools;
 
-pub use approval::ApprovalTokenClaims;
+pub use approval::{issue_approval_token, ApprovalTokenClaims, SignedApprovalToken};
+pub use server::run_stdio;
 pub use tools::McpToolKind;
