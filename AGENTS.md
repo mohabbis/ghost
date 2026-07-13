@@ -240,6 +240,31 @@ install either, so this is not a repo-wide default):
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]  # or mold, if installed
 ```
 
+## Cursor Cloud specific instructions
+
+The Cloud VM is Linux x86_64. Rust stable (via `rust-toolchain.toml`), the Tauri
+CLI, and all system libs are preinstalled by the environment; the startup update
+script only refreshes crate deps (`cargo fetch`) and ensures the Tauri CLI is
+present. Standard commands are already documented above (`README.md`, `Makefile`,
+`## Validation`) — use those. Only the non-obvious Linux gotchas are captured here:
+
+- **Running the desktop app in dev mode:** `cargo tauri dev` fails with
+  "`cargo run` could not determine which binary to run" because the crate exposes
+  multiple bins (`ghost`, `diagnose_perms`, and gated `mcp_relay_server`) and sets
+  no `default-run`. Pass the bin through to the runner:
+  `cargo tauri dev -- --bin ghost` (Makefile's `make dev` hits the same ambiguity).
+  `cargo tauri build --no-bundle` is unaffected (it builds all bins).
+- **GUI testing:** an X11 display is available at `DISPLAY=:1`. The app renders
+  there via `webkit2gtk` with software rendering; `libEGL warning: DRI3 ...`
+  messages are harmless. Ghost's macOS/Windows input capture/replay is unavailable
+  on Linux (only `platform/headless.rs` compiles), but the Ghost Organizer flow
+  (Zone -> add folder -> Scan & Preview -> Approve & Organize -> History -> Undo)
+  works fully and is the best end-to-end smoke test. The Organizer requires
+  creating a Zone and adding the target folder before Scan & Preview is meaningful.
+- **Extra system dep vs. CI:** beyond the GTK/webkit libs listed above, a bare VM
+  also needs `libssl-dev` + `pkg-config` (for `openssl-sys`). GitHub's CI runners
+  ship these preinstalled, so they are absent from `rust.yml`'s apt list.
+
 ## Final response expectations
 
 When reporting work back to the user, include:
