@@ -179,6 +179,7 @@ impl ReplayEngine for HeadlessReplayer {
                     tracing::debug!("Variable reference: {}", name);
                 }
             }
+            progress.complete_step(idx, event);
         }
 
         Ok(())

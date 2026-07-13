@@ -647,3 +647,33 @@ fn compression_review_js_invokes_routine_policy_plan() {
         "compression-review.js must fetch routine_policy_plan for the review timeline"
     );
 }
+
+#[test]
+fn domcontentloaded_checks_replay_unfinished_run() {
+    let js = read("../src/main.js");
+    let dom_ready = js
+        .find("window.addEventListener(\"DOMContentLoaded\"")
+        .map(|idx| &js[idx..])
+        .expect("DOMContentLoaded bootstrap must exist");
+    assert!(
+        dom_ready.contains("replayCheckUnfinishedRun"),
+        "app bootstrap must check for interrupted replay runs"
+    );
+}
+
+#[test]
+fn replay_workflow_still_goes_through_policy_approval() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function replayWorkflow\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("replayWorkflow must exist").as_str();
+    assert!(
+        body.contains("confirmPolicyBeforeReplay"),
+        "replayWorkflow must gate on confirmPolicyBeforeReplay"
+    );
+    let confirm_idx = body.find("confirmPolicyBeforeReplay").unwrap();
+    let replay_idx = body.find("replay_workflow").unwrap();
+    assert!(
+        confirm_idx < replay_idx,
+        "confirmPolicyBeforeReplay must run before replay_workflow"
+    );
+}

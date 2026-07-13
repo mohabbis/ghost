@@ -15,6 +15,7 @@ use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::vision;
 use crate::core::wait::smart_wait;
 use crate::performance::{PerformanceMonitor, PerformanceSummary};
+use crate::storage;
 use crate::telemetry::{TelemetryManager, UsageStats};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use image::DynamicImage;
@@ -345,6 +346,24 @@ impl GhostEngine {
         self.replay_progress.begin(events.len());
         *self.last_failed_step.lock().unwrap() = None;
 
+        let label = workflow_name
+            .clone()
+            .unwrap_or_else(|| "Unsaved workflow".to_string());
+        let fingerprint = crate::policy::fingerprint_events(events);
+        let wal = storage::open_default().ok().and_then(|db| {
+            let id =
+                storage::replay_runs::begin_replay_run(&db, &label, &fingerprint, events.len())
+                    .ok()?;
+            Some((std::sync::Arc::new(db), id))
+        });
+        if let Some((db, id)) = &wal {
+            let db_cb = db.clone();
+            let id_cb = id.clone();
+            self.replay_progress.begin_wal(events.len(), move |report| {
+                let _ = storage::replay_runs::update_replay_progress(&db_cb, &id_cb, report);
+            });
+        }
+
         // Time and record the replay (both no-op unless the user opted in).
         let started = Instant::now();
         self.perf.start_timer("replay");
@@ -364,6 +383,22 @@ impl GhostEngine {
             started.elapsed().as_secs(),
             result.is_ok(),
         );
+
+        if let Some((db, id)) = wal {
+            let cancelled = self.replay_stop_flag.load(Ordering::Relaxed);
+            if !cancelled && result.is_ok() {
+                if let Ok(stored) = storage::replay_runs::get_replay_run(&db, &id) {
+                    let report = crate::audit::ReplayRunReport {
+                        events_applied: stored.events_applied,
+                        events_total: stored.events_total,
+                        undo: stored.undo,
+                    };
+                    let _ = storage::replay_runs::finish_replay_run(&db, &id, &report);
+                }
+            }
+            self.replay_progress.clear_wal();
+        }
+
         self.record_replay(workflow_name, events.len(), started, &result);
 
         result

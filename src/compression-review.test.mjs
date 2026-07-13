@@ -278,6 +278,18 @@ test("guardSeverityLabel uses escalating markers by severity", () => {
   assert.equal(r.guardSeverityLabel("critical"), "!!!");
 });
 
+test("combinedReviewNote merges policy and guard reasons", () => {
+  const r = review();
+  const note = r.combinedReviewNote(
+    1,
+    "OS click outside approved zone",
+    ["!! Sensitive field", "· Coordinate fallback"],
+  );
+  assert.match(note, /Policy: OS click outside approved zone/);
+  assert.match(note, /Guard: Sensitive field/);
+  assert.match(note, /Coordinate fallback/);
+});
+
 test("routineDecisionBadge maps policy decisions to Organizer-style badges", () => {
   const r = review();
   assert.match(r.routineDecisionBadge({ decision: "allow" }), /Allowed/);

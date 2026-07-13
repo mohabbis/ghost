@@ -682,6 +682,35 @@ mod tests {
         );
     }
 
+    /// On case-insensitive volumes, a planned target that differs only by case
+    /// from an on-disk name must be de-duplicated — never silently overwrite.
+    #[test]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    fn case_variant_collision_is_deduped_on_case_insensitive_fs() {
+        let tmp = tempdir();
+        tmp.dir("Documents");
+        tmp.file("Documents/report.pdf", b"existing");
+        tmp.file("Report.pdf", b"incoming");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+        let move_actions: Vec<_> = plan
+            .actions
+            .iter()
+            .filter(|a| matches!(a.capability, Capability::MoveFile { .. }))
+            .collect();
+        assert_eq!(move_actions.len(), 1, "one incoming file should move");
+        let target = match &move_actions[0].capability {
+            Capability::MoveFile { to, .. } => {
+                to.file_name().unwrap().to_string_lossy().to_string()
+            }
+            _ => unreachable!(),
+        };
+        assert!(
+            target.contains("(2)") || target.eq_ignore_ascii_case("report.pdf"),
+            "collision must dedupe, got {target}"
+        );
+    }
+
     /// Sorted listing of a directory tree (relative paths) for mutation checks.
     fn listing(root: &Path) -> Vec<String> {
         let mut out = Vec::new();
