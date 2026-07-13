@@ -25,6 +25,7 @@ let guardAuditCompleted = false;
 let hasReplayedCurrentWorkflow = false;
 let hasSavedCurrentWorkflow = false;
 let latestGuardReport = null;
+let latestRoutinePolicyPlan = null;
 const MAX_TIMELINE_ITEMS = 220;
 const pendingTimelineEvents = [];
 let timelineFlushScheduled = false;
@@ -1068,6 +1069,7 @@ async function refreshCompressedTimeline() {
   initCompressionReview();
   try {
     await compressionReview.compress(recordedEvents);
+    latestRoutinePolicyPlan = compressionReview.policyPlan;
   } catch (error) {
     console.error("Timeline compression failed:", error);
     timelineEl.innerHTML = "";
@@ -1076,6 +1078,46 @@ async function refreshCompressedTimeline() {
     toastError("Could not compress timeline — showing raw events.");
   }
   updateWorkflowHealth();
+  updateRecordingUI();
+}
+
+function renderReviewModalActions(policyPlan) {
+  const modal = document.getElementById("review-modal");
+  if (!modal) return;
+  let footer = document.getElementById("review-modal-actions");
+  if (!footer) {
+    footer = document.createElement("div");
+    footer.id = "review-modal-actions";
+    footer.className = "btn-row review-actions";
+    footer.style.marginTop = "12px";
+    modal.querySelector(".modal-content")?.appendChild(footer);
+  }
+
+  const policyBlocked = policyPlan?.can_proceed_with_approvals === false;
+  const confirmCount = policyPlan?.confirmation_count || 0;
+  const approveLabel =
+    confirmCount > 0
+      ? `Approve ${confirmCount} step(s) & Replay`
+      : "Approve & Replay";
+
+  footer.innerHTML = `
+    <button
+      class="btn btn--primary btn-review-replay"
+      id="review-modal-approve-replay"
+      type="button"
+      ${policyBlocked ? "disabled" : ""}
+      title="${policyBlocked ? "Policy denied one or more steps" : "Approve the policy plan and replay"}"
+    >${approveLabel}</button>
+    <button class="btn btn--ghost btn-review-cancel" type="button" data-close-modal="review-modal">Close</button>
+  `;
+
+  const approveBtn = document.getElementById("review-modal-approve-replay");
+  if (approveBtn && !policyBlocked) {
+    approveBtn.onclick = async () => {
+      hideModal(modal);
+      await replayWorkflow();
+    };
+  }
 }
 
 async function openWorkflowReview() {
@@ -1098,6 +1140,8 @@ async function openWorkflowReview() {
   try {
     const panelReview = new CompressionReview("review-modal-compression", invoke);
     const report = await panelReview.compress(recordedEvents);
+    latestRoutinePolicyPlan = panelReview.policyPlan;
+    renderReviewModalActions(panelReview.policyPlan);
     showModal(modal);
     showInsight(
       `Reviewed ${report.compressed_step_count} step(s) — ${(report.reduction_ratio * 100).toFixed(0)}% fewer than raw events.`,
@@ -2625,7 +2669,14 @@ function updateRecordingUI() {
 
   if (recordBtn) recordBtn.disabled = isRecording || isPlaying;
   if (stopBtn) stopBtn.disabled = !isRecording;
-  if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  if (replayBtn) {
+    const policyBlocked = latestRoutinePolicyPlan?.can_proceed_with_approvals === false;
+    replayBtn.disabled =
+      isRecording || isPlaying || recordedEvents.length === 0 || policyBlocked;
+    replayBtn.title = policyBlocked
+      ? "Policy denied one or more steps — review the timeline before replaying"
+      : "";
+  }
   if (replayReliableBtn) replayReliableBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
   const dryRunBtn = document.getElementById("dryRunBtn");
   if (dryRunBtn) dryRunBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;

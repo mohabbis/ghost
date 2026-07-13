@@ -655,6 +655,33 @@ mod tests {
         assert_ne!(target, "acme-invoice.pdf");
     }
 
+    #[test]
+    fn case_variant_files_get_distinct_targets_on_case_sensitive_fs() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"lower");
+        tmp.file("Report.pdf", b"upper");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+
+        assert_eq!(plan.summary.move_file, 2, "both case variants should move");
+        let targets: Vec<String> = plan
+            .actions
+            .iter()
+            .filter_map(|a| match &a.capability {
+                Capability::MoveFile { to, .. } | Capability::RenameFile { to, .. } => {
+                    Some(to.file_name()?.to_string_lossy().to_string())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&"report.pdf".to_string()));
+        assert!(
+            targets.contains(&"Report.pdf".to_string()),
+            "case-sensitive FS should keep distinct targets, got {targets:?}"
+        );
+    }
+
     /// Sorted listing of a directory tree (relative paths) for mutation checks.
     fn listing(root: &Path) -> Vec<String> {
         let mut out = Vec::new();
