@@ -356,3 +356,15 @@ cargo tauri build --no-bundle                             # compile smoke test
 Frontend needs no compile — `tauri.conf.json` serves `src/` directly.
 
 Manual desktop QA (macOS/Windows) is documented in `docs/manual-qa-checklist.md`.
+
+---
+
+## 12. Architecture freeze (reading order)
+
+Principal engineer design review (2026-07-13) — stop designing, start proving:
+
+1. [`permanent-architecture-invariants.md`](permanent-architecture-invariants.md) — twelve decade-stable laws  
+2. [`architecture-decision-records.md`](architecture-decision-records.md) — 22 accepted ADRs  
+3. [`architecture-debt-register.md`](architecture-debt-register.md) — subsystem debt, deletions, proofs, freeze verdict  
+
+Long-horizon docs ([`architecture-review-2031.md`](architecture-review-2031.md), [`financial-transaction-authority.md`](financial-transaction-authority.md)) are frozen reference only; amend architecture via ADR + prototype, not new vision documents.
