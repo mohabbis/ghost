@@ -53,6 +53,19 @@ pub struct IntegrationSettings {
     pub google_client_id: Option<String>,
 }
 
+impl IntegrationSettings {
+    /// Fill bundled OAuth client IDs when the on-disk config predates them.
+    pub fn ensure_bundled_defaults(&mut self) {
+        if self
+            .google_client_id
+            .as_ref()
+            .is_none_or(|id| id.trim().is_empty())
+        {
+            self.google_client_id = Some(BUNDLED_GOOGLE_CLIENT_ID.to_string());
+        }
+    }
+}
+
 /// Settings for Ghost-owned intelligence providers (`intelligence/`).
 /// Keys live in `intelligence/credentials.rs`, never in this file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,7 +447,8 @@ impl GhostConfig {
 
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let config: GhostConfig = serde_json::from_str(&content)?;
+            let mut config: GhostConfig = serde_json::from_str(&content)?;
+            config.integrations.ensure_bundled_defaults();
             Ok(config)
         } else {
             let config = Self::default();
@@ -588,6 +602,16 @@ mod tests {
         let config: GhostConfig = serde_json::from_value(value).unwrap();
         assert_eq!(config.audit.retention_keep_last, None);
         assert_eq!(config.audit.retention_keep_days, None);
+    }
+
+    #[test]
+    fn ensure_bundled_defaults_fills_missing_google_client_id() {
+        let mut integrations = IntegrationSettings::default();
+        integrations.ensure_bundled_defaults();
+        assert_eq!(
+            integrations.google_client_id.as_deref(),
+            Some(BUNDLED_GOOGLE_CLIENT_ID)
+        );
     }
 }
 

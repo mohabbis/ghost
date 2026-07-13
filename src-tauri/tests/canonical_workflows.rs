@@ -469,4 +469,178 @@ mod canonical_workflows {
             "Automate trust should be the only way to skip the prompt, got {automate_decision:?}"
         );
     }
+
+    /// Filesystem hardening: a file swapped between plan and execute must not move.
+    ///
+    /// Regression for audit FINDING-FS-004 (TOCTOU / inode identity).
+    #[test]
+    #[cfg(unix)]
+    fn test_execute_refuses_identity_swap_between_plan_and_execute() {
+        use ghost_lib::organizer::executor::execute_plan;
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::policy::{Capability, DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::open_in_memory;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_toctou_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let conn = open_in_memory().unwrap();
+        let dir = TempDir::new();
+        let report_pdf = dir.file("report.pdf", b"original body");
+
+        let zone = create_zone(&conn, "Downloads", None, DefaultDecision::Ask, false).unwrap();
+        let rule = FolderRule {
+            path: dir.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::Automate,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
+        assert!(
+            plan.actions.iter().any(|a| a.source_identity.is_some()),
+            "planned move actions should carry scan-time file identity"
+        );
+
+        // Simulate TOCTOU: attacker replaces file contents (new inode) before execute.
+        fs::remove_file(&report_pdf).unwrap();
+        dir.file("report.pdf", b"swapped body");
+
+        let report = execute_plan(&plan, &[rule]);
+        let move_skipped = report.audit.events().iter().any(|e| {
+            matches!(&e.capability, Capability::MoveFile { from, .. } if *from == report_pdf)
+                && matches!(&e.outcome, ghost_lib::audit::ActionOutcome::Skipped { .. })
+        });
+        assert!(
+            move_skipped,
+            "swapped file move must be skipped, got report: {:?}",
+            report
+        );
+        assert!(
+            report_pdf.exists(),
+            "swapped file must remain at the original path"
+        );
+        assert!(
+            !report_pdf
+                .parent()
+                .unwrap()
+                .join("Documents/report.pdf")
+                .exists(),
+            "swapped file must not have been moved into Documents"
+        );
+    }
+
+    /// Scanner must not propose moves for symlink entries in the Zone.
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_source_is_excluded_from_plan() {
+        use ghost_lib::organizer::planner::plan_zone;
+        use ghost_lib::policy::{Capability, DefaultDecision, FolderRule, TrustLevel};
+        use ghost_lib::storage::open_in_memory;
+        use ghost_lib::storage::zones::{add_folder_rule, create_zone};
+        use std::fs;
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new() -> Self {
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir().join(format!(
+                    "ghost_symlink_plan_test_{}_{}",
+                    std::process::id(),
+                    n
+                ));
+                fs::create_dir_all(&path).unwrap();
+                TempDir(path)
+            }
+            fn path(&self) -> &Path {
+                &self.0
+            }
+            fn file(&self, rel: &str, bytes: &[u8]) -> PathBuf {
+                let p = self.0.join(rel);
+                if let Some(parent) = p.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(&p, bytes).unwrap();
+                p
+            }
+            fn symlink_file(&self, rel: &str, target: &Path) -> PathBuf {
+                let p = self.0.join(rel);
+                std::os::unix::fs::symlink(target, &p).unwrap();
+                p
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let conn = open_in_memory().unwrap();
+        let tmp = TempDir::new();
+        let secret = tmp.file("outside/secret.pdf", b"secret");
+        let link = tmp.symlink_file("link.pdf", &secret);
+
+        let zone = create_zone(&conn, "Zone", None, DefaultDecision::Ask, false).unwrap();
+        let rule = FolderRule {
+            path: tmp.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: TrustLevel::Automate,
+        };
+        add_folder_rule(&conn, &zone.id, &rule).unwrap();
+
+        let plan = plan_zone(&conn, &zone.id).expect("plan_zone");
+        assert!(
+            !plan.actions.iter().any(|a| {
+                matches!(
+                    &a.capability,
+                    Capability::MoveFile { from, .. } if from == &link
+                )
+            }),
+            "symlink must not appear in the approved plan"
+        );
+        assert!(link.exists());
+        assert!(secret.exists());
+    }
 }

@@ -166,7 +166,7 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
-| `account_status` | stable | ✓ | – | – | – | ✓ | – | low | Reads the local linked-account record (via the vault's protect/reveal envelope). Reports "not signed in" if locked or unlinked — never errors. |
+| `account_status` | stable | ✓ | – | – | – | ✓ | – | low | Reads the local linked-account record (via the vault's protect/reveal envelope). Reports `google_sign_in_available` / `microsoft_sign_in_available` from configured or bundled OAuth client IDs. Reports "not signed in" if locked or unlinked — never errors. |
 | `account_sign_in` | stable | ✓ | – | – | ✓ | ✓ | – | high | Opens the system browser (OAuth 2.0 + PKCE) and a loopback listener, then calls the provider's token + userinfo endpoints. Requires `integrations.microsoft_client_id`/`google_client_id` (or `GHOST_MS_CLIENT_ID`/`GHOST_GOOGLE_CLIENT_ID`) to be configured, else fails with an actionable error. Errors on state mismatch, cancellation, or a non-2xx provider response. Identity only — establishes no data-access grant to any other product surface. |
 | `account_sign_out` | stable | ✓ | – | – | – | ✓ | – | low | Deletes the local linked-account record. Does not revoke provider-side consent — the user should also remove Ghost from their account's connected-apps list if they want that. |
 
