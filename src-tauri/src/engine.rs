@@ -201,14 +201,13 @@ impl GhostEngine {
     /// Test-only engine with its `AuthManager` rooted at `auth_path` instead
     /// of the real OS data directory, so auth command tests can call
     /// `auth_setup`/`auth_unlock` without ever touching a developer's real
-    /// local password file.
+    /// local password file. The linked-account store is rooted at a sibling
+    /// path derived from `auth_path` (not a shared `account.json`) so parallel
+    /// command tests cannot leak sign-in state into each other.
     #[cfg(test)]
     pub(crate) fn with_auth_path(auth_path: PathBuf) -> Self {
         let mut engine = Self::new();
-        let accounts_path = auth_path
-            .parent()
-            .unwrap_or(std::path::Path::new("."))
-            .join("account.json");
+        let accounts_path = auth_path.with_extension("identity.json");
         engine.auth = Arc::new(AuthManager::with_path(auth_path));
         engine.accounts = Arc::new(crate::accounts::AccountManager::with_path(accounts_path));
         engine
