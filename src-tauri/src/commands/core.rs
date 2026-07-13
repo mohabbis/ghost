@@ -114,9 +114,21 @@ pub fn replay_workflow(
     let plan = crate::policy::evaluate_compressed(&report);
     crate::policy::ensure_replayable(&plan)?;
     engine.consume_routine_approval(&crate::policy::fingerprint_events(&events))?;
-    engine
-        .replay(&events, workflow_name)
-        .map_err(|e| e.to_string())
+
+    let action_plan = crate::action_plan::from_compression_report(&report, &events, workflow_name);
+    let runtime_result = crate::runtime::execute_action_plan_with_progress(
+        &action_plan,
+        &[],
+        Some(&engine),
+        None,
+        |_| {},
+    );
+    if runtime_result.stopped_early && runtime_result.report.failed > 0 {
+        return Err(runtime_result
+            .stop_reason
+            .unwrap_or_else(|| "routine execution failed".into()));
+    }
+    Ok(())
 }
 
 /// Approve a routine replay after the user has reviewed the policy plan.

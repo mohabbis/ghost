@@ -3,6 +3,8 @@
 // (not the marketing site — that lives in public/).
 
 import { CompressionReview } from "./compression-review.js";
+import { renderActionPlanSteps, planSummaryHtml } from "./execution/review.js";
+import { renderExecutionReceipt } from "./execution/receipt.js";
 
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
@@ -1192,6 +1194,15 @@ async function openWorkflowReview() {
     const panelReview = new CompressionReview("review-modal-compression", invoke);
     const report = await panelReview.compress(recordedEvents);
     latestRoutinePolicyPlan = panelReview.policyPlan;
+    const actionPlan = await invoke("action_plan_from_events", { events: recordedEvents });
+    const planHost = document.getElementById("review-modal-action-plan");
+    if (planHost && actionPlan) {
+      planHost.innerHTML = `
+        <h4 class="organizer-subhead">Semantic plan</h4>
+        ${planSummaryHtml(actionPlan)}
+        ${renderActionPlanSteps(actionPlan)}
+      `;
+    }
     renderReviewModalActions(panelReview.policyPlan);
     showModal(modal);
     showInsight(
@@ -3683,8 +3694,10 @@ async function organizerScan() {
   if (result) result.innerHTML = `<p class="organizer-muted">Scanning… nothing has been changed.</p>`;
 
   let plan;
+  let actionPlan;
   try {
     plan = await invoke("organizer_plan", { zoneId: zone.id });
+    actionPlan = await invoke("action_plan_from_zone", { zoneId: zone.id });
   } catch (err) {
     if (result) result.innerHTML = "";
     toastError("Scan failed: " + formatInvokeError(err));
@@ -3697,6 +3710,7 @@ async function organizerScan() {
     if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
   organizerRenderPlan(plan);
+  if (actionPlan) organizerRenderActionPlan(actionPlan);
   organizerHasReviewedPlan = organizerPlanHasApplyableActions(plan);
   organizerUpdateButtons(await safeRules(zone.id));
   if (!organizerHasReviewedPlan) {
@@ -3797,6 +3811,16 @@ async function safeRules(zoneId) {
   }
 }
 
+function organizerRenderActionPlan(actionPlan) {
+  const el = document.getElementById("organizerActionPlan");
+  if (!el || !actionPlan) return;
+  el.innerHTML = `
+    <h3 class="organizer-subhead">Review plan</h3>
+    ${planSummaryHtml(actionPlan)}
+    ${renderActionPlanSteps(actionPlan)}
+  `;
+}
+
 function organizerRenderPlan(plan) {
   const result = document.getElementById("organizerResult");
   if (!result) return;
@@ -3861,7 +3885,12 @@ async function organizerRun() {
 
   let res;
   try {
-    res = await invoke("organizer_execute", { zoneId: zone.id });
+    res = await invoke("execute_action_plan", {
+      source: { kind: "organizer", zone_id: zone.id },
+      events: null,
+      downloads: null,
+      financeRoot: null,
+    });
   } catch (err) {
     toastError("Organize failed: " + formatInvokeError(err));
     if (runBtn) {
@@ -3870,24 +3899,20 @@ async function organizerRun() {
     }
     return;
   }
-  const r = res.report || {};
-  const auditRows = (r.audit || [])
-    .map((e) => {
-      const outcome = e.outcome?.outcome || "?";
-      const detail = e.outcome?.reason || e.outcome?.error || "";
-      // Show the rule that fired and how the action was authorized — the same
-      // "rule that fired / who signed off" record an auditor would expect.
-      const rule = e.rule_path
-        ? ` <span class="org-rule-attr">by rule <code>${escapeHtml(e.rule_path)}</code></span>`
-        : "";
-      const provenance = organizerProvenanceBadge(e.provenance);
-      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${organizerDescribeCapability(e.capability || {})}${provenance}${rule}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
+  const r = res.report_summary || res.report || {};
+  const receiptHtml = res.receipt ? renderExecutionReceipt(res.receipt) : "";
+  const auditRows = (res.receipt?.steps || [])
+    .map((s) => {
+      const outcome = s.outcome || s.verification?.status || "?";
+      const detail = s.verification?.observed || "";
+      return `<li><span class="org-outcome org-outcome--${escapeAttr(outcome)}">${escapeHtml(outcome)}</span> ${escapeHtml(s.label)}${detail ? ` — <em>${escapeHtml(detail)}</em>` : ""}</li>`;
     })
     .join("");
 
   const result = document.getElementById("organizerResult");
   if (result) {
     result.innerHTML = `
+      ${receiptHtml}
       <div class="organizer-summary organizer-summary--done">
         ✓ <strong>${r.applied ?? 0}</strong> applied ·
         <strong>${r.skipped ?? 0}</strong> skipped ·

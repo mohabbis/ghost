@@ -18,6 +18,7 @@ mod integrations;
 mod intelligence;
 mod mcp;
 mod organizer;
+mod runtime_cmds;
 mod updates;
 
 pub use account::*;
@@ -34,4 +35,5 @@ pub use integrations::*;
 pub use intelligence::*;
 pub use mcp::*;
 pub use organizer::*;
+pub use runtime_cmds::*;
 pub use updates::*;
