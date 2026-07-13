@@ -179,6 +179,12 @@ fn capability_type_name(capability: &Capability) -> &'static str {
         Capability::DeleteFile { .. } => "delete_file",
         Capability::StartRecording => "start_recording",
         Capability::ReplayWorkflow { .. } => "replay_workflow",
+        Capability::OsClick { .. } => "os_click",
+        Capability::OsType { .. } => "os_type",
+        Capability::OsShortcut { .. } => "os_shortcut",
+        Capability::OsScroll => "os_scroll",
+        Capability::OsWait => "os_wait",
+        Capability::OsUnknown { .. } => "os_unknown",
         Capability::CaptureScreen => "capture_screen",
         Capability::UseNetwork { .. } => "use_network",
         Capability::GenerateWorkflowFromPrompt => "generate_workflow_from_prompt",
@@ -190,13 +196,21 @@ fn capability_type_name(capability: &Capability) -> &'static str {
 /// existing function ties the two together at this granularity.
 fn capability_risk_level(capability: &Capability) -> &'static str {
     match capability {
-        Capability::ReadFolder { .. } | Capability::CreateFolder { .. } => "low",
+        Capability::ReadFolder { .. } | Capability::CreateFolder { .. } | Capability::OsWait => {
+            "low"
+        }
         Capability::RenameFile { .. }
         | Capability::MoveFile { .. }
-        | Capability::CopyFile { .. } => "medium",
-        Capability::DeleteFile { .. } | Capability::UseNetwork { .. } => "high",
+        | Capability::CopyFile { .. }
+        | Capability::OsScroll => "medium",
+        Capability::DeleteFile { .. }
+        | Capability::UseNetwork { .. }
+        | Capability::OsUnknown { .. } => "high",
         Capability::StartRecording
         | Capability::ReplayWorkflow { .. }
+        | Capability::OsClick { .. }
+        | Capability::OsType { .. }
+        | Capability::OsShortcut { .. }
         | Capability::CaptureScreen
         | Capability::GenerateWorkflowFromPrompt => "medium",
     }

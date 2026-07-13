@@ -258,11 +258,12 @@ resolution, double-click preservation.
 ## 8. What does NOT work / is incomplete ⚠️
 
 - **Ghost Guard routing of compressed steps** — event compression produces the
-  reviewable timeline, and the guard now audits that semantic timeline directly
-  (`guard::audit_compressed`, exposed as `ghost_guard_audit_compressed`), so risk
-  findings line up with the review-timeline steps the user sees. Routing those
-  same steps through the *policy* engine (`policy/`) for recorded routines — as
-  opposed to organizer file ops — is still follow-up work.
+  reviewable timeline, and the guard audits that semantic timeline
+  (`guard::audit_compressed` / `ghost_guard_audit_compressed`). Per-step
+  **policy** preview is now available via `policy::routines` /
+  `routine_policy_plan` (maps steps → `os_*` capabilities → `PolicyDecision`).
+  Binding that plan into replay approval + undo (so `replay_workflow` cannot
+  run without an approved plan) is still follow-up work.
 - **Routines replay is not yet a first-class, guarded, approvable product** the
   way Organizer is. The capture/replay/trace plumbing exists; the
   review→guard→policy→approve→execute→vault→undo loop for arbitrary cross-app

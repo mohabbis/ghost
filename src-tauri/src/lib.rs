@@ -34,6 +34,7 @@ macro_rules! run_with_commands {
                 commands::replay_workflow,
                 commands::ghost_guard_audit,
                 commands::ghost_guard_audit_compressed,
+                commands::routine_policy_plan,
                 commands::get_replay_history,
                 commands::get_replay_progress,
                 commands::dry_run_workflow,

@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-13
-**Status:** `master` @ `964eadd` (v1.2.7). Rust CI green on macOS/Windows/Linux after re-run of Actions flakes (action download `Service Unavailable` was infra, not product code). Recent merges: teal reference UI (#207), identity grant preservation (#206), dependabot bumps. Cursor agents: follow `.cursor/rules/` + `AGENTS.md`. **Release gap remains:** repo is `1.2.7` but latest GitHub Release is still `v1.2.4` — downloads lag until `v1.2.7` is tagged. Updater pubkey is still `REPLACE_WITH_OUTPUT_OF_cargo_tauri_signer_generate`. See `RELEASING.md`.
+**Status:** `master` @ `f889eb2` (v1.2.7). Rust CI green on macOS/Windows/Linux. **GitHub Release `v1.2.7` is published** (`Ghost.dmg`, `Ghost_Setup.exe`, `SHA256SUMS.txt`) — macOS signing/notarization enabled; Windows still unsigned. Recent merges: Guard Desk DOM contract (#209/#211), account fixture isolation (#212), dirs 6 (#200), teal UI (#207). Cursor agents: `.cursor/rules/` + `AGENTS.md`. Updater pubkey is still the `REPLACE_WITH_…` placeholder (no `latest.json` auto-update until `TAURI_SIGNING_PRIVATE_KEY` is set). See `RELEASING.md`.
 
 ---
 
@@ -42,18 +42,19 @@ For a full technical snapshot see `docs/PROJECT_STATE.md`.
 
 ## Immediate Next Steps
 
-1. **Publish v1.2.7 release** (or align site/README to the actual latest GitHub Release). Tag push builds `Ghost.dmg` + `Ghost_Setup.exe`. See `RELEASING.md`.
-2. **Updater pubkey:** replace `REPLACE_WITH_…` in `tauri.conf.json` and set `TAURI_SIGNING_PRIVATE_KEY` so `latest.json` publishes automatically.
-3. **Notarization / Windows signing secrets** so releases stop being ad-hoc/unsigned. See `RELEASING.md`.
-4. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
+1. **Updater pubkey:** replace `REPLACE_WITH_…` in `tauri.conf.json` and set `TAURI_SIGNING_PRIVATE_KEY` so `latest.json` publishes automatically.
+2. **Windows Authenticode / Azure Trusted Signing** so `Ghost_Setup.exe` is signed (macOS notarization already works on v1.2.7). See `RELEASING.md`.
+3. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
+4. **Close the Routines loop** — route compressed replay steps through guard + policy + approval + undo (biggest gap vs Organizer; see `docs/PROJECT_STATE.md` §10).
 5. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
-6. **Close the Routines loop** — route compressed replay steps through guard + policy + approval + undo (biggest gap vs Organizer; see `docs/PROJECT_STATE.md` §10).
+6. **Publish next version** only when Windows signing and/or updater keys land — do not re-tag v1.2.7.
 
 ---
 
 ## Known Risks
 
-- Without Apple/Azure secrets, releases are preview-quality (ad-hoc macOS / unsigned Windows).
+- Windows releases are still unsigned until Azure Trusted Signing secrets are configured; macOS v1.2.7 is notarized.
+- Auto-update is off until a real updater pubkey replaces the placeholder.
 - `parse_id_document` handles PII — keep local and suggestion-only.
 - Experimental commands stay behind `--features experimental`; CI does not run that leg.
 

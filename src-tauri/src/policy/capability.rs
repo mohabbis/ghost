@@ -31,6 +31,27 @@ pub enum Capability {
     StartRecording,
     /// Replay a recorded workflow. Out of Organizer scope.
     ReplayWorkflow { workflow_id: String },
+    /// Click / activate a UI element during routine replay. Risk: `os-control`.
+    OsClick {
+        app: Option<String>,
+        target_label: String,
+        low_confidence: bool,
+        coordinate_only: bool,
+    },
+    /// Type into a UI element during routine replay. Risk: `os-control`.
+    OsType {
+        app: Option<String>,
+        secure_field: bool,
+        redacted: bool,
+    },
+    /// Send a keyboard shortcut during routine replay. Risk: `os-control`.
+    OsShortcut { combo: String },
+    /// Scroll during routine replay. Risk: `os-control`.
+    OsScroll,
+    /// Idle wait inserted by compression. Harmless pacing — may Allow.
+    OsWait,
+    /// Unrecognized compressed step. Denied until the compressor improves.
+    OsUnknown { description: String },
     /// Capture the screen. Out of Organizer scope.
     CaptureScreen,
     /// Reach a network host. Denied in the Organizer MVP.
@@ -100,6 +121,25 @@ mod tests {
             Capability::StartRecording,
             Capability::ReplayWorkflow {
                 workflow_id: "wf-1".into(),
+            },
+            Capability::OsClick {
+                app: Some("Notes".into()),
+                target_label: "Save".into(),
+                low_confidence: false,
+                coordinate_only: false,
+            },
+            Capability::OsType {
+                app: None,
+                secure_field: false,
+                redacted: false,
+            },
+            Capability::OsShortcut {
+                combo: "Cmd+S".into(),
+            },
+            Capability::OsScroll,
+            Capability::OsWait,
+            Capability::OsUnknown {
+                description: "garbled".into(),
             },
             Capability::CaptureScreen,
             Capability::UseNetwork {
