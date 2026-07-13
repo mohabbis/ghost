@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod action_plan;
 pub mod audit;
 pub mod auth;
 pub mod checks;
@@ -21,6 +22,7 @@ pub mod organizer;
 pub mod performance;
 mod platform;
 pub mod policy;
+pub mod runtime;
 pub mod storage;
 pub mod telemetry;
 
@@ -115,6 +117,14 @@ macro_rules! run_with_commands {
                 commands::organizer_time_to_value,
                 commands::organizer_verify_audit_chain,
                 commands::organizer_issue_mcp_approval_token,
+                // Ghost 2.0 — unified action plan pipeline
+                commands::action_plan_from_zone,
+                commands::action_plan_from_events,
+                commands::action_plan_demo,
+                commands::execute_action_plan,
+                commands::execute_routine_action_plan,
+                commands::get_execution_receipt,
+                commands::undo_action_plan_execution,
                 commands::mcp_pairing_status,
                 commands::mcp_enable_pairing,
                 commands::mcp_disable_pairing,

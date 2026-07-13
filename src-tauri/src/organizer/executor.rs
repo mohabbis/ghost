@@ -27,8 +27,8 @@
 //! recoverable — partial progress is captured in the audit log and reversible
 //! through the journal.
 
-use crate::audit::{ActionOutcome, AuditLog, Provenance, UndoJournal, UndoOp};
-use crate::policy::{self, Capability, FolderRule, PolicyDecision};
+use crate::audit::{ActionOutcome, AuditLog, UndoJournal, UndoOp};
+use crate::policy::{self, Capability, FolderRule};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -84,57 +84,15 @@ pub fn execute_plan_with_progress(
     rules: &[FolderRule],
     mut on_progress: impl FnMut(&ExecutionReport),
 ) -> ExecutionReport {
-    let mut report = ExecutionReport::default();
-
-    for action in &plan.actions {
-        let cap = &action.capability;
-
-        // (1) Re-check policy at execution time, recording which rule fired so
-        // the audit log can name the boundary that authorized (or refused) each
-        // action. Deny => skip, audited, no IO.
-        let evaluation = policy::evaluate_with_attribution(cap, rules);
-        let rule_path = evaluation.rule_path.clone();
-        if let PolicyDecision::Deny { reason } = &evaluation.decision {
-            report.record_skip(cap.clone(), format!("policy denied: {reason}"), rule_path);
-            on_progress(&report);
-            continue;
-        }
-        // An `automate` rule yields Allow with no prompting; anything requiring
-        // confirmation ran only because the user approved this execution.
-        let provenance = if evaluation.decision.is_allowed() {
-            Provenance::Automated
-        } else {
-            Provenance::UserApproved
-        };
-
-        match apply_one(action, rules, &mut report.undo) {
-            Outcome::Applied => {
-                report.applied += 1;
-                report.audit.record_attributed(
-                    cap.clone(),
-                    ActionOutcome::Applied,
-                    rule_path,
-                    Some(provenance),
-                );
-            }
-            Outcome::Skipped(reason) => report.record_skip(cap.clone(), reason, rule_path),
-            Outcome::Failed(error) => {
-                report.failed += 1;
-                report.audit.record_attributed(
-                    cap.clone(),
-                    ActionOutcome::Failed { error },
-                    rule_path,
-                    Some(provenance),
-                );
-            }
-        }
-        on_progress(&report);
-    }
-
-    report
+    let action_plan = crate::action_plan::from_organizer_plan(plan);
+    crate::runtime::execute_action_plan_with_progress(&action_plan, rules, None, None, |report| {
+        on_progress(report)
+    })
+    .report
 }
 
 impl ExecutionReport {
+    #[allow(dead_code)]
     fn record_skip(&mut self, cap: Capability, reason: String, rule_path: Option<PathBuf>) {
         self.skipped += 1;
         self.audit
@@ -143,6 +101,7 @@ impl ExecutionReport {
 }
 
 /// The result of attempting a single capability.
+#[allow(dead_code)]
 enum Outcome {
     Applied,
     Skipped(String),
@@ -152,6 +111,7 @@ enum Outcome {
 /// Apply one plan action, committing its undo step only after the mutation is
 /// successful and verified. Only the organizer's own file-organization
 /// capabilities are executable here; anything else is skipped rather than risked.
+#[allow(dead_code)]
 fn apply_one(
     action: &super::planner::PlanAction,
     rules: &[FolderRule],
@@ -196,6 +156,7 @@ fn apply_one(
 
 /// Move or rename a file from `from` to `to`, committing the reverse step only
 /// after the move succeeds and its postcondition is verified.
+#[allow(dead_code)]
 fn relocate(
     from: &Path,
     to: &Path,
@@ -278,8 +239,10 @@ fn relocate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audit::Provenance;
     use crate::organizer::planner::{plan_with_rules, PlanAction};
     use crate::organizer::testutil::{tempdir, TempDir};
+    use crate::policy::PolicyDecision;
     use std::path::{Path, PathBuf};
 
     fn test_action(cap: Capability) -> PlanAction {

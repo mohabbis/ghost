@@ -1656,3 +1656,44 @@ h3 .i,
     flex: 1 1 100%;
   }
 }
+
+/* Ghost 2.0 — unified execution review + receipt */
+.ghost2-plan {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.ghost2-step {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle, #2a2a2e);
+}
+.ghost2-step__label {
+  font-weight: 500;
+}
+.ghost2-summary {
+  margin: 8px 0 12px;
+  color: var(--text-muted, #9ca3af);
+}
+.ghost2-receipt {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle, #2a2a2e);
+  border-radius: 8px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.03));
+}
+.ghost2-receipt__warn {
+  color: var(--danger, #f87171);
+}
+.ghost2-receipt-step {
+  margin: 6px 0;
+  font-size: 0.9rem;
+}
+.ghost2-receipt-step__expected,
+.ghost2-receipt-step__observed {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted, #9ca3af);
+}
+.ghost2-review-plan {
+  margin-top: 16px;
+}

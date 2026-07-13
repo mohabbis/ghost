@@ -1,0 +1,10 @@
+{
+  "name": "ghost-frontend",
+  "private": true,
+  "scripts": {
+    "build:execution": "tsc -p tsconfig.execution.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

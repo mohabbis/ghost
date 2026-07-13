@@ -269,6 +269,20 @@ plan can never reach the filesystem.
 | `organizer_verify_signed_report` | stable | – | – | – | – | – | – | low | **safe-read.** Verifies the machine-local signature on an exported compliance report; returns `false` on tamper or mismatch. Writes nothing. |
 | `organizer_issue_mcp_approval_token` | stable | ✓ | – | – | – | ✓ | – | medium | **safe-read.** Issues a signed, short-lived, single-use MCP token bound to the current server-side plan hash. Requires vault unlock; user must have reviewed the plan in Organizer. |
 
+### `commands/runtime_cmds.rs` — Ghost 2.0 unified execution (stable)
+
+One canonical pipeline for Organizer, Routine, MCP, and demo intent sources. Plans compile to a versioned `ActionPlan`; execution runs through `runtime::execute_action_plan_with_progress` with per-step verification and a human-readable receipt. The frontend must pass a `PlanSource` — steps are never trusted from the client.
+
+| Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
+| `action_plan_from_zone` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Re-plans from Zone id and compiles an `ActionPlan` for semantic review; mutates nothing. |
+| `action_plan_from_events` | stable | – | – | – | – | – | – | low | **safe-read.** Compresses recorded events and compiles a reviewable `ActionPlan`; mutates nothing. |
+| `action_plan_demo` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Builds the invoice demo workflow (newest invoice → rename → move → TextEdit log) for review; mutates nothing. |
+| `execute_action_plan` | stable | ✓ | ✓ | – | – | ✓ | ✓ | high | **local-mutate + os-control.** Recompiles server-side from `PlanSource`, re-checks policy per step, verifies postconditions, stops on verification failure, writes undo before mutations, persists WAL execution row, returns receipt. UI steps require vault unlock and use the shared engine for replay slices. |
+| `execute_routine_action_plan` | stable | – | ✓ | – | – | ✓ | ✓ | high | **os-control.** Like `execute_action_plan` for Routine source after `ensure_replayable` and routine approval fingerprint consumption. |
+| `get_execution_receipt` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Reconstructs a human-readable receipt from a persisted execution id (audit + verification summary). |
+| `undo_action_plan_execution` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Replays stored undo journal for a unified execution id; same semantics as `organizer_undo`. |
+
 ### `commands/mcp.rs` — MCP pairing (stable)
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
