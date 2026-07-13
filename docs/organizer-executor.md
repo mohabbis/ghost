@@ -35,9 +35,10 @@ resulting risk classes in `docs/command-registry.md`.
    folders implicitly because that would be an unaudited mutation. Move/rename
    also re-checks **file identity** (dev/ino on Unix, NTFS timestamps on Windows) when
    the plan captured a scan-time identity, refusing a TOCTOU inode swap. Finally,
-   `policy::verify_relocate_at_execution` canonicalizes `from`/`to` and re-runs
-   policy so symlink or path-escape tricks cannot bypass Zone boundaries at
-   execution time.
+   `policy::verify_relocate_at_execution` canonicalizes `from`/`to` **and**
+   each FolderRule root, then re-runs policy so symlink or path-escape tricks
+   cannot bypass Zone boundaries — and so macOS `/var` → `/private/var` (and
+   similar) does not false-deny in-boundary moves.
 3. **Prepares undo before mutating.** The inverse op (`UndoOp::RemoveFolder` for
    a created folder, `UndoOp::Restore` for a move/rename) is constructed before
    the filesystem call but not yet committed to the `UndoJournal`.
