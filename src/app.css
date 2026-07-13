@@ -63,7 +63,7 @@
   transition: border-color 240ms ease, background 240ms ease, box-shadow 240ms ease;
 }
 
-/* Live states: the chip breathes while recording (red) or replaying (purple)
+/* Live states: the chip breathes while recording (red) or replaying (teal)
    so the app's current mode is glanceable from anywhere on screen. */
 .recording-status--live {
   border-color: rgba(239, 68, 68, 0.55);
@@ -72,9 +72,9 @@
 }
 
 .recording-status--playing {
-  border-color: rgba(141, 123, 255, 0.55);
-  background: rgba(141, 123, 255, 0.12);
-  animation: status-breathe-purple 2s ease-in-out infinite;
+  border-color: rgba(14, 143, 120, 0.55);
+  background: rgba(14, 143, 120, 0.12);
+  animation: status-breathe-teal 2s ease-in-out infinite;
 }
 
 @keyframes status-breathe-red {
@@ -82,9 +82,9 @@
   50% { box-shadow: 0 0 18px 0 rgba(239, 68, 68, 0.4); }
 }
 
-@keyframes status-breathe-purple {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(141, 123, 255, 0); }
-  50% { box-shadow: 0 0 18px 0 rgba(141, 123, 255, 0.4); }
+@keyframes status-breathe-teal {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(14, 143, 120, 0); }
+  50% { box-shadow: 0 0 18px 0 rgba(14, 143, 120, 0.4); }
 }
 
 .banner {
@@ -248,8 +248,8 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(141, 123, 255, 0.12);
-  border: 1px solid rgba(141, 123, 255, 0.3);
+  background: rgba(14, 143, 120, 0.12);
+  border: 1px solid rgba(14, 143, 120, 0.3);
   font-size: 0.9rem;
 }
 
@@ -459,7 +459,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   padding: 12px 8px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgba(141, 123, 255, 0.07);
+  background: rgba(14, 143, 120, 0.07);
   font-size: 0.8rem;
 }
 
@@ -526,7 +526,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 /* ===== Demo polish pass ===== */
 .app-body {
   background:
-    linear-gradient(180deg, rgba(141, 123, 255, 0.06), transparent 28rem),
+    linear-gradient(180deg, rgba(14, 143, 120, 0.08), transparent 28rem),
     var(--bg);
 }
 
@@ -553,7 +553,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   color: #fff;
   font-size: 1.2rem;
   font-weight: 800;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 10px 26px -12px rgba(139, 124, 246, 0.7);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 10px 26px -12px rgba(14, 143, 120, 0.7);
 }
 
 .app-header__brand h1 {
@@ -587,7 +587,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 .btn:focus-visible,
 .auth-input:focus-visible,
 .speed-picker select:focus-visible {
-  outline: 3px solid rgba(200, 182, 255, 0.42);
+  outline: 3px solid rgba(14, 143, 120, 0.36);
   outline-offset: 2px;
 }
 
@@ -721,7 +721,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 
 .guard-card {
   border-color: rgba(131, 246, 196, 0.28);
-  background: linear-gradient(135deg, rgba(131, 246, 196, 0.1), rgba(141, 123, 255, 0.08));
+  background: linear-gradient(135deg, rgba(131, 246, 196, 0.1), rgba(14, 143, 120, 0.08));
 }
 
 .guard-card[data-risk="medium"] {
@@ -745,10 +745,10 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   gap: 18px;
   align-items: stretch;
   padding: 24px;
-  border: 1px solid rgba(200, 182, 255, 0.24);
+  border: 1px solid rgba(14, 143, 120, 0.24);
   border-radius: 28px;
   background:
-    linear-gradient(135deg, rgba(141, 123, 255, 0.22), rgba(131, 246, 196, 0.08)),
+    linear-gradient(135deg, rgba(14, 143, 120, 0.22), rgba(131, 246, 196, 0.08)),
     rgba(255, 255, 255, 0.055);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
 }
@@ -939,7 +939,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 }
 
 .about-h {
-  color: #8d7bff;
+  color: #0e8f78;
   margin: 0 0 8px;
   font-size: 12px;
   text-transform: uppercase;
@@ -1375,7 +1375,7 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   height: 34px;
   font-size: 1rem;
   border-radius: 11px;
-  box-shadow: 0 12px 26px rgba(141, 123, 255, 0.28);
+  box-shadow: 0 12px 26px rgba(14, 143, 120, 0.28);
 }
 
 .nav__wordmark {
@@ -1413,9 +1413,9 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 }
 
 .nav__item.is-active {
-  background: rgba(139, 124, 246, 0.16);
+  background: rgba(14, 143, 120, 0.16);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(139, 124, 246, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(14, 143, 120, 0.34);
 }
 
 .nav__ico {
@@ -1544,7 +1544,7 @@ h3 .i,
 }
 
 .organizer-panel {
-  border-color: rgba(139, 124, 246, 0.28);
+  border-color: rgba(14, 143, 120, 0.28);
 }
 
 .organizer-head {

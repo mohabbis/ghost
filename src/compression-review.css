@@ -7,7 +7,7 @@
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: rgba(141, 123, 255, 0.08);
+  background: rgba(14, 143, 120, 0.08);
 }
 
 .compression-header {
@@ -87,8 +87,8 @@
 }
 
 .compression-step:hover {
-  border-color: rgba(141, 123, 255, 0.4);
-  background: rgba(141, 123, 255, 0.1);
+  border-color: rgba(14, 143, 120, 0.4);
+  background: rgba(14, 143, 120, 0.1);
 }
 
 .step-icon {
@@ -133,8 +133,8 @@
 }
 
 .compression-step.step-secure {
-  border-color: rgba(141, 123, 255, 0.4);
-  background: rgba(141, 123, 255, 0.1);
+  border-color: rgba(14, 143, 120, 0.4);
+  background: rgba(14, 143, 120, 0.1);
 }
 
 .compression-step.step-unknown {
