@@ -52,11 +52,16 @@ Filesystem steps write undo data before mutation. Use **Undo this run** or `undo
 
 ## macOS semantic helper
 
-Build on macOS:
+Ghost ships **GhostAXHelper** inside the macOS app bundle
+(`Ghost.app/Contents/MacOS/ghost-ax-helper`). Release CI builds it automatically;
+no `GHOST_AX_HELPER` env var is required for installed builds.
+
+Local development on macOS:
 
 ```bash
-swiftc -o ghost-ax-helper native/macos/GhostAXHelper.swift
-export GHOST_AX_HELPER="$(pwd)/ghost-ax-helper"
+make ax-helper
+# optional override:
+export GHOST_AX_HELPER="$(pwd)/native/macos/ghost-ax-helper"
 ```
 
 Operations: `resolve_target`, `activate_element`, `set_value`, `verify_element`, `enumerate_children`, `permission_status`, `frontmost_app`.
@@ -65,7 +70,7 @@ Ambiguous matches are refused. Stale target fingerprints are rejected at executi
 
 ### Real Mac validation (required before claiming demo-complete)
 
-1. Grant Accessibility to Ghost and the AX helper process.
+1. Grant **Accessibility** to Ghost (System Settings → Privacy & Security).
 2. Run the invoice demo end-to-end.
 3. Confirm TextEdit receives the log via AX `set_value` (not enigo fallback).
 4. Record a screen walkthrough for the release PR.

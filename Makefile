@@ -1,4 +1,4 @@
-.PHONY: check test clippy fmt build dev clean help
+.PHONY: check test clippy fmt build dev clean help ax-helper
 
 MANIFEST := src-tauri/Cargo.toml
 
@@ -11,6 +11,7 @@ help:
 	@echo "  make fmt-check - Check format without fixing"
 	@echo "  make build   - Build desktop app (no bundle)"
 	@echo "  make dev     - Run dev app"
+	@echo "  make ax-helper - Build GhostAXHelper sidecar (macOS only)"
 	@echo "  make clean   - Clean build artifacts"
 	@echo "  make ci      - Run all CI checks (fmt-check, clippy, test)"
 
@@ -34,6 +35,9 @@ build:
 
 dev:
 	cargo tauri dev
+
+ax-helper:
+	bash scripts/build-ghost-ax-helper.sh
 
 clean:
 	cargo clean

@@ -21,6 +21,8 @@ venv/
 dist/
 build/
 target/
+src-tauri/bin/ghost-ax-helper-*
+native/macos/ghost-ax-helper
 .gradle/
 
 # Python specific
