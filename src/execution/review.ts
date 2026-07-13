@@ -1,5 +1,20 @@
 import type { ActionPlan, ActionStep } from "./types.js";
 
+function stepKindBadge(step: ActionStep): string {
+  const k = step.kind?.kind;
+  if (!k) return "";
+  if (k === "semantic_focus" || k === "semantic_set_value" || k === "semantic_verify") {
+    return '<span class="badge badge--semantic">semantic</span>';
+  }
+  if (k === "ui_replay") {
+    return '<span class="badge badge--coord">replay</span>';
+  }
+  if (k === "verify_path") {
+    return '<span class="badge badge--verify">verify</span>';
+  }
+  return "";
+}
+
 /** Render semantic action steps for unified review (not raw mouse events). */
 export function renderActionPlanSteps(plan: ActionPlan): string {
   if (!plan?.steps?.length) {
@@ -8,8 +23,10 @@ export function renderActionPlanSteps(plan: ActionPlan): string {
   const rows = plan.steps
     .map((step: ActionStep) => {
       const badge = decisionBadge(step.decision);
+      const kindBadge = stepKindBadge(step);
       return `<li class="ghost2-step">
         <span class="ghost2-step__label">✓ ${escapeHtml(step.label)}</span>
+        ${kindBadge}
         ${badge}
       </li>`;
     })
@@ -20,7 +37,7 @@ export function renderActionPlanSteps(plan: ActionPlan): string {
 export function planSummaryHtml(plan: ActionPlan): string {
   const s = plan.summary || {};
   return `<div class="ghost2-summary">
-    <strong>${plan.title}</strong> —
+    <strong>${escapeHtml(plan.title)}</strong> —
     ${s.total_steps ?? 0} steps
     (${s.filesystem_steps ?? 0} files,
      ${s.ui_steps ?? 0} UI,

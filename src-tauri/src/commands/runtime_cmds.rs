@@ -102,6 +102,10 @@ pub fn get_execution_receipt(execution_id: String) -> Result<ExecutionReceipt, S
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no execution with id {execution_id}"))?;
 
+    if let Some(receipt) = stored.receipt {
+        return Ok(receipt);
+    }
+
     let verifications: Vec<crate::runtime::StepVerification> = stored
         .audit
         .events()
@@ -227,6 +231,9 @@ fn run_action_plan(
     use_engine: bool,
 ) -> Result<ActionPlanExecuteResult, String> {
     let conn = crate::storage::open_default().map_err(|e| e.to_string())?;
+    let audit = engine.map(|e| e.get_config().audit);
+    let retention_keep_last = audit.as_ref().and_then(|a| a.retention_keep_last);
+    let retention_keep_days = audit.as_ref().and_then(|a| a.retention_keep_days);
     let zone_id = match &action_plan.source {
         PlanSource::Organizer { zone_id } | PlanSource::Mcp { zone_id } => zone_id.clone(),
         PlanSource::Routine { .. } => "routine".into(),
@@ -250,8 +257,8 @@ fn run_action_plan(
         &rules,
         if use_engine { engine } else { None },
         use_engine,
-        None,
-        None,
+        retention_keep_last,
+        retention_keep_days,
     )?;
 
     Ok(ActionPlanExecuteResult {

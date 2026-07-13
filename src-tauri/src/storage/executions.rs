@@ -93,6 +93,9 @@ pub struct StoredExecution {
     /// See [`ExecutionSummary::finished`].
     #[serde(default = "default_true")]
     pub finished: bool,
+    /// Persisted Ghost 2.0 execution receipt when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<crate::runtime::ExecutionReceipt>,
 }
 
 /// The outcome of verifying the execution hash chain: whether every sealed run
@@ -132,9 +135,16 @@ struct ExecutionRow {
     hash: String,
     prev_hash: String,
     finished: bool,
+    #[serde(default)]
+    receipt_json: String,
 }
 
 fn stored_from_row(row: ExecutionRow) -> anyhow::Result<StoredExecution> {
+    let receipt = if row.receipt_json.is_empty() {
+        None
+    } else {
+        Some(serde_json::from_str(&row.receipt_json)?)
+    };
     Ok(StoredExecution {
         id: row.id,
         zone_id: row.zone_id,
@@ -147,6 +157,7 @@ fn stored_from_row(row: ExecutionRow) -> anyhow::Result<StoredExecution> {
         hash: row.hash,
         prev_hash: row.prev_hash,
         finished: row.finished,
+        receipt,
     })
 }
 
@@ -303,6 +314,7 @@ pub fn save_execution(db: &Db, zone_id: &str, report: &ExecutionReport) -> anyho
         hash,
         prev_hash,
         finished: true,
+        receipt_json: String::new(),
     };
     insert_row(&write_txn, &row)?;
     write_txn.commit()?;
@@ -330,6 +342,7 @@ pub fn begin_execution(db: &Db, zone_id: &str) -> anyhow::Result<String> {
         hash: String::new(),
         prev_hash: String::new(),
         finished: false,
+        receipt_json: String::new(),
     };
     let write_txn = db.db.begin_write()?;
     insert_row(&write_txn, &row)?;
@@ -373,9 +386,14 @@ pub fn finish_execution(
     id: &str,
     zone_id: &str,
     report: &ExecutionReport,
+    receipt: Option<&crate::runtime::ExecutionReceipt>,
 ) -> anyhow::Result<()> {
     let audit_json = serde_json::to_string(&report.audit)?;
     let undo_json = serde_json::to_string(&report.undo)?;
+    let receipt_json = receipt
+        .map(serde_json::to_string)
+        .transpose()?
+        .unwrap_or_default();
 
     let write_txn = db.db.begin_write()?;
     let seq = seq_for_id(&write_txn, id)?;
@@ -404,6 +422,7 @@ pub fn finish_execution(
         hash,
         prev_hash,
         finished: true,
+        receipt_json,
     };
     write_row(&write_txn, seq, &row)?;
     write_txn.commit()?;
@@ -733,6 +752,7 @@ pub(crate) fn import_execution_raw(
         hash: hash.to_string(),
         prev_hash: prev_hash.to_string(),
         finished,
+        receipt_json: String::new(),
     };
     insert_row(write_txn, &row)?;
     Ok(())
@@ -883,6 +903,40 @@ mod tests {
     }
 
     #[test]
+    fn finish_execution_persists_receipt_round_trip() {
+        use crate::runtime::{build_receipt, StepVerification};
+
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+
+        let db = open_in_memory().unwrap();
+        let id = begin_execution(&db, "z").unwrap();
+        let verifications = vec![StepVerification::not_applicable(
+            "step-1",
+            "Move file",
+            "applied",
+        )];
+        let receipt = build_receipt(
+            "plan-1",
+            "Test plan",
+            Some(id.clone()),
+            &report,
+            &verifications,
+            "1000",
+            "1001",
+            false,
+            None,
+        );
+        finish_execution(&db, &id, "z", &report, Some(&receipt)).unwrap();
+
+        let loaded = get_execution(&db, &id).unwrap().unwrap();
+        assert_eq!(loaded.receipt.as_ref(), Some(&receipt));
+    }
+
+    #[test]
     fn finish_execution_seals_and_marks_finished() {
         let tmp = Scratch::new();
         tmp.file("report.pdf", b"a");
@@ -900,7 +954,7 @@ mod tests {
 
         let id = begin_execution(&db, "z").unwrap();
         let report = execute_plan(&plan, &rules);
-        finish_execution(&db, &id, "z", &report).unwrap();
+        finish_execution(&db, &id, "z", &report, None).unwrap();
 
         let loaded = get_execution(&db, &id).unwrap().unwrap();
         assert!(loaded.finished);
@@ -1074,6 +1128,7 @@ mod tests {
                 hash: String::new(),
                 prev_hash: String::new(),
                 finished: true,
+                receipt_json: String::new(),
             },
         );
 
@@ -1128,6 +1183,7 @@ mod tests {
                 hash: String::new(),
                 prev_hash: String::new(),
                 finished: true,
+                receipt_json: String::new(),
             },
         );
 
@@ -1185,6 +1241,7 @@ mod tests {
                 hash: String::new(),
                 prev_hash: String::new(),
                 finished: true,
+                receipt_json: String::new(),
             },
         );
 

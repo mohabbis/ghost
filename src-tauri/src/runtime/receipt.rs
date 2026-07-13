@@ -4,7 +4,7 @@ use super::verify::StepVerification;
 use crate::organizer::executor::ExecutionReport;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionReceipt {
     pub execution_id: Option<String>,
     pub plan_id: String,
@@ -21,7 +21,7 @@ pub struct ExecutionReceipt {
     pub audit_event_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReceiptStep {
     pub id: String,
     pub label: String,

@@ -41,7 +41,14 @@ pub fn run_persisted_action_plan(
         },
     );
 
-    finish_execution(conn, &execution_id, zone_id, &runtime.report).map_err(|e| e.to_string())?;
+    finish_execution(
+        conn,
+        &execution_id,
+        zone_id,
+        &runtime.report,
+        Some(&runtime.receipt),
+    )
+    .map_err(|e| e.to_string())?;
     let _ = record_milestone(conn, Milestone::FirstRun);
     let _ = prune_executions(conn, retention_keep_last, retention_keep_days);
 
