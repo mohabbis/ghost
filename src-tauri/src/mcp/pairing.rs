@@ -117,4 +117,30 @@ mod tests {
         assert!(!pairing_is_required());
         assert!(verify_pairing_code(""));
     }
+
+    #[test]
+    fn mask_code_hides_the_middle_of_the_secret() {
+        let masked = mask_code("ABCD2345");
+        assert!(masked.starts_with("AB"));
+        assert!(masked.ends_with("45"));
+        assert!(!masked.contains("CD23"));
+        // Short codes are fully masked rather than leaking their length shape.
+        assert_eq!(mask_code("AB"), "****");
+    }
+
+    #[test]
+    fn constant_time_eq_rejects_length_and_content_mismatches() {
+        assert!(constant_time_eq(b"code-1234", b"code-1234"));
+        assert!(!constant_time_eq(b"code-1234", b"code-1235"));
+        assert!(!constant_time_eq(b"code-1234", b"code-123"));
+        assert!(!constant_time_eq(b"", b"x"));
+    }
+
+    #[test]
+    fn generated_codes_use_the_unambiguous_alphabet() {
+        // No 0/O/1/I in the alphabet — codes get read aloud/typed by users.
+        let code = generate_code();
+        assert_eq!(code.len(), 8);
+        assert!(code.chars().all(|c| !matches!(c, '0' | 'O' | '1' | 'I')));
+    }
 }

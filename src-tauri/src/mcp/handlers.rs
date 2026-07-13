@@ -157,3 +157,76 @@ fn plan_to_json(plan: &OrganizerPlan) -> Value {
         "denied_operations": plan.actions.iter().filter(|a| a.decision.is_denied()).count(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_tool_name_is_rejected() {
+        let err = handle_tool("ghost.delete_everything", &json!({})).unwrap_err();
+        assert!(err.contains("Unknown MCP tool"), "got: {err}");
+    }
+
+    #[test]
+    fn status_tool_reports_the_trust_pipeline_without_touching_disk() {
+        // `ghost.status` is a pure metadata handler — it must never require a
+        // Zone, a plan, or the database to answer.
+        let out = handle_tool(McpToolKind::Status.name(), &json!({})).unwrap();
+        assert_eq!(out["app"], "ghost");
+        assert!(out["trust_pipeline"].as_str().unwrap().contains("Approval"));
+    }
+
+    #[test]
+    fn explain_plan_echoes_the_requested_zone() {
+        let out = handle_tool(
+            McpToolKind::ExplainPlan.name(),
+            &json!({ "zone_id": "zone-42" }),
+        )
+        .unwrap();
+        assert_eq!(out["zone_id"], "zone-42");
+        assert!(out["message"].as_str().unwrap().contains("Approve"));
+    }
+
+    #[test]
+    fn zone_scoped_tools_require_a_zone_id_argument() {
+        // A tool that operates on a Zone must fail loudly on a missing
+        // argument rather than silently defaulting to some Zone.
+        let err = handle_tool(McpToolKind::ExplainPlan.name(), &json!({})).unwrap_err();
+        assert!(err.contains("Missing required argument"), "got: {err}");
+        assert!(err.contains("zone_id"), "got: {err}");
+    }
+
+    #[test]
+    fn get_approval_status_rejects_unknown_request_ids() {
+        let err = handle_tool(
+            McpToolKind::GetApprovalStatus.name(),
+            &json!({ "request_id": "does-not-exist" }),
+        )
+        .unwrap_err();
+        assert!(err.contains("Unknown approval request"), "got: {err}");
+    }
+
+    #[test]
+    fn list_tools_advertises_every_tool_kind_once() {
+        let tools = list_tools();
+        assert_eq!(tools.len(), McpToolKind::all().len());
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        for kind in McpToolKind::all() {
+            assert!(
+                names.contains(&kind.name()),
+                "list_tools missing {}",
+                kind.name()
+            );
+        }
+        // The mutating execute tool must be advertised with an input schema so
+        // clients know it takes an approval token, not a bare Zone id.
+        let execute = tools
+            .iter()
+            .find(|t| t["name"] == McpToolKind::ExecuteApprovedPlan.name())
+            .expect("execute tool advertised");
+        assert!(execute["inputSchema"]["properties"]
+            .get("approval_token")
+            .is_some());
+    }
+}
