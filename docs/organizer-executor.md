@@ -32,7 +32,12 @@ resulting risk classes in `docs/command-registry.md`.
    non-negotiable): an occupied target is `Skipped`, not clobbered. The target
    parent folder must already exist from an explicit, policy-checked
    `CreateFolder` action; the move/rename step never creates missing parent
-   folders implicitly because that would be an unaudited mutation.
+   folders implicitly because that would be an unaudited mutation. Move/rename
+   also re-checks **file identity** (dev/ino on Unix, file index on Windows) when
+   the plan captured a scan-time identity, refusing a TOCTOU inode swap. Finally,
+   `policy::verify_relocate_at_execution` canonicalizes `from`/`to` and re-runs
+   policy so symlink or path-escape tricks cannot bypass Zone boundaries at
+   execution time.
 3. **Prepares undo before mutating.** The inverse op (`UndoOp::RemoveFolder` for
    a created folder, `UndoOp::Restore` for a move/rename) is constructed before
    the filesystem call but not yet committed to the `UndoJournal`.

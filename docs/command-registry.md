@@ -201,12 +201,15 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound Fabric intents (no auto-execute). |
 | `fabric_dismiss_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Dismisses an inbound intent without acting on it. |
 | `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound intent for Organizer review (webhook simulation). |
+| `fabric_webhook_status` | experimental | ✓ | – | – | – | – | – | low | Reports whether a webhook secret is configured. |
+| `fabric_set_webhook_secret` | experimental | ✓ | – | – | – | – | – | medium | Generates/rotates the local `X-Ghost-Webhook-Secret` for `POST /fabric/webhook`. |
 | `google_grant_status` | experimental | ✓ | – | – | – | – | – | low | Local Google Cloud grant metadata. |
 | `google_request_grant` | experimental | ✓ | – | – | ✓ | – | – | medium | OAuth consent for GCS export scope. |
 | `google_revoke_grant` | experimental | ✓ | – | – | – | – | – | low | Revokes local Google Cloud grant. |
 | `google_list_buckets` | experimental | ✓ | – | – | ✓ | – | – | low | Lists buckets in a GCP project (requires `project_id`). |
 | `google_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview for GCS push. |
-| `google_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Pushes JSON export objects to a user-chosen GCS bucket. |
+| `google_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Pushes JSON export objects to a user-chosen GCS bucket; enforces bound bucket when scoped. |
+| `google_bind_export_bucket` | experimental | ✓ | – | – | – | – | – | low | Narrows Google Cloud grant to one GCS bucket (`ResourceScope::Destination`). |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 
@@ -261,6 +264,9 @@ plan can never reach the filesystem.
 | `mcp_enable_pairing` | stable | ✓ | – | – | – | – | – | low | Generates and persists a pairing code; shown once to the user. |
 | `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
 | `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (polled by the UI). |
+| `mcp_http_server_status` | experimental | ✓ | – | – | – | – | – | low | Reports MCP/Fabric HTTP listener state (bind, port, LAN exposure). |
+| `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener; LAN requires bearer token. |
+| `mcp_stop_http_server` | experimental | ✓ | – | – | – | – | – | low | Stops the HTTP listener started by `mcp_start_http_server`. |
 
 ### `commands/filing.rs` — audience-aware filing preview (stable)
 

@@ -307,6 +307,40 @@ impl IdentityStore {
         }
         Some(bundle)
     }
+
+    /// Update the `resource_scope` on the active grant of the given kind.
+    pub fn set_grant_resource_scope(
+        &self,
+        auth: &AuthManager,
+        kind: IntegrationKind,
+        scope: ResourceScope,
+    ) -> anyhow::Result<()> {
+        let Some(mut bundle) = self.load(auth) else {
+            anyhow::bail!("no linked account");
+        };
+        let now = chrono::Utc::now();
+        let grant = bundle
+            .grants
+            .iter_mut()
+            .find(|g| g.integration == kind && g.is_active(now))
+            .ok_or_else(|| anyhow::anyhow!("no active grant for {kind:?}"))?;
+        grant.resource_scope = scope;
+        self.write_bundle(auth, &bundle)
+    }
+
+    /// Return the active grant for `kind`, if any.
+    pub fn active_grant(
+        &self,
+        auth: &AuthManager,
+        kind: IntegrationKind,
+    ) -> Option<IntegrationGrant> {
+        let now = chrono::Utc::now();
+        self.load(auth).and_then(|b| {
+            b.grants
+                .into_iter()
+                .find(|g| g.integration == kind && g.is_active(now))
+        })
+    }
 }
 
 impl Default for IdentityStore {

@@ -55,4 +55,20 @@ Commands (`commands/integrations.rs`, experimental):
 
 `fabric_record_inbound_intent` stores a pending intent locally (webhook simulation / manual registration). `fabric_list_inbound_intents` and Organizer UI banners surface it — the user must still scan, review, and approve in Organizer. `fabric_dismiss_inbound_intent` clears without executing.
 
+### Webhook ingestion (experimental)
+
+When the MCP HTTP server is running (`mcp_start_http_server`), Fabric or Eventstream connectors can POST to `/fabric/webhook`:
+
+```http
+POST /fabric/webhook HTTP/1.1
+X-Ghost-Webhook-Secret: <secret from fabric_set_webhook_secret>
+Content-Type: application/json
+
+{"zone_id":"optional-zone-id","source":"fabric-pipeline","summary":"Pipeline completed — review exports"}
+```
+
+Ghost records the intent via `triggers::record_intent` and returns the intent JSON. No filesystem or replay mutation occurs.
+
+Commands: `fabric_set_webhook_secret`, `fabric_webhook_status`.
+
 See `docs/power-bi-integration.md` for the shared export payload shape.

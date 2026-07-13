@@ -6,6 +6,7 @@
 pub mod export;
 
 pub mod triggers;
+pub mod webhook;
 
 use crate::identity::IntegrationError;
 use serde::Deserialize;

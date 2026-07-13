@@ -47,16 +47,22 @@ Every integration below is additive to that pipeline, never a bypass of it.
   OneLake push (`fabric_push_audit_export`). Settings UI uses workspace/lakehouse
   dropdown pickers. Inbound intent queue (`fabric_list_inbound_intents`,
   `fabric_record_inbound_intent`, `fabric_dismiss_inbound_intent`) surfaces
-  external signals without auto-executing. See `docs/fabric-integration.md`.
+  external signals without auto-executing. **Webhook ingestion**
+  (`POST /fabric/webhook`, `fabric_set_webhook_secret`) records intents when the
+  HTTP server is running. See `docs/fabric-integration.md`.
 - **Google Cloud Storage export** (`integrations/google/`,
   `commands/integrations.rs`, experimental): separate `GoogleCloud` grant,
-  bucket listing (`google_list_buckets`), export preview, and GCS push
+  bucket listing (`google_list_buckets`), per-bucket grant binding
+  (`google_bind_export_bucket`), export preview, and GCS push
   (`google_push_audit_export`). See `docs/google-cloud-integration.md`.
-- **Localhost MCP HTTP** (`mcp/http.rs`, `ghost mcp serve http [port]`):
-  experimental JSON-RPC over `127.0.0.1` only — same handlers as stdio MCP.
-- **Organizer TOCTOU hardening** (`organizer/file_identity.rs`,
-  `executor.rs`): scan-time dev/ino (or Windows file index) captured on plan
-  actions and re-checked at execution; symlink sources refused.
+- **MCP HTTP server** (`mcp/http.rs`, `ghost mcp serve http [port]` or
+  `mcp_start_http_server`): localhost by default; optional LAN bind with bearer
+  auth; shared listener for `POST /mcp` and `POST /fabric/webhook`. TLS via
+  reverse proxy. See `docs/mcp-integration.md`.
+- **Organizer TOCTOU + boundary hardening** (`organizer/file_identity.rs`,
+  `policy/boundary.rs`, `executor.rs`): scan-time dev/ino (or Windows file index)
+  re-checked at execution; canonical path zone-boundary re-check after
+  `canonicalize`; symlink sources refused.
 - **Local intelligence providers** (`intelligence/local/`, experimental):
   Ollama, LM Studio, and OpenAI-compatible localhost adapters;
   `intelligence_discover_local` probes localhost only. Settings UI and

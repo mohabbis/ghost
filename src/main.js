@@ -1308,6 +1308,8 @@ async function openSettings() {
   let fabricStatus = { active: false };
   let googleCloudStatus = { active: false };
   let mcpPairingStatus = { enabled: false };
+  let mcpHttpStatus = { running: false };
+  let fabricWebhookStatus = { configured: false };
   try {
     account = await invoke("account_status");
   } catch (error) {
@@ -1338,6 +1340,16 @@ async function openSettings() {
       googleCloudStatus = await invoke("google_grant_status");
     } catch (error) {
       console.error("Failed to load Google Cloud grant status:", error);
+    }
+    try {
+      mcpHttpStatus = await invoke("mcp_http_server_status");
+    } catch (error) {
+      console.error("Failed to load MCP HTTP status:", error);
+    }
+    try {
+      fabricWebhookStatus = await invoke("fabric_webhook_status");
+    } catch (error) {
+      console.error("Failed to load Fabric webhook status:", error);
     }
   }
 
@@ -1513,21 +1525,29 @@ async function openSettings() {
            }
            <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>
 
+           <h4 style="color: #0e8f78; margin: 12px 0 4px;">Fabric inbound webhook</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">When the MCP HTTP server is running, POST to <code>${escapeAttr(fabricWebhookStatus.endpoint_path || "/fabric/webhook")}</code> with header <code>X-Ghost-Webhook-Secret</code>. Intents surface in Organizer — nothing auto-executes.</p>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Secret: ${fabricWebhookStatus.configured ? `configured (${escapeAttr(fabricWebhookStatus.secret_hint || "set")})` : "not set"}</p>
+           <button class="btn btn--ghost btn--small" type="button" data-fabric-webhook-secret>${fabricWebhookStatus.configured ? "Rotate webhook secret" : "Generate webhook secret"}</button>
+           <pre id="fabric-webhook-secret" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+
            <h4 style="color: #0e8f78; margin: 12px 0 4px;">Google Cloud Storage</h4>
            <p class="panel__hint" style="margin: 4px 0 8px;">Export Organizer audit history to a GCS bucket you choose. Requires Google sign-in, then a separate Cloud Storage grant.</p>
            ${
              googleCloudStatus.active
-               ? `<p class="panel__hint" style="margin: 4px 0 8px;">Google Cloud connected${googleCloudStatus.granted_at ? ` (granted ${escapeAttr(new Date(googleCloudStatus.granted_at).toLocaleDateString())})` : ""}.</p>
+               ? `<p class="panel__hint" style="margin: 4px 0 8px;">Google Cloud connected${googleCloudStatus.granted_at ? ` (granted ${escapeAttr(new Date(googleCloudStatus.granted_at).toLocaleDateString())})` : ""}${googleCloudStatus.bound_bucket ? ` · bound bucket <strong>${escapeHtml(googleCloudStatus.bound_bucket)}</strong>` : ""}.</p>
                   <label>GCP project ID
                     <input id="google-project-id" type="text" placeholder="my-gcp-project" style="${fieldStyle}">
                   </label>
                   <label>Bucket
                     <select id="google-bucket" style="${fieldStyle}">
                       <option value="">Select bucket…</option>
+                      ${googleCloudStatus.bound_bucket ? `<option value="${escapeAttr(googleCloudStatus.bound_bucket)}" selected>${escapeHtml(googleCloudStatus.bound_bucket)}</option>` : ""}
                     </select>
                   </label>
                   <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
                     <button class="btn btn--ghost btn--small" type="button" data-google-list-buckets>List buckets</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-google-bind-bucket>Bind export bucket</button>
                     <button class="btn btn--ghost btn--small" type="button" data-google-preview>Preview export</button>
                     <button class="btn btn--ghost btn--small" type="button" data-google-push disabled>Push to bucket</button>
                     <button class="btn btn--ghost btn--small" type="button" data-google-revoke>Disconnect</button>
@@ -1541,12 +1561,31 @@ async function openSettings() {
     }
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">MCP access</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> (stdio) or <code>ghost mcp serve http [port]</code> (localhost HTTP, experimental). Pairing codes apply to both.</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> (stdio) or start the HTTP server below. Pairing codes apply to MCP routes.</p>
     <p class="panel__hint" style="margin: 4px 0 8px;">Pairing: ${mcpPairingStatus.enabled ? `enabled (${escapeAttr(mcpPairingStatus.code_hint || "active")})` : "disabled — any local client can connect"}</p>
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>Enable pairing code</button>
       <button class="btn btn--ghost btn--small" type="button" data-mcp-disable-pairing ${mcpPairingStatus.enabled ? "" : "disabled"}>Disable pairing</button>
     </div>
+    ${
+      experimentalEnabled
+        ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `running on ${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN exposed)" : ""}` : "stopped"}</p>
+           <label>Port
+             <input id="mcp-http-port" type="number" min="1024" max="65535" value="${escapeAttr(mcpHttpStatus.port || 8787)}" style="${fieldStyle}">
+           </label>
+           <label>Bearer token (required for LAN)
+             <input id="mcp-http-bearer" type="password" placeholder="optional on localhost" style="${fieldStyle}">
+           </label>
+           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+             <input id="mcp-http-lan" type="checkbox">
+             Expose on LAN (0.0.0.0) — higher risk; use TLS via reverse proxy
+           </label>
+           <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+             <button class="btn btn--ghost btn--small" type="button" data-mcp-http-start ${mcpHttpStatus.running ? "disabled" : ""}>Start HTTP server</button>
+             <button class="btn btn--ghost btn--small" type="button" data-mcp-http-stop ${mcpHttpStatus.running ? "" : "disabled"}>Stop HTTP server</button>
+           </div>`
+        : ""
+    }
     <pre id="mcp-pairing-code" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
     <p class="panel__hint" id="mcp-pairing-note" style="margin: 8px 0 12px;"></p>
 
@@ -2141,6 +2180,74 @@ async function enableMcpPairing() {
     showNotification("MCP pairing enabled.");
   } catch (error) {
     toastError(`Could not enable MCP pairing: ${formatInvokeError(error)}`);
+  }
+}
+
+async function bindGoogleExportBucket() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const bucket = document.getElementById("google-bucket")?.value?.trim();
+  if (!bucket) return toastError("Select a bucket first.");
+  const note = document.getElementById("google-note");
+  try {
+    await invoke("google_bind_export_bucket", { bucket });
+    if (note) note.textContent = `Export grant bound to gs://${escapeAttr(bucket)}.`;
+    showNotification("GCS export bucket bound.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Bind failed: ${formatInvokeError(error)}`;
+    else toastError(`GCS bind failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function generateFabricWebhookSecret() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const pre = document.getElementById("fabric-webhook-secret");
+  try {
+    const secret = await invoke("fabric_set_webhook_secret");
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = `Webhook secret (copy into your Fabric/Eventstream connector):\n${secret}`;
+    }
+    showNotification("Fabric webhook secret generated.");
+    openSettings();
+  } catch (error) {
+    toastError(`Webhook secret failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function startMcpHttpServer() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const port = Number(document.getElementById("mcp-http-port")?.value) || 8787;
+  const bearerToken = document.getElementById("mcp-http-bearer")?.value?.trim() || null;
+  const exposeLan = document.getElementById("mcp-http-lan")?.checked || false;
+  const note = document.getElementById("mcp-pairing-note");
+  try {
+    const status = await invoke("mcp_start_http_server", { port, exposeLan, bearerToken });
+    if (note) {
+      note.textContent = `HTTP server running on ${status.bind_host}:${status.port}. POST /mcp for MCP; POST /fabric/webhook for inbound intents.`;
+    }
+    showNotification("MCP HTTP server started.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Start failed: ${formatInvokeError(error)}`;
+    else toastError(`MCP HTTP start failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function stopMcpHttpServer() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("mcp-pairing-note");
+  try {
+    await invoke("mcp_stop_http_server");
+    if (note) note.textContent = "HTTP server stopped.";
+    showNotification("MCP HTTP server stopped.");
+    openSettings();
+  } catch (error) {
+    toastError(`MCP HTTP stop failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -4238,12 +4345,20 @@ function wireUpControls() {
       revokeFabricGrant();
       return;
     }
+    if (e.target.closest("[data-fabric-webhook-secret]")) {
+      generateFabricWebhookSecret();
+      return;
+    }
     if (e.target.closest("[data-google-connect]")) {
       connectGoogleCloud();
       return;
     }
     if (e.target.closest("[data-google-list-buckets]")) {
       listGoogleBuckets();
+      return;
+    }
+    if (e.target.closest("[data-google-bind-bucket]")) {
+      bindGoogleExportBucket();
       return;
     }
     if (e.target.closest("[data-google-preview]")) {
@@ -4264,6 +4379,14 @@ function wireUpControls() {
     }
     if (e.target.closest("[data-mcp-disable-pairing]")) {
       disableMcpPairing();
+      return;
+    }
+    if (e.target.closest("[data-mcp-http-start]")) {
+      startMcpHttpServer();
+      return;
+    }
+    if (e.target.closest("[data-mcp-http-stop]")) {
+      stopMcpHttpServer();
       return;
     }
   });

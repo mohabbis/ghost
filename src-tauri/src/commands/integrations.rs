@@ -378,26 +378,53 @@ pub fn fabric_record_inbound_intent(
 }
 
 #[derive(serde::Serialize, Default)]
+pub struct FabricWebhookStatus {
+    pub configured: bool,
+    pub secret_hint: Option<String>,
+    pub endpoint_path: &'static str,
+}
+
+/// Whether a Fabric inbound webhook secret is configured locally.
+#[tauri::command]
+pub fn fabric_webhook_status() -> FabricWebhookStatus {
+    let hint = crate::integrations::microsoft::fabric::webhook::secret_hint();
+    FabricWebhookStatus {
+        configured: hint.is_some(),
+        secret_hint: hint,
+        endpoint_path: "/fabric/webhook",
+    }
+}
+
+/// Generate a new webhook secret for `POST /fabric/webhook` (shown once).
+#[tauri::command]
+pub fn fabric_set_webhook_secret() -> Result<String, String> {
+    Ok(crate::integrations::microsoft::fabric::webhook::generate_secret())
+}
+
+#[derive(serde::Serialize, Default)]
 pub struct GoogleGrantStatus {
     pub active: bool,
     pub granted_at: Option<chrono::DateTime<chrono::Utc>>,
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub bound_bucket: Option<String>,
 }
 
 #[tauri::command]
 pub fn google_grant_status(engine: State<GhostEngine>) -> GoogleGrantStatus {
     let auth = engine.auth();
-    let grant = engine
-        .accounts()
-        .identity_store()
+    let accounts = engine.accounts();
+    let store = accounts.identity_store();
+    let grant = store
         .active_grants(&auth)
         .into_iter()
         .find(|g| g.integration == IntegrationKind::GoogleCloud);
+    let bound_bucket = google_service(&engine).bound_export_bucket(&auth);
     match grant {
         Some(g) => GoogleGrantStatus {
             active: true,
             granted_at: Some(g.granted_at),
             expires_at: g.expires_at,
+            bound_bucket,
         },
         None => GoogleGrantStatus::default(),
     }
@@ -456,15 +483,30 @@ pub fn google_export_preview(
 }
 
 #[tauri::command]
+pub fn google_bind_export_bucket(bucket: String, engine: State<GhostEngine>) -> Result<(), String> {
+    let auth = engine.auth();
+    google_service(&engine)
+        .bind_export_bucket(&auth, &bucket)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn google_push_audit_export(
     bucket: String,
     since_days: Option<u32>,
     engine: State<'_, GhostEngine>,
 ) -> Result<GcsPushSummary, String> {
     let auth = engine.auth();
-    let access_token = google_service(&engine)
-        .google_access_token(&auth)
-        .map_err(|e| e.to_string())?;
+    let svc = google_service(&engine);
+    svc.ensure_push_bucket_allowed(&auth, &bucket)
+        .map_err(|e| {
+            if e == crate::identity::IntegrationError::PermissionDenied {
+                "Push denied: grant is bound to a different bucket — bind this bucket in Settings first".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+    let access_token = svc.google_access_token(&auth).map_err(|e| e.to_string())?;
 
     let db = open_default().map_err(|e| e.to_string())?;
     let executions =

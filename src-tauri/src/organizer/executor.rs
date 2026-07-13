@@ -107,7 +107,7 @@ pub fn execute_plan_with_progress(
             Provenance::UserApproved
         };
 
-        match apply_one(action, &mut report.undo) {
+        match apply_one(action, rules, &mut report.undo) {
             Outcome::Applied => {
                 report.applied += 1;
                 report.audit.record_attributed(
@@ -152,7 +152,11 @@ enum Outcome {
 /// Apply one plan action, committing its undo step only after the mutation is
 /// successful and verified. Only the organizer's own file-organization
 /// capabilities are executable here; anything else is skipped rather than risked.
-fn apply_one(action: &super::planner::PlanAction, undo: &mut UndoJournal) -> Outcome {
+fn apply_one(
+    action: &super::planner::PlanAction,
+    rules: &[FolderRule],
+    undo: &mut UndoJournal,
+) -> Outcome {
     let cap = &action.capability;
     match cap {
         Capability::CreateFolder { path } => {
@@ -173,9 +177,17 @@ fn apply_one(action: &super::planner::PlanAction, undo: &mut UndoJournal) -> Out
                 Err(e) => Outcome::Failed(e.to_string()),
             }
         }
-        Capability::MoveFile { from, to } | Capability::RenameFile { from, to } => {
-            relocate(from, to, action.source_identity.as_ref(), undo)
+        Capability::MoveFile { from, to } => {
+            relocate(from, to, action.source_identity.as_ref(), rules, true, undo)
         }
+        Capability::RenameFile { from, to } => relocate(
+            from,
+            to,
+            action.source_identity.as_ref(),
+            rules,
+            false,
+            undo,
+        ),
         other => Outcome::Skipped(format!(
             "capability not executable by the organizer: {other:?}"
         )),
@@ -188,6 +200,8 @@ fn relocate(
     from: &Path,
     to: &Path,
     expected_identity: Option<&super::file_identity::FileIdentity>,
+    rules: &[FolderRule],
+    is_move: bool,
     undo: &mut UndoJournal,
 ) -> Outcome {
     // (2) Verify state. The plan may have been approved a while ago.
@@ -214,6 +228,9 @@ fn relocate(
             "source metadata unreadable or not a regular file: {}",
             from.display()
         ));
+    }
+    if let Err(reason) = policy::verify_relocate_at_execution(from, to, rules, is_move) {
+        return Outcome::Skipped(format!("canonical path check failed: {reason}"));
     }
     // Never overwrite. The planner de-duplicates targets, but disk state can
     // drift between plan and execution — re-check and refuse rather than clobber.
@@ -275,6 +292,18 @@ mod tests {
             conflict: None,
             source_identity: None,
         }
+    }
+
+    fn relocate_in_zone(
+        tmp: &TempDir,
+        from: &Path,
+        to: &Path,
+        identity: Option<&crate::organizer::file_identity::FileIdentity>,
+        is_move: bool,
+        undo: &mut UndoJournal,
+    ) -> Outcome {
+        let rules = vec![full_rule(tmp.path())];
+        relocate(from, to, identity, &rules, is_move, undo)
     }
 
     fn full_rule(path: &Path) -> FolderRule {
@@ -453,10 +482,12 @@ mod tests {
         // The planner de-duplicates against on-disk names, so to force a genuine
         // execution-time collision we run the move capability directly.
         let mut undo = UndoJournal::new();
-        let outcome = relocate(
+        let outcome = relocate_in_zone(
+            &tmp,
             &tmp.path().join("report.pdf"),
             &tmp.path().join("Documents/report.pdf"),
             None,
+            true,
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));
@@ -517,10 +548,12 @@ mod tests {
         }
 
         let mut undo = UndoJournal::new();
-        let outcome = relocate(
+        let outcome = relocate_in_zone(
+            &tmp,
             &tmp.path().join("report.pdf"),
             &locked_dir.join("report.pdf"),
             None,
+            true,
             &mut undo,
         );
 
@@ -540,10 +573,12 @@ mod tests {
     fn missing_source_is_skipped_with_no_undo() {
         let tmp = tempdir();
         let mut undo = UndoJournal::new();
-        let outcome = relocate(
-            &tmp.path().join("ghost.pdf"), // never existed
+        let outcome = relocate_in_zone(
+            &tmp,
+            &tmp.path().join("ghost.pdf"),
             &tmp.path().join("Documents/ghost.pdf"),
             None,
+            true,
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));
@@ -558,7 +593,14 @@ mod tests {
         let target = missing_parent.join("report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&tmp.path().join("report.pdf"), &target, None, &mut undo);
+        let outcome = relocate_in_zone(
+            &tmp,
+            &tmp.path().join("report.pdf"),
+            &target,
+            None,
+            true,
+            &mut undo,
+        );
 
         assert!(
             matches!(outcome, Outcome::Skipped(reason) if reason.contains("target parent does not exist"))
@@ -581,7 +623,11 @@ mod tests {
         let path = tmp.path().join("not-a-dir").join("child");
         let mut undo = UndoJournal::new();
 
-        let outcome = apply_one(&test_action(Capability::CreateFolder { path }), &mut undo);
+        let outcome = apply_one(
+            &test_action(Capability::CreateFolder { path }),
+            &[],
+            &mut undo,
+        );
 
         assert!(matches!(outcome, Outcome::Failed(_)));
         assert!(
@@ -598,6 +644,7 @@ mod tests {
 
         let outcome = apply_one(
             &test_action(Capability::CreateFolder { path: path.clone() }),
+            &[],
             &mut undo,
         );
 
@@ -613,7 +660,14 @@ mod tests {
         let target = tmp.path().join("not-a-dir").join("report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&tmp.path().join("report.pdf"), &target, None, &mut undo);
+        let outcome = relocate_in_zone(
+            &tmp,
+            &tmp.path().join("report.pdf"),
+            &target,
+            None,
+            true,
+            &mut undo,
+        );
 
         assert!(matches!(outcome, Outcome::Failed(_)));
         assert!(tmp.path().join("report.pdf").exists());
@@ -629,7 +683,7 @@ mod tests {
         let to = tmp.path().join("Documents/report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&from, &to, None, &mut undo);
+        let outcome = relocate_in_zone(&tmp, &from, &to, None, true, &mut undo);
 
         assert!(matches!(outcome, Outcome::Applied));
         assert_eq!(undo.ops(), &[UndoOp::Restore { from: to, to: from }]);
@@ -662,11 +716,13 @@ mod tests {
 
         let ok_from = tmp.path().join("ok.pdf");
         let ok_to = tmp.path().join("Documents/ok.pdf");
-        let ok = relocate(&ok_from, &ok_to, None, &mut undo);
+        let rules = vec![full_rule(tmp.path())];
+        let ok = relocate(&ok_from, &ok_to, None, &rules, true, &mut undo);
         let failed = apply_one(
             &test_action(Capability::CreateFolder {
                 path: tmp.path().join("blocked-parent/child"),
             }),
+            &rules,
             &mut undo,
         );
 
@@ -693,7 +749,8 @@ mod tests {
         let to = tmp.path().join("Documents/report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&path, &to, Some(&expected), &mut undo);
+        let rules = vec![full_rule(tmp.path())];
+        let outcome = relocate(&path, &to, Some(&expected), &rules, true, &mut undo);
 
         assert!(matches!(outcome, Outcome::Skipped(reason) if reason.contains("identity changed")));
         assert!(path.exists());
@@ -713,7 +770,7 @@ mod tests {
         let to = tmp.path().join("dest/link.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&link, &to, None, &mut undo);
+        let outcome = relocate_in_zone(&tmp, &link, &to, None, true, &mut undo);
 
         assert!(matches!(outcome, Outcome::Skipped(_)));
         assert!(link.exists());
@@ -728,6 +785,7 @@ mod tests {
             &test_action(Capability::DeleteFile {
                 path: PathBuf::from("/anything"),
             }),
+            &[],
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));

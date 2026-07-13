@@ -6,6 +6,7 @@
 //! active [`FolderRule`]s, returning a [`PolicyDecision`]. The engine is pure
 //! and deny-by-default; persistence of Zones/rules lives in `crate::storage`.
 
+pub mod boundary;
 pub mod capability;
 pub mod decision;
 pub mod engine;
@@ -13,6 +14,7 @@ pub mod risk;
 pub mod routines;
 pub mod zone;
 
+pub use boundary::verify_relocate_at_execution;
 pub use capability::Capability;
 pub use decision::PolicyDecision;
 pub use engine::{evaluate, evaluate_with_attribution, Evaluation};
