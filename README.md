@@ -108,9 +108,9 @@ Still being hardened:
 | macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
 | Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Latest release is [`v1.2.7`](https://github.com/mohabbis/ghost/releases/tag/v1.2.7). Ghost remains an early technical preview. macOS installers are Developer ID–signed and notarized; Windows installers are currently unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
+Latest release is [`v1.2.8`](https://github.com/mohabbis/ghost/releases/tag/v1.2.8). Ghost remains an early technical preview. macOS installers are Developer ID–signed and notarized; Windows installers are currently unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
 
-Ghost includes a user-approved auto-updater that never installs silently. The updater signing key is configured for builds from current `master` forward; `latest.json` publishes on the next tagged release. Stock `v1.2.7` installers will not offer updates until users install a newer build that embeds the pubkey. See [`docs/auto-update.md`](docs/auto-update.md).
+Ghost includes a user-approved auto-updater that never installs silently. The updater signing key is embedded in `v1.2.8+` builds; `latest.json` publishes with this release. Older `v1.2.7` installers will not offer updates until users install `v1.2.8` or newer. See [`docs/auto-update.md`](docs/auto-update.md).
 
 ## Architecture
 
