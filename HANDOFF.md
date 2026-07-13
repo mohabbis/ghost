@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
-**Last Updated:** 2026-07-12
-**Status:** `master` @ `f274f67` (v1.2.7). CI green on all three OSes. Recent merges: write-ahead Organizer crash recovery (#181), Microsoft/Google account sign-in (#182), finance reconciliation matcher (#179), pixel template-match replay fallback (#178). **Release gap remains:** `Cargo.toml`/`tauri.conf.json` are at `1.2.7` but the updater pubkey is still `REPLACE_WITH_OUTPUT_OF_cargo_tauri_signer_generate` and the last published GitHub Release may lag the repo version — verify `https://github.com/mohabbis/ghost/releases` before claiming a download version. See `RELEASING.md` for tag push + signing secrets.
+**Last Updated:** 2026-07-13
+**Status:** `master` @ `964eadd` (v1.2.7). Rust CI green on macOS/Windows/Linux after re-run of Actions flakes (action download `Service Unavailable` was infra, not product code). Recent merges: teal reference UI (#207), identity grant preservation (#206), dependabot bumps. Cursor agents: follow `.cursor/rules/` + `AGENTS.md`. **Release gap remains:** repo is `1.2.7` but latest GitHub Release is still `v1.2.4` — downloads lag until `v1.2.7` is tagged. Updater pubkey is still `REPLACE_WITH_OUTPUT_OF_cargo_tauri_signer_generate`. See `RELEASING.md`.
 
 ---
 

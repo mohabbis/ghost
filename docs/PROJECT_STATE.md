@@ -1,6 +1,6 @@
 # Ghost — Technical State of the Project
 
-> Snapshot for context (as of 2026-07-12, `master` @ `f274f67`, v1.2.7).
+> Snapshot for context (as of 2026-07-13, `master` @ `964eadd`, v1.2.7).
 > Audience: engineers picking this up to push it to a YC-submission bar.
 > Everything below is grounded in the actual code in this repo — file paths and
 > symbols are real and clickable.

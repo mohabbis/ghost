@@ -1,0 +1,31 @@
+---
+description: Rules for Tauri command and Rust backend changes
+globs: src-tauri/**/*.rs
+alwaysApply: false
+---
+
+# Rust / Tauri command rules
+
+Before adding or changing commands, read `docs/command-registry.md` and `docs/core-boundaries.md`.
+
+## Module map
+
+- Stable: `commands/core.rs`, `organizer.rs`, `auth.rs`, `account.rs`, `diagnostics.rs`, …
+- Experimental: `commands/experimental.rs` + `#[cfg(feature = "experimental")]` only
+- `commands.rs` stays a thin registry/re-export — do not dump logic there
+
+## Checklist for each new command
+
+1. Assign module + risk class
+2. Document input scope and mutation behavior
+3. Require approval for `local-mutate` / `os-control` / `external-mutate` as appropriate
+4. Register in `lib.rs` `generate_handler!` without reordering unrelated entries
+5. Add tests for valid / invalid / denied / interrupted paths where practical
+6. Update `docs/command-registry.md` in the same PR
+
+## Trust invariants in code
+
+- Organizer: never delete; never overwrite; undo journal before mutate
+- `organizer_execute` re-plans server-side — do not accept a plan from the frontend
+- Policy engine (`policy/`) stays pure (no IO)
+- Experimental AI/cloud/vision/knowledge stay feature-gated
