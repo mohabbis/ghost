@@ -141,8 +141,9 @@ step first), so files are moved out of a destination folder before that folder's
   one leaves prior successful actions and their undo entries intact without adding
   undo entries for failed/skipped work.
 - **Deterministic & policy-gated.** Denied actions never reach the filesystem.
-- **TOCTOU / inode identity.** `organizer/file_identity.rs` captures dev/ino (or
-  Windows file index) at scan time on each `PlanAction`. `relocate` re-stats the
+- **TOCTOU / inode identity.** `organizer/file_identity.rs` captures dev/ino (Unix)
+  or NTFS creation/write timestamps (Windows, stable `MetadataExt`) at scan time
+  on each `PlanAction`. `relocate` re-stats the
   source before `rename` and skips when identity drifted or the source is a symlink.
 
 ## Status

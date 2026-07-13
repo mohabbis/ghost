@@ -46,12 +46,14 @@ impl FileIdentity {
         #[cfg(windows)]
         {
             use std::os::windows::fs::MetadataExt;
+            // `file_index` / `volume_serial_number` need unstable `windows_by_handle`.
+            // Use stable NTFS timestamps as the Windows identity tuple instead.
             FileIdentity {
                 size: meta.len(),
                 dev: None,
                 ino: None,
-                file_index: Some(meta.file_index()),
-                volume_serial: Some(meta.volume_serial_number()),
+                file_index: Some(meta.last_write_time()),
+                volume_serial: Some(meta.creation_time()),
             }
         }
         #[cfg(not(any(unix, windows)))]
