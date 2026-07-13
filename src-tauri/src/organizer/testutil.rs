@@ -36,6 +36,20 @@ impl TempDir {
         fs::create_dir_all(&p).unwrap();
         p
     }
+
+    /// Create a symlink at `rel` pointing to `target`, returning its absolute
+    /// path. Unix only: Windows symlink creation needs
+    /// `SeCreateSymbolicLinkPrivilege` (admin/Developer Mode), which CI
+    /// runners may lack, so tests using this stay `#[cfg(unix)]`.
+    #[cfg(unix)]
+    pub fn symlink_file(&self, rel: &str, target: &Path) -> PathBuf {
+        let p = self.path.join(rel);
+        if let Some(parent) = p.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        std::os::unix::fs::symlink(target, &p).unwrap();
+        p
+    }
 }
 
 impl Drop for TempDir {

@@ -173,6 +173,38 @@ mod tests {
         assert_eq!(files[0].stem, "IMG");
     }
 
+    /// Symlinks are excluded via jwalk's default no-follow behavior (a
+    /// symlink entry reports `is_symlink()==true`/`is_file()==false`, so the
+    /// `is_file()` filter in `scan` drops it) — the MVP organizes plain files
+    /// only. Windows symlink creation needs `SeCreateSymbolicLinkPrivilege`
+    /// (admin/Developer Mode), which the `windows-latest` CI runner may
+    /// lack, so this is verified on unix only; the exclusion mechanism
+    /// itself is platform-agnostic, but stays unverified by CI on Windows —
+    /// an explicit, known residual gap rather than a faked pass there.
+    #[cfg(unix)]
+    #[test]
+    fn scan_excludes_symlinks() {
+        let tmp = tempdir();
+        let real = tmp.file("report.pdf", b"x");
+        tmp.symlink_file("shortcut.pdf", &real);
+
+        let files = scan(tmp.path());
+        let names: Vec<&str> = files.iter().map(|f| f.file_name.as_str()).collect();
+        assert_eq!(names, vec!["report.pdf"]);
+    }
+
+    #[test]
+    fn scan_reads_unicode_filenames() {
+        let tmp = tempdir();
+        tmp.file("日本語 📷 café.pdf", b"x");
+
+        let files = scan(tmp.path());
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].file_name, "日本語 📷 café.pdf");
+        assert_eq!(files[0].stem, "日本語 📷 café");
+        assert_eq!(files[0].extension.as_deref(), Some("pdf"));
+    }
+
     /// A file at `MAX_DEPTH` levels of nesting is included; one level deeper
     /// is not. Pins the exact boundary so a future depth-accounting change
     /// (e.g. adjusting jwalk's depth offset) can't silently shift it.

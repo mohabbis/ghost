@@ -179,6 +179,27 @@ mod tests {
     }
 
     #[test]
+    fn unicode_characters_are_preserved_in_safe_file_name() {
+        // sanitize_component only touches the ASCII-scoped ILLEGAL set and
+        // is_control(); Unicode text (emoji, combining diacritics, CJK) must
+        // survive untouched, never stripped or transliterated.
+        assert_eq!(safe_file_name("日本語 📷 café.pdf"), "日本語 📷 café.pdf");
+    }
+
+    #[test]
+    fn deduplicate_is_case_sensitive_by_design() {
+        // deduplicate compares names via an exact HashSet<String>, so
+        // "Report.pdf" and "report.pdf" are distinct here — correct on the
+        // case-sensitive filesystem this test runs on (Linux CI). On the
+        // case-*insensitive* filesystems macOS/Windows default to, this
+        // exact-match comparison is the root cause of a real collision risk
+        // it can't see: a known residual gap Linux CI cannot exercise.
+        let mut taken = HashSet::new();
+        taken.insert("report.pdf".to_string());
+        assert_eq!(deduplicate("Report.pdf", &taken), "Report.pdf");
+    }
+
+    #[test]
     fn deduplicate_appends_counter_before_extension() {
         let mut taken = HashSet::new();
         taken.insert("a.pdf".to_string());
