@@ -40,6 +40,11 @@ pub struct GhostConfig {
 /// corresponding "Sign in with ..." option is unavailable until an operator
 /// registers an app and fills these in (or sets `GHOST_MS_CLIENT_ID` /
 /// `GHOST_GOOGLE_CLIENT_ID`, which take priority for local dev).
+///
+/// Google sign-in also falls back to [`BUNDLED_GOOGLE_CLIENT_ID`] when unset.
+pub const BUNDLED_GOOGLE_CLIENT_ID: &str =
+    "126188596343-s62mdpmhghit8q66pmujpifg9mlqqtur.apps.googleusercontent.com";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct IntegrationSettings {
     #[serde(default)]
@@ -413,7 +418,10 @@ impl Default for GhostConfig {
             },
             // Keep all audit history by default; retention is opt-in.
             audit: AuditSettings::default(),
-            integrations: IntegrationSettings::default(),
+            integrations: IntegrationSettings {
+                microsoft_client_id: None,
+                google_client_id: Some(BUNDLED_GOOGLE_CLIENT_ID.to_string()),
+            },
             intelligence: IntelligenceSettings::default(),
         }
     }

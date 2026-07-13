@@ -101,6 +101,10 @@ with Google" is unavailable until an operator registers a public-client app
 registration and supplies a client ID (PKCE public clients don't have or need
 a client secret):
 
+Ghost ships with a bundled Google OAuth client ID for "Sign in with Google"
+(see `config::BUNDLED_GOOGLE_CLIENT_ID`). Microsoft sign-in still requires an
+operator-supplied Entra app registration until a bundled ID is added.
+
 - **Microsoft**: register an app in Entra ID (Azure Portal → App
   registrations), set it up as a public client with a redirect URI of
   `http://127.0.0.1/callback` (the loopback port is chosen at runtime, so the
