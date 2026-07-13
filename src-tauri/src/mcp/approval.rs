@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApprovalTokenClaims {
@@ -29,6 +30,19 @@ fn signing_key_path() -> PathBuf {
         .unwrap_or_else(std::env::temp_dir)
         .join("ghost")
         .join("mcp-signing.key")
+}
+
+/// Process-wide cache of the signing key. Signing and verification must use
+/// the *same* key bytes; without this cache two threads that both find the key
+/// file missing on first use would each generate and write a different key,
+/// and a token signed under the first key would fail verification under the
+/// second. Loading once and reusing it also avoids a filesystem read per token.
+fn signing_key() -> Vec<u8> {
+    static KEY: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
+    KEY.get_or_init(|| Mutex::new(load_or_create_signing_key()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 fn load_or_create_signing_key() -> Vec<u8> {
@@ -76,7 +90,7 @@ pub fn issue_approval_token(plan_id: &str, plan_hash: &str) -> SignedApprovalTok
         expires_at: now + Duration::minutes(5),
         nonce: uuid::Uuid::new_v4().to_string(),
     };
-    let signature = sign_claims(&claims, &load_or_create_signing_key());
+    let signature = sign_claims(&claims, &signing_key());
     SignedApprovalToken { claims, signature }
 }
 
@@ -95,7 +109,7 @@ pub fn verify_execution_token_with_hash(
 ) -> Result<ApprovalTokenClaims, String> {
     let signed: SignedApprovalToken = serde_json::from_str(token_json)
         .map_err(|_| "Invalid approval token format".to_string())?;
-    let expected = sign_claims(&signed.claims, &load_or_create_signing_key());
+    let expected = sign_claims(&signed.claims, &signing_key());
     if expected != signed.signature {
         return Err("Approval token signature is invalid".to_string());
     }
@@ -136,5 +150,48 @@ mod tests {
         let signed = issue_approval_token("plan_zone-1", "sha256:deadbeef");
         let json = serde_json::to_string(&signed).unwrap();
         assert!(verify_execution_token(&json, "zone-1").is_ok());
+    }
+
+    #[test]
+    fn tampered_signature_is_rejected() {
+        let mut signed = issue_approval_token("plan_zone-tamper", "sha256:abc");
+        signed.signature = "sha256:0000000000000000".to_string();
+        let json = serde_json::to_string(&signed).unwrap();
+        let err = verify_execution_token(&json, "zone-tamper").unwrap_err();
+        assert!(err.contains("signature is invalid"), "got: {err}");
+    }
+
+    #[test]
+    fn token_for_a_different_zone_is_rejected() {
+        let signed = issue_approval_token("plan_zone-a", "sha256:abc");
+        let json = serde_json::to_string(&signed).unwrap();
+        let err = verify_execution_token(&json, "zone-b").unwrap_err();
+        assert!(
+            err.contains("does not match the requested Zone"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn malformed_token_json_is_rejected() {
+        let err = verify_execution_token("not-a-token", "zone-x").unwrap_err();
+        assert!(err.contains("Invalid approval token format"), "got: {err}");
+    }
+
+    #[test]
+    fn a_rejected_verification_does_not_burn_the_single_use_nonce() {
+        // A token presented against the wrong Zone must fail *before* the nonce
+        // is consumed, so an honest client that then presents it against the
+        // correct Zone still succeeds. If the reject path burned the nonce, a
+        // stray/duplicated request could permanently lock out a valid approval.
+        let signed = issue_approval_token("plan_zone-retry", "sha256:abc");
+        let json = serde_json::to_string(&signed).unwrap();
+
+        assert!(verify_execution_token(&json, "wrong-zone").is_err());
+        // Same token, correct Zone — the nonce was never consumed, so this works.
+        assert!(verify_execution_token(&json, "zone-retry").is_ok());
+        // And now it is single-use: a replay against the correct Zone fails.
+        let err = verify_execution_token(&json, "zone-retry").unwrap_err();
+        assert!(err.contains("already been used"), "got: {err}");
     }
 }

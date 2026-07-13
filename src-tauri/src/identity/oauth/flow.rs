@@ -55,6 +55,30 @@ struct AuthorizedTokens {
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Assemble the provider consent-screen URL for an authorization-code + PKCE
+/// flow. Pulled out of `authorize_and_exchange` so the security-relevant query
+/// assembly — PKCE `S256` challenge binding and the CSRF `state` — can be
+/// asserted without opening a browser or binding a socket. Every dynamic value
+/// is percent-encoded through `urlencoding_encode`.
+fn build_authorize_url(
+    provider: OAuthProvider,
+    client_id: &str,
+    redirect_uri: &str,
+    scope: &str,
+    state: &str,
+    challenge: &str,
+) -> String {
+    format!(
+        "{}?client_id={}&response_type=code&redirect_uri={}&response_mode=query&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
+        provider.authorize_endpoint(),
+        urlencoding_encode(client_id),
+        urlencoding_encode(redirect_uri),
+        urlencoding_encode(scope),
+        urlencoding_encode(state),
+        urlencoding_encode(challenge),
+    )
+}
+
 /// Shared core of every OAuth flow Ghost runs: bind a loopback listener, open
 /// the system browser to `provider`'s consent screen for `scope`, wait for
 /// the redirect, and exchange the code for tokens. Blocks up to
@@ -75,14 +99,13 @@ fn authorize_and_exchange(
     let state = random_state();
     let client_id_owned = client_id.to_string();
 
-    let authorize_url = format!(
-        "{}?client_id={}&response_type=code&redirect_uri={}&response_mode=query&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
-        provider.authorize_endpoint(),
-        urlencoding_encode(&client_id_owned),
-        urlencoding_encode(&redirect_uri),
-        urlencoding_encode(scope),
-        urlencoding_encode(&state),
-        urlencoding_encode(&challenge),
+    let authorize_url = build_authorize_url(
+        provider,
+        &client_id_owned,
+        &redirect_uri,
+        scope,
+        &state,
+        &challenge,
     );
 
     open::that(&authorize_url)
@@ -198,4 +221,88 @@ pub fn run_grant_flow(
             expires_at: authorized.expires_at,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_query(url: &str) -> std::collections::HashMap<String, String> {
+        let query = url.split_once('?').map(|x| x.1).unwrap_or("");
+        query
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn authorize_url_targets_the_provider_consent_endpoint() {
+        let url = build_authorize_url(
+            OAuthProvider::Microsoft,
+            "client-abc",
+            "http://127.0.0.1:5555/callback",
+            "openid email",
+            "state-xyz",
+            "challenge-123",
+        );
+        assert!(url.starts_with(OAuthProvider::Microsoft.authorize_endpoint()));
+        assert!(url.contains('?'));
+    }
+
+    #[test]
+    fn authorize_url_requests_a_code_via_pkce_s256() {
+        let url = build_authorize_url(
+            OAuthProvider::Google,
+            "client-abc",
+            "http://127.0.0.1:5555/callback",
+            "openid email",
+            "state-xyz",
+            "challenge-123",
+        );
+        let params = parse_query(&url);
+        assert_eq!(
+            params.get("response_type").map(String::as_str),
+            Some("code")
+        );
+        // The PKCE challenge must be present and use SHA-256, never the
+        // "plain" method — that is the whole point of the code-exchange guard.
+        assert_eq!(
+            params.get("code_challenge").map(String::as_str),
+            Some("challenge-123")
+        );
+        assert_eq!(
+            params.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
+    }
+
+    #[test]
+    fn authorize_url_carries_state_client_and_scope() {
+        let url = build_authorize_url(
+            OAuthProvider::Google,
+            "client-abc",
+            "http://127.0.0.1:5555/callback",
+            "openid email",
+            "state-xyz",
+            "challenge-123",
+        );
+        let params = parse_query(&url);
+        // CSRF state round-trips verbatim (await_redirect compares it back).
+        assert_eq!(params.get("state").map(String::as_str), Some("state-xyz"));
+        assert_eq!(
+            params.get("client_id").map(String::as_str),
+            Some("client-abc")
+        );
+        // Reserved characters in the redirect and scope are percent-encoded,
+        // never emitted raw into the query string.
+        assert_eq!(
+            params.get("redirect_uri").map(String::as_str),
+            Some("http%3A%2F%2F127.0.0.1%3A5555%2Fcallback")
+        );
+        assert_eq!(
+            params.get("scope").map(String::as_str),
+            Some("openid%20email")
+        );
+    }
 }
