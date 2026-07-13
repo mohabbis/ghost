@@ -3,6 +3,7 @@
 use crate::core::events::InputEvent;
 use crate::organizer::file_identity::FileIdentity;
 use crate::policy::{Capability, PolicyDecision};
+use crate::runtime::semantic::UiTarget;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -84,6 +85,20 @@ pub enum ActionKind {
     OpenApplication {
         name: String,
     },
+    /// Focus a UI element via Accessibility (macOS helper); refuses ambiguous matches.
+    SemanticFocus {
+        target: UiTarget,
+    },
+    /// Set text/value on an accessible element instead of coordinate typing.
+    SemanticSetValue {
+        target: UiTarget,
+        value: String,
+    },
+    /// Post-action semantic verification (role/title/value).
+    SemanticVerify {
+        target: UiTarget,
+        expected_value: Option<String>,
+    },
     UiReplay {
         events: Vec<InputEvent>,
         step_index: usize,
@@ -122,6 +137,9 @@ impl ActionPlan {
                 | ActionKind::RenameFile { .. } => summary.filesystem_steps += 1,
                 ActionKind::VerifyPath { .. } => summary.verify_steps += 1,
                 ActionKind::OpenApplication { .. }
+                | ActionKind::SemanticFocus { .. }
+                | ActionKind::SemanticSetValue { .. }
+                | ActionKind::SemanticVerify { .. }
                 | ActionKind::UiReplay { .. }
                 | ActionKind::TypeText { .. }
                 | ActionKind::Shortcut { .. }

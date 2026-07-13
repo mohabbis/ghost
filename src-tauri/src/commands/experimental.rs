@@ -217,6 +217,11 @@ pub fn replay_with_reliability(
     engine: State<GhostEngine>,
 ) -> Result<(), String> {
     let defaults = engine.default_retry_config();
+    let report = crate::core::compression::compress(&events);
+    let plan = crate::policy::evaluate_compressed(&report);
+    crate::policy::ensure_replayable(&plan)?;
+    engine.consume_routine_approval(&crate::policy::fingerprint_events(&events))?;
+
     let reliability = crate::core::events::ReliabilitySettings {
         retry_config: crate::core::events::RetryConfig {
             max_attempts: max_attempts.unwrap_or(defaults.max_attempts),
@@ -227,14 +232,21 @@ pub fn replay_with_reliability(
         ..Default::default()
     };
 
-    let report = crate::core::compression::compress(&events);
-    let plan = crate::policy::evaluate_compressed(&report);
-    crate::policy::ensure_replayable(&plan)?;
-    engine.consume_routine_approval(&crate::policy::fingerprint_events(&events))?;
-
-    engine
-        .replay_with_reliability(&events, &reliability, workflow_name)
-        .map_err(|e| e.to_string())
+    let action_plan = crate::action_plan::from_compression_report(&report, &events, workflow_name);
+    let runtime_result = crate::runtime::execute_action_plan_with_reliability(
+        &action_plan,
+        &[],
+        Some(&engine),
+        None,
+        &reliability,
+        |_| {},
+    );
+    if runtime_result.stopped_early && runtime_result.report.failed > 0 {
+        return Err(runtime_result
+            .stop_reason
+            .unwrap_or_else(|| "reliable routine execution failed".into()));
+    }
+    Ok(())
 }
 
 /// Cloud sync state managed by Tauri.

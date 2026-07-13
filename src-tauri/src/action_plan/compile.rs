@@ -9,6 +9,15 @@ use crate::policy::{evaluate_with_attribution, Capability};
 use uuid::Uuid;
 
 pub fn from_organizer_plan(plan: &OrganizerPlan) -> ActionPlan {
+    from_organizer_plan_with_source(
+        plan,
+        PlanSource::Organizer {
+            zone_id: plan.zone_id.clone(),
+        },
+    )
+}
+
+pub fn from_organizer_plan_with_source(plan: &OrganizerPlan, source: PlanSource) -> ActionPlan {
     let steps = plan
         .actions
         .iter()
@@ -18,9 +27,7 @@ pub fn from_organizer_plan(plan: &OrganizerPlan) -> ActionPlan {
     ActionPlan::new(
         Uuid::new_v4().to_string(),
         format!("Organize zone {}", plan.zone_id),
-        PlanSource::Organizer {
-            zone_id: plan.zone_id.clone(),
-        },
+        source,
         steps,
     )
 }
@@ -233,6 +240,15 @@ fn step_label(kind: &ActionKind, cap: &Capability) -> String {
             )
         }
         ActionKind::OpenApplication { name } => format!("Open {name}"),
+        ActionKind::SemanticFocus { target } => {
+            format!("Focus {} {}", target.app, target.role)
+        }
+        ActionKind::SemanticSetValue { target, .. } => {
+            format!("Set value on {} {}", target.app, target.role)
+        }
+        ActionKind::SemanticVerify { target, .. } => {
+            format!("Verify {} {}", target.app, target.role)
+        }
         ActionKind::TypeText { text, .. } => {
             if text.len() > 48 {
                 format!("Type {}…", &text[..48])

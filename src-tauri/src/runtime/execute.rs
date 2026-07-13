@@ -2,11 +2,12 @@
 
 use super::fs::{apply_filesystem_step, FsOutcome};
 use super::receipt::{build_receipt, ExecutionReceipt};
-use super::ui::{dispatch_ui_step, UiOutcome};
+use super::ui::{dispatch_ui_step_with_reliability, UiOutcome};
 use super::verify::{verify_after_kind, StepVerification, VerificationStatus};
 use crate::action_plan::types::ActionKind;
 use crate::action_plan::types::ActionPlan;
 use crate::audit::{ActionOutcome, Provenance, UndoJournal};
+use crate::core::events::ReliabilitySettings;
 use crate::engine::GhostEngine;
 use crate::organizer::executor::ExecutionReport;
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
@@ -34,6 +35,36 @@ pub fn execute_action_plan_with_progress(
     rules: &[FolderRule],
     engine: Option<&GhostEngine>,
     execution_id: Option<String>,
+    on_progress: impl FnMut(&ExecutionReport),
+) -> RuntimeResult {
+    execute_action_plan_with_options(plan, rules, engine, execution_id, None, on_progress)
+}
+
+/// Like [`execute_action_plan_with_progress`], but enables reliability retries for UI replay steps.
+pub fn execute_action_plan_with_reliability(
+    plan: &ActionPlan,
+    rules: &[FolderRule],
+    engine: Option<&GhostEngine>,
+    execution_id: Option<String>,
+    reliability: &ReliabilitySettings,
+    on_progress: impl FnMut(&ExecutionReport),
+) -> RuntimeResult {
+    execute_action_plan_with_options(
+        plan,
+        rules,
+        engine,
+        execution_id,
+        Some(reliability),
+        on_progress,
+    )
+}
+
+fn execute_action_plan_with_options(
+    plan: &ActionPlan,
+    rules: &[FolderRule],
+    engine: Option<&GhostEngine>,
+    execution_id: Option<String>,
+    reliability: Option<&ReliabilitySettings>,
     mut on_progress: impl FnMut(&ExecutionReport),
 ) -> RuntimeResult {
     let started_at = now_epoch_string();
@@ -74,6 +105,7 @@ pub fn execute_action_plan_with_progress(
             step.source_identity.as_ref(),
             rules,
             engine,
+            reliability,
             &mut report.undo,
         );
 
@@ -157,6 +189,7 @@ fn dispatch_step(
     source_identity: Option<&crate::organizer::file_identity::FileIdentity>,
     rules: &[FolderRule],
     engine: Option<&GhostEngine>,
+    reliability: Option<&ReliabilitySettings>,
     undo: &mut UndoJournal,
 ) -> DispatchOutcome {
     match kind {
@@ -176,7 +209,7 @@ fn dispatch_step(
                 DispatchOutcome::Failed(format!("verification failed for {}", path.display()))
             }
         }
-        _ => match dispatch_ui_step(kind, engine) {
+        _ => match dispatch_ui_step_with_reliability(kind, engine, reliability) {
             UiOutcome::Applied => DispatchOutcome::Applied,
             UiOutcome::Skipped(r) => DispatchOutcome::Skipped(r),
             UiOutcome::Failed(e) => DispatchOutcome::Failed(e),

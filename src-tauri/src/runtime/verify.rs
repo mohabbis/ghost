@@ -105,6 +105,46 @@ pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepV
             label,
             &format!("opened {name} (UI verification best-effort)"),
         ),
+        ActionKind::SemanticFocus { target } => StepVerification::not_applicable(
+            step_id,
+            label,
+            &format!("focused {} {}", target.app, target.role),
+        ),
+        ActionKind::SemanticSetValue { target, value } => {
+            if let Ok(observed) = crate::runtime::semantic::verify_target(target, Some(value)) {
+                StepVerification {
+                    step_id: step_id.into(),
+                    label: label.into(),
+                    expected: format!("value contains {}", value),
+                    observed,
+                    status: VerificationStatus::Verified,
+                    continue_execution: true,
+                }
+            } else {
+                StepVerification::not_applicable(step_id, label, "semantic value set dispatched")
+            }
+        }
+        ActionKind::SemanticVerify {
+            target,
+            expected_value,
+        } => match crate::runtime::semantic::verify_target(target, expected_value.as_deref()) {
+            Ok(observed) => StepVerification {
+                step_id: step_id.into(),
+                label: label.into(),
+                expected: expected_value
+                    .clone()
+                    .unwrap_or_else(|| format!("{} present", target.role)),
+                observed,
+                status: VerificationStatus::Verified,
+                continue_execution: true,
+            },
+            Err(e) => StepVerification::failed(
+                step_id,
+                label,
+                "semantic element verified",
+                &e.to_string(),
+            ),
+        },
         ActionKind::TypeText { .. } | ActionKind::Shortcut { .. } => {
             StepVerification::not_applicable(step_id, label, "UI action dispatched")
         }

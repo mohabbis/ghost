@@ -1,12 +1,11 @@
 //! Shared Organizer run/undo pipeline for Tauri commands and the headless MCP server.
 
-use crate::organizer::executor::{execute_plan_with_progress, ExecutionReport};
+use crate::action_plan::{from_organizer_plan_with_source, PlanSource};
+use crate::organizer::executor::ExecutionReport;
 use crate::organizer::planner::plan_zone;
 use crate::organizer::undo::{revert, UndoReport};
-use crate::storage::executions::{
-    begin_execution, finish_execution, get_execution, mark_execution_finished, prune_executions,
-    update_execution_progress,
-};
+use crate::runtime::run_persisted_action_plan;
+use crate::storage::executions::{get_execution, mark_execution_finished};
 use crate::storage::milestones::{record_milestone, Milestone};
 use crate::storage::zones::list_folder_rules;
 use crate::storage::Db;
@@ -15,30 +14,54 @@ use crate::storage::Db;
 pub struct ZoneRunOutcome {
     pub execution_id: String,
     pub report: ExecutionReport,
+    pub receipt: crate::runtime::ExecutionReceipt,
 }
 
-/// Re-plan server-side and execute an approved Zone — same trust path as
-/// `organizer_execute`, without accepting a client-supplied plan.
+/// Re-plan server-side and execute through the canonical ActionPlan runtime.
 pub fn execute_zone(
     conn: &Db,
     zone_id: &str,
     retention_keep_last: Option<usize>,
     retention_keep_days: Option<u64>,
 ) -> Result<ZoneRunOutcome, String> {
+    execute_zone_with_source(
+        conn,
+        zone_id,
+        PlanSource::Organizer {
+            zone_id: zone_id.into(),
+        },
+        retention_keep_last,
+        retention_keep_days,
+    )
+}
+
+/// Like [`execute_zone`], but records the intent source on the compiled plan (e.g. MCP).
+pub fn execute_zone_with_source(
+    conn: &Db,
+    zone_id: &str,
+    source: PlanSource,
+    retention_keep_last: Option<usize>,
+    retention_keep_days: Option<u64>,
+) -> Result<ZoneRunOutcome, String> {
     let rules = list_folder_rules(conn, zone_id).map_err(|e| e.to_string())?;
     let plan = plan_zone(conn, zone_id).map_err(|e| e.to_string())?;
+    let action_plan = from_organizer_plan_with_source(&plan, source);
 
-    let execution_id = begin_execution(conn, zone_id).map_err(|e| e.to_string())?;
-    let report = execute_plan_with_progress(&plan, &rules, |partial| {
-        let _ = update_execution_progress(conn, &execution_id, partial);
-    });
-    finish_execution(conn, &execution_id, zone_id, &report).map_err(|e| e.to_string())?;
-    let _ = record_milestone(conn, Milestone::FirstRun);
-    let _ = prune_executions(conn, retention_keep_last, retention_keep_days);
+    let outcome = run_persisted_action_plan(
+        conn,
+        zone_id,
+        &action_plan,
+        &rules,
+        None,
+        false,
+        retention_keep_last,
+        retention_keep_days,
+    )?;
 
     Ok(ZoneRunOutcome {
-        execution_id,
-        report,
+        execution_id: outcome.execution_id,
+        report: outcome.runtime.report,
+        receipt: outcome.runtime.receipt,
     })
 }
 
