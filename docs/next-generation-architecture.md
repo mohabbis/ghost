@@ -1,6 +1,6 @@
 # Ghost Next-Generation Architecture
 
-> **Architectural north star:** For five-year KEEP / REFACTOR / REPLACE / REMOVE decisions, platform ownership, Action IR, plugin runtime, and product NEVER-boundaries, see [`architecture-review-2031.md`](architecture-review-2031.md). Where this document’s ambition (marketplace, remote MCP, “OS for safe AI actions”) conflicts with that review or with the `AGENTS.md` wedge build order, prefer the architecture review and `AGENTS.md`. This file remains the MCP / Zones / approval-token vision sketch.
+> **Architectural north star:** For five-year KEEP / REFACTOR / REPLACE / REMOVE decisions, Ghost Kernel / Resource Graph / Capability Registry / Verification-first design, Action IR, Planner Interface, plugin Intent-only rules, Ghost Agent products, Trust Levels, and product NEVER-boundaries, see [`architecture-review-2031.md`](architecture-review-2031.md). Where this document’s ambition (marketplace, remote MCP, “OS for safe AI actions”) conflicts with that review or with the `AGENTS.md` wedge build order, prefer the architecture review and `AGENTS.md`. This file remains the MCP / Zones / approval-token vision sketch — as an **adapter** story into the kernel, not a peer architecture.
 
 Ghost's long-term architecture is the trusted execution layer between AI reasoning systems and a user's local digital workspace. AI systems reason, Ghost verifies, the user approves, and deterministic code executes.
 
