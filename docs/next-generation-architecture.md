@@ -1,5 +1,7 @@
 # Ghost Next-Generation Architecture
 
+> **Architectural north star:** For five-year KEEP / REFACTOR / REPLACE / REMOVE decisions, platform ownership, Action IR, plugin runtime, and product NEVER-boundaries, see [`architecture-review-2031.md`](architecture-review-2031.md). Where this document’s ambition (marketplace, remote MCP, “OS for safe AI actions”) conflicts with that review or with the `AGENTS.md` wedge build order, prefer the architecture review and `AGENTS.md`. This file remains the MCP / Zones / approval-token vision sketch.
+
 Ghost's long-term architecture is the trusted execution layer between AI reasoning systems and a user's local digital workspace. AI systems reason, Ghost verifies, the user approves, and deterministic code executes.
 
 Ghost is not another AI assistant. Ghost is the operating system for safe AI actions: a vendor-neutral execution engine where every filesystem operation is planned, reviewed, approved, audited, and reversible.
