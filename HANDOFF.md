@@ -1,7 +1,7 @@
 # Ghost Project — Detailed Handoff Prompt for Continued Development
 
 **Last Updated:** 2026-07-13
-**Status:** `master` @ `f889eb2` (v1.2.7). Rust CI green on macOS/Windows/Linux. **GitHub Release `v1.2.7` is published** (`Ghost.dmg`, `Ghost_Setup.exe`, `SHA256SUMS.txt`) — macOS signing/notarization enabled; Windows still unsigned. Recent merges: Guard Desk DOM contract (#209/#211), account fixture isolation (#212), dirs 6 (#200), teal UI (#207). Cursor agents: `.cursor/rules/` + `AGENTS.md`. Updater pubkey is still the `REPLACE_WITH_…` placeholder (no `latest.json` auto-update until `TAURI_SIGNING_PRIVATE_KEY` is set). See `RELEASING.md`.
+**Status:** `master` tip tracks post-`v1.2.7` work. **GitHub Release [`v1.2.7`](https://github.com/mohabbis/ghost/releases/tag/v1.2.7) is published** (`Ghost.dmg`, `Ghost_Setup.exe`, `SHA256SUMS.txt`) — macOS Developer ID + notarization enabled; Windows still unsigned. Marketing/README aligned (#213). Updater signing keypair is configured (`tauri.conf.json` pubkey + `TAURI_SIGNING_*` Actions secrets) — **next tagged release** will publish `latest.json` / updater artifacts (existing v1.2.7 installers will not auto-update until users install a build that embeds the new pubkey). Cursor agents: `.cursor/rules/` + `AGENTS.md`.
 
 ---
 
@@ -42,19 +42,18 @@ For a full technical snapshot see `docs/PROJECT_STATE.md`.
 
 ## Immediate Next Steps
 
-1. **Updater pubkey:** replace `REPLACE_WITH_…` in `tauri.conf.json` and set `TAURI_SIGNING_PRIVATE_KEY` so `latest.json` publishes automatically.
-2. **Windows Authenticode / Azure Trusted Signing** so `Ghost_Setup.exe` is signed (macOS notarization already works on v1.2.7). See `RELEASING.md`.
+1. **Windows Authenticode / Azure Trusted Signing** so `Ghost_Setup.exe` is signed. See `RELEASING.md`.
+2. **Tag the next version** (e.g. `v1.2.8`) after this updater-key commit lands on `master`, so `latest.json` publishes and new installs can auto-update. Do not re-tag `v1.2.7`.
 3. **Keep Guard Desk / POS Bridge suggestion-only** — never auto-execute from ID-scan output.
-4. **Close the Routines loop** — route compressed replay steps through guard + policy + approval + undo (biggest gap vs Organizer; see `docs/PROJECT_STATE.md` §10).
+4. **Finish the Routines loop** — policy plan + one-shot approve now gate `replay_workflow`; still missing routine undo/vault and app/window Zones. See `docs/PROJECT_STATE.md` §10.
 5. Continue `AGENTS.md` build order: Organizer polish → replay reliability → release quality → AI last (gated).
-6. **Publish next version** only when Windows signing and/or updater keys land — do not re-tag v1.2.7.
 
 ---
 
 ## Known Risks
 
 - Windows releases are still unsigned until Azure Trusted Signing secrets are configured; macOS v1.2.7 is notarized.
-- Auto-update is off until a real updater pubkey replaces the placeholder.
+- Auto-update artifacts appear only on the **next** tagged release after the pubkey commit; stock `v1.2.7` binaries still have no updater key.
 - `parse_id_document` handles PII — keep local and suggestion-only.
 - Experimental commands stay behind `--features experimental`; CI does not run that leg.
 

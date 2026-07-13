@@ -32,6 +32,7 @@ macro_rules! run_with_commands {
                 commands::start_recording,
                 commands::stop_recording,
                 commands::replay_workflow,
+                commands::approve_routine_replay,
                 commands::ghost_guard_audit,
                 commands::ghost_guard_audit_compressed,
                 commands::routine_policy_plan,

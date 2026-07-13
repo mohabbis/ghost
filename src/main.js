@@ -624,9 +624,53 @@ async function confirmGuardBeforeReplay() {
   return true;
 }
 
+/** Guard → policy plan → explicit approve (server one-shot token) before OS replay. */
+async function confirmPolicyBeforeReplay(events) {
+  if (!events || events.length === 0) return false;
+  if (!(await confirmGuardBeforeReplay())) return false;
+
+  let plan;
+  try {
+    plan = await invoke("routine_policy_plan", { events });
+  } catch (error) {
+    toastError("Policy plan failed: " + formatInvokeError(error));
+    return false;
+  }
+
+  if (!plan?.can_proceed_with_approvals) {
+    const denied = (plan?.steps || [])
+      .filter((s) => s.decision?.decision === "deny")
+      .map((s) => `step ${s.step_index + 1}: ${s.decision.reason || "denied"}`)
+      .slice(0, 4)
+      .join("; ");
+    toastError(`Replay blocked by policy${denied ? `: ${denied}` : "."}`);
+    showInsight("Policy denied one or more routine steps. Edit or re-record before replaying.");
+    return false;
+  }
+
+  const confirmCount = plan.confirmation_count || 0;
+  const summary =
+    confirmCount > 0
+      ? `Policy requires confirmation for ${confirmCount} OS-control step(s). Approve and replay?`
+      : "Approve this routine policy plan and replay?";
+  const ok = await ghostConfirm(summary, "Approve & Replay");
+  if (!ok) {
+    showInsight("Replay cancelled — approve the policy plan when ready.");
+    return false;
+  }
+
+  try {
+    await invoke("approve_routine_replay", { events });
+  } catch (error) {
+    toastError("Could not approve routine: " + formatInvokeError(error));
+    return false;
+  }
+  return true;
+}
+
 async function replayWorkflow() {
   if (!invoke) return notAvailable();
-  if (!(await confirmGuardBeforeReplay())) return;
+  if (!(await confirmPolicyBeforeReplay(recordedEvents))) return;
 
   try {
     isPlaying = true;
@@ -655,7 +699,7 @@ async function replayWithReliability() {
     return;
   }
 
-  if (!(await confirmGuardBeforeReplay())) return;
+  if (!(await confirmPolicyBeforeReplay(recordedEvents))) return;
 
   try {
     // Retry behavior comes from Settings (replay.*) — no popups.
@@ -3345,8 +3389,9 @@ async function replayNextStep() {
   if (isPlaying || isRecording) return;
 
   if (stepReplayCursor >= recordedEvents.length) stepReplayCursor = 0;
-  // Approve the workflow once at the start of a stepped run, not per step.
-  if (stepReplayCursor === 0 && !(await confirmGuardBeforeReplay())) return;
+  // Review the full routine once at the start of a stepped run, then mint a
+  // one-shot approval for each slice (fingerprint must match the events replayed).
+  if (stepReplayCursor === 0 && !(await confirmPolicyBeforeReplay(recordedEvents))) return;
 
   const start = stepReplayCursor;
   const end = nextStepBoundary(recordedEvents, start);
@@ -3355,6 +3400,8 @@ async function replayNextStep() {
   try {
     isPlaying = true;
     updateRecordingUI();
+    // Mint a one-shot token for this exact slice (overwrites full-list approve from step 0).
+    await invoke("approve_routine_replay", { events: slice });
     await invoke("replay_workflow", { events: slice });
     stepReplayCursor = end;
     const remaining = recordedEvents.length - end;
@@ -3381,10 +3428,10 @@ async function retryFromFailedStep() {
     updateRecordingUI();
     return;
   }
-  if (!(await confirmGuardBeforeReplay())) return;
-
   const offset = lastFailedStep;
   const slice = recordedEvents.slice(offset);
+  if (!(await confirmPolicyBeforeReplay(slice))) return;
+
   try {
     isPlaying = true;
     lastFailedStep = null;

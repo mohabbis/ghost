@@ -18,7 +18,7 @@ pub use decision::PolicyDecision;
 pub use engine::{evaluate, evaluate_with_attribution, Evaluation};
 pub use risk::RiskLevel;
 pub use routines::{
-    capability_for_step, evaluate_compressed, evaluate_compressed_with_rules, RoutinePolicyPlan,
-    RoutineStepDecision,
+    capability_for_step, ensure_replayable, evaluate_compressed, evaluate_compressed_with_rules,
+    fingerprint_events, RoutinePolicyPlan, RoutineStepDecision,
 };
 pub use zone::{DefaultDecision, FolderRule, TrustLevel, Zone};

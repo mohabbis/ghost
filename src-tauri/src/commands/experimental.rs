@@ -227,6 +227,11 @@ pub fn replay_with_reliability(
         ..Default::default()
     };
 
+    let report = crate::core::compression::compress(&events);
+    let plan = crate::policy::evaluate_compressed(&report);
+    crate::policy::ensure_replayable(&plan)?;
+    engine.consume_routine_approval(&crate::policy::fingerprint_events(&events))?;
+
     engine
         .replay_with_reliability(&events, &reliability, workflow_name)
         .map_err(|e| e.to_string())

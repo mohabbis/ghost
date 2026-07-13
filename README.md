@@ -96,10 +96,10 @@ Working now:
 
 Still being hardened:
 
-- Windows installer signing (Azure Trusted Signing) and auto-update key setup.
+- Windows installer signing (Azure Trusted Signing).
 - Cross-app replay reliability where semantic targeting falls back to coordinates.
 - Richer target resolution for windows, controls, and app-specific UI.
-- Installer and update polish.
+- Routine undo/vault and app/window Zones for replay Allow.
 
 ## Download
 
@@ -110,7 +110,7 @@ Still being hardened:
 
 Latest release is [`v1.2.7`](https://github.com/mohabbis/ghost/releases/tag/v1.2.7). Ghost remains an early technical preview. macOS installers are Developer ID–signed and notarized; Windows installers are currently unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
 
-Ghost includes a user-approved auto-updater path that never installs silently, but it stays inactive until the updater signing key and `latest.json` are configured. See [`docs/auto-update.md`](docs/auto-update.md).
+Ghost includes a user-approved auto-updater that never installs silently. The updater signing key is configured for builds from current `master` forward; `latest.json` publishes on the next tagged release. Stock `v1.2.7` installers will not offer updates until users install a newer build that embeds the pubkey. See [`docs/auto-update.md`](docs/auto-update.md).
 
 ## Architecture
 

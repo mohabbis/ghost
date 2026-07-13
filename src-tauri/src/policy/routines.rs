@@ -123,6 +123,31 @@ fn target_label(target: &Target) -> String {
     }
 }
 
+/// Stable content fingerprint for a raw event list, used to bind one-shot
+/// replay approvals to the exact events the user reviewed.
+pub fn fingerprint_events(events: &[crate::core::events::InputEvent]) -> String {
+    use sha2::{Digest, Sha256};
+    let bytes = serde_json::to_vec(events).unwrap_or_default();
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Refuse plans that contain any `Deny` (caller must surface the plan first).
+pub fn ensure_replayable(plan: &RoutinePolicyPlan) -> Result<(), String> {
+    if plan.denied_count == 0 {
+        return Ok(());
+    }
+    let reasons: Vec<String> = plan
+        .steps
+        .iter()
+        .filter_map(|s| match &s.decision {
+            PolicyDecision::Deny { reason } => Some(format!("step {}: {reason}", s.step_index + 1)),
+            _ => None,
+        })
+        .collect();
+    Err(format!("Replay blocked by policy: {}", reasons.join("; ")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,5 +279,35 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn fingerprint_is_stable_for_identical_events() {
+        let events = vec![crate::core::events::InputEvent::Delay {
+            ms: 10,
+            timestamp: None,
+        }];
+        assert_eq!(fingerprint_events(&events), fingerprint_events(&events));
+        assert_ne!(
+            fingerprint_events(&events),
+            fingerprint_events(&[crate::core::events::InputEvent::Delay {
+                ms: 11,
+                timestamp: None,
+            }])
+        );
+    }
+
+    #[test]
+    fn ensure_replayable_rejects_denied_plans() {
+        let plan = evaluate_compressed(&CompressionReport::new(
+            1,
+            vec![CompressedStep::Unknown(UnknownStep {
+                description: "nope".into(),
+                raw_event_count: 1,
+            })],
+            vec![(0, 1)],
+        ));
+        let err = ensure_replayable(&plan).unwrap_err();
+        assert!(err.contains("Replay blocked by policy"));
     }
 }
