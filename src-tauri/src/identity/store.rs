@@ -57,7 +57,19 @@ impl IdentityStore {
             .unwrap_or_default()
     }
 
-    /// Persist a newly linked account with a base identity grant and encrypted tokens.
+    /// Persist a linked account with a base identity grant and encrypted
+    /// tokens. Preserves any other existing integration grants (Power BI,
+    /// Fabric, ...) rather than replacing the whole bundle — only the
+    /// `Identity` grant and the identity record itself are superseded, same
+    /// merge rule `add_grant` uses. Re-authenticating identity (e.g. signing
+    /// in again) must not silently revoke a user's Power BI/Fabric access.
+    ///
+    /// Known gap, not handled here: if `identity` belongs to a *different*
+    /// account than whatever was previously linked, this still carries the
+    /// old account's grants forward under the new identity rather than
+    /// revoking them — Ghost only tracks one linked identity at a time, and
+    /// there's no cross-check today that a grant's `account_id` still
+    /// matches. Account-switching hygiene is a separate piece of work.
     pub fn store_sign_in(
         &self,
         auth: &AuthManager,
@@ -79,12 +91,25 @@ impl IdentityStore {
 
         let token_record = self.encrypt_tokens(auth, &grant_id, &tokens)?;
 
-        let bundle = IdentityBundle {
-            version: BUNDLE_VERSION,
-            identity: Some(identity),
-            grants: vec![grant],
-            tokens: vec![token_record],
-        };
+        let mut bundle = self.load(auth).unwrap_or_default();
+
+        let superseded_grant_ids: Vec<String> = bundle
+            .grants
+            .iter()
+            .filter(|g| g.integration == IntegrationKind::Identity)
+            .map(|g| g.grant_id.clone())
+            .collect();
+        bundle
+            .grants
+            .retain(|g| g.integration != IntegrationKind::Identity);
+        bundle
+            .tokens
+            .retain(|t| !superseded_grant_ids.contains(&t.grant_id));
+
+        bundle.version = BUNDLE_VERSION;
+        bundle.identity = Some(identity);
+        bundle.grants.push(grant);
+        bundle.tokens.push(token_record);
         self.write_bundle(auth, &bundle)
     }
 

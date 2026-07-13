@@ -5,7 +5,7 @@ use serde::Deserialize;
 use std::net::TcpListener;
 
 use super::callback::{await_redirect, urlencoding_encode, CALLBACK_TIMEOUT};
-use super::pkce::{pkce_pair, random_state};
+use super::pkce::{constant_time_eq, pkce_pair, random_state};
 use super::provider::{OAuthProvider, REDIRECT_HOST};
 
 #[derive(Deserialize)]
@@ -89,7 +89,7 @@ fn authorize_and_exchange(
         .map_err(|e| anyhow::anyhow!("couldn't open the system browser for sign-in: {e}"))?;
 
     let (code, returned_state) = await_redirect(listener)?;
-    if returned_state != state {
+    if !constant_time_eq(&returned_state, &state) {
         anyhow::bail!(
             "Sign-in state mismatch — the callback did not match the request Ghost sent (possible interception, aborting)"
         );
