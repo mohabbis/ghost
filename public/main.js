@@ -328,39 +328,37 @@ function organizerDemo() {
 }
 
 /* ============================================================
-   Demo C — Client filing preset
+   Demo B — Plan Filing (preview only; Organizer executes)
    ============================================================ */
-function clientFilingDemo() {
-  const filesEl = $("#client-files");
-  const planEl = $("#client-plan");
-  const auditBox = $("#client-audit");
-  const auditEl = $("#client-auditlist");
-  const btn = $("#client-action");
-  const hint = $("#client-hint");
-  const planHead = $("#client-planhead");
+function planFilingDemo() {
+  const filesEl = $("#filing-files");
+  const planEl = $("#filing-plan");
+  const auditBox = $("#filing-audit");
+  const auditEl = $("#filing-auditlist");
+  const btn = $("#filing-action");
+  const hint = $("#filing-hint");
+  const planHead = $("#filing-planhead");
   if (!btn) return;
 
+  // Mirrors the desktop Plan Filing view: paste names → preview by profile.
+  // Nothing here mutates disk; Organizer is where approve / audit / undo live.
   const FILES = [
-    { name: "acme-invoice-march.pdf", meta: "Invoice" },
-    { name: "chase_stmt.pdf", meta: "Statement" },
-    { name: "stripe-receipt.pdf", meta: "Receipt" },
-    { name: "acme-invoice-march.pdf", meta: "Duplicate" },
-    { name: "notes.txt", meta: "Doc" },
+    { name: "junit-test-results-2026-07.xml", meta: "Test report" },
+    { name: "coverage-Q2-2026.html", meta: "Coverage" },
+    { name: "build-log-2026-07-12.txt", meta: "Build log" },
+    { name: "screenshot-flaky-login.png", meta: "Screenshot" },
+    { name: "trace-run-8842.zip", meta: "Trace" },
   ];
-  // Each category folder carries a trust level (the desktop app's per-folder
-  // Automate / AskFirst / Never). Filing into a category you set to automate
-  // runs hands-free; the ambiguous duplicate is held ask-first; deletes and
-  // uploads are never allowed. Every executed row names the rule (category)
-  // that authorized it and whether it ran automated or you-approved.
   const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Invoices", desc: "create category folder", audit: "Created folder <b>Invoices</b>", prov: "you approved", rule: "Client filing preset" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Statements", desc: "create category folder", audit: "Created folder <b>Statements</b>", prov: "you approved", rule: "Client filing preset" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Receipts", desc: "create category folder", audit: "Created folder <b>Receipts</b>", prov: "you approved", rule: "Client filing preset" },
-    { tag: "→ move", cls: "tag--move", strong: "acme-invoice-march.pdf", desc: "→ Invoices/2026-03 acme-invoice-march.pdf", file: 0, audit: "Moved <b>2026-03 acme-invoice-march.pdf</b> → Invoices", prov: "automated", rule: "Invoices", trust: "automate" },
-    { tag: "→ move", cls: "tag--move", strong: "chase_stmt.pdf", desc: "→ Statements/2026-03 chase_stmt.pdf", file: 1, audit: "Moved <b>2026-03 chase_stmt.pdf</b> → Statements", prov: "automated", rule: "Statements", trust: "automate" },
-    { tag: "→ move", cls: "tag--move", strong: "stripe-receipt.pdf", desc: "→ Receipts/2026-03 stripe-receipt.pdf", file: 2, audit: "Moved <b>2026-03 stripe-receipt.pdf</b> → Receipts", prov: "automated", rule: "Receipts", trust: "automate" },
-    { tag: "⚠ conflict", cls: "tag--warn", strong: "acme-invoice-march.pdf", desc: "duplicate — held for you, keeps both as 2026-03 acme-invoice-march (2).pdf", file: 3, warn: true, audit: "Kept both: <b>2026-03 acme-invoice-march (2).pdf</b>", prov: "you approved", rule: "Invoices", trust: "ask-first" },
-    { tag: "✕ denied", cls: "tag--deny", strong: "0 deletes · 0 uploads", desc: "client files stay local", deny: true, trust: "never" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Test reports", desc: "by artifact type" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Coverage", desc: "by reporting period" },
+    { tag: "＋ folder", cls: "tag--new", strong: "Build logs", desc: "by run date" },
+    { tag: "→ file", cls: "tag--move", strong: "junit-test-results-2026-07.xml", desc: "→ Test reports/2026-07 junit-test-results.xml", file: 0 },
+    { tag: "→ file", cls: "tag--move", strong: "coverage-Q2-2026.html", desc: "→ Coverage/2026-Q2 coverage.html", file: 1 },
+    { tag: "→ file", cls: "tag--move", strong: "build-log-2026-07-12.txt", desc: "→ Build logs/2026-07-12 build-log.txt", file: 2 },
+    { tag: "→ file", cls: "tag--move", strong: "screenshot-flaky-login.png", desc: "→ Screenshots/screenshot-flaky-login.png", file: 3 },
+    { tag: "→ file", cls: "tag--move", strong: "trace-run-8842.zip", desc: "→ Traces/trace-run-8842.zip", file: 4 },
+    { tag: "✕ denied", cls: "tag--deny", strong: "0 disk writes", desc: "preview only — Organizer executes", deny: true },
   ];
 
   let state = "idle";
@@ -373,21 +371,11 @@ function clientFilingDemo() {
   }
 
   function planRow(a) {
-    const trust = a.trust
-      ? ` <span class="trust-chip trust-chip--${a.trust.replace("-", "")}">${a.trust}</span>`
-      : "";
     return el(
       "li",
-      a.warn ? "is-warn" : a.deny ? "is-deny" : null,
-      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>${trust}`,
+      a.deny ? "is-deny" : null,
+      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>`,
     );
-  }
-
-  function auditRow(html, prov, rule) {
-    const auto = prov === "automated";
-    const badge = prov ? ` <span class="audit__prov${auto ? " audit__prov--auto" : ""}">${prov}</span>` : "";
-    const ruleTag = rule ? ` <span class="audit__rule">by rule <code>${rule}</code></span>` : "";
-    return el("li", null, `✓ ${html}${badge}${ruleTag}`);
   }
 
   function reset() {
@@ -395,81 +383,47 @@ function clientFilingDemo() {
     planEl.innerHTML = "";
     auditEl.innerHTML = "";
     auditBox.hidden = true;
-    planHead.textContent = "Client filing plan";
+    planHead.textContent = "Filing preview";
     hint.className = "demo__hint";
-    hint.textContent = "Invoices, receipts, and statements file into real category folders with dated names.";
-    btn.textContent = "Use client filing preset";
+    hint.textContent = "Reads names only — Plan Filing never touches disk. Organizer adds approve, audit, and undo.";
+    btn.textContent = "Preview filing";
     btn.disabled = false;
     state = "idle";
   }
 
-  async function scan() {
+  async function preview() {
     btn.disabled = true;
-    hint.textContent = "Scanning client downloads read-only…";
+    hint.textContent = "Building a local filing preview from pasted names…";
     FILES.forEach((f, i) => filesEl.appendChild(fileRow(f, i)));
     await sequence(
       PLAN.map((a) => () => planEl.appendChild(planRow(a))),
-      240,
+      220,
     );
-    planHead.textContent = "Client filing plan — preview only";
-    hint.textContent = "Trust levels: automate files hands-free · ask-first holds the duplicate for you · never blocks deletes. Approve to run.";
-    btn.textContent = "Approve filing";
-    btn.disabled = false;
-    state = "planned";
-  }
-
-  async function execute() {
-    btn.disabled = true;
-    hint.textContent = "Filing approved client documents…";
+    planHead.textContent = "Filing preview — disk untouched";
     auditBox.hidden = false;
-    const planRows = $$("li", planEl);
-    const acts = PLAN.filter((a) => a.audit);
-    await sequence(
-      acts.map((a, i) => () => {
-        planRows[i]?.classList.add("is-done");
-        if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.add("is-moved");
-        auditEl.appendChild(auditRow(a.audit, a.prov, a.rule));
-      }),
-      320,
+    auditEl.appendChild(
+      el(
+        "li",
+        null,
+        "✓ Preview ready — hand off to <b>Organizer</b> for approve → execute → audit → undo",
+      ),
     );
-    hint.textContent = "Filed with an audit log — every row names the rule and who signed off. No deletes, no uploads, conflicts preserved.";
-    btn.textContent = "↩︎ Undo filing";
+    hint.textContent = "Same trust pipeline as the desktop app: Plan Filing proposes; Organizer acts only after you approve.";
+    btn.textContent = "Reset preview";
     btn.disabled = false;
-    state = "done";
-  }
-
-  async function undo() {
-    btn.disabled = true;
-    hint.textContent = "Undoing from the local journal…";
-    const acts = PLAN.filter((a) => a.audit);
-    await sequence(
-      acts
-        .slice()
-        .reverse()
-        .map((a) => () => {
-          if (a.file != null) $(`li[data-file="${a.file}"]`, filesEl)?.classList.remove("is-moved");
-          auditEl.appendChild(auditRow(`Reverted: ${a.audit}`, null, a.rule));
-        }),
-      260,
-    );
-    hint.textContent = "Original download folder restored.";
-    btn.textContent = "Run preset again";
-    btn.disabled = false;
-    state = "undone";
+    state = "previewed";
   }
 
   btn.addEventListener("click", () => {
-    if (state === "idle") scan();
-    else if (state === "planned") execute();
-    else if (state === "done") undo();
-    else if (state === "undone") reset();
+    if (state === "idle") preview();
+    else if (state === "previewed") reset();
   });
 
   reset();
 }
 
 /* ============================================================
-   Demo B — Record → Review → Replay → Audit → Undo
+   Demo C — Record → Review → Replay → Audit → Undo
    ============================================================ */
 function replayDemo() {
   const stepsEl = $("#rep-steps");
@@ -712,7 +666,7 @@ window.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupScrollSpy();
   organizerDemo();
+  planFilingDemo();
   replayDemo();
-  clientFilingDemo();
   guardDeskDemo();
 });

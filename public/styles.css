@@ -371,6 +371,48 @@ strong { font-weight: 650; }
 .pipeline h3 { font-size: 16px; margin-bottom: 7px; letter-spacing: 0; }
 .pipeline p { color: var(--muted); font-size: 14.5px; }
 
+/* Inside the app — product map of desktop views */
+.app-views {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.app-views li {
+  padding: 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: #ffffff;
+  transition: border-color 160ms var(--ease), transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.app-views li:hover {
+  border-color: var(--violet-line);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+.app-views strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: var(--paper);
+}
+.app-views p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.app-views__note {
+  margin: 18px 0 0;
+  color: var(--faint);
+  font-size: 14px;
+  font-family: var(--mono);
+  letter-spacing: 0.01em;
+}
+
 /* ───────────────────────── Compare ───────────────────────── */
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .compare__col { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px; background: #ffffff; }

@@ -6,7 +6,7 @@
     <title>Ghost — Approve before it acts</title>
     <meta
       name="description"
-      content="Local desktop automation you approve before it acts. Scan folders, review the plan, run it on your computer — audited, undoable, nothing uploaded."
+      content="Local desktop automation you approve before it acts. Organizer, Plan Filing, Record & Replay, Workflows, and Guard Desk — audited, undoable, nothing uploaded."
     />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -113,9 +113,9 @@
 
       <nav class="nav__links" id="nav-links" aria-label="Primary">
         <a href="#demo">Demo</a>
-        <a href="#audiences">Who it's for</a>
+        <a href="#app">Inside the app</a>
         <a href="#how">How it works</a>
-        <a href="#why">Why Ghost</a>
+        <a href="#audiences">Who it's for</a>
         <a href="#privacy">Privacy</a>
         <a href="#roadmap">Roadmap</a>
       </nav>
@@ -138,8 +138,8 @@
           <h1>Approve before it <span class="grad">acts</span>.</h1>
           <p class="lede">
             Local desktop automation for software teams, automation engineers, and anyone
-            drowning in files. Scan → plan → approve → undo. Your files never
-            leave this machine.
+            drowning in files. Record or plan → inspect → approve → execute → audit → undo.
+            Your files never leave this machine.
           </p>
           <div class="hero__actions">
             <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download for Mac</span></a>
@@ -187,8 +187,8 @@
           <p class="eyebrow">Interactive demo</p>
           <h2>Watch the trust model, live.</h2>
           <p class="section__sub">
-            A faithful in-browser simulation of what the desktop app actually does — nothing here touches
-            your files. Drive it yourself.
+            In-browser simulations of the same desktop views — Organizer, Plan Filing,
+            Record &amp; Replay, and Guard Desk. Nothing here touches your files.
           </p>
         </div>
 
@@ -197,11 +197,11 @@
             <button class="demo__tab is-active" role="tab" aria-selected="true" data-tab="organizer" id="tab-organizer">
               <svg class="i"><use href="#i-folder"/></svg> Organizer
             </button>
-            <button class="demo__tab" role="tab" aria-selected="false" data-tab="replay" id="tab-replay">
-              <svg class="i"><use href="#i-record"/></svg> Record → Replay
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="plan-filing" id="tab-plan-filing">
+              <svg class="i"><use href="#i-folder-open"/></svg> Plan Filing
             </button>
-            <button class="demo__tab" role="tab" aria-selected="false" data-tab="client-filing" id="tab-client-filing">
-              <svg class="i"><use href="#i-folder-open"/></svg> Client filing
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="replay" id="tab-replay">
+              <svg class="i"><use href="#i-record"/></svg> Record &amp; Replay
             </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="guard-desk" id="tab-guard-desk">
               <svg class="i"><use href="#i-shield"/></svg> Guard Desk
@@ -230,7 +230,29 @@
             </div>
           </div>
 
-          <!-- Tab B: Record → Replay -->
+          <!-- Tab B: Plan Filing (preview-only; Organizer executes) -->
+          <div class="demo__panel" role="tabpanel" data-panel="plan-filing" aria-labelledby="tab-plan-filing" hidden>
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot"></span> Pasted names — engineering profile</div>
+                <ul class="filelist" id="filing-files" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle" id="filing-planhead">Filing preview</div>
+                <ul class="planlist" id="filing-plan" aria-live="polite"></ul>
+                <div class="audit" id="filing-audit" hidden>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Hand-off note</div>
+                  <ul id="filing-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="filing-action" type="button">Preview filing</button>
+              <span class="demo__hint" id="filing-hint">Reads names only — Plan Filing never touches disk. Organizer adds approve, audit, and undo.</span>
+            </div>
+          </div>
+
+          <!-- Tab C: Record & Replay -->
           <div class="demo__panel" role="tabpanel" data-panel="replay" aria-labelledby="tab-replay" hidden>
             <div class="demo__stage">
               <div class="demo__left">
@@ -249,28 +271,6 @@
             <div class="demo__controls">
               <button class="btn" id="rep-action" type="button">Record a task</button>
               <span class="demo__hint" id="rep-hint">Typed text is redacted by default; secure fields are never captured.</span>
-            </div>
-          </div>
-
-          <!-- Tab C: Client filing -->
-          <div class="demo__panel" role="tabpanel" data-panel="client-filing" aria-labelledby="tab-client-filing" hidden>
-            <div class="demo__stage">
-              <div class="demo__left">
-                <div class="demo__screentitle"><span class="dot"></span> Client portal downloads — 5 items</div>
-                <ul class="filelist" id="client-files" aria-live="polite"></ul>
-              </div>
-              <div class="demo__right">
-                <div class="demo__screentitle" id="client-planhead">Client filing plan</div>
-                <ul class="planlist" id="client-plan" aria-live="polite"></ul>
-                <div class="audit" id="client-audit" hidden>
-                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Audit log</div>
-                  <ul id="client-auditlist"></ul>
-                </div>
-              </div>
-            </div>
-            <div class="demo__controls">
-              <button class="btn" id="client-action" type="button">Use client filing preset</button>
-              <span class="demo__hint" id="client-hint">Invoices, receipts, and statements file into real category folders with dated names.</span>
             </div>
           </div>
 
@@ -298,30 +298,68 @@
         </div>
       </section>
 
-      <!-- ───────────────────────── Bookkeeper niche ───────────────────────── -->
-      <section id="client-filing" class="section reveal">
+      <!-- ───────────────────────── Inside the app ───────────────────────── -->
+      <section id="app" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Also useful weekly</p>
-          <h2>Client filing when downloads pile up.</h2>
+          <p class="eyebrow">Inside the desktop app</p>
+          <h2>Five views. One trust pipeline.</h2>
           <p class="section__sub">
-            Invoices, receipts, and statements — Ghost proposes dated folders before anything moves.
+            The marketing site is the reference look. The desktop app is where these views
+            are wired — same teal language, same approve-before-it-acts model.
+          </p>
+        </div>
+        <ol class="app-views">
+          <li>
+            <strong>Organizer</strong>
+            <p>Scan a folder, review the proposed moves and renames, approve, audit, undo.</p>
+          </li>
+          <li>
+            <strong>Plan Filing</strong>
+            <p>Paste file names, preview filing by profile and period — disk stays untouched until Organizer.</p>
+          </li>
+          <li>
+            <strong>Record &amp; Replay</strong>
+            <p>Capture a task once, inspect every step, then replay only what you approved.</p>
+          </li>
+          <li>
+            <strong>Workflows</strong>
+            <p>Save approved routines and run them again with the same inspect → approve → audit path.</p>
+          </li>
+          <li>
+            <strong>Guard Desk</strong>
+            <p>Local check + ID scan, approve the plan, then optional POS Bridge field fill.</p>
+          </li>
+        </ol>
+        <p class="app-views__note">
+          Experimental tools stay behind an explicit build flag — never default chrome.
+        </p>
+      </section>
+
+      <!-- ───────────────────────── Plan Filing niche ───────────────────────── -->
+      <section id="plan-filing" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Plan Filing</p>
+          <h2>Preview the filing plan before anything moves.</h2>
+          <p class="section__sub">
+            Paste names for engineering artifacts, finance reports, or coursework. Ghost proposes
+            folders and dated names. Organizer is where you approve, execute, audit, and undo.
           </p>
         </div>
         <div class="niche-grid">
           <article class="niche-card">
-            <span class="niche-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
-            <h3>Every move has a receipt.</h3>
-            <p>Ghost records what moved, where it went, and why the policy allowed it, so weekly filing does not become a mystery later.</p>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-list"/></svg></span>
+            <h3>Names only.</h3>
+            <p>Plan Filing reads the lines you paste — not your disk. It never moves, renames, or deletes files on its own.</p>
+          </article>
+          <article class="niche-card">
+            <span class="niche-card__ico"><svg class="i"><use href="#i-folder-open"/></svg></span>
+            <h3>Profiles that match the work.</h3>
+            <p>Software automation, finance &amp; ops, or student coursework — same preview → Organizer approve path for each.</p>
           </article>
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-undo"/></svg></span>
-            <h3>One click puts it back.</h3>
-            <p>The undo journal is written before file mutations, so a bad client drop or naming mistake can be reversed without guesswork.</p>
-          </article>
-          <article class="niche-card">
-            <span class="niche-card__ico"><svg class="i"><use href="#i-lock"/></svg></span>
-            <h3>Client files stay on your machine.</h3>
-            <p>No account, no cloud inbox, no upload step. Ghost reads local folder metadata and works inside the boundaries you approved.</p>
+            <h3>Execution stays trusted.</h3>
+            <p>When you are ready to act, Organizer runs the plan with audit receipts and one-click undo for reversible steps.</p>
           </article>
         </div>
       </section>
@@ -428,17 +466,16 @@
       <section id="how" class="section reveal">
         <div class="section__head">
           <p class="eyebrow">The trust pipeline</p>
-          <h2>Every action takes the same seven steps.</h2>
-          <p class="section__sub">AI may propose. Deterministic code executes only what you approved — and writes the receipt.</p>
+          <h2>Every action takes the same path.</h2>
+          <p class="section__sub">Record or plan → inspect → approve → replay/execute → audit → undo. AI may propose. Deterministic code executes only what you approved.</p>
         </div>
         <ol class="pipeline">
-          <li><span class="pipeline__n">1</span><h3>Record / Select</h3><p>Record a task, or pick a folder. Explicit and visible — never in the background.</p></li>
+          <li><span class="pipeline__n">1</span><h3>Record / Plan</h3><p>Record a task, paste names for Plan Filing, or pick a folder. Explicit and visible — never in the background.</p></li>
           <li><span class="pipeline__n">2</span><h3>Inspect</h3><p>Raw input compresses into readable steps. Typed text redacted; secrets dropped.</p></li>
-          <li><span class="pipeline__n">3</span><h3>Plan</h3><p>Ghost proposes exact changes and flags conflicts. The plan mutates nothing.</p></li>
-          <li><span class="pipeline__n">4</span><h3>Approve</h3><p>Set each folder to automate, ask-first, or never. Deny-by-default: risky actions need explicit consent.</p></li>
-          <li><span class="pipeline__n">5</span><h3>Execute</h3><p>Deterministic code runs the approved plan — no silent delete, no overwrite.</p></li>
-          <li><span class="pipeline__n">6</span><h3>Audit</h3><p>Every change names the rule that fired and whether it was automated or you-approved. Export to CSV or JSON.</p></li>
-          <li><span class="pipeline__n">7</span><h3>Undo</h3><p>Reversible steps record undo data first, so one click puts things back.</p></li>
+          <li><span class="pipeline__n">3</span><h3>Approve</h3><p>Set each folder to automate, ask-first, or never. Deny-by-default: risky actions need explicit consent.</p></li>
+          <li><span class="pipeline__n">4</span><h3>Replay / Execute</h3><p>Deterministic code runs the approved plan — no silent delete, no overwrite.</p></li>
+          <li><span class="pipeline__n">5</span><h3>Audit</h3><p>Every change names the rule that fired and whether it was automated or you-approved. Export to CSV or JSON.</p></li>
+          <li><span class="pipeline__n">6</span><h3>Undo</h3><p>Reversible steps record undo data first, so one click puts things back.</p></li>
         </ol>
       </section>
 
@@ -502,8 +539,8 @@
         <div class="roadmap">
           <div class="roadmap__col roadmap__col--now">
             <span class="pill pill--now">Shipping now</span>
-            <h3>Ghost Organizer + inspectable replay</h3>
-            <p>Safe file cleanup: scan, propose, approve, move/rename, audit, undo — never a silent delete or overwrite. Set each folder to automate, ask-first, or never; every change names the rule that fired, and you can export the audit log to CSV or JSON. Guided setup turns a few questions into a ready boundary. Plus record &amp; replay you can see through: preview every step before it runs, watch live per-step status, retry from a failed step, and read a per-click trace of how every target was found.</p>
+            <h3>Organizer, Plan Filing, Replay, Workflows, Guard Desk</h3>
+            <p>Wired desktop views today: Organizer scan → approve → audit → undo; Plan Filing preview from pasted names; Record &amp; Replay with inspectable steps; saved Workflows; Guard Desk local scan + optional POS Bridge after approval. Same trust pipeline everywhere. Experimental AI stays gated — not default chrome.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Next</span>
@@ -513,7 +550,7 @@
           <div class="roadmap__col">
             <span class="pill">Later</span>
             <h3>Ghost Intelligence</h3>
-            <p>Suggestion-only planning and pattern detection. It proposes; you and deterministic code still decide and execute.</p>
+            <p>Suggestion-only planning and pattern detection behind the experimental flag. It proposes; you and deterministic code still decide and execute.</p>
           </div>
         </div>
       </section>
@@ -544,11 +581,12 @@
     <footer class="footer">
       <div class="footer__brand">
         <span class="brand"><span class="brand__mark" aria-hidden="true">G</span> Ghost</span>
-        <p>Record → Inspect → Approve → Replay → Audit → Undo.</p>
+        <p>Record / Plan → Inspect → Approve → Replay / Execute → Audit → Undo.</p>
       </div>
       <nav class="footer__links" aria-label="Footer">
         <a href="#demo">Demo</a>
-        <a href="#client-filing">Client filing</a>
+        <a href="#app">Inside the app</a>
+        <a href="#plan-filing">Plan Filing</a>
         <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
         <a href="#roadmap">Roadmap</a>
