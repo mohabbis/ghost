@@ -131,6 +131,19 @@ pub fn ghost_guard_audit_compressed(
     crate::core::guard::audit_compressed(&report)
 }
 
+/// Build a deny-by-default **policy plan** for a compressed routine timeline.
+///
+/// Compresses events server-side, maps each semantic step to an `os-*`
+/// [`crate::policy::Capability`], and evaluates it through the same policy
+/// engine Organizer uses. The plan is never accepted from the client.
+///
+/// Risk class: `os-control` — does not execute anything; preview only.
+#[tauri::command]
+pub fn routine_policy_plan(events: Vec<InputEvent>) -> crate::policy::RoutinePolicyPlan {
+    let report = crate::core::compression::compress(&events);
+    crate::policy::evaluate_compressed(&report)
+}
+
 /// List past replay runs, newest first, from local execution history.
 ///
 /// Safe-read: returns only the user's own run records (status, duration,

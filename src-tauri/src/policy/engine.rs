@@ -201,13 +201,90 @@ pub fn evaluate_with_attribution(cap: &Capability, rules: &[FolderRule]) -> Eval
             "Delete is disabled in the MVP ({})",
             path.display()
         ))),
-        // Everything below is outside the Organizer scope; deny by default.
+        // Everything below is outside the Organizer file scope.
         Capability::StartRecording => Evaluation::unmatched(deny(
             "Recording is not a policy-approved capability in the Organizer MVP",
         )),
-        Capability::ReplayWorkflow { .. } => Evaluation::unmatched(deny(
-            "Workflow replay is not policy-approved in the Organizer MVP",
+        // Whole-workflow replay still needs explicit approval (os-control).
+        Capability::ReplayWorkflow { workflow_id } => Evaluation::unmatched(confirm(
+            format!("Replay workflow `{workflow_id}` controls the OS and needs approval"),
+            RiskLevel::High,
         )),
+        Capability::OsClick {
+            app,
+            target_label,
+            low_confidence,
+            coordinate_only,
+        } => {
+            let where_ = match app {
+                Some(a) if !a.is_empty() => format!("{target_label} in {a}"),
+                _ => target_label.clone(),
+            };
+            if *coordinate_only || *low_confidence {
+                Evaluation::unmatched(confirm(
+                    format!(
+                        "Click `{where_}` has weak targeting and needs careful approval before replay"
+                    ),
+                    RiskLevel::High,
+                ))
+            } else {
+                Evaluation::unmatched(confirm(
+                    format!("Click `{where_}` will control another app and needs approval"),
+                    RiskLevel::Medium,
+                ))
+            }
+        }
+        Capability::OsType {
+            app,
+            secure_field,
+            redacted,
+        } => {
+            if *secure_field {
+                Evaluation::unmatched(deny(format!(
+                    "Typing into a secure field{} is refused during routine replay",
+                    app.as_ref().map(|a| format!(" in {a}")).unwrap_or_default()
+                )))
+            } else if *redacted {
+                Evaluation::unmatched(confirm(
+                    "Typed text was redacted at capture time; approve carefully before replaying keystrokes",
+                    RiskLevel::High,
+                ))
+            } else {
+                Evaluation::unmatched(confirm(
+                    format!(
+                        "Typing{} will control another app and needs approval",
+                        app.as_ref().map(|a| format!(" in {a}")).unwrap_or_default()
+                    ),
+                    RiskLevel::Medium,
+                ))
+            }
+        }
+        Capability::OsShortcut { combo } => {
+            let lower = combo.to_ascii_lowercase();
+            let destructive = ["delete", "del", "backspace", "clear", "trash", "remove"]
+                .iter()
+                .any(|h| lower.contains(h));
+            if destructive {
+                Evaluation::unmatched(confirm(
+                    format!("Shortcut `{combo}` looks destructive and needs high-risk approval"),
+                    RiskLevel::High,
+                ))
+            } else {
+                Evaluation::unmatched(confirm(
+                    format!("Shortcut `{combo}` will control another app and needs approval"),
+                    RiskLevel::Medium,
+                ))
+            }
+        }
+        Capability::OsScroll => Evaluation::unmatched(confirm(
+            "Scroll will control another app and needs approval",
+            RiskLevel::Low,
+        )),
+        // Pure pacing — no OS mutation beyond time.
+        Capability::OsWait => Evaluation::unmatched(PolicyDecision::Allow),
+        Capability::OsUnknown { description } => Evaluation::unmatched(deny(format!(
+            "Unrecognized routine step cannot be approved: {description}"
+        ))),
         Capability::CaptureScreen => {
             Evaluation::unmatched(deny("Screen capture is not allowed in the Organizer MVP"))
         }

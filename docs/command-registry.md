@@ -113,7 +113,7 @@ An experimental command can move toward the stable core only after:
 
 ## Risk inventory
 
-Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI. The legacy recording/replay surface is not yet wired to the policy engine (`src-tauri/src/policy/`); the **Ghost Organizer** commands (`commands/organizer.rs`) are the first surface that is — every proposed and executed action passes through `policy::evaluate`, and the executor writes an audit log and undo journal.
+Every registered Tauri command (source of truth: `generate_handler!` in `src-tauri/src/lib.rs`) is inventoried below, grouped by module. **New command PRs must add a row here.** High- and critical-risk commands must require explicit approval, stay developer-only, or be absent from the default product UI. The **Ghost Organizer** commands (`commands/organizer.rs`) route every proposed and executed filesystem action through `policy::evaluate`. Recorded routines now have a preview path too: `routine_policy_plan` compresses events and evaluates each semantic step as an `os-*` capability (deny / require confirmation / allow wait). Binding that plan into `replay_workflow` approval + undo remains follow-up work.
 
 Legend — what the command touches: **Files** = local filesystem · **OS** = OS input synthesis/capture · **Scr** = screen contents / accessibility tree · **Net** = network · **Auth** = authentication or secrets · **Win** = app/window state. `✓` yes · `–` no · `~` conditional.
 
@@ -126,6 +126,7 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `replay_workflow` | stable | – | ✓ | – | – | – | ✓ | critical | Synthesizes real input. Must route through policy before broad use; wrong focused app/window can misfire. |
 | `ghost_guard_audit` | stable | – | – | – | – | – | – | low | Pure deterministic risk audit of recorded events. |
 | `ghost_guard_audit_compressed` | stable | – | – | – | – | – | – | low | Pure deterministic risk audit of the compressed **semantic timeline**: compresses events server-side (no LLM/network) and audits the resulting steps, so findings map to review-timeline step indices, not raw events. |
+| `routine_policy_plan` | stable | – | – | – | – | – | – | low | Preview-only: compresses events server-side and evaluates each semantic step through `policy::evaluate` as `os_*` capabilities. Never executes. Secure-field typing and unknown steps are denied; other OS steps require confirmation until app Zones exist. |
 | `get_replay_history` | stable | ✓ | – | – | – | – | – | low | Reads past replay runs (status, duration, failure reason, per-click resolution trace) from local execution history; `limit` caps rows. |
 | `get_replay_progress` | stable | – | – | – | – | – | – | low | In-memory getter: current/total step of the running replay plus the last failed step index. Polled by the UI for per-step status. |
 | `dry_run_workflow` | stable | – | – | – | – | – | – | low | Pure preview of what a replay would do (per-step action/target/coords). Executes nothing; typed text never included. |
