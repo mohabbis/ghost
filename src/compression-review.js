@@ -24,6 +24,7 @@ export class CompressionReview {
     this.container = document.getElementById(containerId);
     this.invoke = invokeFn;
     this.report = null;
+    this.policyPlan = null;
   }
 
   async compress(events) {
@@ -32,6 +33,7 @@ export class CompressionReview {
     }
     try {
       this.eventCount = events.length;
+      this.policyPlan = null;
       this.report = await this.invoke("compress_workflow", { events });
       this.render();
       return this.report;
@@ -40,6 +42,40 @@ export class CompressionReview {
       this.renderError(formatInvokeError(err));
       throw err;
     }
+  }
+
+  setPolicyPlan(plan) {
+    this.policyPlan = plan || null;
+    this.render();
+  }
+
+  policyBadgeForStep(idx) {
+    const step = this.policyPlan?.steps?.find((s) => s.step_index === idx);
+    const decision = step?.decision;
+    if (!decision) return "";
+    if (decision.decision === "allow")
+      return `<span class="org-badge org-badge--allow">Allowed</span>`;
+    if (decision.decision === "deny")
+      return `<span class="org-badge org-badge--deny" title="${escapeHtml(decision.reason || "")}">Denied</span>`;
+    if (decision.decision === "require_confirmation")
+      return `<span class="org-badge org-badge--confirm">Needs approval</span>`;
+    return "";
+  }
+
+  policyStrip() {
+    if (!this.policyPlan) return "";
+    const p = this.policyPlan;
+    const blocked = !p.can_proceed_with_approvals;
+    return `
+      <div class="compression-policy-strip${blocked ? " compression-policy-strip--blocked" : ""}">
+        <strong>Policy</strong>
+        ${p.confirmation_count || 0} need approval · ${p.allow_count || 0} allowed · ${p.denied_count || 0} denied
+        ${
+          blocked
+            ? " — <em>Replay blocked until denied steps are fixed</em>"
+            : " — Preview Policy, then Approve &amp; Replay"
+        }
+      </div>`;
   }
 
   render() {
@@ -62,6 +98,8 @@ export class CompressionReview {
             <span class="stat-value">${this.report.redacted_fields}</span>
           </div>
         </div>
+
+        ${this.policyStrip()}
 
         ${
           this.report.warnings.length > 0
@@ -112,12 +150,13 @@ export class CompressionReview {
     const riskClass = this.getRiskClass(step);
     const confidence =
       step.confidence !== undefined ? `${(step.confidence * 100).toFixed(0)}%` : "";
+    const policyBadge = this.policyBadgeForStep(idx);
 
     return `
       <div class="compression-step ${riskClass}">
         <span class="step-icon">${icon}</span>
         <div class="step-content">
-          <div class="step-text">${description}</div>
+          <div class="step-text">${description}${policyBadge ? ` ${policyBadge}` : ""}</div>
           ${confidence ? `<div class="step-confidence">confidence: ${confidence}</div>` : ""}
           ${lastRunNote ? `<div class="step-confidence step-lastrun">Last run: ${escapeHtml(lastRunNote)}</div>` : ""}
         </div>

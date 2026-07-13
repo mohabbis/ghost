@@ -222,12 +222,16 @@
                   <li data-mission-step="permissions"><span>1</span><strong>Grant access</strong><em>Needed for clicks and keys</em></li>
                   <li data-mission-step="record"><span>2</span><strong>Record</strong><em>Capture a focused task</em></li>
                   <li data-mission-step="audit"><span>3</span><strong>Audit</strong><em>Ghost Guard reviews risk</em></li>
-                  <li data-mission-step="replay"><span>4</span><strong>Replay or save</strong><em>Make it reusable</em></li>
+                  <li data-mission-step="replay"><span>4</span><strong>Approve &amp; replay</strong><em>Preview, then run with consent</em></li>
                 </ol>
               </section>
 
               <section class="panel record-panel" aria-labelledby="recording-heading">
-                <h2 id="recording-heading">Recording &amp; replay</h2>
+                <div class="organizer-head">
+                  <h2 id="recording-heading">Recording &amp; replay</h2>
+                  <span class="organizer-pipeline" aria-hidden="true">Record → Audit → Preview → Approve → Replay</span>
+                </div>
+                <p class="panel__hint">Capture a short, focused task. Ghost Guard audits risk, you preview the policy plan, then Approve &amp; Replay — nothing controls other apps until you consent.</p>
 
                 <!-- Primary action. Stop only matters while recording. -->
                 <div class="btn-row record-primary">
@@ -237,10 +241,11 @@
 
                 <!-- Replay actions — revealed once a workflow has been captured. -->
                 <div class="btn-row record-group" id="replayControls" hidden>
-                  <button class="btn btn--ghost" id="replayBtn" disabled>Approve &amp; Replay</button>
+                  <button class="btn btn--primary" id="previewPolicyBtn" type="button" disabled title="Review the policy plan for this routine">Preview Policy</button>
+                  <button class="btn btn--ghost" id="replayBtn" disabled title="Preview or review the policy plan first">Approve &amp; Replay</button>
                   <button class="btn btn--ghost" id="replayReliableBtn" disabled hidden>Guarded Replay</button>
                   <button class="btn btn--ghost btn--small" id="dryRunBtn" disabled title="See what each step will do before replaying">Preview Steps</button>
-                  <button class="btn btn--ghost btn--small" id="stepReplayBtn" disabled title="Replay one step at a time">Replay Next Step</button>
+                  <button class="btn btn--ghost btn--small" id="stepReplayBtn" disabled title="Approve once, then replay one press/release group at a time">Replay Next Step</button>
                   <button class="btn btn--ghost btn--small" id="retryFailedBtn" hidden>Retry From Failed Step</button>
                   <label class="speed-picker">
                     Speed

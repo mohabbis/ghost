@@ -16,6 +16,30 @@
   gap: 8px;
 }
 
+.compression-policy-strip {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(7, 8, 19, 0.35);
+  color: var(--muted);
+}
+
+.compression-policy-strip strong {
+  color: var(--text);
+  margin-right: 6px;
+}
+
+.compression-policy-strip--blocked {
+  border-color: rgba(255, 107, 129, 0.45);
+  color: #ffb3c0;
+}
+
+.compression-policy-strip--blocked strong {
+  color: #ff8da0;
+}
+
 .compression-stat {
   display: flex;
   flex-direction: column;

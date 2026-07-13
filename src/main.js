@@ -25,6 +25,8 @@ let guardAuditCompleted = false;
 let hasReplayedCurrentWorkflow = false;
 let hasSavedCurrentWorkflow = false;
 let latestGuardReport = null;
+/** True after the user opens Preview Policy / Preview Steps / Review for this recording. */
+let routineHasReviewedPlan = false;
 const MAX_TIMELINE_ITEMS = 220;
 const pendingTimelineEvents = [];
 let timelineFlushScheduled = false;
@@ -141,7 +143,7 @@ function ghostPrompt(message, defaultValue = "", placeholder = "") {
   });
 }
 
-function ghostPick(message, options) {
+function ghostPick(message, options, { primaryLabel } = {}) {
   return new Promise((resolve) => {
     const modal = document.getElementById("input-modal");
     const content = modal?.querySelector(".modal-content");
@@ -151,7 +153,13 @@ function ghostPick(message, options) {
       <h3 style="margin-top:0">${escapeHtml(message)}</h3>
       <div style="display:flex;flex-direction:column;gap:6px;margin:8px 0 16px;max-height:50vh;overflow-y:auto;">
         ${options.length === 0 ? '<p style="color:var(--muted)">Nothing here yet.</p>' : ""}
-        ${options.map((o) => `<button class="btn btn--ghost" data-dialog-option="${escapeAttr(o)}" style="justify-content:flex-start;text-align:left;">${escapeHtml(o)}</button>`).join("")}
+        ${options
+          .map((o) => {
+            const isPrimary = primaryLabel && o === primaryLabel;
+            const cls = isPrimary ? "btn btn--primary" : "btn btn--ghost";
+            return `<button class="${cls}" data-dialog-option="${escapeAttr(o)}" style="justify-content:flex-start;text-align:left;">${escapeHtml(o)}</button>`;
+          })
+          .join("")}
       </div>
       <div style="display:flex;justify-content:flex-end;">
         <button class="btn btn--ghost btn--small" data-dialog-cancel>Cancel</button>
@@ -172,7 +180,7 @@ function ghostPick(message, options) {
 // A yes/no confirmation built on the same in-app dialog. Resolves true only on
 // explicit approval — used to gate Organizer execution behind a clear consent.
 async function ghostConfirm(message, confirmLabel = "Yes") {
-  const choice = await ghostPick(message, [confirmLabel]);
+  const choice = await ghostPick(message, [confirmLabel], { primaryLabel: confirmLabel });
   return choice === confirmLabel;
 }
 
@@ -545,7 +553,7 @@ async function stopRecording() {
     isRecording = false;
     updateRecordingUI();
     await refreshTimeline();
-    showInsight(`Captured ${recordedEvents.length} event(s). Review the timeline, then replay or save.`);
+    showInsight(`Captured ${recordedEvents.length} event(s). Review Guard findings, preview the policy plan, then Approve & Replay.`);
     updateWorkflowHealth();
     runGhostGuardAudit({ quiet: true });
   } catch (error) {
@@ -614,9 +622,13 @@ async function confirmGuardBeforeReplay() {
   }
 
   if (latestGuardReport?.requires_confirmation) {
-    const ok = await ghostPick("Ghost Guard found high-risk steps. Continue?", ["Review first", "Replay anyway"]);
-    if (ok !== "Replay anyway") {
-      showInsight("Review the timeline and Ghost Guard findings before replay.");
+    const pick = await ghostPick(
+      "Ghost Guard found high-risk steps. Continue to the policy plan?",
+      ["Review findings", "Continue to policy"],
+      { primaryLabel: "Continue to policy" },
+    );
+    if (pick !== "Continue to policy") {
+      showInsight("Review the timeline and Ghost Guard findings, then open Preview Policy.");
       return false;
     }
   }
@@ -624,7 +636,119 @@ async function confirmGuardBeforeReplay() {
   return true;
 }
 
-/** Guard → policy plan → explicit approve (server one-shot token) before OS replay. */
+function routineStepLabel(step) {
+  const cap = step?.capability;
+  if (!cap) return `Step ${(step?.step_index ?? 0) + 1}`;
+  switch (cap.kind) {
+    case "os_click":
+      return `Click ${cap.target_label || "target"}${cap.app ? ` (${cap.app})` : ""}`;
+    case "os_type":
+      return `Type${cap.app ? ` in ${cap.app}` : ""}${cap.secure_field ? " (secure field)" : ""}`;
+    case "os_shortcut":
+      return `Shortcut ${cap.combo || ""}`;
+    case "os_scroll":
+      return "Scroll";
+    case "os_wait":
+      return "Wait";
+    case "os_unknown":
+      return cap.description || "Unknown step";
+    default:
+      return cap.kind || `Step ${step.step_index + 1}`;
+  }
+}
+
+/** Render policy plan in the analysis modal; resolve true if user approves. */
+function presentRoutinePolicyPlan(plan, { approveLabel = "Approve & Replay" } = {}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("analysis-modal");
+    const content = modal?.querySelector(".modal-content");
+    if (!content) {
+      resolve(false);
+      return;
+    }
+
+    routineHasReviewedPlan = true;
+    updateRecordingUI();
+
+    const steps = plan?.steps || [];
+    const rows = steps
+      .map((s) => {
+        const reason =
+          s.decision?.reason ||
+          (s.decision?.decision === "require_confirmation" ? s.decision.risk : "");
+        return `<tr>
+          <td>${s.step_index + 1}</td>
+          <td>${escapeHtml(routineStepLabel(s))}</td>
+          <td>${organizerDecisionBadge(s.decision)}</td>
+          <td class="replay-meta">${escapeHtml(reason || "—")}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const denied = plan?.denied_count || 0;
+    const confirmCount = plan?.confirmation_count || 0;
+    const allowCount = plan?.allow_count || 0;
+    const canApprove = !!plan?.can_proceed_with_approvals;
+    const note = canApprove
+      ? `Preview only — ${confirmCount} step(s) need confirmation, ${allowCount} allowed. Approve below to mint a one-shot replay token.`
+      : `Replay blocked — ${denied} step(s) denied. Re-record or remove denied steps.`;
+
+    content.innerHTML = `
+      <h3 style="margin-top:0">Routine policy plan</h3>
+      <p class="organizer-note">${escapeHtml(note)}</p>
+      <div class="organizer-result" style="max-height:42vh;overflow:auto;margin:12px 0;">
+        <table class="organizer-table">
+          <thead><tr><th>#</th><th>Step</th><th>Policy</th><th>Detail</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="4">No compressed steps.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="btn-row" style="justify-content:flex-end;gap:8px;">
+        <button class="btn btn--ghost btn--small" type="button" data-policy-cancel>Cancel</button>
+        ${
+          canApprove
+            ? `<button class="btn btn--primary" type="button" data-policy-approve>${escapeHtml(approveLabel)}</button>`
+            : ""
+        }
+      </div>`;
+
+    const finish = (val) => {
+      closeModal("analysis-modal");
+      resolve(val);
+    };
+    content.querySelector("[data-policy-cancel]")?.addEventListener("click", () => finish(false));
+    content.querySelector("[data-policy-approve]")?.addEventListener("click", () => finish(true));
+    showModal(modal);
+  });
+}
+
+/** Open Preview Policy without starting replay (marks plan as reviewed). */
+async function previewRoutinePolicyPlan() {
+  if (!invoke) return notAvailable();
+  if (recordedEvents.length === 0) return toastError("No events recorded yet");
+
+  let plan;
+  try {
+    plan = await invoke("routine_policy_plan", { events: recordedEvents });
+  } catch (error) {
+    return toastError("Policy plan failed: " + formatInvokeError(error));
+  }
+
+  // Overlay decisions on the live compression timeline when present.
+  if (compressionReview?.report) {
+    compressionReview.setPolicyPlan(plan);
+  }
+
+  const approved = await presentRoutinePolicyPlan(plan, {
+    approveLabel: "Looks good — enable Approve & Replay",
+  });
+  if (approved) {
+    showInsight("Policy plan reviewed. Click Approve & Replay when you are ready to run it.");
+  } else if (!plan?.can_proceed_with_approvals) {
+    showInsight("Policy denied one or more steps — fix the timeline before replaying.");
+  }
+}
+
+/** Guard → policy plan table → explicit approve (server one-shot token) before OS replay. */
 async function confirmPolicyBeforeReplay(events) {
   if (!events || events.length === 0) return false;
   if (!(await confirmGuardBeforeReplay())) return false;
@@ -637,25 +761,20 @@ async function confirmPolicyBeforeReplay(events) {
     return false;
   }
 
+  if (compressionReview?.report && events === recordedEvents) {
+    compressionReview.setPolicyPlan(plan);
+  }
+
   if (!plan?.can_proceed_with_approvals) {
-    const denied = (plan?.steps || [])
-      .filter((s) => s.decision?.decision === "deny")
-      .map((s) => `step ${s.step_index + 1}: ${s.decision.reason || "denied"}`)
-      .slice(0, 4)
-      .join("; ");
-    toastError(`Replay blocked by policy${denied ? `: ${denied}` : "."}`);
+    await presentRoutinePolicyPlan(plan);
+    toastError("Replay blocked by policy — see denied steps in the plan.");
     showInsight("Policy denied one or more routine steps. Edit or re-record before replaying.");
     return false;
   }
 
-  const confirmCount = plan.confirmation_count || 0;
-  const summary =
-    confirmCount > 0
-      ? `Policy requires confirmation for ${confirmCount} OS-control step(s). Approve and replay?`
-      : "Approve this routine policy plan and replay?";
-  const ok = await ghostConfirm(summary, "Approve & Replay");
+  const ok = await presentRoutinePolicyPlan(plan);
   if (!ok) {
-    showInsight("Replay cancelled — approve the policy plan when ready.");
+    showInsight("Replay cancelled — preview the policy plan when ready.");
     return false;
   }
 
@@ -820,6 +939,8 @@ function renderGuardReport(report) {
   if (!card || !scoreEl || !summaryEl) return;
 
   card.dataset.risk = report.risk_level;
+  if (report.blocks_replay) card.dataset.blocked = "1";
+  else delete card.dataset.blocked;
   scoreEl.textContent = `${report.score}/100 · ${report.risk_level.toUpperCase()} risk`;
 
   const topFindings = (report.findings || []).slice(0, 3);
@@ -828,14 +949,22 @@ function renderGuardReport(report) {
     .join("<br>");
   const nextSteps = report.ai_audit?.recommended_next_steps?.slice(0, 2) || [];
   const nextHtml = nextSteps.map((step) => `• ${escapeHtml(step)}`).join("<br>");
-  summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}${nextHtml ? `<br>${nextHtml}` : ""}`;
+  const statusLine = report.blocks_replay
+    ? `<br><strong style="color:var(--danger, #ff8da0)">Replay blocked</strong> — remove sensitive steps, then re-audit.`
+    : report.requires_confirmation
+      ? `<br><strong style="color:var(--accent-warm)">Needs confirmation</strong> — preview the policy plan before Approve &amp; Replay.`
+      : `<br><span style="color:var(--success)">Clear to preview</span> — open Preview Policy when ready.`;
+  summaryEl.innerHTML = `${escapeHtml(report.summary)}${findingsHtml ? `<br>${findingsHtml}` : ""}${nextHtml ? `<br>${nextHtml}` : ""}${statusLine}`;
 
   latestGuardReport = report;
   guardAuditCompleted = true;
   updateMissionProgress();
+  updateRecordingUI();
 
-  if (report.requires_confirmation) {
-    showNotification("Ghost Guard found high-risk steps. Use step-by-step review before replay.", "error");
+  if (report.blocks_replay) {
+    showNotification("Ghost Guard blocked replay. Fix sensitive steps, then re-audit.", "error");
+  } else if (report.requires_confirmation) {
+    showNotification("Ghost Guard found high-risk steps. Preview the policy plan before Approve & Replay.", "error");
   } else {
     showNotification("Ghost Guard audit complete.");
   }
@@ -993,6 +1122,12 @@ async function refreshCompressedTimeline() {
   initCompressionReview();
   try {
     await compressionReview.compress(recordedEvents);
+    try {
+      const plan = await invoke("routine_policy_plan", { events: recordedEvents });
+      compressionReview.setPolicyPlan(plan);
+    } catch (_) {
+      // Policy overlay is best-effort; timeline still useful without it.
+    }
   } catch (error) {
     console.error("Timeline compression failed:", error);
     timelineEl.innerHTML = "";
@@ -1023,9 +1158,17 @@ async function openWorkflowReview() {
   try {
     const panelReview = new CompressionReview("review-modal-compression", invoke);
     const report = await panelReview.compress(recordedEvents);
+    try {
+      const plan = await invoke("routine_policy_plan", { events: recordedEvents });
+      panelReview.setPolicyPlan(plan);
+    } catch (_) {
+      /* optional */
+    }
+    routineHasReviewedPlan = true;
+    updateRecordingUI();
     showModal(modal);
     showInsight(
-      `Reviewed ${report.compressed_step_count} step(s) — ${(report.reduction_ratio * 100).toFixed(0)}% fewer than raw events.`,
+      `Reviewed ${report.compressed_step_count} step(s) — ${(report.reduction_ratio * 100).toFixed(0)}% fewer than raw events. Approve & Replay is unlocked.`,
     );
   } catch (error) {
     console.error("Workflow review failed:", error);
@@ -1897,16 +2040,34 @@ function updateRecordingUI() {
 
   if (recordBtn) recordBtn.disabled = isRecording || isPlaying;
   if (stopBtn) stopBtn.disabled = !isRecording;
-  if (replayBtn) replayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
-  if (replayReliableBtn) replayReliableBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  const hasEvents = recordedEvents.length > 0;
+  const guardBlocks = !!latestGuardReport?.blocks_replay;
+  const canApproveReplay =
+    hasEvents && !isRecording && !isPlaying && routineHasReviewedPlan && !guardBlocks;
+  if (replayBtn) {
+    replayBtn.disabled = !canApproveReplay;
+    replayBtn.title = guardBlocks
+      ? "Ghost Guard blocked replay — remove sensitive steps"
+      : !routineHasReviewedPlan
+        ? "Preview or review the policy plan first"
+        : "Approve the policy plan, then replay";
+  }
+  if (replayReliableBtn) replayReliableBtn.disabled = !canApproveReplay;
+  const previewPolicyBtn = document.getElementById("previewPolicyBtn");
+  if (previewPolicyBtn) previewPolicyBtn.disabled = isRecording || isPlaying || !hasEvents;
   const dryRunBtn = document.getElementById("dryRunBtn");
-  if (dryRunBtn) dryRunBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  if (dryRunBtn) dryRunBtn.disabled = isRecording || isPlaying || !hasEvents;
   const stepReplayBtn = document.getElementById("stepReplayBtn");
-  if (stepReplayBtn) stepReplayBtn.disabled = isRecording || isPlaying || recordedEvents.length === 0;
+  if (stepReplayBtn) {
+    stepReplayBtn.disabled = isRecording || isPlaying || !hasEvents || guardBlocks;
+    stepReplayBtn.title = guardBlocks
+      ? "Ghost Guard blocked replay — remove sensitive steps"
+      : "Approve once, then replay one press/release group at a time";
+  }
   const retryFailedBtn = document.getElementById("retryFailedBtn");
   if (retryFailedBtn) {
     retryFailedBtn.hidden = lastFailedStep === null;
-    retryFailedBtn.disabled = isRecording || isPlaying;
+    retryFailedBtn.disabled = isRecording || isPlaying || guardBlocks;
   }
   const guardAuditBtn = document.getElementById("guardAuditBtn");
   if (guardAuditBtn) guardAuditBtn.disabled = isRecording || recordedEvents.length === 0;
@@ -3263,6 +3424,7 @@ async function summarizeLastReplayResolution() {
 function resetReplayInspectionState() {
   lastFailedStep = null;
   stepReplayCursor = 0;
+  routineHasReviewedPlan = false;
   // A trace from a different workflow must not badge the new timeline.
   window.__ghostLastReplayTrace = null;
   const el = replayProgressEl();
@@ -3363,8 +3525,18 @@ async function showDryRunPreview() {
     <h3 style="margin-top:0">Replay preview — what Ghost will do</h3>
     ${summary}
     <ul class="replay-history dry-run">${rows}</ul>
-    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+    <p class="organizer-note">Preview only — Approve &amp; Replay still requires a policy plan and your consent.</p>
+    <div class="btn-row" style="margin-top:16px;justify-content:flex-end;gap:8px;">
+      <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button>
+      <button class="btn btn--primary" type="button" id="dryRunApproveBtn">Approve &amp; Replay</button>
+    </div>`;
+  routineHasReviewedPlan = true;
+  updateRecordingUI();
   showModal(modal);
+  content.querySelector("#dryRunApproveBtn")?.addEventListener("click", () => {
+    closeModal("analysis-modal");
+    replayWorkflow();
+  });
 }
 
 // A "step" for step-by-step replay starts at a user-intent event; releases
@@ -3462,6 +3634,7 @@ function wireUpControls() {
   bind("stopBtn", stopRecording);
   bind("replayBtn", replayWorkflow);
   bind("replayReliableBtn", replayWithReliability);
+  bind("previewPolicyBtn", previewRoutinePolicyPlan);
   bind("cancelBtn", cancelReplay);
   bind("pauseBtn", pauseReplay);
   bind("resumeBtn", resumeReplay);
