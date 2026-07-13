@@ -33,7 +33,7 @@ resulting risk classes in `docs/command-registry.md`.
    parent folder must already exist from an explicit, policy-checked
    `CreateFolder` action; the move/rename step never creates missing parent
    folders implicitly because that would be an unaudited mutation. Move/rename
-   also re-checks **file identity** (dev/ino on Unix, file index on Windows) when
+   also re-checks **file identity** (dev/ino on Unix, NTFS timestamps on Windows) when
    the plan captured a scan-time identity, refusing a TOCTOU inode swap. Finally,
    `policy::verify_relocate_at_execution` canonicalizes `from`/`to` and re-runs
    policy so symlink or path-escape tricks cannot bypass Zone boundaries at
@@ -141,8 +141,9 @@ step first), so files are moved out of a destination folder before that folder's
   one leaves prior successful actions and their undo entries intact without adding
   undo entries for failed/skipped work.
 - **Deterministic & policy-gated.** Denied actions never reach the filesystem.
-- **TOCTOU / inode identity.** `organizer/file_identity.rs` captures dev/ino (or
-  Windows file index) at scan time on each `PlanAction`. `relocate` re-stats the
+- **TOCTOU / inode identity.** `organizer/file_identity.rs` captures dev/ino (Unix)
+  or NTFS creation/write timestamps (Windows, stable `MetadataExt`) at scan time
+  on each `PlanAction`. `relocate` re-stats the
   source before `rename` and skips when identity drifted or the source is a symlink.
 
 ## Status

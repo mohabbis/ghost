@@ -46,12 +46,14 @@ impl FileIdentity {
         #[cfg(windows)]
         {
             use std::os::windows::fs::MetadataExt;
+            // `file_index` / `volume_serial_number` need unstable `windows_by_handle`.
+            // Use stable NTFS timestamps as the Windows identity tuple instead.
             FileIdentity {
                 size: meta.len(),
                 dev: None,
                 ino: None,
-                file_index: Some(meta.file_index()),
-                volume_serial: Some(meta.volume_serial_number()),
+                file_index: Some(meta.last_write_time()),
+                volume_serial: Some(meta.creation_time()),
             }
         }
         #[cfg(not(any(unix, windows)))]
@@ -101,6 +103,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn different_inodes_do_not_match() {
         let a = FileIdentity {
             size: 5,
@@ -115,6 +118,26 @@ mod tests {
             ino: Some(11),
             file_index: None,
             volume_serial: None,
+        };
+        assert!(!a.matches(&b));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn different_timestamps_do_not_match() {
+        let a = FileIdentity {
+            size: 5,
+            dev: None,
+            ino: None,
+            file_index: Some(10),
+            volume_serial: Some(20),
+        };
+        let b = FileIdentity {
+            size: 5,
+            dev: None,
+            ino: None,
+            file_index: Some(11),
+            volume_serial: Some(20),
         };
         assert!(!a.matches(&b));
     }

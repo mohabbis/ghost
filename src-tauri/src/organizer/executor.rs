@@ -229,17 +229,6 @@ fn relocate(
             from.display()
         ));
     }
-    if let Err(reason) = policy::verify_relocate_at_execution(from, to, rules, is_move) {
-        return Outcome::Skipped(format!("canonical path check failed: {reason}"));
-    }
-    // Never overwrite. The planner de-duplicates targets, but disk state can
-    // drift between plan and execution — re-check and refuse rather than clobber.
-    if to.exists() {
-        return Outcome::Skipped(format!(
-            "target already exists, refusing to overwrite: {}",
-            to.display()
-        ));
-    }
     // The planner emits an explicit, policy-checked CreateFolder for each
     // destination. Do not create parent folders implicitly here: doing so would
     // mutate the filesystem without a separate plan row, audit event, and undo
@@ -253,6 +242,17 @@ fn relocate(
                 parent.display()
             ));
         }
+    }
+    if let Err(reason) = policy::verify_relocate_at_execution(from, to, rules, is_move) {
+        return Outcome::Skipped(format!("canonical path check failed: {reason}"));
+    }
+    // Never overwrite. The planner de-duplicates targets, but disk state can
+    // drift between plan and execution — re-check and refuse rather than clobber.
+    if to.exists() {
+        return Outcome::Skipped(format!(
+            "target already exists, refusing to overwrite: {}",
+            to.display()
+        ));
     }
 
     // (3) Prepare undo before mutating: move the file back to where it started.

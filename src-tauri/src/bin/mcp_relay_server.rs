@@ -205,9 +205,7 @@ fn handle_mcp(
 fn parse_query(path: &str, key: &str) -> Option<String> {
     let query = path.split('?').nth(1)?;
     query.split('&').find_map(|pair| {
-        let mut parts = pair.splitn(2, '=');
-        let k = parts.next()?;
-        let v = parts.next()?;
+        let (k, v) = pair.split_once('=')?;
         if k == key {
             Some(v.to_string())
         } else {

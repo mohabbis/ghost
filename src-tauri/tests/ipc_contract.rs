@@ -229,6 +229,56 @@ fn stock_build_power_bi_functions_are_gated() {
     }
 }
 
+/// `openSettings` must gate experimental MCP/Fabric status fetches in stock builds.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_open_settings_gates_mcp_status_calls() {
+    let js = read("../src/main.js");
+    let re = regex::Regex::new(r"(?s)async function openSettings\(\)\s*\{.*?\n\}").unwrap();
+    let body = re.find(&js).expect("openSettings must exist").as_str();
+    for cmd in [
+        "mcp_http_server_status",
+        "mcp_relay_status",
+        "fabric_webhook_status",
+    ] {
+        let idx = body
+            .find(cmd)
+            .unwrap_or_else(|| panic!("openSettings must reference {cmd} when gated"));
+        let before = &body[..idx];
+        assert!(
+            before.rfind("experimentalEnabled").is_some(),
+            "openSettings must gate {cmd} on experimentalEnabled"
+        );
+    }
+}
+
+/// MCP HTTP/relay controls must refuse experimental IPC in stock builds.
+#[cfg(not(feature = "experimental"))]
+#[test]
+fn stock_build_mcp_http_and_relay_functions_are_gated() {
+    let js = read("../src/main.js");
+    let functions = [
+        "startMcpHttpServer",
+        "stopMcpHttpServer",
+        "startMcpRelay",
+        "stopMcpRelay",
+        "generateFabricWebhookSecret",
+        "bindGoogleExportBucket",
+    ];
+    for name in functions {
+        let re =
+            regex::Regex::new(&format!(r"(?s)async function {name}\(\)\s*\{{.*?\n\}}")).unwrap();
+        let body = re
+            .find(&js)
+            .unwrap_or_else(|| panic!("{name} must exist"))
+            .as_str();
+        assert!(
+            body.contains("experimentalEnabled"),
+            "{name} must gate on experimentalEnabled in stock builds"
+        );
+    }
+}
+
 #[cfg(not(feature = "experimental"))]
 #[test]
 fn stock_build_compression_review_js_has_no_experimental_invokes() {

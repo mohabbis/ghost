@@ -155,4 +155,26 @@ mod tests {
         .unwrap();
         assert!(parsed.summary.contains("Throttled"));
     }
+
+    #[test]
+    fn docs_sample_payloads_parse() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let samples = [
+            "docs/samples/fabric-eventstream/ghost-native.json",
+            "docs/samples/fabric-eventstream/cloudevents-pipeline-done.json",
+            "docs/samples/fabric-eventstream/fabric-item-event.json",
+            "docs/samples/fabric-eventstream/eventstream-row-bridge.json",
+        ];
+        for rel in samples {
+            let path = root.join(rel);
+            let body = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("could not read {}: {}", path.display(), e));
+            let parsed = parse_inbound_body(&body)
+                .unwrap_or_else(|e| panic!("sample {rel} failed to parse: {e}"));
+            assert!(
+                !parsed.summary.trim().is_empty(),
+                "sample {rel} must yield a non-empty summary"
+            );
+        }
+    }
 }
