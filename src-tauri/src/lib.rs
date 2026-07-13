@@ -24,6 +24,9 @@ pub mod policy;
 pub mod storage;
 pub mod telemetry;
 
+#[cfg(test)]
+mod test_support;
+
 macro_rules! run_with_commands {
     ($builder:expr $(, $experimental_command:path)* $(,)?) => {
         $builder

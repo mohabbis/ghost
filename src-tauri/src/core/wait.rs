@@ -402,6 +402,21 @@ mod tests {
         }
     }
 
+    struct MockOcrGuard;
+
+    impl MockOcrGuard {
+        fn install(results: Vec<crate::core::ocr::OcrResult>) -> Self {
+            MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(results));
+            Self
+        }
+    }
+
+    impl Drop for MockOcrGuard {
+        fn drop(&mut self) {
+            MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
+        }
+    }
+
     // --- VariableContext ---
 
     #[test]
@@ -441,8 +456,8 @@ mod tests {
 
     #[test]
     fn resolve_from_env_returns_value() {
+        let _env = crate::test_support::EnvVarGuard::set("GHOST_TEST_VAR", "hello");
         let mut ctx = VariableContext::new();
-        std::env::set_var("GHOST_TEST_VAR", "hello");
         let val = ctx
             .resolve(
                 "v",
@@ -452,7 +467,6 @@ mod tests {
             )
             .unwrap();
         assert_eq!(val, "hello");
-        std::env::remove_var("GHOST_TEST_VAR");
     }
 
     #[test]
@@ -470,7 +484,7 @@ mod tests {
     #[test]
     fn resolve_from_env_rejects_non_ghost_prefix() {
         // Even if the var exists, a non-GHOST_ key must be refused.
-        std::env::set_var("PATH_LIKE_LEAK", "anything");
+        let _env = crate::test_support::EnvVarGuard::set("PATH_LIKE_LEAK", "anything");
         let mut ctx = VariableContext::new();
         let result = ctx.resolve(
             "v",
@@ -479,12 +493,11 @@ mod tests {
             },
         );
         assert!(result.is_err());
-        std::env::remove_var("PATH_LIKE_LEAK");
     }
 
     #[test]
     fn resolve_from_env_rejects_secret_looking_keys() {
-        std::env::set_var("GHOST_OPENAI_API_KEY", "sk-secret");
+        let _env = crate::test_support::EnvVarGuard::set("GHOST_OPENAI_API_KEY", "sk-secret");
         let mut ctx = VariableContext::new();
         let result = ctx.resolve(
             "v",
@@ -493,7 +506,6 @@ mod tests {
             },
         );
         assert!(result.is_err());
-        std::env::remove_var("GHOST_OPENAI_API_KEY");
     }
 
     #[test]
@@ -516,10 +528,21 @@ mod tests {
         path
     }
 
+    fn unique_csv_name(prefix: &str) -> String {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static SEQ: AtomicUsize = AtomicUsize::new(0);
+        format!(
+            "ghost_wait_{}_{}_{}.csv",
+            prefix,
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        )
+    }
+
     #[test]
     fn resolve_from_csv_reads_column_by_header() {
         let path = write_confined_csv(
-            &format!("ghost_wait_test_{}.csv", std::process::id()),
+            &unique_csv_name("read_col"),
             "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
         );
 
@@ -542,7 +565,7 @@ mod tests {
     #[test]
     fn resolve_from_csv_defaults_row_to_zero() {
         let path = write_confined_csv(
-            &format!("ghost_wait_test_default_row_{}.csv", std::process::id()),
+            &unique_csv_name("default_row"),
             "name,email\nAlice,alice@example.com\nBob,bob@example.com\n",
         );
 
@@ -565,7 +588,7 @@ mod tests {
     #[test]
     fn resolve_from_csv_errors_on_missing_column() {
         let path = write_confined_csv(
-            &format!("ghost_wait_test_missing_col_{}.csv", std::process::id()),
+            &unique_csv_name("missing_col"),
             "name,email\nAlice,alice@example.com\n",
         );
 
@@ -672,7 +695,7 @@ mod tests {
             },
         ];
 
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        let _mock = MockOcrGuard::install(mock_results);
 
         let selector = ElementSelector::OCR {
             text: "Cancel".to_string(),
@@ -690,8 +713,6 @@ mod tests {
 
         let result = resolve_selector(&selector, &locator).unwrap();
         assert_eq!(result, (expected_x, expected_y));
-
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
     }
 
     #[test]
@@ -706,7 +727,7 @@ mod tests {
             h: 0.1,
         }];
 
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        let _mock = MockOcrGuard::install(mock_results);
 
         let selector = ElementSelector::OCR {
             text: "submit".to_string(),
@@ -722,8 +743,6 @@ mod tests {
 
         let result = resolve_selector(&selector, &locator).unwrap();
         assert_eq!(result, (expected_x, expected_y));
-
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
     }
 
     #[test]
@@ -738,7 +757,7 @@ mod tests {
             h: 0.1,
         }];
 
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = Some(mock_results));
+        let _mock = MockOcrGuard::install(mock_results);
 
         let selector = ElementSelector::OCR {
             text: "Save".to_string(),
@@ -750,8 +769,6 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Save"));
         assert!(err_msg.contains("Open File"));
-
-        MOCK_OCR_RESULTS.with(|m| *m.borrow_mut() = None);
     }
 
     // --- check_wait_condition / wait_for_condition / smart_wait ---

@@ -85,6 +85,7 @@
         <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
         <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
         <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
       </defs>
     </svg>
 
@@ -145,7 +146,7 @@
             <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download for Mac</span></a>
             <a class="btn btn--secondary btn--lg" href="#demo"><svg class="i"><use href="#i-play"/></svg> Try it live</a>
           </div>
-          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v1.2.9 · Mac &amp; Windows · nothing uploaded</p>
+          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v1.2.9 · Mac &amp; Windows · no account required · nothing uploaded</p>
         </div>
 
         <!-- Hero mockup: a proposed plan awaiting approval -->
@@ -436,7 +437,7 @@
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-lock"/></svg></span>
             <h3>Same guarantees for all</h3>
-            <p>Local-first, no account, no uploads. Nothing is deleted or overwritten silently, every change is audited, and reversible steps can be undone in one click.</p>
+            <p>Local-first — no account required, no uploads. Nothing is deleted or overwritten silently, every change is audited, and reversible steps can be undone in one click.</p>
           </article>
         </div>
       </section>
@@ -447,8 +448,10 @@
           <p class="eyebrow">Works with</p>
           <h2>The files and machines you already have.</h2>
           <p class="section__sub">
-            No accounts, no API keys, no integrations to wire up. Ghost works on whatever is
-            already sitting in your folders.
+            No account, API key, or integration setup is required for Organizer, replay, or
+            workflows. Ghost works on whatever is already sitting in your folders. Optional
+            Microsoft or Google sign-in lives in the desktop app <strong>Settings</strong> — only
+            if you turn on stack integrations (Power BI, Google Cloud, and similar).
           </p>
         </div>
         <div class="trust-strip works-strip">
@@ -458,7 +461,8 @@
           <span><svg class="i"><use href="#i-folder"/></svg> PDFs, Word &amp; text documents</span>
           <span><svg class="i"><use href="#i-folder-open"/></svg> Images, archives &amp; installers</span>
           <span><svg class="i"><use href="#i-download"/></svg> Files from browser &amp; client-portal downloads</span>
-          <span><svg class="i"><use href="#i-cloud-off"/></svg> No cloud accounts or integrations required</span>
+          <span><svg class="i"><use href="#i-cloud-off"/></svg> Core use: no sign-in required</span>
+          <span><svg class="i"><use href="#i-user"/></svg> Optional Microsoft/Google sign-in in app Settings</span>
         </div>
       </section>
 
@@ -503,7 +507,8 @@
               <li>Runs on your Mac or PC — nothing uploaded</li>
               <li>Acts only on the plan you approved, at the trust level you set</li>
               <li>Deterministic code executes, not the model</li>
-              <li>Local-first storage, no account, no vendor holds your logins</li>
+              <li>Local-first storage — no account required; no vendor holds your logins</li>
+              <li>Optional Microsoft/Google sign-in in Settings is identity-only, for integrations you enable</li>
               <li>Every change names the rule that fired — audited and reversible</li>
             </ul>
           </div>
@@ -525,6 +530,7 @@
           <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-mail-off"/></svg></span><p>No background email, browser, or tab reading.</p></div>
           <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-key"/></svg></span><p>No raw secret capture — password &amp; payment fields are suppressed.</p></div>
           <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-cloud-off"/></svg></span><p>No cloud-first storage. Workflows stay on your device.</p></div>
+          <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-user"/></svg></span><p>No sign-in required. Optional Microsoft/Google linking in app Settings is identity-only — for stack integrations you explicitly turn on.</p></div>
           <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-keyboard"/></svg></span><p>Keyboard &amp; pointer captured only while you record or an approved replay runs.</p></div>
         </div>
       </section>
@@ -540,7 +546,7 @@
           <div class="roadmap__col roadmap__col--now">
             <span class="pill pill--now">Shipping now</span>
             <h3>Organizer, Plan Filing, Replay, Workflows, Guard Desk</h3>
-            <p>Wired desktop views today: Organizer scan → approve → audit → undo; Plan Filing preview from pasted names; Record &amp; Replay with inspectable steps; saved Workflows; Guard Desk local scan + optional POS Bridge after approval. Same trust pipeline everywhere. Experimental AI stays gated — not default chrome.</p>
+            <p>Wired desktop views today: Organizer scan → approve → audit → undo; Plan Filing preview from pasted names; Record &amp; Replay with inspectable steps; saved Workflows; Guard Desk local scan + optional POS Bridge after approval. Optional Microsoft/Google sign-in in <strong>Settings</strong> (desktop app only — not on this site) for stack integrations you enable. Same trust pipeline everywhere. Experimental AI stays gated — not default chrome.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Next</span>

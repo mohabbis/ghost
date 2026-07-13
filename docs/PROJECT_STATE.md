@@ -1,6 +1,6 @@
 # Ghost — Technical State of the Project
 
-> Snapshot for context (as of 2026-07-13, `master` @ `964eadd`, v1.2.7).
+> Snapshot for context (as of 2026-07-13, `master` @ latest, **v1.2.9**).
 > Audience: engineers picking this up to push it to a YC-submission bar.
 > Everything below is grounded in the actual code in this repo — file paths and
 > symbols are real and clickable.
@@ -28,7 +28,7 @@ scan → propose → approve → move/rename → audit → undo). Recording/repl
 cross-app routines is the second layer and is partially built. AI/"Intelligence"
 is deliberately last and is feature-gated off by default.
 
-**Version:** `1.2.7` (`src-tauri/Cargo.toml`). ~29k lines of Rust across
+**Version:** `1.2.9` (`src-tauri/Cargo.toml`). ~29k lines of Rust across
 `src-tauri/src` plus a no-build-step vanilla JS/HTML/CSS frontend in `src/`.
 Account sign-in (Microsoft/Google OAuth + PKCE) is wired for identity only —
 see `docs/integrations-roadmap.md`; it does not gate the app or move data off
@@ -248,9 +248,9 @@ resolution, double-click preservation.
 - **Local at-rest protection** — `argon2` + `aes-gcm` (see `auth.rs`).
 - **CI green on all three OSes** — Check / Test / Clippy / Rustfmt + a
   `cargo tauri build --no-bundle` smoke test on macOS & Windows (`rust.yml`).
-  530 lib tests + 34 integration-suite tests (`ipc_contract`,
+  616 lib tests + 51 integration-suite tests (`ipc_contract`,
   `resolution_benchmark`, `canonical_workflows`, `frontend_dom_contract`,
-  `e2e`, `integration_test`) pass. An IPC-contract test
+  `e2e`, `integration_test`, `mcp_integration`) pass. An IPC-contract test
   asserts the frontend only invokes registered commands with matching params;
   a DOM-contract test asserts every `getElementById` the JS looks up is authored
   in the markup.
@@ -276,9 +276,9 @@ resolution, double-click preservation.
   create+move is the destination root; files sort into
   `<root>/<Category>/`. Richer routing/rules are not built.
 - **Signing/notarization** — macOS Developer ID + notarization is enabled for
-  `v1.2.7`. Windows Authenticode / Azure Trusted Signing is still unconfigured.
-  Updater pubkey + `TAURI_SIGNING_*` secrets are set for builds from the key
-  commit forward; `latest.json` publishes on the next tag.
+  `v1.2.9`. Windows Authenticode / Azure Trusted Signing is still unconfigured
+  (deferred). Updater pubkey + `TAURI_SIGNING_*` secrets are set; `latest.json`
+  and `.sig` artifacts publish on `v1.2.9+` releases.
 
 ---
 
@@ -344,7 +344,7 @@ signing), not a rewrite of the trust foundation.
 # System deps (Linux): GTK/webkit + libxdo (see AGENTS.md). macOS/Windows: none extra.
 cargo fmt   --manifest-path src-tauri/Cargo.toml -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --all-targets
-cargo test  --manifest-path src-tauri/Cargo.toml          # 530 lib + 34 integration
+cargo test  --manifest-path src-tauri/Cargo.toml          # 616 lib + 51 integration
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo tauri build --no-bundle                             # compile smoke test
 # Makefile shortcuts: `make ci` (fmt+clippy+test), `make check`, `make build`, `make dev`.
@@ -352,3 +352,5 @@ cargo tauri build --no-bundle                             # compile smoke test
 ```
 
 Frontend needs no compile — `tauri.conf.json` serves `src/` directly.
+
+Manual desktop QA (macOS/Windows) is documented in `docs/manual-qa-checklist.md`.
