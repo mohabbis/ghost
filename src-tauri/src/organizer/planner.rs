@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 
 use super::classifier::{classify, LOW_CONFIDENCE};
 use super::conflict::Conflict;
+use super::file_identity::FileIdentity;
 use super::naming::{dated_prefix, deduplicate, safe_file_name};
 use super::scanner::{scan, ScannedFile};
 
@@ -46,6 +47,9 @@ pub struct PlanAction {
     pub reason: String,
     /// Present when the proposed target collided and was de-duplicated.
     pub conflict: Option<Conflict>,
+    /// File identity captured at scan time; used to detect TOCTOU swaps before execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_identity: Option<FileIdentity>,
 }
 
 /// Why a scanned file produced no action.
@@ -200,6 +204,7 @@ pub fn plan_with_rules_and_options(
                 confidence: 1.0,
                 reason: format!("Create destination folder {}", target_dir.display()),
                 conflict: None,
+                source_identity: None,
             });
             summary.create_folder += 1;
         }
@@ -235,6 +240,7 @@ pub fn plan_with_rules_and_options(
             confidence: class.confidence,
             reason: class.reason,
             conflict,
+            source_identity: FileIdentity::from_path(&file.path),
         });
     }
 

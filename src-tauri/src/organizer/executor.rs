@@ -107,7 +107,7 @@ pub fn execute_plan_with_progress(
             Provenance::UserApproved
         };
 
-        match apply_one(cap, &mut report.undo) {
+        match apply_one(action, &mut report.undo) {
             Outcome::Applied => {
                 report.applied += 1;
                 report.audit.record_attributed(
@@ -149,10 +149,11 @@ enum Outcome {
     Failed(String),
 }
 
-/// Apply one capability, committing its undo step only after the mutation is
+/// Apply one plan action, committing its undo step only after the mutation is
 /// successful and verified. Only the organizer's own file-organization
 /// capabilities are executable here; anything else is skipped rather than risked.
-fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
+fn apply_one(action: &super::planner::PlanAction, undo: &mut UndoJournal) -> Outcome {
+    let cap = &action.capability;
     match cap {
         Capability::CreateFolder { path } => {
             if path.exists() {
@@ -173,7 +174,7 @@ fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
             }
         }
         Capability::MoveFile { from, to } | Capability::RenameFile { from, to } => {
-            relocate(from, to, undo)
+            relocate(from, to, action.source_identity.as_ref(), undo)
         }
         other => Outcome::Skipped(format!(
             "capability not executable by the organizer: {other:?}"
@@ -183,16 +184,36 @@ fn apply_one(cap: &Capability, undo: &mut UndoJournal) -> Outcome {
 
 /// Move or rename a file from `from` to `to`, committing the reverse step only
 /// after the move succeeds and its postcondition is verified.
-fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
+fn relocate(
+    from: &Path,
+    to: &Path,
+    expected_identity: Option<&super::file_identity::FileIdentity>,
+    undo: &mut UndoJournal,
+) -> Outcome {
     // (2) Verify state. The plan may have been approved a while ago.
+    if !from.exists() {
+        return Outcome::Skipped(format!("source no longer exists: {}", from.display()));
+    }
     if from.is_symlink() {
         return Outcome::Skipped(format!(
             "source is a symlink, refusing to move: {}",
             from.display()
         ));
     }
-    if !from.exists() {
-        return Outcome::Skipped(format!("source no longer exists: {}", from.display()));
+    if let Some(current) = super::file_identity::FileIdentity::from_path(from) {
+        if let Some(expected) = expected_identity {
+            if !expected.matches(&current) {
+                return Outcome::Skipped(format!(
+                    "source file identity changed since plan (possible TOCTOU swap): {}",
+                    from.display()
+                ));
+            }
+        }
+    } else if expected_identity.is_some() {
+        return Outcome::Skipped(format!(
+            "source metadata unreadable or not a regular file: {}",
+            from.display()
+        ));
     }
     // Never overwrite. The planner de-duplicates targets, but disk state can
     // drift between plan and execution — re-check and refuse rather than clobber.
@@ -240,9 +261,21 @@ fn relocate(from: &Path, to: &Path, undo: &mut UndoJournal) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::organizer::planner::plan_with_rules;
+    use crate::organizer::planner::{plan_with_rules, PlanAction};
     use crate::organizer::testutil::{tempdir, TempDir};
     use std::path::{Path, PathBuf};
+
+    fn test_action(cap: Capability) -> PlanAction {
+        PlanAction {
+            capability: cap,
+            decision: PolicyDecision::Allow,
+            rule_path: None,
+            confidence: 1.0,
+            reason: "test".into(),
+            conflict: None,
+            source_identity: None,
+        }
+    }
 
     fn full_rule(path: &Path) -> FolderRule {
         FolderRule {
@@ -423,6 +456,7 @@ mod tests {
         let outcome = relocate(
             &tmp.path().join("report.pdf"),
             &tmp.path().join("Documents/report.pdf"),
+            None,
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));
@@ -486,6 +520,7 @@ mod tests {
         let outcome = relocate(
             &tmp.path().join("report.pdf"),
             &locked_dir.join("report.pdf"),
+            None,
             &mut undo,
         );
 
@@ -508,6 +543,7 @@ mod tests {
         let outcome = relocate(
             &tmp.path().join("ghost.pdf"), // never existed
             &tmp.path().join("Documents/ghost.pdf"),
+            None,
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));
@@ -522,7 +558,7 @@ mod tests {
         let target = missing_parent.join("report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&tmp.path().join("report.pdf"), &target, &mut undo);
+        let outcome = relocate(&tmp.path().join("report.pdf"), &target, None, &mut undo);
 
         assert!(
             matches!(outcome, Outcome::Skipped(reason) if reason.contains("target parent does not exist"))
@@ -545,7 +581,7 @@ mod tests {
         let path = tmp.path().join("not-a-dir").join("child");
         let mut undo = UndoJournal::new();
 
-        let outcome = apply_one(&Capability::CreateFolder { path }, &mut undo);
+        let outcome = apply_one(&test_action(Capability::CreateFolder { path }), &mut undo);
 
         assert!(matches!(outcome, Outcome::Failed(_)));
         assert!(
@@ -560,7 +596,10 @@ mod tests {
         let path = tmp.path().join("Documents");
         let mut undo = UndoJournal::new();
 
-        let outcome = apply_one(&Capability::CreateFolder { path: path.clone() }, &mut undo);
+        let outcome = apply_one(
+            &test_action(Capability::CreateFolder { path: path.clone() }),
+            &mut undo,
+        );
 
         assert!(matches!(outcome, Outcome::Applied));
         assert_eq!(undo.ops(), &[UndoOp::RemoveFolder { path }]);
@@ -574,7 +613,7 @@ mod tests {
         let target = tmp.path().join("not-a-dir").join("report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&tmp.path().join("report.pdf"), &target, &mut undo);
+        let outcome = relocate(&tmp.path().join("report.pdf"), &target, None, &mut undo);
 
         assert!(matches!(outcome, Outcome::Failed(_)));
         assert!(tmp.path().join("report.pdf").exists());
@@ -590,7 +629,7 @@ mod tests {
         let to = tmp.path().join("Documents/report.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&from, &to, &mut undo);
+        let outcome = relocate(&from, &to, None, &mut undo);
 
         assert!(matches!(outcome, Outcome::Applied));
         assert_eq!(undo.ops(), &[UndoOp::Restore { from: to, to: from }]);
@@ -623,11 +662,11 @@ mod tests {
 
         let ok_from = tmp.path().join("ok.pdf");
         let ok_to = tmp.path().join("Documents/ok.pdf");
-        let ok = relocate(&ok_from, &ok_to, &mut undo);
+        let ok = relocate(&ok_from, &ok_to, None, &mut undo);
         let failed = apply_one(
-            &Capability::CreateFolder {
+            &test_action(Capability::CreateFolder {
                 path: tmp.path().join("blocked-parent/child"),
-            },
+            }),
             &mut undo,
         );
 
@@ -642,6 +681,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn relocate_skips_identity_swap() {
+        let tmp = tempdir();
+        let path = tmp.file("report.pdf", b"original");
+        let expected =
+            crate::organizer::file_identity::FileIdentity::from_path(&path).expect("identity");
+        tmp.dir("Documents");
+        std::fs::remove_file(&path).unwrap();
+        tmp.file("report.pdf", b"swapped");
+        let to = tmp.path().join("Documents/report.pdf");
+        let mut undo = UndoJournal::new();
+
+        let outcome = relocate(&path, &to, Some(&expected), &mut undo);
+
+        assert!(matches!(outcome, Outcome::Skipped(reason) if reason.contains("identity changed")));
+        assert!(path.exists());
+        assert!(!to.exists());
+        assert!(undo.is_empty());
+    }
+
     /// Refuse to relocate symlink sources — prevents TOCTOU escape if a real
     /// file is swapped for a symlink between scan and execute.
     #[cfg(unix)]
@@ -654,7 +713,7 @@ mod tests {
         let to = tmp.path().join("dest/link.pdf");
         let mut undo = UndoJournal::new();
 
-        let outcome = relocate(&link, &to, &mut undo);
+        let outcome = relocate(&link, &to, None, &mut undo);
 
         assert!(matches!(outcome, Outcome::Skipped(_)));
         assert!(link.exists());
@@ -666,9 +725,9 @@ mod tests {
     fn unsupported_capabilities_are_skipped_never_executed() {
         let mut undo = UndoJournal::new();
         let outcome = apply_one(
-            &Capability::DeleteFile {
+            &test_action(Capability::DeleteFile {
                 path: PathBuf::from("/anything"),
-            },
+            }),
             &mut undo,
         );
         assert!(matches!(outcome, Outcome::Skipped(_)));

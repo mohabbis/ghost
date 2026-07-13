@@ -26,6 +26,7 @@ mod canonical_workflows {
             size: 0,
             modified: None,
             created: None,
+            identity: None,
         }
     }
 

@@ -1306,6 +1306,7 @@ async function openSettings() {
   let intelStatus = { default_provider: "disabled", providers: [] };
   let powerBiStatus = { active: false };
   let fabricStatus = { active: false };
+  let googleCloudStatus = { active: false };
   let mcpPairingStatus = { enabled: false };
   try {
     account = await invoke("account_status");
@@ -1332,6 +1333,11 @@ async function openSettings() {
       fabricStatus = await invoke("fabric_grant_status");
     } catch (error) {
       console.error("Failed to load Fabric grant status:", error);
+    }
+    try {
+      googleCloudStatus = await invoke("google_grant_status");
+    } catch (error) {
+      console.error("Failed to load Google Cloud grant status:", error);
     }
   }
 
@@ -1505,12 +1511,37 @@ async function openSettings() {
                : `<button class="btn btn--ghost btn--small" type="button" data-fabric-connect ${account.signed_in ? "" : "disabled"}>Connect Fabric</button>
                   ${!account.signed_in ? '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Microsoft above first.</p>' : ""}`
            }
-           <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>`
+           <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>
+
+           <h4 style="color: #0e8f78; margin: 12px 0 4px;">Google Cloud Storage</h4>
+           <p class="panel__hint" style="margin: 4px 0 8px;">Export Organizer audit history to a GCS bucket you choose. Requires Google sign-in, then a separate Cloud Storage grant.</p>
+           ${
+             googleCloudStatus.active
+               ? `<p class="panel__hint" style="margin: 4px 0 8px;">Google Cloud connected${googleCloudStatus.granted_at ? ` (granted ${escapeAttr(new Date(googleCloudStatus.granted_at).toLocaleDateString())})` : ""}.</p>
+                  <label>GCP project ID
+                    <input id="google-project-id" type="text" placeholder="my-gcp-project" style="${fieldStyle}">
+                  </label>
+                  <label>Bucket
+                    <select id="google-bucket" style="${fieldStyle}">
+                      <option value="">Select bucket…</option>
+                    </select>
+                  </label>
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                    <button class="btn btn--ghost btn--small" type="button" data-google-list-buckets>List buckets</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-google-preview>Preview export</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-google-push disabled>Push to bucket</button>
+                    <button class="btn btn--ghost btn--small" type="button" data-google-revoke>Disconnect</button>
+                  </div>
+                  <pre id="google-preview" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>`
+               : `<button class="btn btn--ghost btn--small" type="button" data-google-connect ${account.signed_in && account.provider === "google" ? "" : "disabled"}>Connect Google Cloud</button>
+                  ${account.signed_in && account.provider === "google" ? "" : '<p class="panel__hint" style="margin: 4px 0 8px;">Sign in with Google above first.</p>'}`
+           }
+           <p class="panel__hint" id="google-note" style="margin: 8px 0 12px;"></p>`
         : ""
     }
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">MCP access</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> and can scan Zones or execute a plan you approved in Organizer. Issue an MCP token after reviewing a plan, or enable pairing so only clients with your code can connect.</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> (stdio) or <code>ghost mcp serve http [port]</code> (localhost HTTP, experimental). Pairing codes apply to both.</p>
     <p class="panel__hint" style="margin: 4px 0 8px;">Pairing: ${mcpPairingStatus.enabled ? `enabled (${escapeAttr(mcpPairingStatus.code_hint || "active")})` : "disabled — any local client can connect"}</p>
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>Enable pairing code</button>
@@ -1780,6 +1811,7 @@ async function discoverLocalRuntimes() {
 // enables after a preview has been shown for the current session.
 let powerBiPreviewShown = false;
 let fabricPreviewShown = false;
+let googlePreviewShown = false;
 
 async function connectPowerBi() {
   if (!invoke) return notAvailable();
@@ -1999,6 +2031,99 @@ async function revokeFabricGrant() {
     openSettings();
   } catch (error) {
     toastError(`Fabric disconnect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+// --- Google Cloud Storage export ------------------------------------------------
+async function connectGoogleCloud() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("google-note");
+  if (note) note.textContent = "Opening your browser to connect Google Cloud…";
+  try {
+    await invoke("google_request_grant");
+    showNotification("Google Cloud connected.");
+    openSettings();
+  } catch (error) {
+    if (note) note.textContent = `Connect failed: ${formatInvokeError(error)}`;
+    else toastError(`Google Cloud connect failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function listGoogleBuckets() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const projectId = document.getElementById("google-project-id")?.value?.trim();
+  if (!projectId) return toastError("Enter your GCP project ID first.");
+  const note = document.getElementById("google-note");
+  const select = document.getElementById("google-bucket");
+  try {
+    const buckets = await invoke("google_list_buckets", { projectId });
+    if (select) {
+      select.innerHTML =
+        '<option value="">Select bucket…</option>' +
+        buckets
+          .map((b) => `<option value="${escapeAttr(b.name)}">${escapeHtml(b.name)}</option>`)
+          .join("");
+    }
+    if (note) note.textContent = buckets.length ? "" : "No buckets returned for this project.";
+  } catch (error) {
+    if (note) note.textContent = `Bucket list failed: ${formatInvokeError(error)}`;
+    else toastError(`GCS bucket list failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function previewGoogleExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  const note = document.getElementById("google-note");
+  const pre = document.getElementById("google-preview");
+  try {
+    const payload = await invoke("google_export_preview", { sinceDays: null });
+    if (pre) {
+      pre.style.display = "block";
+      pre.textContent = `${payload.runs.length} run(s), ${payload.actions.length} action(s), ${payload.policy_events.length} policy event(s) would be exported.`;
+    }
+    googlePreviewShown = true;
+    const pushBtn = document.querySelector("[data-google-push]");
+    if (pushBtn) pushBtn.disabled = false;
+    if (note) note.textContent = "";
+  } catch (error) {
+    if (note) note.textContent = `Preview failed: ${formatInvokeError(error)}`;
+    else toastError(`Google export preview failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function pushGoogleExport() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  if (!googlePreviewShown) return;
+  const bucket = document.getElementById("google-bucket")?.value?.trim();
+  if (!bucket) return toastError("Select a bucket first.");
+  const note = document.getElementById("google-note");
+  if (note) note.textContent = "Pushing to GCS…";
+  try {
+    const result = await invoke("google_push_audit_export", { bucket, sinceDays: null });
+    if (note) {
+      note.textContent = `Pushed ${result.runs_pushed} run(s) to gs://${escapeAttr(bucket)}/${escapeAttr(result.export_prefix)}.`;
+    }
+    showNotification("Pushed to Google Cloud Storage.");
+  } catch (error) {
+    if (note) note.textContent = `Push failed: ${formatInvokeError(error)}`;
+    else toastError(`GCS push failed: ${formatInvokeError(error)}`);
+  }
+}
+
+async function revokeGoogleCloudGrant() {
+  if (!invoke) return notAvailable();
+  if (!experimentalEnabled) return;
+  try {
+    await invoke("google_revoke_grant");
+    googlePreviewShown = false;
+    showNotification("Google Cloud disconnected.");
+    openSettings();
+  } catch (error) {
+    toastError(`Google Cloud disconnect failed: ${formatInvokeError(error)}`);
   }
 }
 
@@ -2568,6 +2693,51 @@ async function organizerInit() {
   if (!invoke) return; // static mode: the panel stays inert
   await organizerRefreshZones();
   await organizerCheckUnfinishedRun();
+  await organizerCheckFabricInbound();
+}
+
+async function organizerCheckFabricInbound() {
+  const banner = document.getElementById("organizerFabricInboundBanner");
+  if (!banner || !invoke || !experimentalEnabled) {
+    if (banner) banner.innerHTML = "";
+    return;
+  }
+  let intents;
+  try {
+    intents = await invoke("fabric_list_inbound_intents");
+  } catch (_err) {
+    return;
+  }
+  const pending = (intents || []).filter((i) => i.status === "pending");
+  if (!pending.length) {
+    banner.innerHTML = "";
+    return;
+  }
+  const first = pending[0];
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>Fabric inbound intent:</strong> ${escapeHtml(first.summary)} — review and scan before approving. Ghost will not auto-execute.</span>
+      <div class="banner__actions">
+        <button class="btn btn--ghost btn--small" id="organizerFabricInboundReviewBtn" type="button">Review Zone</button>
+        <button class="btn btn--ghost btn--small" id="organizerFabricInboundDismissBtn" type="button">Dismiss</button>
+      </div>
+    </section>`;
+  document.getElementById("organizerFabricInboundReviewBtn")?.addEventListener("click", async () => {
+    if (first.zone_id) {
+      organizerSelectedZoneId = first.zone_id;
+      await organizerRefreshZones();
+    }
+    showNotification("Scan and review the plan — inbound Fabric signals never auto-run.");
+  });
+  document.getElementById("organizerFabricInboundDismissBtn")?.addEventListener("click", async () => {
+    try {
+      await invoke("fabric_dismiss_inbound_intent", { intentId: first.intent_id });
+      showNotification("Inbound Fabric intent dismissed.");
+    } catch (err) {
+      toastError("Could not dismiss: " + formatInvokeError(err));
+    }
+    await organizerCheckFabricInbound();
+  });
 }
 
 // A run that began (files may already have moved) but never finished —
@@ -4066,6 +4236,26 @@ function wireUpControls() {
     }
     if (e.target.closest("[data-fabric-revoke]")) {
       revokeFabricGrant();
+      return;
+    }
+    if (e.target.closest("[data-google-connect]")) {
+      connectGoogleCloud();
+      return;
+    }
+    if (e.target.closest("[data-google-list-buckets]")) {
+      listGoogleBuckets();
+      return;
+    }
+    if (e.target.closest("[data-google-preview]")) {
+      previewGoogleExport();
+      return;
+    }
+    if (e.target.closest("[data-google-push]")) {
+      pushGoogleExport();
+      return;
+    }
+    if (e.target.closest("[data-google-revoke]")) {
+      revokeGoogleCloudGrant();
       return;
     }
     if (e.target.closest("[data-mcp-enable-pairing]")) {

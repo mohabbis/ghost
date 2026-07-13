@@ -47,9 +47,12 @@ Commands (`commands/integrations.rs`, experimental):
 
 ## Not in scope (v1)
 
-- Inbound Fabric-triggered file mutations
+- **Auto-executing** inbound Fabric-triggered file mutations
 - Notebook/pipeline direct desktop control
 - Silent export
-- Workspace/lakehouse picker UI beyond manual ID fields
+
+## Inbound intents (experimental, read-only queue)
+
+`fabric_record_inbound_intent` stores a pending intent locally (webhook simulation / manual registration). `fabric_list_inbound_intents` and Organizer UI banners surface it — the user must still scan, review, and approve in Organizer. `fabric_dismiss_inbound_intent` clears without executing.
 
 See `docs/power-bi-integration.md` for the shared export payload shape.

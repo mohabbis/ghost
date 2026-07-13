@@ -198,6 +198,15 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `fabric_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview (same row shapes as Power BI). No network. |
 | `fabric_list_lakehouses` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists lakehouse items in a workspace; requires Fabric grant. |
 | `fabric_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Uploads JSON export files to a lakehouse `Files/ghost-export/` path via OneLake. Re-derives payload server-side; requires preview in UI first. |
+| `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound Fabric intents (no auto-execute). |
+| `fabric_dismiss_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Dismisses an inbound intent without acting on it. |
+| `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound intent for Organizer review (webhook simulation). |
+| `google_grant_status` | experimental | ✓ | – | – | – | – | – | low | Local Google Cloud grant metadata. |
+| `google_request_grant` | experimental | ✓ | – | – | ✓ | – | – | medium | OAuth consent for GCS export scope. |
+| `google_revoke_grant` | experimental | ✓ | – | – | – | – | – | low | Revokes local Google Cloud grant. |
+| `google_list_buckets` | experimental | ✓ | – | – | ✓ | – | – | low | Lists buckets in a GCP project (requires `project_id`). |
+| `google_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview for GCS push. |
+| `google_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Pushes JSON export objects to a user-chosen GCS bucket. |
 
 ### `commands/diagnostics.rs` — diagnostics (stable)
 

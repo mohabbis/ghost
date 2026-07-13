@@ -24,6 +24,7 @@
 pub mod classifier;
 pub mod conflict;
 pub mod executor;
+pub mod file_identity;
 pub mod naming;
 pub mod pipeline;
 pub mod planner;

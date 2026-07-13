@@ -5,8 +5,10 @@
 
 pub mod audit;
 pub mod errors;
+pub mod google;
 pub mod microsoft;
 
 pub use audit::{AuditActor, IntegrationAuditEvent};
 pub use errors::IntegrationConnectorError;
+pub use google::GoogleIntegrationService;
 pub use microsoft::MicrosoftIntegrationService;

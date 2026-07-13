@@ -25,7 +25,8 @@ pub fn run_stdio() {
     }
 }
 
-fn handle_message(line: &str) -> Value {
+/// Handle one JSON-RPC request line/body and return the response object.
+pub fn handle_message(line: &str) -> Value {
     let request: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(e) => return json_rpc_error(None, -32700, &format!("Parse error: {e}")),
