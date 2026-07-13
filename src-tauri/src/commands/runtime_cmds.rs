@@ -9,10 +9,8 @@ use crate::engine::GhostEngine;
 use crate::organizer::pipeline::undo_zone_run;
 use crate::organizer::planner::plan_zone;
 use crate::policy::{ensure_replayable, evaluate_compressed, fingerprint_events};
-use crate::runtime::{execute_action_plan_with_progress, ExecutionReceipt};
-use crate::storage::executions::{
-    begin_execution, finish_execution, get_execution, update_execution_progress,
-};
+use crate::runtime::{run_persisted_action_plan, ExecutionReceipt};
+use crate::storage::executions::get_execution;
 use crate::storage::zones::list_folder_rules;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -245,31 +243,26 @@ fn run_action_plan(
         PlanSource::Workflow { .. } => vec![],
     };
 
-    let execution_id = begin_execution(&conn, &zone_id).map_err(|e| e.to_string())?;
-    let engine_ref = if use_engine { engine } else { None };
-
-    let runtime_result = execute_action_plan_with_progress(
+    let outcome = run_persisted_action_plan(
+        &conn,
+        &zone_id,
         action_plan,
         &rules,
-        engine_ref,
-        Some(execution_id.clone()),
-        |partial| {
-            let _ = update_execution_progress(&conn, &execution_id, partial);
-        },
-    );
-
-    finish_execution(&conn, &execution_id, &zone_id, &runtime_result.report)
-        .map_err(|e| e.to_string())?;
+        if use_engine { engine } else { None },
+        use_engine,
+        None,
+        None,
+    )?;
 
     Ok(ActionPlanExecuteResult {
-        execution_id: Some(execution_id),
+        execution_id: Some(outcome.execution_id),
         report_summary: ExecuteSummary {
-            applied: runtime_result.report.applied,
-            skipped: runtime_result.report.skipped,
-            failed: runtime_result.report.failed,
+            applied: outcome.runtime.report.applied,
+            skipped: outcome.runtime.report.skipped,
+            failed: outcome.runtime.report.failed,
         },
-        receipt: runtime_result.receipt,
-        stopped_early: runtime_result.stopped_early,
+        receipt: outcome.runtime.receipt,
+        stopped_early: outcome.runtime.stopped_early,
     })
 }
 

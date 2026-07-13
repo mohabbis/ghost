@@ -1,11 +1,14 @@
-//! Headless MCP execution helpers — reuse the Organizer trust pipeline.
+//! Headless MCP execution helpers — canonical ActionPlan runtime.
 
+use crate::action_plan::{from_organizer_plan_with_source, PlanSource};
 use crate::mcp::approval::verify_execution_token_with_hash;
 use crate::mcp::plan_hash::hash_organizer_plan;
-use crate::organizer::pipeline::{execute_zone, undo_zone_run};
+use crate::organizer::pipeline::undo_zone_run;
 use crate::organizer::planner::plan_zone;
+use crate::runtime::run_persisted_action_plan;
 use crate::storage::executions::{get_execution, ExecutionSummary};
 use crate::storage::open_default;
+use crate::storage::zones::list_folder_rules;
 use serde_json::{json, Value};
 
 pub fn execute_approved_plan(zone_id: &str, approval_token: &str) -> Result<Value, String> {
@@ -22,14 +25,38 @@ pub fn execute_approved_plan(zone_id: &str, approval_token: &str) -> Result<Valu
 
     verify_execution_token_with_hash(approval_token, zone_id, Some(&plan_hash))?;
 
-    let outcome = execute_zone(&conn, zone_id, None, None)?;
+    let action_plan = from_organizer_plan_with_source(
+        &plan,
+        PlanSource::Mcp {
+            zone_id: zone_id.into(),
+        },
+    );
+    let rules = list_folder_rules(&conn, zone_id).map_err(|e| e.to_string())?;
+    let outcome = run_persisted_action_plan(
+        &conn,
+        zone_id,
+        &action_plan,
+        &rules,
+        None,
+        false,
+        None,
+        None,
+    )?;
+
     Ok(json!({
         "execution_id": outcome.execution_id,
         "zone_id": zone_id,
-        "applied": outcome.report.applied,
-        "skipped": outcome.report.skipped,
-        "failed": outcome.report.failed,
-        "status": if outcome.report.failed > 0 { "failed" } else { "completed" },
+        "applied": outcome.runtime.report.applied,
+        "skipped": outcome.runtime.report.skipped,
+        "failed": outcome.runtime.report.failed,
+        "stopped_early": outcome.runtime.stopped_early,
+        "status": if outcome.runtime.report.failed > 0 || outcome.runtime.stopped_early {
+            "failed"
+        } else {
+            "completed"
+        },
+        "receipt": outcome.runtime.receipt,
+        "plan_source": "mcp",
     }))
 }
 
@@ -90,8 +117,6 @@ mod tests {
     fn denied_plan_cannot_execute_even_with_valid_token() {
         let signed = issue_approval_token("plan_zone-deny", "sha256:abc");
         let token = serde_json::to_string(&signed).unwrap();
-        // execute_approved_plan re-plans from DB; without a real zone this fails
-        // before token verification on missing zone — ensure error is not "success".
         let err = execute_approved_plan("zone-deny", &token).unwrap_err();
         assert!(!err.is_empty());
     }

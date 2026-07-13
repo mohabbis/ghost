@@ -283,6 +283,8 @@ One canonical pipeline for Organizer, Routine, MCP, and demo intent sources. Pla
 | `get_execution_receipt` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Reconstructs a human-readable receipt from a persisted execution id (audit + verification summary). |
 | `undo_action_plan_execution` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Replays stored undo journal for a unified execution id; same semantics as `organizer_undo`. |
 
+MCP headless execution (`mcp/execute.rs::execute_approved_plan`) uses the same `run_persisted_action_plan` path with `PlanSource::Mcp` and returns an execution receipt in the JSON response.
+
 ### `commands/mcp.rs` — MCP pairing (stable)
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |

@@ -4,6 +4,7 @@ use super::types::{ActionKind, ActionPlan, ActionStep, PlanSource};
 use crate::organizer::file_identity::FileIdentity;
 use crate::organizer::naming::dated_prefix;
 use crate::policy::{evaluate_with_attribution, Capability};
+use crate::runtime::semantic::UiTarget;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -106,24 +107,46 @@ pub fn build_invoice_demo(downloads: &Path, finance_root: &Path) -> Result<Actio
         "Open TextEdit",
     );
 
+    let document_target = UiTarget {
+        app: "TextEdit".into(),
+        role: "AXTextArea".into(),
+        title: None,
+        fingerprint: None,
+    };
+
     push_ui_step(
         &mut steps,
         4,
-        ActionKind::TypeText {
-            text: log_line.clone(),
+        ActionKind::SemanticFocus {
+            target: document_target.clone(),
+        },
+        Capability::OsClick {
             app: Some("TextEdit".into()),
+            target_label: "focus document".into(),
+            low_confidence: false,
+            coordinate_only: false,
+        },
+        "Focus document",
+    );
+
+    push_ui_step(
+        &mut steps,
+        5,
+        ActionKind::SemanticSetValue {
+            target: document_target,
+            value: log_line.clone(),
         },
         Capability::OsType {
             app: Some("TextEdit".into()),
             secure_field: false,
             redacted: false,
         },
-        "Insert log entry",
+        "Insert log entry (semantic)",
     );
 
     push_ui_step(
         &mut steps,
-        5,
+        6,
         ActionKind::Shortcut {
             combo: "Cmd+S".into(),
         },
@@ -135,7 +158,7 @@ pub fn build_invoice_demo(downloads: &Path, finance_root: &Path) -> Result<Actio
 
     push_verify_step(
         &mut steps,
-        6,
+        7,
         final_path.clone(),
         &format!("Verify {} in Finance folder", dated_name),
     );

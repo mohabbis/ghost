@@ -117,3 +117,78 @@ fn relocate(
         Err(e) => FsOutcome::Failed(e.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audit::UndoJournal;
+    use crate::organizer::testutil::tempdir;
+    use crate::policy::{Capability, FolderRule};
+    use std::path::Path;
+
+    fn full_rule(path: &Path) -> FolderRule {
+        FolderRule {
+            path: path.to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: crate::policy::TrustLevel::AskFirst,
+        }
+    }
+
+    fn apply_move(
+        tmp: &crate::organizer::testutil::TempDir,
+        from: &Path,
+        to: &Path,
+        identity: Option<&FileIdentity>,
+        undo: &mut UndoJournal,
+    ) -> FsOutcome {
+        let rules = vec![full_rule(tmp.path())];
+        let kind = ActionKind::MoveFile {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+        };
+        let cap = Capability::MoveFile {
+            from: from.to_path_buf(),
+            to: to.to_path_buf(),
+        };
+        apply_filesystem_step(&kind, &cap, identity, &rules, undo)
+    }
+
+    #[test]
+    fn never_overwrites_an_existing_target() {
+        let tmp = tempdir();
+        tmp.file("report.pdf", b"new");
+        tmp.file("Documents/report.pdf", b"original");
+        let mut undo = UndoJournal::new();
+        let outcome = apply_move(
+            &tmp,
+            &tmp.path().join("report.pdf"),
+            &tmp.path().join("Documents/report.pdf"),
+            None,
+            &mut undo,
+        );
+        assert!(matches!(outcome, FsOutcome::Skipped(_)));
+        assert!(undo.is_empty());
+    }
+
+    #[test]
+    fn relocate_skips_identity_swap() {
+        let tmp = tempdir();
+        let path = tmp.file("report.pdf", b"original");
+        let expected = FileIdentity::from_path(&path).expect("identity");
+        tmp.dir("Documents");
+        std::fs::remove_file(&path).unwrap();
+        tmp.file("report.pdf", b"swapped");
+        let to = tmp.path().join("Documents/report.pdf");
+        let mut undo = UndoJournal::new();
+        let outcome = apply_move(&tmp, &path, &to, Some(&expected), &mut undo);
+        assert!(
+            matches!(outcome, FsOutcome::Skipped(reason) if reason.contains("identity changed"))
+        );
+        assert!(undo.is_empty());
+    }
+}

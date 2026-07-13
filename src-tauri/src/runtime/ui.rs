@@ -1,8 +1,9 @@
-//! UI step dispatch: replay slices, typing, shortcuts, open app.
+//! UI step dispatch: replay slices, typing, shortcuts, semantic AX, open app.
 
 use crate::action_plan::types::ActionKind;
-use crate::core::events::InputEvent;
+use crate::core::events::{InputEvent, ReliabilitySettings};
 use crate::engine::GhostEngine;
+use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use enigo::{Enigo, Key, Keyboard, Settings};
 use std::thread;
 use std::time::Duration;
@@ -14,16 +15,83 @@ pub enum UiOutcome {
 }
 
 pub fn dispatch_ui_step(kind: &ActionKind, engine: Option<&GhostEngine>) -> UiOutcome {
+    dispatch_ui_step_with_reliability(kind, engine, None)
+}
+
+pub fn dispatch_ui_step_with_reliability(
+    kind: &ActionKind,
+    engine: Option<&GhostEngine>,
+    reliability: Option<&ReliabilitySettings>,
+) -> UiOutcome {
     match kind {
         ActionKind::OpenApplication { name } => open_application(name),
+        ActionKind::SemanticFocus { target } => semantic_focus(target),
+        ActionKind::SemanticSetValue { target, value } => semantic_set_value(target, value),
+        ActionKind::SemanticVerify {
+            target,
+            expected_value,
+        } => semantic_verify(target, expected_value.as_deref()),
         ActionKind::TypeText { text, .. } => type_text(text),
         ActionKind::Shortcut { combo } => send_shortcut(combo),
         ActionKind::Wait { ms } => {
             thread::sleep(Duration::from_millis(*ms));
             UiOutcome::Applied
         }
-        ActionKind::UiReplay { events, .. } => replay_events(engine, events),
+        ActionKind::UiReplay { events, .. } => {
+            replay_events_with_reliability(engine, events, reliability)
+        }
         _ => UiOutcome::Skipped("not a UI step".into()),
+    }
+}
+
+fn semantic_focus(target: &UiTarget) -> UiOutcome {
+    match semantic::focus_target(target) {
+        Ok(()) => UiOutcome::Applied,
+        Err(SemanticError::HelperUnavailable(msg)) => UiOutcome::Skipped(msg),
+        Err(SemanticError::Ambiguous(n)) => {
+            UiOutcome::Skipped(format!("refusing ambiguous focus ({n} matches)"))
+        }
+        Err(SemanticError::StaleTarget { expected, observed }) => UiOutcome::Skipped(format!(
+            "stale target refused (expected {expected}, observed {observed})"
+        )),
+        Err(e) => UiOutcome::Failed(e.to_string()),
+    }
+}
+
+fn semantic_set_value(target: &UiTarget, value: &str) -> UiOutcome {
+    match semantic::set_target_value(target, value) {
+        Ok(()) => UiOutcome::Applied,
+        Err(SemanticError::HelperUnavailable(_)) => {
+            // Fall back to keyboard typing when the AX helper is not present.
+            type_text(value)
+        }
+        Err(SemanticError::Ambiguous(n)) => {
+            UiOutcome::Skipped(format!("refusing ambiguous set_value ({n} matches)"))
+        }
+        Err(SemanticError::StaleTarget { expected, observed }) => UiOutcome::Skipped(format!(
+            "stale target refused (expected {expected}, observed {observed})"
+        )),
+        Err(e) => UiOutcome::Failed(e.to_string()),
+    }
+}
+
+fn semantic_verify(target: &UiTarget, expected_value: Option<&str>) -> UiOutcome {
+    match semantic::verify_target(target, expected_value) {
+        Ok(observed) => {
+            if let Some(expected) = expected_value {
+                if observed.trim() != expected.trim() {
+                    return UiOutcome::Failed(format!(
+                        "semantic verify mismatch (expected {expected}, observed {observed})"
+                    ));
+                }
+            }
+            UiOutcome::Applied
+        }
+        Err(SemanticError::HelperUnavailable(msg)) => UiOutcome::Skipped(msg),
+        Err(SemanticError::StaleTarget { expected, observed }) => UiOutcome::Skipped(format!(
+            "stale target refused (expected {expected}, observed {observed})"
+        )),
+        Err(e) => UiOutcome::Failed(e.to_string()),
     }
 }
 
@@ -99,14 +167,23 @@ fn send_shortcut(combo: &str) -> UiOutcome {
     UiOutcome::Applied
 }
 
-fn replay_events(engine: Option<&GhostEngine>, events: &[InputEvent]) -> UiOutcome {
+fn replay_events_with_reliability(
+    engine: Option<&GhostEngine>,
+    events: &[InputEvent],
+    reliability: Option<&ReliabilitySettings>,
+) -> UiOutcome {
     let Some(engine) = engine else {
         return UiOutcome::Skipped("no replay engine available".into());
     };
     if events.is_empty() {
         return UiOutcome::Skipped("empty replay slice".into());
     }
-    match engine.replay(events, None) {
+    let result = if let Some(settings) = reliability {
+        engine.replay_with_reliability(events, settings, None)
+    } else {
+        engine.replay(events, None)
+    };
+    match result {
         Ok(()) => UiOutcome::Applied,
         Err(e) => UiOutcome::Failed(e.to_string()),
     }

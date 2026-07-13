@@ -28,9 +28,10 @@ execute_action_plan(source: demo, downloads, finance_root)
 2. Rename invoice (dated prefix)
 3. Move to Finance/Invoices
 4. Open TextEdit
-5. Insert log entry
-6. Save document (Cmd+S)
-7. Verify file exists in Finance folder
+5. Focus document (Accessibility)
+6. Insert log entry (semantic `set_value`, not coordinate typing)
+7. Save document (Cmd+S)
+8. Verify file exists in Finance folder
 
 ### Verification
 
@@ -46,25 +47,36 @@ Filesystem steps write undo data before mutation. Use **Undo this run** or `undo
 |---|---|---|
 | Organizer | `action_plan_from_zone` | `execute_action_plan` (organizer source) |
 | Routine | `action_plan_from_events` | `replay_workflow` / `execute_routine_action_plan` |
-| MCP | (zone plan hash token) | `mcp execute_approved_plan` → same runtime via `execute_zone` |
+| MCP | (zone plan hash token) | `ghost.execute_approved_plan` → `run_persisted_action_plan` (`PlanSource::Mcp`) |
 | Demo | `action_plan_demo` | `execute_action_plan` (demo source) |
 
-## macOS semantic helper (optional)
+## macOS semantic helper
 
 Build on macOS:
 
 ```bash
 swiftc -o ghost-ax-helper native/macos/GhostAXHelper.swift
+export GHOST_AX_HELPER="$(pwd)/ghost-ax-helper"
 ```
 
-JSON-line protocol: `{"op":"frontmost_app"}`, `{"op":"permission_status"}`.
+Operations: `resolve_target`, `activate_element`, `set_value`, `verify_element`, `enumerate_children`, `permission_status`, `frontmost_app`.
 
-Rust platform code remains authoritative; the helper is an optional upgrade path.
+Ambiguous matches are refused. Stale target fingerprints are rejected at execution time.
+
+### Real Mac validation (required before claiming demo-complete)
+
+1. Grant Accessibility to Ghost and the AX helper process.
+2. Run the invoice demo end-to-end.
+3. Confirm TextEdit receives the log via AX `set_value` (not enigo fallback).
+4. Record a screen walkthrough for the release PR.
+
+Rust platform code remains authoritative when the helper is absent; UI steps fall back to keyboard replay where safe.
 
 ## Tests
 
 ```bash
 cargo test --manifest-path src-tauri/Cargo.toml ghost2_pipeline
+cargo test --manifest-path src-tauri/Cargo.toml ghost2_runtime_completion
 cargo test --manifest-path src-tauri/Cargo.toml runtime::
 cargo test --manifest-path src-tauri/Cargo.toml action_plan::
 ```
