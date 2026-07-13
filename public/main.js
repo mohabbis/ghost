@@ -40,8 +40,8 @@ function platformDetection() {
   document.body.dataset.platform = platform;
 
   const sub = $("#download-sub");
-  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v1.2.7 preview release.";
-  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v1.2.7 preview release.";
+  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v1.2.7 (notarized).";
+  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v1.2.7 (unsigned installer).";
 
   const primaryLabel = $("[data-download-label]");
   if (primaryLabel) {

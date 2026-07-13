@@ -96,7 +96,7 @@ Working now:
 
 Still being hardened:
 
-- Release signing and notarization.
+- Windows installer signing (Azure Trusted Signing) and auto-update key setup.
 - Cross-app replay reliability where semantic targeting falls back to coordinates.
 - Richer target resolution for windows, controls, and app-specific UI.
 - Installer and update polish.
@@ -108,9 +108,9 @@ Still being hardened:
 | macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
 | Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Current builds are preview quality. The current app version is `v1.2.7`. macOS builds may be ad-hoc signed; if macOS blocks the app, approve it under **System Settings -> Privacy & Security**. Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). Notarized releases require Apple signing secrets — see `RELEASING.md`.
+Latest release is [`v1.2.7`](https://github.com/mohabbis/ghost/releases/tag/v1.2.7). Ghost remains an early technical preview. macOS installers are Developer ID–signed and notarized; Windows installers are currently unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
 
-Ghost ships a signed, user-approved auto-updater: on launch it checks for a newer release and, if one exists, offers it — it installs only after you click **Update now**, and never swaps itself out silently. See [`docs/auto-update.md`](docs/auto-update.md).
+Ghost includes a user-approved auto-updater path that never installs silently, but it stays inactive until the updater signing key and `latest.json` are configured. See [`docs/auto-update.md`](docs/auto-update.md).
 
 ## Architecture
 
@@ -171,7 +171,7 @@ Workflow data, logs, settings, audit history, and undo journals stay local and e
 1. Keep CI green and command surfaces classified.
 2. Harden Ghost Organizer planning, review, execution, audit, and undo.
 3. Improve target resolution and replay reliability.
-4. Finish release signing and installer quality.
+4. Finish Windows signing, auto-update keys, and installer quality.
 5. Add suggestion-only intelligence behind clear gates after the trusted core is reliable.
 6. Add a local MCP server as a single provider-neutral integration surface for read, scan, plan, validate, explain, approval, execution, and undo workflows.
 7. Add signed approval tokens, remote pairing/relay, provider abstraction, and plugin/workflow capabilities without weakening local-first execution ownership.
