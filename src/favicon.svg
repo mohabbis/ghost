@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="parrotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0e8f78" />
-      <stop offset="100%" stop-color="#ffb86b" />
+    <linearGradient id="g" x1="6" y1="2" x2="26" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0a6e5c"/>
     </linearGradient>
   </defs>
-  <ellipse cx="50" cy="70" rx="32" ry="22" fill="url(#parrotGrad)" opacity="0.4" />
-  <circle cx="50" cy="45" r="20" fill="url(#parrotGrad)" />
-  <circle cx="42" cy="42" r="3.5" fill="#070813" />
-  <circle cx="58" cy="42" r="3.5" fill="#070813" />
-  <path d="M45 52 Q50 56 55 52" stroke="#070813" stroke-width="2" fill="none" />
-  <polygon points="35,35 30,25 40,28" fill="#ffb86b" />
+  <rect width="32" height="32" rx="8" fill="#0a0e14"/>
+  <path d="M16 4c4.8 0 8.4 3.3 8.4 8.3 0 4.1-2 6.8-4.7 8.8-.7.5-1 .82-1 1.62v1.9c0 .65-.52 1.17-1.17 1.17h-1.45c-.65 0-1.17-.52-1.17-1.17v-1.9c0-.8-.3-1.12-1-1.62-2.7-2-4.7-4.7-4.7-8.8C8.6 7.3 11.2 4 16 4Z" fill="url(#g)"/>
+  <circle cx="12.4" cy="11.8" r="1.9" fill="#f0fdf9"/>
+  <circle cx="19.6" cy="11.8" r="1.9" fill="#f0fdf9"/>
+  <circle cx="12.4" cy="11.8" r="0.85" fill="#0a0e14"/>
+  <circle cx="19.6" cy="11.8" r="0.85" fill="#0a0e14"/>
 </svg>

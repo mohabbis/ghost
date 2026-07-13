@@ -3,22 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost — Approve before it acts</title>
+    <title>Ghost 2.0 — Approve before it acts</title>
     <meta
       name="description"
-      content="Local desktop automation you approve before it acts. Organizer, Plan Filing, Record & Replay, and Workflows — audited, undoable, local-first. Optional sign-in only for integrations you enable."
+      content="Ghost 2.0 unifies Organizer, Routines, and MCP on one Action Plan runtime — review semantic steps, approve, execute, verify, and recover with execution receipts. Local-first on Mac and Windows."
     />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#0a0e14" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://ghost.muharafiq.com/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Ghost — Approve before it acts" />
+    <meta property="og:title" content="Ghost 2.0 — Approve before it acts" />
     <meta
       property="og:description"
-      content="Local desktop automation you approve before it acts. Plans stay on your computer — audited, undoable, local-first by default."
+      content="One Action Plan runtime for file cleanup and desktop routines — semantic review, execution receipts, audited and undoable. Local-first on your Mac or PC."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
     <meta property="og:image" content="https://ghost.muharafiq.com/assets/og.png" />
@@ -77,7 +77,8 @@
         <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M17 10h.01M7 14h10"/></symbol>
         <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M17.05 12.6c-.03-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3-.79-1.55.02-2.97.9-3.77 2.28-1.6 2.79-.41 6.92 1.15 9.19.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.13 2.76-2.25.87-1.29 1.23-2.54 1.25-2.6-.03-.02-2.4-.92-2.42-3.64zM14.8 5.7c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.68 1.37-.59.68-1.1 1.77-.96 2.81 1.02.08 2.06-.52 2.7-1.28z"/></symbol>
         <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v6.7L3 18.2zM11.3 12.5H21V21l-9.7-1.3z"/></symbol>
-        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4.5 4.5L19 7"/></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5"/></symbol>
+        <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></symbol>
         <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
         <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
@@ -92,27 +93,13 @@
     <header class="nav" id="top">
       <a class="brand" href="#top" aria-label="Ghost home">
         <span class="brand__mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" width="26" height="26" role="img" aria-label="Ghost logo">
-            <path
-              d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z"
-              fill="url(#gp)"
-            />
-            <circle cx="12.6" cy="13" r="3.1" fill="#fff" />
-            <circle cx="19.4" cy="13" r="3.1" fill="#fff" />
-            <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0b0d12" />
-            <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0b0d12" />
-            <defs>
-              <linearGradient id="gp" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#12a88c" />
-                <stop offset="1" stop-color="#0a6e5c" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <img src="/assets/ghost-mark.svg" alt="" width="26" height="26" class="ghost-logo" />
         </span>
         <span>Ghost</span>
       </a>
 
       <nav class="nav__links" id="nav-links" aria-label="Primary">
+        <a href="#v2">Ghost 2.0</a>
         <a href="#demo">Demo</a>
         <a href="#app">Inside the app</a>
         <a href="#how">How it works</a>
@@ -132,14 +119,16 @@
     </header>
 
     <main id="main">
+      <div class="hero-shell">
       <!-- ───────────────────────── Hero ───────────────────────── -->
       <section class="hero reveal">
         <div class="hero__copy">
+          <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span> Ghost 2.0 · Now shipping</p>
           <p class="brand-hero">Ghost</p>
           <h1>Approve before it <span class="grad">acts</span>.</h1>
           <p class="lede">
-            Local desktop automation for software teams, automation engineers, and anyone
-            drowning in files. Record or plan → inspect → approve → execute → audit → undo.
+            One <strong>Action Plan</strong> runtime for Organizer, Routines, and MCP.
+            Compile → review semantic steps → approve → execute → verify with receipts → undo.
             Your files never leave this machine.
           </p>
           <div class="hero__actions">
@@ -149,26 +138,20 @@
           <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v2.0.0 · Mac &amp; Windows · technical preview · no account required · local-first by default</p>
         </div>
 
-        <!-- Hero mockup: a proposed plan awaiting approval -->
+        <!-- Hero mock: Ghost 2.0 receipt after approval -->
         <aside class="mock" aria-hidden="true">
-          <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — proposed plan</em></div>
+          <div class="mock__bar"><span></span><span></span><span></span><em>Ghost 2.0 — execution receipt</em></div>
           <div class="mock__body">
-            <div class="mock__row"><span class="tag tag--new"><svg class="i"><use href="#i-plus"/></svg> folder</span> Receipts</div>
-            <div class="mock__row"><span class="tag tag--move"><svg class="i"><use href="#i-arrow-right"/></svg> move</span> receipt-final(2).pdf → Receipts</div>
-            <div class="mock__row"><span class="tag tag--rename"><svg class="i"><use href="#i-pencil"/></svg> rename</span> invoice-acme.pdf → 2026-03 invoice-acme.pdf</div>
-            <div class="mock__row mock__row--warn"><span class="tag tag--warn"><svg class="i"><use href="#i-alert"/></svg> conflict</span> keeps both — never overwrites</div>
-            <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-ban"/></svg> 0</span> deletes · 0 uploads</div>
+            <div class="mock__row"><span class="tag tag--move"><svg class="i"><use href="#i-arrow-right"/></svg> move</span> invoice_jan.pdf → Finance/Invoices</div>
+            <div class="mock__row"><span class="tag tag--rename"><svg class="i"><use href="#i-pencil"/></svg> semantic</span> Focus TextEdit · set_value verified</div>
+            <div class="mock__row"><span class="tag tag--new"><svg class="i"><use href="#i-check-circle"/></svg> verify</span> Expected path exists · observed match</div>
+            <div class="mock__row mock__row--warn"><span class="tag tag--warn"><svg class="i"><use href="#i-alert"/></svg> policy</span> 0 denied · 0 silent overwrites</div>
+            <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-undo"/></svg> undo</span> journal written before mutation</div>
             <div class="mock__foot">
-              <button class="btn btn--sm" type="button" tabindex="-1">Approve</button>
-              <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Undo</button>
+              <button class="btn btn--sm" type="button" tabindex="-1">View receipt</button>
+              <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Undo run</button>
               <span class="mock__mark">
-                <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
-                  <path d="M16 3c6 0 10 4.4 10 10.5 0 5.2-2.7 8.4-6.2 10.9-.9.6-1.3 1-1.3 2.1V29a1.4 1.4 0 0 1-1.4 1.4h-2.2A1.4 1.4 0 0 1 13.3 29v-2.5c0-1.1-.4-1.5-1.3-2.1C8.5 21.9 6 18.7 6 13.5 6 7.4 10 3 16 3Z" fill="url(#gp2)"/>
-                  <circle cx="12.6" cy="13" r="3.1" fill="#fff"/><circle cx="19.4" cy="13" r="3.1" fill="#fff"/>
-                  <circle class="pupil" data-eye cx="12.6" cy="13" r="1.35" fill="#0b0d12"/>
-                  <circle class="pupil" data-eye cx="19.4" cy="13" r="1.35" fill="#0b0d12"/>
-                  <defs><linearGradient id="gp2" x1="6" y1="3" x2="26" y2="30" gradientUnits="userSpaceOnUse"><stop stop-color="#12a88c"/><stop offset="1" stop-color="#0a6e5c"/></linearGradient></defs>
-                </svg>
+                <img src="/assets/ghost-mark.svg" alt="" width="30" height="30" class="ghost-logo" />
               </span>
             </div>
           </div>
@@ -176,11 +159,42 @@
       </section>
 
       <div class="trust-strip reveal">
-        <span><svg class="i"><use href="#i-lock"/></svg> Runs on your machine</span>
-        <span><svg class="i"><use href="#i-sliders"/></svg> Automate, ask-first, or never</span>
-        <span><svg class="i"><use href="#i-receipt"/></svg> Every change names the rule</span>
-        <span><svg class="i"><use href="#i-undo"/></svg> Organizer undo; replay reverses typed text</span>
+        <span><svg class="i"><use href="#i-layers"/></svg> One Action Plan runtime</span>
+        <span><svg class="i"><use href="#i-receipt"/></svg> Execution receipts per run</span>
+        <span><svg class="i"><use href="#i-shield"/></svg> Semantic steps before coordinates</span>
+        <span><svg class="i"><use href="#i-undo"/></svg> Audit chain + Organizer undo</span>
       </div>
+      </div>
+
+      <section id="v2" class="v2-band reveal">
+        <div class="v2-band__inner">
+          <div class="section__head">
+            <p class="eyebrow">Ghost 2.0</p>
+            <h2>One pipeline. Every source.</h2>
+            <p class="section__sub">
+              Organizer zones, recorded routines, MCP plans, and the invoice demo all compile into the same
+              reviewable Action Plan — then execute through one deterministic runtime with per-step verification.
+            </p>
+          </div>
+          <div class="v2-grid">
+            <article class="v2-card">
+              <span class="v2-card__ico"><svg class="i"><use href="#i-layers"/></svg></span>
+              <h3>Unified Action Plans</h3>
+              <p>Semantic steps you can read — not raw mouse coordinates. Policy checks run before anything touches disk or UI.</p>
+            </article>
+            <article class="v2-card">
+              <span class="v2-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
+              <h3>Execution receipts</h3>
+              <p>Every run records expected vs observed per step. History surfaces receipts; audit seals stay tamper-evident.</p>
+            </article>
+            <article class="v2-card">
+              <span class="v2-card__ico"><svg class="i"><use href="#i-shield"/></svg></span>
+              <h3>Semantic automation</h3>
+              <p>macOS Accessibility helper bundled in the app — focus, set_value, and verify before coordinate fallback.</p>
+            </article>
+          </div>
+        </div>
+      </section>
 
       <!-- ───────────────────────── Interactive demo ───────────────────────── -->
       <section id="demo" class="section reveal">
@@ -502,7 +516,7 @@
             </ul>
           </div>
           <div class="compare__col compare__col--us">
-            <h3><span class="brand__mark brand__mark--sm" aria-hidden="true">G</span> Ghost</h3>
+            <h3><span class="brand__mark brand__mark--sm" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span> Ghost</h3>
             <ul>
               <li>Runs on your Mac or PC — local-first; optional integrations are opt-in</li>
               <li>Acts only on the plan you approved, at the trust level you set</li>
@@ -544,19 +558,24 @@
         </div>
         <div class="roadmap">
           <div class="roadmap__col roadmap__col--now">
-            <span class="pill pill--now">Technical preview</span>
+            <span class="pill pill--now">Ghost 2.0 · Shipped</span>
+            <h3>Unified Action Plan runtime</h3>
+            <p>Organizer, Routines, MCP, and the invoice demo compile into one reviewable plan. Execute with per-step verification, persisted receipts, semantic AX on macOS, and the same audit + undo guarantees.</p>
+          </div>
+          <div class="roadmap__col">
+            <span class="pill">Now</span>
             <h3>Organizer, Plan Filing, Replay, Workflows, Guard Desk</h3>
-            <p>Wired desktop views today: Organizer scan → approve → audit → undo; Plan Filing preview from pasted names; Record &amp; Replay with inspectable steps and policy-gated approval; saved Workflows; Guard Desk local scan + optional POS Bridge demo after approval (not certified compliance). Optional Microsoft/Google sign-in in <strong>Settings</strong> (desktop app only — not on this site) for stack integrations you enable. Experimental AI stays gated — not default chrome.</p>
+            <p>Wired desktop views: scan → approve → audit → undo; Plan Filing preview; policy-gated replay; saved workflows; Guard Desk local scan + POS Bridge demo. Experimental AI stays gated.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Next</span>
-            <h3>Ghost Routines</h3>
-            <p>Tougher targeting for cross-app routines — window-aware locators and semantic lookup before coordinates, with every fallback decision explained.</p>
+            <h3>Ghost Routines polish</h3>
+            <p>Full compression → semantic compile for routine clicks; tougher cross-app targeting with every fallback explained in the receipt.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Later</span>
             <h3>Ghost Intelligence</h3>
-            <p>Suggestion-only planning and pattern detection behind the experimental flag. It proposes; you and deterministic code still decide and execute.</p>
+            <p>Suggestion-only planning behind the experimental flag. It proposes; deterministic code still executes only what you approved.</p>
           </div>
         </div>
       </section>
@@ -586,10 +605,11 @@
 
     <footer class="footer">
       <div class="footer__brand">
-        <span class="brand"><span class="brand__mark" aria-hidden="true">G</span> Ghost</span>
+        <span class="brand"><span class="brand__mark" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span> Ghost</span>
         <p>Record / Plan → Inspect → Approve → Replay / Execute → Audit → Undo.</p>
       </div>
       <nav class="footer__links" aria-label="Footer">
+        <a href="#v2">Ghost 2.0</a>
         <a href="#demo">Demo</a>
         <a href="#app">Inside the app</a>
         <a href="#plan-filing">Plan Filing</a>

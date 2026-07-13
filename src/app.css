@@ -1373,9 +1373,17 @@ body[data-view="guard-desk"] .rail-record { display: none; }
 .nav__glyph {
   width: 34px;
   height: 34px;
-  font-size: 1rem;
+  display: grid;
+  place-items: center;
   border-radius: 11px;
+  background: linear-gradient(145deg, rgba(20, 184, 166, 0.22), rgba(10, 110, 92, 0.12));
+  border: 1px solid rgba(20, 184, 166, 0.28);
   box-shadow: 0 12px 26px rgba(14, 143, 120, 0.28);
+  overflow: hidden;
+}
+.nav__glyph .ghost-logo {
+  width: 22px;
+  height: 22px;
 }
 
 .nav__wordmark {
