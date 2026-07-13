@@ -170,10 +170,11 @@ fn module_initializers_wire_static_feature_controls() {
         );
     }
 
-    // Approve is enabled after a scan result, not in the static init wiring.
+    // Approve is enabled after scan results, not at init time — keep that
+    // trust-pipeline order (recommend → human approve → POS Bridge).
     let show_results = function_body(&js, "guardShowComplianceResults");
     assert!(
-        show_results.contains("guardApproveBtn") && show_results.contains("approveBtn.onclick"),
+        show_results.contains("\"guardApproveBtn\"") && show_results.contains("approveBtn.onclick"),
         "Guard Desk approve control must be enabled and wired after a scan result"
     );
 
