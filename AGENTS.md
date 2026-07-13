@@ -275,3 +275,19 @@ When reporting work back to the user, include:
 - known risks or follow-up work.
 
 Do not claim checks, builds, releases, signing, notarization, or installer validation unless they actually happened.
+
+## Cursor Cloud specific instructions
+
+This section captures non-obvious caveats for running Ghost inside a Cursor Cloud VM (Ubuntu 24.04, no macOS/Windows). Standard build/test/lint commands are already documented above (see "Validation") and in the `Makefile`/`README.md` — use those; only the caveats below are cloud-specific.
+
+- **Toolchain is pre-provisioned by the startup update script.** Rust stable (pinned by `rust-toolchain.toml`), `cargo-tauri` (installed via `cargo install tauri-cli`), the Linux GTK/WebKit system libs (`libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev`), and `libssl-dev`/`pkg-config` are baked into the VM image. `libssl-dev` is required even for a default (non-experimental) build because a transitive dependency pulls `openssl-sys`. If a build fails on missing GTK/WebKit/openssl, re-run the corresponding `apt-get install`.
+
+- **Running the app needs an explicit binary.** The crate ships three binaries (`ghost`, `diagnose_perms`, `mcp_relay_server`) and has no `default-run`, so plain `cargo tauri dev` / `make dev` fails with "could not determine which binary to run". Launch the desktop app with `cargo tauri dev -- --bin ghost` (the args after `--` are forwarded to the cargo runner).
+
+- **GUI runs on the VNC desktop with software rendering.** There is an XFCE desktop on `DISPLAY=:1` (TigerVNC) that the computer-use tooling drives. WebKitGTK renders blank under this headless/VNC GPU stack unless you disable hardware acceleration. Export these before launching: `DISPLAY=:1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1`. Without them the window opens but stays black.
+
+- **Organizer works headlessly, no permissions needed.** The Ghost Organizer wedge (Zone → Scan → Approve → Organize → Audit → Undo) operates purely on the local filesystem and does not need macOS Accessibility/Input Monitoring grants, so it is the reliable end-to-end flow to exercise on Linux. Record/Replay uses the `platform/headless.rs` backend on Linux (no real input capture).
+
+- **Frontend Node test must target the file, not the dir.** Run `node --test src/compression-review.test.mjs`. `node --test src/` fails with `MODULE_NOT_FOUND` because of how the sibling module is imported.
+
+- **Experimental surface is off by default.** Add `--features experimental` to build/run the AI/Power BI/MCP-relay code; CI does not exercise it.
