@@ -39,6 +39,9 @@ dev:
 ax-helper:
 	bash scripts/build-ghost-ax-helper.sh
 
+icons:
+	bash scripts/generate-brand-icons.sh
+
 clean:
 	cargo clean
 

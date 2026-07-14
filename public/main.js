@@ -73,7 +73,7 @@ function revealOnScroll() {
 /* ---------- ghost cursor-tracking eyes ---------- */
 function setupGhostEyes() {
   if (reduce.matches) return;
-  const pupils = $$("[data-eye]");
+  const pupils = $$("[data-eye], .ghost-eye");
   if (!pupils.length) return;
   let raf = null;
   let mx = 0;

@@ -32,8 +32,8 @@ func respond(_ resp: AXResponse) {
     FileHandle.standardOutput.write("\n".data(using: .utf8)!)
 }
 
-func fail(_ detail: String, count: UInt32? = nil) {
-    respond(AXResponse(ok: false, detail: detail, match_count: count, fingerprint: nil, value: nil))
+func fail(_ detail: String, count: UInt32? = nil, fingerprint: String? = nil, value: String? = nil) {
+    respond(AXResponse(ok: false, detail: detail, match_count: count, fingerprint: fingerprint, value: value))
 }
 
 func ok(_ detail: String, count: UInt32? = nil, fingerprint: String? = nil, value: String? = nil) {
