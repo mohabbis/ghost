@@ -156,8 +156,13 @@ pub fn search(db: &Db, query: &str, opts: &SearchOptions) -> anyhow::Result<Vec<
         .collect())
 }
 
-/// The memories directly linked to `id`, each with the link weight, strongest
-/// first. Used to walk the graph out from a starting note.
+/// The live memories directly linked to `id`, each with the link weight,
+/// strongest first. Used to walk the graph out from a starting note.
+///
+/// Archived ("soft-forgotten") neighbors are omitted, mirroring [`search`]'s
+/// default: the edge itself is preserved in storage (nothing is deleted), but a
+/// memory the user has forgotten is not resurfaced by walking the graph.
+/// [`unarchive_memory`] restores it to the walk.
 pub fn neighbors(db: &Db, id: &str) -> anyhow::Result<Vec<(Memory, f32)>> {
     let read_txn = db.db.begin_read()?;
     let links_table = read_txn.open_table(LINKS)?;
@@ -169,7 +174,11 @@ pub fn neighbors(db: &Db, id: &str) -> anyhow::Result<Vec<(Memory, f32)>> {
         let link: MemoryLink = serde_json::from_str(v.value())?;
         if let Some(other) = link.other(id) {
             if let Some(m) = mem_table.get(other)? {
-                out.push((serde_json::from_str::<Memory>(m.value())?, link.weight));
+                let mem: Memory = serde_json::from_str(m.value())?;
+                if mem.archived {
+                    continue;
+                }
+                out.push((mem, link.weight));
             }
         }
     }
@@ -328,6 +337,44 @@ mod tests {
         assert_eq!(neigh.len(), 1);
         assert_eq!(neigh[0].0.id, second.memory.id);
         assert!(neigh[0].1 > 0.0);
+    }
+
+    #[test]
+    fn neighbors_excludes_archived_and_restores_on_unarchive() {
+        let db = open_in_memory().unwrap();
+        let a = add_memory(
+            &db,
+            "ghost organizer release plan",
+            vec![],
+            MemorySource::Manual,
+        )
+        .unwrap();
+        let b = add_memory(
+            &db,
+            "ghost organizer release checklist",
+            vec![],
+            MemorySource::Manual,
+        )
+        .unwrap();
+        // The two related notes auto-link, so each is the other's neighbor.
+        assert_eq!(b.links.len(), 1, "related notes should link");
+        assert_eq!(neighbors(&db, &a.memory.id).unwrap().len(), 1);
+
+        // Forgetting B removes it from A's neighbor walk — a soft-forgotten memory
+        // must not be resurfaced through the graph, matching search's default.
+        assert!(archive_memory(&db, &b.memory.id).unwrap());
+        assert!(
+            neighbors(&db, &a.memory.id).unwrap().is_empty(),
+            "archived neighbor must not surface in the walk"
+        );
+
+        // The edge was never deleted: unarchiving restores B to the walk.
+        assert!(unarchive_memory(&db, &b.memory.id).unwrap());
+        assert_eq!(
+            neighbors(&db, &a.memory.id).unwrap().len(),
+            1,
+            "unarchiving must restore the neighbor"
+        );
     }
 
     #[test]
