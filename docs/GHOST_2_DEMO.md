@@ -64,9 +64,10 @@ make ax-helper
 export GHOST_AX_HELPER="$(pwd)/native/macos/ghost-ax-helper"
 ```
 
-Operations: `resolve_target`, `activate_element`, `set_value`, `verify_element`, `enumerate_children`, `permission_status`, `frontmost_app`.
+Operations: `resolve_target`, `list_matches`, `activate_element`, `set_value`, `verify_element`, `enumerate_children`, `permission_status`, `frontmost_app`.
 
 Ambiguous matches are refused. Stale target fingerprints are rejected at execution time.
+`list_matches` is the read-only exception: it enumerates every candidate element (fingerprint + value) so an ambiguous target can be inspected and disambiguated before an action is approved — it mutates nothing.
 
 ### Real Mac validation (required before claiming demo-complete)
 
