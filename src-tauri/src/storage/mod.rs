@@ -11,6 +11,7 @@
 use redb::Database;
 use std::path::PathBuf;
 
+pub mod atlas;
 pub mod executions;
 pub mod migrations;
 pub mod milestones;
@@ -64,6 +65,7 @@ fn init_tables(database: &Database) -> anyhow::Result<()> {
     milestones::init(&write_txn)?;
     executions::init(&write_txn)?;
     replay_runs::init(&write_txn)?;
+    atlas::init(&write_txn)?;
     write_txn.commit()?;
     Ok(())
 }
