@@ -15,7 +15,10 @@ fn scratch_dir() -> PathBuf {
         .as_nanos();
     let path = std::env::temp_dir().join(format!("ghost2_test_{nanos}"));
     fs::create_dir_all(&path).unwrap();
-    path
+    // Resolve symlinks (macOS `temp_dir()` is `/var/...` -> `/private/var/...`)
+    // so the FolderRule path matches the canonicalized paths the planner emits;
+    // otherwise zone containment rejects every file and the plan is empty.
+    path.canonicalize().unwrap()
 }
 
 fn full_rule(path: &std::path::Path) -> FolderRule {
