@@ -30,7 +30,7 @@ undo in Rust.
 
 ## Build and run
 
-From the repository root on macOS 14 or newer:
+From the repository root on macOS 26 or newer:
 
 ```bash
 ./script/build_and_run.sh

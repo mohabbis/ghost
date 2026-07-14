@@ -2,7 +2,7 @@
 
 This additive change introduces:
 
-- a SwiftUI macOS 14+ application under `apps/macos`;
+- a SwiftUI macOS 26+ application under `apps/macos`;
 - a versioned local Rust bridge binary under `src-tauri/src/bin`;
 - a complete Organizer workflow through receipt and undo;
 - signed plan-bound approval tokens and server-side replanning;
