@@ -2,7 +2,9 @@
 // GhostAXHelper — macOS Accessibility semantic automation helper (Ghost 2.0).
 // Build: make ax-helper  (or bash scripts/build-ghost-ax-helper.sh)
 // Bundled via Tauri externalBin as Ghost.app/Contents/MacOS/ghost-ax-helper
-// Protocol: one JSON object per line on stdin → one JSON object per line on stdout.
+// Protocol: one JSON request object on stdin → one JSON response object on stdout.
+// Ops: permission_status, frontmost_app, resolve_target, list_matches,
+//      activate_element, set_value, verify_element, enumerate_children.
 
 import Foundation
 import AppKit
@@ -248,6 +250,22 @@ case "verify_element":
                 ok("verified \(m.fp)", fingerprint: m.fp, value: observed)
             }
         }
+    }
+
+case "list_matches":
+    // Read-only inspection: enumerate every element that satisfies the
+    // app/role/title query, with each candidate's fingerprint and value.
+    // Unlike resolve_target this never refuses on ambiguity — it is the
+    // "Inspect" step callers use to disambiguate before approving an action.
+    let matches = resolve(req: req)
+    if matches.isEmpty {
+        fail("no matching element", count: 0)
+    } else {
+        let listing = matches.prefix(50).enumerated().map { idx, m -> String in
+            let value = readValue(m) ?? ""
+            return value.isEmpty ? "[\(idx)] \(m.fp)" : "[\(idx)] \(m.fp) = \(value)"
+        }.joined(separator: " ;; ")
+        ok("matches: \(listing)", count: UInt32(matches.count))
     }
 
 case "enumerate_children":
