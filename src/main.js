@@ -3814,12 +3814,12 @@ async function organizerScan() {
     if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
   if (actionPlan) organizerRenderActionPlan(actionPlan);
+  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
   if (result) {
     result.innerHTML = organizerHasReviewedPlan
       ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed.</p>`
       : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
   }
-  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
   organizerUpdateButtons(await safeRules(zone.id));
   if (!organizerHasReviewedPlan) {
     showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");

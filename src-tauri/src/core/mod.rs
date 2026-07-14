@@ -1,6 +1,7 @@
 //! Core module for platform-agnostic input handling.
 
 pub mod ai;
+pub mod atlas;
 pub mod cloud;
 pub mod compress;
 pub mod compression;

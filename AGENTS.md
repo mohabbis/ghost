@@ -240,6 +240,31 @@ install either, so this is not a repo-wide default):
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]  # or mold, if installed
 ```
 
+## Cursor Cloud specific instructions
+
+The Cloud VM is Linux x86_64. Rust stable (via `rust-toolchain.toml`), the Tauri
+CLI, and all system libs are preinstalled by the environment; the startup update
+script only refreshes crate deps (`cargo fetch`) and ensures the Tauri CLI is
+present. Standard commands are already documented above (`README.md`, `Makefile`,
+`## Validation`) — use those. Only the non-obvious Linux gotchas are captured here:
+
+- **Running the desktop app in dev mode:** `cargo tauri dev` fails with
+  "`cargo run` could not determine which binary to run" because the crate exposes
+  multiple bins (`ghost`, `diagnose_perms`, and gated `mcp_relay_server`) and sets
+  no `default-run`. Pass the bin through to the runner:
+  `cargo tauri dev -- --bin ghost` (Makefile's `make dev` hits the same ambiguity).
+  `cargo tauri build --no-bundle` is unaffected (it builds all bins).
+- **GUI testing:** an X11 display is available at `DISPLAY=:1`. The app renders
+  there via `webkit2gtk` with software rendering; `libEGL warning: DRI3 ...`
+  messages are harmless. Ghost's macOS/Windows input capture/replay is unavailable
+  on Linux (only `platform/headless.rs` compiles), but the Ghost Organizer flow
+  (Zone -> add folder -> Scan & Preview -> Approve & Organize -> History -> Undo)
+  works fully and is the best end-to-end smoke test. The Organizer requires
+  creating a Zone and adding the target folder before Scan & Preview is meaningful.
+- **Extra system dep vs. CI:** beyond the GTK/webkit libs listed above, a bare VM
+  also needs `libssl-dev` + `pkg-config` (for `openssl-sys`). GitHub's CI runners
+  ship these preinstalled, so they are absent from `rust.yml`'s apt list.
+
 ## Final response expectations
 
 When reporting work back to the user, include:
@@ -250,3 +275,19 @@ When reporting work back to the user, include:
 - known risks or follow-up work.
 
 Do not claim checks, builds, releases, signing, notarization, or installer validation unless they actually happened.
+
+## Cursor Cloud specific instructions
+
+This section captures non-obvious caveats for running Ghost inside a Cursor Cloud VM (Ubuntu 24.04, no macOS/Windows). Standard build/test/lint commands are already documented above (see "Validation") and in the `Makefile`/`README.md` — use those; only the caveats below are cloud-specific.
+
+- **Toolchain is pre-provisioned by the startup update script.** Rust stable (pinned by `rust-toolchain.toml`), `cargo-tauri` (installed via `cargo install tauri-cli`), the Linux GTK/WebKit system libs (`libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev`), and `libssl-dev`/`pkg-config` are baked into the VM image. `libssl-dev` is required even for a default (non-experimental) build because a transitive dependency pulls `openssl-sys`. If a build fails on missing GTK/WebKit/openssl, re-run the corresponding `apt-get install`.
+
+- **Running the app needs an explicit binary.** The crate ships three binaries (`ghost`, `diagnose_perms`, `mcp_relay_server`) and has no `default-run`, so plain `cargo tauri dev` / `make dev` fails with "could not determine which binary to run". Launch the desktop app with `cargo tauri dev -- --bin ghost` (the args after `--` are forwarded to the cargo runner).
+
+- **GUI runs on the VNC desktop with software rendering.** There is an XFCE desktop on `DISPLAY=:1` (TigerVNC) that the computer-use tooling drives. WebKitGTK renders blank under this headless/VNC GPU stack unless you disable hardware acceleration. Export these before launching: `DISPLAY=:1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1`. Without them the window opens but stays black.
+
+- **Organizer works headlessly, no permissions needed.** The Ghost Organizer wedge (Zone → Scan → Approve → Organize → Audit → Undo) operates purely on the local filesystem and does not need macOS Accessibility/Input Monitoring grants, so it is the reliable end-to-end flow to exercise on Linux. Record/Replay uses the `platform/headless.rs` backend on Linux (no real input capture).
+
+- **Frontend Node test must target the file, not the dir.** Run `node --test src/compression-review.test.mjs`. `node --test src/` fails with `MODULE_NOT_FOUND` because of how the sibling module is imported.
+
+- **Experimental surface is off by default.** Add `--features experimental` to build/run the AI/Power BI/MCP-relay code; CI does not exercise it.
