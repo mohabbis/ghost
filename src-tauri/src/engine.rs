@@ -210,6 +210,11 @@ impl GhostEngine {
         Arc::clone(&self.accounts)
     }
 
+    /// Access the opt-in performance monitor (for `ScopedTimer` around commands).
+    pub fn perf(&self) -> &PerformanceMonitor {
+        &self.perf
+    }
+
     /// Record a one-shot approval for the given event fingerprint (TTL-bound).
     pub fn store_routine_approval(&self, fingerprint: String) {
         *self.routine_approval.lock().unwrap() = Some(PendingRoutineApproval {
@@ -618,8 +623,6 @@ impl GhostEngine {
 
     /// List all saved workflows with parallel directory scanning.
     pub fn list_workflows() -> anyhow::Result<Vec<String>> {
-        use std::fs;
-
         let data_dir = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
 
@@ -636,14 +639,16 @@ impl GhostEngine {
                 entry.ok().and_then(|e| {
                     let path = e.path();
                     if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
+                        path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
                     } else {
                         None
                     }
                 })
             })
             .collect();
-        
+
         // Sort for deterministic ordering
         workflows.sort();
 
