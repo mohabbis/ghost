@@ -395,6 +395,24 @@ function togglePasswordVisibility(btn) {
   input.focus();
 }
 
+// Show a Caps Lock warning under a password field while it has focus. Uses the
+// key event's modifier state, so it only reflects the real OS state — nothing
+// about the typed value is read or stored.
+function attachCapsWarning(inputId, warnId) {
+  const input = document.getElementById(inputId);
+  const warn = document.getElementById(warnId);
+  if (!input || !warn) return;
+  const sync = (e) => {
+    const on = typeof e.getModifierState === "function" && e.getModifierState("CapsLock");
+    warn.hidden = !on;
+  };
+  input.addEventListener("keydown", sync);
+  input.addEventListener("keyup", sync);
+  input.addEventListener("blur", () => {
+    warn.hidden = true;
+  });
+}
+
 // Cheap, local-only strength estimate (0–3) for the setup step. Never leaves
 // the device; it only nudges the user toward a stronger local unlock password.
 function passwordStrengthScore(pw) {
@@ -554,6 +572,16 @@ function showOnboardingStep(n) {
   // (e.g. user re-runs the tour after setting one up).
   if (n === ONBOARDING_PASSWORD_STEP && authStatus.configured) {
     showOnboardingStep(n + 1);
+    return;
+  }
+
+  // Move focus to the step's primary control so the flow is keyboard-friendly:
+  // the password field on the setup step, otherwise the primary button.
+  const active = document.querySelector(`.onboarding__step[data-step="${n}"]:not([hidden])`);
+  if (active) {
+    const target =
+      active.querySelector("input.auth-input") || active.querySelector(".btn--primary");
+    if (target) requestAnimationFrame(() => target.focus());
   }
 }
 
@@ -4755,6 +4783,11 @@ function wireUpControls() {
       if (e.key === "Enter") onboardingSetPassword();
     });
   }
+
+  // Caps Lock warnings on every password field (lock screen + setup).
+  attachCapsWarning("lockPassword", "lockCaps");
+  attachCapsWarning("setupPassword", "setupCaps");
+  attachCapsWarning("setupPasswordConfirm", "setupCaps");
 
   // Onboarding navigation: welcome → how-it-helps → permissions → password → ready.
   // Every step offers a way to ignore (skip), accept, or keep going.

@@ -539,6 +539,7 @@
           <button type="button" class="auth-field__toggle" data-toggle-password="lockPassword"
                   aria-label="Show password" aria-pressed="false">Show</button>
         </div>
+        <p class="auth-caps" id="lockCaps" role="status" hidden>Caps Lock is on</p>
         <p class="onboarding__note auth-error" id="lockError" hidden>Wrong password — try again.</p>
         <div class="onboarding__actions">
           <button class="btn btn--primary" id="unlockBtn" type="button">Unlock</button>
@@ -659,6 +660,7 @@
             <div class="auth-strength__bar"><span class="auth-strength__fill"></span></div>
             <span class="auth-strength__label"></span>
           </div>
+          <p class="auth-caps" id="setupCaps" role="status" hidden>Caps Lock is on</p>
           <div class="auth-field">
             <input type="password" id="setupPasswordConfirm" class="auth-input"
                    placeholder="Confirm password" autocomplete="new-password"
