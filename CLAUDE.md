@@ -132,7 +132,7 @@ Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 Current structure:
 
 ```text
-src/                    # Tauri desktop frontend (vanilla JS/HTML/CSS, no bundler; main.js holds most UI logic; compression-review.js/.css is the split-out event-review timeline)
+src/                    # Tauri desktop frontend (ES-module JS/HTML/CSS, bundled by Vite; main.js holds most UI logic; compression-review.js/.css is the split-out event-review timeline; src/public/ holds pass-through static assets)
 apps/macos/             # Ghost 2.0 native macOS app (SwiftUI): App/, Views/, Features/, Services/, RustBridge/, AppKitBridge/ — UI only; all trust decisions stay in the Rust core over a JSON stdin/stdout bridge (docs/native-macos-preview.md)
 native/macos/           # GhostAXHelper.swift — read-only macOS Accessibility helper (list_matches op)
 public/                 # marketing/download site (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/; auto-deployed to Vercel by deploy-website.yml)
@@ -341,7 +341,7 @@ Makefile shortcuts exist for all of these: `make ci` runs fmt-check + clippy + t
 
 Notes:
 
-- there is no `package.json` and no frontend build step — `tauri.conf.json` serves `../src` directly, so frontend changes need no compile;
+- the frontend is bundled by **Vite** (`vite.config.js`, root `src/`): `npm run dev` serves it at `http://localhost:1420`, `npm run build` compiles the `execution/` TypeScript then emits a CSP-clean bundle to `dist/`, and `tauri.conf.json` points `frontendDist` at `../dist` with `beforeDevCommand`/`beforeBuildCommand` wired — so `cargo tauri build`/`dev` drive Vite automatically (CI installs Node + `npm ci` first). Keep the production CSP (`script-src 'self'`) intact: the Vite config disables the inline modulepreload polyfill so the bundle stays external-only;
 - local Linux builds need the GTK/webkit system deps listed in `AGENTS.md`; the `platform/headless.rs` backend is what Linux CI exercises;
 - CI (`rust.yml`) runs check/test/clippy on ubuntu/macos/windows, fmt on ubuntu, and a `cargo tauri build --no-bundle` smoke test on macos/windows — it does not run `--features experimental`;
 - `security.yml` runs separately (push/PR to main/develop + a weekly schedule): gitleaks secret scanning, `cargo audit`/`cargo deny check` (see `deny.toml`), and CodeQL. It does not gate PRs into `master` the way `rust.yml` does — don't assume it ran on your branch;

@@ -1,10 +1,16 @@
 {
   "name": "ghost-frontend",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build:execution": "tsc -p tsconfig.execution.json"
+    "dev": "vite",
+    "build:execution": "tsc -p tsconfig.execution.json",
+    "build": "npm run build:execution && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.execution.json --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vite": "^7.1.0"
   }
 }
