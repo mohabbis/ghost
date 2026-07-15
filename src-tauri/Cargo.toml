@@ -23,12 +23,12 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
-reqwest = { version = "0.11", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-chrome = { version = "0.7", optional = true }
-image = "0.24"
+image = "0.25"
 ssim = "0.1"
 rusttype = "0.9"
 threadpool = "1.8"
