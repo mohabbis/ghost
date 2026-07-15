@@ -50,7 +50,7 @@ const GA_ROOT: u32 = 2;
 type HOOKPROC = unsafe extern "system" fn(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
 
 #[link(name = "user32")]
-extern "system" {
+unsafe extern "system" {
     fn SetWindowsHookExA(
         idHook: i32,
         lpfn: HOOKPROC,

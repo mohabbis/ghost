@@ -223,8 +223,15 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --all-targets
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo tauri build --no-bundle
+npm ci                        # frontend deps (Vite) — required before the build below
+cargo tauri build --no-bundle # runs beforeBuildCommand (npm run build -> Vite)
 ```
+
+The `src/` frontend is bundled by **Vite** (`vite.config.js`). `cargo tauri
+dev`/`build` invoke `npm run dev`/`npm run build` via `beforeDevCommand`/
+`beforeBuildCommand`, so `node`/`npm` and a one-time `npm install` are
+prerequisites even for a Rust-only change. CI runs `npm ci` before every
+`cargo tauri build`.
 
 If the environment cannot run checks, say that plainly and leave a validation note.
 

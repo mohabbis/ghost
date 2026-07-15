@@ -52,8 +52,9 @@ the machine by itself.
 ## 2. Architecture at a glance
 
 ```
-src/                    Desktop app frontend — vanilla JS/HTML/CSS, NO bundler.
-                        tauri.conf.json serves ../src directly; main.js holds the UI logic.
+src/                    Desktop app frontend — ES-module JS/HTML/CSS, bundled by Vite.
+                        cargo tauri dev/build drive Vite (before*Command); output -> dist/.
+                        main.js holds the UI logic; src/public/ holds static assets.
 public/                 Marketing site (static, in-browser demos), auto-deployed to Vercel.
 src-tauri/src/          Rust backend (the real product logic).
 docs/                   Planning + technical docs (this file lives here).
