@@ -533,8 +533,12 @@
         <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-lock"/></svg></span>
         <h2 id="lock-title">Ghost is locked</h2>
         <p class="onboarding__lead">Enter your password to unlock your workflows.</p>
-        <input type="password" id="lockPassword" class="auth-input" placeholder="Password"
-               autocomplete="current-password" aria-label="Password" />
+        <div class="auth-field">
+          <input type="password" id="lockPassword" class="auth-input" placeholder="Password"
+                 autocomplete="current-password" aria-label="Password" />
+          <button type="button" class="auth-field__toggle" data-toggle-password="lockPassword"
+                  aria-label="Show password" aria-pressed="false">Show</button>
+        </div>
         <p class="onboarding__note auth-error" id="lockError" hidden>Wrong password — try again.</p>
         <div class="onboarding__actions">
           <button class="btn btn--primary" id="unlockBtn" type="button">Unlock</button>
@@ -644,12 +648,24 @@
             Add a <strong>local unlock password</strong> so workflows stay encrypted at rest
             (Argon2id + AES-256-GCM). Nothing is uploaded. You can skip — Organizer still works.
           </p>
-          <input type="password" id="setupPassword" class="auth-input"
-                 placeholder="Password (min 8 characters)" autocomplete="new-password"
-                 aria-label="New password" />
-          <input type="password" id="setupPasswordConfirm" class="auth-input"
-                 placeholder="Confirm password" autocomplete="new-password"
-                 aria-label="Confirm new password" />
+          <div class="auth-field">
+            <input type="password" id="setupPassword" class="auth-input"
+                   placeholder="Password (min 8 characters)" autocomplete="new-password"
+                   aria-label="New password" />
+            <button type="button" class="auth-field__toggle" data-toggle-password="setupPassword"
+                    aria-label="Show password" aria-pressed="false">Show</button>
+          </div>
+          <div class="auth-strength" id="setupPasswordStrength" data-score="0" hidden>
+            <div class="auth-strength__bar"><span class="auth-strength__fill"></span></div>
+            <span class="auth-strength__label"></span>
+          </div>
+          <div class="auth-field">
+            <input type="password" id="setupPasswordConfirm" class="auth-input"
+                   placeholder="Confirm password" autocomplete="new-password"
+                   aria-label="Confirm new password" />
+            <button type="button" class="auth-field__toggle" data-toggle-password="setupPasswordConfirm"
+                    aria-label="Show password" aria-pressed="false">Show</button>
+          </div>
           <p class="onboarding__note auth-error" id="setupPasswordError" hidden></p>
           <p class="onboarding__note">
             There is no recovery if you forget it — the password never leaves your device.
