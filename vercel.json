@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "echo 'Ghost marketing site is static — no build step.'",
+  "installCommand": "echo 'No dependencies to install for the marketing site.'",
+  "outputDirectory": "public"
+}
