@@ -380,28 +380,103 @@ function showLockScreen() {
   }
 }
 
+// Flip a password field between masked and visible, keeping the toggle's label
+// and pressed state in sync. Shared by the lock screen and the setup step.
+function togglePasswordVisibility(btn) {
+  const targetId = btn?.dataset?.togglePassword;
+  if (!targetId) return;
+  const input = document.getElementById(targetId);
+  if (!input) return;
+  const reveal = input.type === "password";
+  input.type = reveal ? "text" : "password";
+  btn.textContent = reveal ? "Hide" : "Show";
+  btn.setAttribute("aria-pressed", reveal ? "true" : "false");
+  btn.setAttribute("aria-label", reveal ? "Hide password" : "Show password");
+  input.focus();
+}
+
+// Cheap, local-only strength estimate (0–3) for the setup step. Never leaves
+// the device; it only nudges the user toward a stronger local unlock password.
+function passwordStrengthScore(pw) {
+  if (!pw || pw.length < 8) return 0;
+  let variety = 0;
+  if (/[a-z]/.test(pw)) variety += 1;
+  if (/[A-Z]/.test(pw)) variety += 1;
+  if (/[0-9]/.test(pw)) variety += 1;
+  if (/[^A-Za-z0-9]/.test(pw)) variety += 1;
+  if (pw.length >= 14 && variety >= 3) return 3;
+  if (pw.length >= 11 && variety >= 2) return 2;
+  return 1;
+}
+
+// Live feedback under the setup password field: strength plus a match hint.
+function updateSetupPasswordStrength() {
+  const meter = document.getElementById("setupPasswordStrength");
+  if (!meter) return;
+  const pw = document.getElementById("setupPassword")?.value ?? "";
+  const confirm = document.getElementById("setupPasswordConfirm")?.value ?? "";
+  if (!pw) {
+    meter.hidden = true;
+    return;
+  }
+  meter.hidden = false;
+  const score = passwordStrengthScore(pw);
+  meter.dataset.score = String(score);
+  const label = meter.querySelector(".auth-strength__label");
+  if (label) {
+    const words = ["Too short", "Weak", "Good", "Strong"];
+    let text = words[score];
+    if (confirm && confirm !== pw) text += " · passwords don't match yet";
+    else if (confirm && confirm === pw && pw.length >= 8) text += " · passwords match";
+    label.textContent = text;
+  }
+}
+
 async function tryUnlock() {
   if (!invoke) return;
   const input = document.getElementById("lockPassword");
   const error = document.getElementById("lockError");
+  const btn = document.getElementById("unlockBtn");
+  const card = input?.closest(".onboarding__card");
   const password = input?.value ?? "";
+
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.label = btn.dataset.label || btn.textContent;
+    btn.textContent = "Unlocking…";
+  }
+  const restoreBtn = () => {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.label || "Unlock";
+    }
+  };
 
   try {
     const ok = await invoke("auth_unlock", { password });
     if (!ok) {
       if (error) error.hidden = false;
+      if (card) {
+        card.classList.remove("auth-shake");
+        // Force reflow so the animation restarts on repeated wrong tries.
+        void card.offsetWidth;
+        card.classList.add("auth-shake");
+      }
       if (input) {
         input.value = "";
         input.focus();
       }
+      restoreBtn();
       return;
     }
   } catch (err) {
     console.error("Unlock failed:", err);
     toastError("Unlock failed: " + formatInvokeError(err));
+    restoreBtn();
     return;
   }
 
+  restoreBtn();
   if (error) error.hidden = true;
   const overlay = document.getElementById("lock-screen");
   if (overlay) overlay.hidden = true;
@@ -4660,6 +4735,24 @@ function wireUpControls() {
   if (lockPassword) {
     lockPassword.addEventListener("keydown", (e) => {
       if (e.key === "Enter") tryUnlock();
+    });
+  }
+
+  // Show/Hide toggles for every masked password field (lock screen + setup).
+  document.body.addEventListener("click", (e) => {
+    const toggle = e.target.closest("[data-toggle-password]");
+    if (toggle) togglePasswordVisibility(toggle);
+  });
+
+  // Live strength + match feedback while choosing a setup password. Enter on the
+  // confirm field submits, matching the lock screen's behavior.
+  const setupPassword = document.getElementById("setupPassword");
+  const setupPasswordConfirm = document.getElementById("setupPasswordConfirm");
+  if (setupPassword) setupPassword.addEventListener("input", updateSetupPasswordStrength);
+  if (setupPasswordConfirm) {
+    setupPasswordConfirm.addEventListener("input", updateSetupPasswordStrength);
+    setupPasswordConfirm.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") onboardingSetPassword();
     });
   }
 

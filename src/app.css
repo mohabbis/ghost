@@ -523,6 +523,93 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   color: #ef4444;
 }
 
+/* Password field with an inline Show/Hide toggle. */
+.auth-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-field .auth-input {
+  padding-right: 64px;
+}
+
+.auth-field__toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #7b8794);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.auth-field__toggle:hover {
+  color: var(--accent-strong, #0e8f78);
+  background: rgba(14, 143, 120, 0.08);
+}
+
+.auth-field__toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--accent-strong, #0e8f78);
+}
+
+/* Live password-strength meter (setup step only). */
+.auth-strength {
+  margin: 2px 0 8px;
+}
+
+.auth-strength__bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border, #d8dee4);
+  overflow: hidden;
+}
+
+.auth-strength__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: #ef4444;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.auth-strength[data-score="1"] .auth-strength__fill { width: 33%; background: #ef4444; }
+.auth-strength[data-score="2"] .auth-strength__fill { width: 66%; background: #f59e0b; }
+.auth-strength[data-score="3"] .auth-strength__fill { width: 100%; background: #10b981; }
+
+.auth-strength__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--muted, #7b8794);
+}
+
+/* Wrong-password shake on the lock screen. */
+@keyframes auth-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.auth-shake {
+  animation: auth-shake 0.32s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-shake { animation: none; }
+  .auth-strength__fill { transition: none; }
+}
+
 /* ===== Demo polish pass ===== */
 .app-body {
   background:

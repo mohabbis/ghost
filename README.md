@@ -108,7 +108,7 @@ Still being hardened:
 | macOS 12+ (Apple Silicon + Intel) | [Ghost.dmg](https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg) |
 | Windows 10 / 11 (64-bit) | [Ghost_Setup.exe](https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe) |
 
-Latest release in this repo is **v2.0.0** (Ghost 2.0 unified runtime). Published installers on GitHub may lag until the next release is cut — build from source for the newest behavior. macOS installers are Developer ID–signed and notarized when published; Windows installers may be unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
+Latest release in this repo is **v2.0.1** (Ghost 2.0 unified runtime). Published installers on GitHub may lag until the next release is cut — build from source for the newest behavior. macOS installers are Developer ID–signed and notarized when published; Windows installers may be unsigned (SmartScreen may warn). Verify downloads with [`SHA256SUMS.txt`](https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt). See `RELEASING.md`.
 
 Ghost includes a user-approved auto-updater that never installs silently. The updater signing key is embedded in `v1.2.9+` builds (macOS ships `.app.tar.gz` + `.sig`); `latest.json` publishes with this release. Older `v1.2.7`/`v1.2.8` installers will not offer updates until users install `v1.2.9` or newer. See [`docs/auto-update.md`](docs/auto-update.md).
 
