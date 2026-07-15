@@ -1,9 +1,17 @@
-```
 # Dependencies
 node_modules/
+
+# Rust / Cargo
 target/
-target/
-**/Cargo.lock
+**/target/
+*.rs.bk
+
+# Frontend build output (Vite)
+dist/
+
+# GhostAXHelper sidecar binaries (built by scripts/build-ghost-ax-helper.sh)
+src-tauri/bin/ghost-ax-helper-*
+native/macos/ghost-ax-helper
 
 # Logs and temp files
 *.log
@@ -13,6 +21,7 @@ target/
 .env
 .env.local
 *.env.*
+.envrc
 
 # Editors
 .vscode/
@@ -26,15 +35,7 @@ __pycache__/
 .Python
 venv/
 .venv/
-.envrc
 
-# Rust/Cargo (from Tauri project)
-Cargo.lock
-*.rs.bk
-**/target/
-
-# OS
 # OS generated files
 .DS_Store
 Thumbs.db
-```
