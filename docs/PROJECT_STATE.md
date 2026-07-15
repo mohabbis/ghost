@@ -1,5 +1,18 @@
 # Ghost — Technical State of the Project
 
+> **⚠️ Historical snapshot (v1.2.9, 2026-07-13).** The repo has since moved to
+> **Ghost 2.0** (`Cargo.toml` @ `2.0.2`), which converges Organizer, Routines,
+> and MCP onto one **Action Plan** runtime (`action_plan/` + `runtime/`,
+> `Capture → Review → Approve → Execute → Verify → Recover`), added replay
+> WAL/undo (`replay_undo`), a stable MCP pairing/approval surface, Ghost Atlas
+> (`core/atlas.rs`, local lexical semantic memory), and a native macOS SwiftUI
+> app (`apps/macos`). It also closed §8's Routines-undo gap via the Action Plan
+> runtime. **Release note:** the newest *published* GitHub release is still
+> **v1.2.9** — v2.0.x is merged to `master` but not cut as a public installer.
+> For current architecture see `CLAUDE.md`, `docs/GHOST_2_DEMO.md`, and
+> `docs/native-macos-preview.md`; the sections below describe the v1.2.9 core,
+> which remains accurate for the Organizer trust pipeline.
+>
 > Snapshot for context (as of 2026-07-13, `master` @ latest, **v1.2.9**).
 > Audience: engineers picking this up to push it to a YC-submission bar.
 > Everything below is grounded in the actual code in this repo — file paths and
