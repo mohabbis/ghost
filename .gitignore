@@ -1,3 +1,37 @@
-```css
+```
+# Dependencies
+node_modules/
+target/
 
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+.envrc
+
+# Rust/Cargo (from Tauri project)
+Cargo.lock
+*.rs.bk
+**/target/
+
+# OS
+.DS_Store
+Thumbs.db
 ```
