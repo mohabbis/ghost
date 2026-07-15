@@ -81,7 +81,7 @@ at rest. Keyboard and pointer are captured **only** while you explicitly record 
 
 ## Download
 
-Get the latest release for your platform:
+Current release line: **v2.0.4** (macOS notarized; Windows unsigned). Get the latest build for your platform:
 
 - **macOS** (Apple Silicon & Intel, macOS 12+) — [download the `.dmg`](https://github.com/mohabbis/ghost/releases/latest)
 - **Windows 10/11** — [download the installer](https://github.com/mohabbis/ghost/releases/latest)
