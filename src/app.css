@@ -523,6 +523,26 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   color: #ef4444;
 }
 
+/* Caps Lock warning shown while a password field has focus. */
+.auth-caps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 6px;
+  font-size: 0.74rem;
+  color: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  .auth-caps { color: #fbbf24; }
+}
+
+.auth-caps::before {
+  content: "⇪";
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
 /* Password field with an inline Show/Hide toggle. */
 .auth-field {
   position: relative;
