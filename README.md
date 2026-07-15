@@ -134,6 +134,10 @@ The command surface is intentionally classified by risk. Before changing Tauri c
 # Install Rust and Tauri CLI
 cargo install tauri-cli --version "^2.0" --locked
 
+# Install the frontend toolchain (Vite). Required before running/building the
+# app: cargo tauri dev/build invoke npm run dev/build via the Tauri hooks.
+npm install
+
 # Run the main gates
 make ci
 make check
