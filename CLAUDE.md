@@ -127,10 +127,14 @@ Organizer first. Routines second. Intelligence last.
 
 Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 
+**Version / release state (read first):** the repo is on **Ghost 2.0** (`src-tauri/Cargo.toml` + `tauri.conf.json` at `2.0.2`). Ghost 2.0 converges Organizer, Routines, and MCP onto one **Action Plan** runtime (`Capture → Review → Approve → Execute → Verify → Recover`; see `docs/GHOST_2_DEMO.md`, `docs/native-macos-preview.md`). Note the **release gap**: the newest *published* GitHub release is still **v1.2.9** — the v2.0.x code is merged to `master` but not cut as a public installer. Some state docs (`docs/PROJECT_STATE.md`, `docs/full-repo-audit-2026-07-13.md`) predate 2.0 and describe v1.2.9; treat them as historical for anything below.
+
 Current structure:
 
 ```text
 src/                    # Tauri desktop frontend (vanilla JS/HTML/CSS, no bundler; main.js holds most UI logic; compression-review.js/.css is the split-out event-review timeline)
+apps/macos/             # Ghost 2.0 native macOS app (SwiftUI): App/, Views/, Features/, Services/, RustBridge/, AppKitBridge/ — UI only; all trust decisions stay in the Rust core over a JSON stdin/stdout bridge (docs/native-macos-preview.md)
+native/macos/           # GhostAXHelper.swift — read-only macOS Accessibility helper (list_matches op)
 public/                 # marketing/download site (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/; auto-deployed to Vercel by deploy-website.yml)
 src-tauri/              # Rust backend
 docs/                   # planning and technical docs
@@ -149,12 +153,14 @@ src-tauri/src/
                          # accounts.rs: thin compatibility shim over identity/ (see below), independent of the vault password in auth.rs
   commands.rs            # thin registry/re-export over commands/
   commands/
-    core.rs              # stable automation, recording, replay (incl. get_replay_history), workflow storage, permissions, Ghost Guard audit, OCR, ID parsing
+    core.rs              # stable automation, recording, replay (incl. get_replay_history + replay WAL/undo: replay_check_unfinished_run/_dismiss_unfinished_run/replay_undo), workflow storage, permissions, Ghost Guard audit, OCR, ID parsing
     auth.rs              # local password state and protection
     account.rs           # account_status/_sign_in/_sign_out: Microsoft/Google OAuth + PKCE sign-in (identity only, see docs/integrations-roadmap.md)
     compression.rs       # compress_workflow (event compression -> review timeline)
     diagnostics.rs       # config, telemetry export, performance, is_experimental_enabled
     organizer.rs         # organizer_plan/_execute/_list_executions/_undo, audit export, signed-report verify, policy pack import/export, audit-chain verify, time-to-value
+    runtime_cmds.rs      # Ghost 2.0 Action Plan runtime commands: action_plan_from_zone/_from_events/_demo, execute_action_plan, execute_routine_action_plan, get_execution_receipt, undo_action_plan_execution
+    mcp.rs               # STABLE MCP surface: mcp_pairing_status/_enable_pairing/_disable_pairing/_list_pending_approvals + organizer_issue_mcp_approval_token (HTTP server/relay commands are experimental-gated)
     filing.rs            # preview_file_filing / estimate_filing_savings (read-only, audience-aware filing preview: Finance/Student/Engineering)
     updates.rs           # updater surface
     intelligence.rs       # experimental (feature-gated): internal suggestion-only OpenAI/Anthropic planning providers
@@ -166,7 +172,9 @@ src-tauri/src/
   integrations/           # Layer B: business-system connectors, gated behind their own IntegrationGrant
     microsoft/            # mod.rs (grant checks + Power BI grant request), scopes.rs, fabric/ (stub), power_bi/ (real HTTP client + export.rs payload builder)
   intelligence/           # Layer C: internal suggestion-only AI providers (OpenAI/Anthropic), feature-gated
-  mcp/                    # tool/approval-token scaffolding for a future MCP server; no transport yet (docs/mcp-integration.md)
+  mcp/                    # Ghost's MCP surface: pairing.rs, approval.rs, pending.rs, token_store.rs, plan_hash.rs, tools.rs, handlers.rs, execute.rs (stable) + http.rs, server.rs, relay.rs, tls.rs (HTTP transport, experimental-gated). docs/mcp-integration.md, docs/mcp-relay.md
+  action_plan/            # Ghost 2.0: compile.rs/demo.rs/types.rs — compiles a Zone or recorded events into one reviewable, policy-evaluated Action Plan (the unified Organizer+Routines intent model)
+  runtime/                # Ghost 2.0 Action Plan runtime: execute.rs/fs.rs/semantic.rs/ui.rs/verify.rs/receipt.rs/persist.rs — approve → execute → verify → receipt → recover, over both file (Organizer) and semantic-UI (Routines) steps
   core/
     compress.rs          # deterministic text compression for LLM-bound content
     compression/         # deterministic event compression for workflow review
@@ -178,6 +186,7 @@ src-tauri/src/
     ocr.rs               # stable: local OCR (macOS Vision / Windows OCR) over user-supplied image bytes, no network
     oauth.rs             # thin compatibility re-export of identity/oauth/ for older imports — new code should import identity:: directly
     guard.rs             # Ghost Guard: keyboard-suppression heuristics + deterministic pre-replay/save workflow audit (docs/GHOST_GUARD.md)
+    atlas.rs             # Ghost Atlas: pure, deterministic local semantic-memory engine (lexical embeddings — NOT neural; no model, no network, no I/O). Persistence in storage/atlas.rs. docs/neural-atlas.md
     events.rs, security.rs, traits.rs, workflow_schema.rs, wait.rs
     ai.rs, cloud.rs, llm.rs, local_llm.rs, vision.rs, knowledge.rs   # experimental-facing
   platform/
@@ -185,7 +194,7 @@ src-tauri/src/
   policy/
     capability.rs, decision.rs, engine.rs, risk.rs, zone.rs
   storage/
-    mod.rs, zones.rs, executions.rs, milestones.rs   # redb-backed (pure Rust, no bundled C lib); milestones.rs: local-only first-touch timing (no network)
+    mod.rs, zones.rs, executions.rs, milestones.rs, atlas.rs   # redb-backed (pure Rust, no bundled C lib); milestones.rs: local-only first-touch timing (no network); atlas.rs: durable Atlas memory graph (never deletes — archival flips a flag)
     sqlite_import.rs      # one-time SQLite -> redb migration for pre-redb installs; renames (never deletes) the legacy ghost.db
     migrations.rs         # legacy-only: brings a pre-redb ghost.db up to its final SQLite schema before sqlite_import reads it
   organizer/
@@ -220,6 +229,16 @@ Also built: write-ahead durability for `organizer_execute`. `executor::execute_p
 Also built: Ghost Guard, the deterministic local safety layer (`core/guard.rs`, see `docs/GHOST_GUARD.md`). It suppresses keyboard capture after clicks into password/OTP/payment-shaped fields during recording, and the stable `ghost_guard_audit` / `ghost_guard_audit_compressed` commands run a pure local risk audit over raw events or the compressed semantic timeline (no network, no LLM) before replay/save. Routing compressed-step findings into the review-timeline UI remains follow-up work.
 
 Also built: stable on-device OCR and ID-document parsing. `run_ocr_on_image` (`core/ocr.rs`) runs local OCR (macOS Vision / Windows OCR) over user-supplied image bytes with no network; `parse_id_document` (`core/id_scan.rs`) is a pure text-in/struct-out parser over that OCR'd text (age/expiry/review-flag signals, no image/IO/network). Both are stable core, not experimental — see `docs/core-boundaries.md`.
+
+Also built (Ghost 2.0): the unified **Action Plan runtime** (`action_plan/` + `runtime/`). `action_plan/compile.rs` compiles either a Zone (Organizer) or recorded events (Routines) into one reviewable, policy-evaluated `ActionPlan`; `runtime/` runs the same `Capture → Review → Approve → Execute → Verify → Recover` shape over both **file** steps (`runtime/fs.rs`, the Organizer trust pipeline) and **semantic-UI** steps (`runtime/semantic.rs`/`ui.rs`, preferring Accessibility `set_value` over coordinate typing), sealing an authoritative **execution receipt** (`runtime/receipt.rs`) and writing undo. Stable commands (`commands/runtime_cmds.rs`): `action_plan_from_zone`/`_from_events`/`_demo`, `execute_action_plan`, `execute_routine_action_plan`, `get_execution_receipt`, `undo_action_plan_execution`. This is how Routines reached Organizer-grade approve→execute→verify→undo; see `docs/GHOST_2_DEMO.md`. Bare-`Allow` app/window Zones and a routine vault are still follow-up.
+
+Also built: replay write-ahead durability + undo, mirroring Organizer's. Replay runs persist a WAL (`storage/replay_runs.rs`); `replay_check_unfinished_run` surfaces an interrupted routine on next load, and `replay_dismiss_unfinished_run` / `replay_undo` resolve it. `routine_policy_plan` maps compressed steps → `os_*` capabilities and `approve_routine_replay` + `replay_workflow` refuse a `Deny` and consume a one-shot server-issued approval token.
+
+Also built: the **MCP surface** (`mcp/`, `docs/mcp-integration.md`, `docs/mcp-relay.md`). Stable, always-registered: device **pairing** (`mcp_pairing_status`/`_enable_pairing`/`_disable_pairing`) and an **approval queue** (`mcp_list_pending_approvals`, `organizer_issue_mcp_approval_token`) — an external MCP client can propose an action but a plan-hash-bound (`mcp/plan_hash.rs`), single-use approval token must be issued locally before anything executes through the normal trust pipeline. The HTTP server and relay transport (`mcp/http.rs`, `server.rs`, `relay.rs`, `tls.rs`; commands `mcp_start_http_server`/`_stop_http_server`/`_http_server_status`/`_relay_status`) are **experimental-gated**, so a stock build exposes pairing/approval but no listening socket.
+
+Also built: **Ghost Atlas** (`core/atlas.rs` engine + `storage/atlas.rs` persistence, `docs/neural-atlas.md`) — a local, offline semantic-memory graph ported in concept from "Neural Atlas" but rebuilt for Ghost's trust model. Retrieval is **lexical** (character-trigram + word hashing, deterministic, reproducible) — **not** neural sentence-transformer semantics, and it must not be marketed as such (rule 10). No model download, no network, no ML runtime; "forgetting" is a reversible `archived` flag, never a delete. Commandless so far — any Tauri surface on it must still carry a module + risk class + policy + approval + audit/undo.
+
+Also built (Ghost 2.0): the **native macOS app** (`apps/macos`, SwiftUI) and `native/macos/GhostAXHelper.swift`. SwiftUI owns scenes/navigation/review/approval/receipts UI only; the existing Rust core keeps every trust decision (scan, plan, policy, approval validation, mutation, audit, WAL, receipt, undo) and the two talk over a versioned one-JSON-object-per-line stdin/stdout bridge (`handshake`/`scan`/`create_plan`/`approve`/`execute`/`receipt`/`undo`, approval tokens signed + single-use + 5-minute). This is an implementation scaffold/vertical slice, not a shipped surface — no v2.0.x public release exercises it yet. See `docs/native-macos-preview.md`.
 
 Also built (commandless): `checks/`, `compliance/`, `data_protection/`, `enterprise/`, `finance/`, `fraud/` are domain-model scaffolding for possible enterprise financial-operations work (playbooks/approvals/workflows, reconciliation/invoices, KYC/AML/retention, encryption/redaction/secure-delete, fraud rules/scoring/evidence, check/ID review packets). Per `docs/enterprise-financial-operations.md` these modules intentionally add **no Tauri commands, no background monitoring, no network calls, and no financial mutations** — most are still single-purpose stub files. Do not wire a command onto them without a playbook, risk class, policy check, approval step, audit/undo behavior, and an update to `docs/command-registry.md`, same as any other command.
 
@@ -281,6 +300,8 @@ Command modules (`src-tauri/src/commands.rs` is a thin registry over these):
 - `commands/compression.rs` for the `compress_workflow` event-compression command;
 - `commands/diagnostics.rs` for config, telemetry export, performance summaries, and `is_experimental_enabled`;
 - `commands/organizer.rs` for the Organizer plan/execute/history/undo surface, plus audit export, signed-report verify, policy pack import/export, audit-chain verify, and time-to-value;
+- `commands/runtime_cmds.rs` for the Ghost 2.0 Action Plan runtime (`action_plan_*`, `execute_action_plan`, `execute_routine_action_plan`, `get_execution_receipt`, `undo_action_plan_execution`);
+- `commands/mcp.rs` for the stable MCP pairing + approval-queue surface (`mcp_pairing_status`/`_enable_pairing`/`_disable_pairing`/`_list_pending_approvals`, `organizer_issue_mcp_approval_token`); the HTTP server/relay commands stay behind `--features experimental`;
 - `commands/filing.rs` for the audience-aware, read-only filing preview + savings estimate (`preview_file_filing`, `estimate_filing_savings`; audiences are Finance/Student/Engineering — see `src-tauri/src/filing/` and `docs/filing-profiles.md`);
 - `commands/updates.rs` for the updater;
 - `commands/intelligence.rs` (feature-gated) for internal suggestion-only OpenAI/Anthropic planning providers;
