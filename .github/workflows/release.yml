@@ -101,6 +101,9 @@ jobs:
           bash scripts/build-ghost-ax-helper.sh
           test -f src-tauri/bin/ghost-ax-helper-aarch64-apple-darwin
           test -f src-tauri/bin/ghost-ax-helper-x86_64-apple-darwin
+          # The universal build (--target universal-apple-darwin) consumes the
+          # -universal-apple-darwin sidecar; Tauri does not lipo it for us.
+          test -f src-tauri/bin/ghost-ax-helper-universal-apple-darwin
 
       - name: Build universal macOS DMG
         env:
