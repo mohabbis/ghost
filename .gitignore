@@ -2,6 +2,8 @@
 # Dependencies
 node_modules/
 target/
+target/
+**/Cargo.lock
 
 # Logs and temp files
 *.log
@@ -32,6 +34,7 @@ Cargo.lock
 **/target/
 
 # OS
+# OS generated files
 .DS_Store
 Thumbs.db
 ```
