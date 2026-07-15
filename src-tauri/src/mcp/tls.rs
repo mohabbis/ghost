@@ -1,7 +1,7 @@
 //! Load rustls server certificates for in-process TLS (experimental MCP HTTP).
 
-use rustls::pki_types::CertificateDer;
 use rustls::ServerConfig;
+use rustls::pki_types::CertificateDer;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;

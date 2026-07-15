@@ -87,15 +87,15 @@ fn helper_candidates() -> Vec<PathBuf> {
     if let Ok(path) = std::env::var("GHOST_AX_HELPER") {
         out.push(PathBuf::from(path));
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            // Tauri externalBin sidecar: Ghost.app/Contents/MacOS/ghost-ax-helper
-            out.push(dir.join("ghost-ax-helper"));
-            if dir.ends_with("MacOS") {
-                if let Some(contents) = dir.parent() {
-                    out.push(contents.join("Resources").join("ghost-ax-helper"));
-                }
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        // Tauri externalBin sidecar: Ghost.app/Contents/MacOS/ghost-ax-helper
+        out.push(dir.join("ghost-ax-helper"));
+        if dir.ends_with("MacOS")
+            && let Some(contents) = dir.parent()
+        {
+            out.push(contents.join("Resources").join("ghost-ax-helper"));
         }
     }
     out.extend([
@@ -216,13 +216,13 @@ pub fn resolve_target(target: &UiTarget) -> Result<ResolvedTarget, SemanticError
 }
 
 fn ensure_fresh(target: &UiTarget, resolved: &ResolvedTarget) -> Result<(), SemanticError> {
-    if let Some(expected) = &target.fingerprint {
-        if expected != &resolved.fingerprint {
-            return Err(SemanticError::StaleTarget {
-                expected: expected.clone(),
-                observed: resolved.fingerprint.clone(),
-            });
-        }
+    if let Some(expected) = &target.fingerprint
+        && expected != &resolved.fingerprint
+    {
+        return Err(SemanticError::StaleTarget {
+            expected: expected.clone(),
+            observed: resolved.fingerprint.clone(),
+        });
     }
     Ok(())
 }
@@ -305,9 +305,11 @@ mod tests {
     fn helper_candidates_include_dev_and_bundle_paths() {
         let candidates = helper_candidates();
         assert!(candidates.iter().any(|p| p.ends_with("ghost-ax-helper")));
-        assert!(candidates
-            .iter()
-            .any(|p| p.ends_with("native/macos/ghost-ax-helper")));
+        assert!(
+            candidates
+                .iter()
+                .any(|p| p.ends_with("native/macos/ghost-ax-helper"))
+        );
     }
 
     #[test]

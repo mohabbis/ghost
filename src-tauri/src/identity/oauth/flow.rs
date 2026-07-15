@@ -4,7 +4,7 @@ use crate::identity::types::{AccountIdentity, TokenMaterial};
 use serde::Deserialize;
 use std::net::TcpListener;
 
-use super::callback::{await_redirect, urlencoding_encode, CALLBACK_TIMEOUT};
+use super::callback::{CALLBACK_TIMEOUT, await_redirect, urlencoding_encode};
 use super::pkce::{constant_time_eq, pkce_pair, random_state};
 use super::provider::{OAuthProvider, REDIRECT_HOST};
 

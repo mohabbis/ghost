@@ -70,13 +70,13 @@ fn relocate(
         ));
     }
     if let Some(current) = FileIdentity::from_path(from) {
-        if let Some(expected) = expected_identity {
-            if !expected.matches(&current) {
-                return FsOutcome::Skipped(format!(
-                    "source file identity changed since plan (possible TOCTOU swap): {}",
-                    from.display()
-                ));
-            }
+        if let Some(expected) = expected_identity
+            && !expected.matches(&current)
+        {
+            return FsOutcome::Skipped(format!(
+                "source file identity changed since plan (possible TOCTOU swap): {}",
+                from.display()
+            ));
         }
     } else if expected_identity.is_some() {
         return FsOutcome::Skipped(format!(
@@ -84,13 +84,13 @@ fn relocate(
             from.display()
         ));
     }
-    if let Some(parent) = to.parent() {
-        if !parent.exists() {
-            return FsOutcome::Skipped(format!(
-                "target parent does not exist: {}",
-                parent.display()
-            ));
-        }
+    if let Some(parent) = to.parent()
+        && !parent.exists()
+    {
+        return FsOutcome::Skipped(format!(
+            "target parent does not exist: {}",
+            parent.display()
+        ));
     }
     if let Err(reason) = policy::verify_relocate_at_execution(from, to, rules, is_move) {
         return FsOutcome::Skipped(format!("canonical path check failed: {reason}"));

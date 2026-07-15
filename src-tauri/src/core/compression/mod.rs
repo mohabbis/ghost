@@ -30,7 +30,7 @@ mod tests;
 
 pub use compressor::{compress, compress_with_options};
 pub use types::{
-    ClickButton, ClickStep, CompressedStep, CompressionReport, CompressionWarning, ScrollDirection,
-    ScrollMagnitude, ScrollStep, ShortcutStep, Target, TypeTextStep, UnknownStep, WaitStep,
-    LOW_CONFIDENCE,
+    ClickButton, ClickStep, CompressedStep, CompressionReport, CompressionWarning, LOW_CONFIDENCE,
+    ScrollDirection, ScrollMagnitude, ScrollStep, ShortcutStep, Target, TypeTextStep, UnknownStep,
+    WaitStep,
 };

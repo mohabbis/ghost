@@ -311,9 +311,11 @@ mod tests {
             "Accounting/2026",
             &names(&["Trial Balance 2026-06.csv"]),
         );
-        assert!(preview.items[0]
-            .relative_dir
-            .starts_with("Accounting/2026/"));
+        assert!(
+            preview.items[0]
+                .relative_dir
+                .starts_with("Accounting/2026/")
+        );
     }
 
     #[test]

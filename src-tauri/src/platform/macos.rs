@@ -3,7 +3,7 @@
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::replay_support::{
-    self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+    self, ReplayProgress, check_continue, interruptible_sleep, pacing_gap_ms,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::vision;
@@ -81,7 +81,7 @@ const kAXValueCGPointType: u32 = 1;
 
 // External C functions (Core Graphics)
 #[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CGEventTapCreate(
         tap_place: CGEventTapId,
         place: u32,
@@ -115,7 +115,7 @@ type CFStringRef = *const c_void;
 
 // Accessibility external functions
 #[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn AXUIElementCopyElementAtPosition(
         application: AXUIElementRef,
         x: f32,
@@ -135,7 +135,7 @@ extern "C" {
 
 // Core Foundation external functions
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CFMachPortCreateRunLoopSource(
         allocator: CFAllocatorRef,
         port: CFMachPortRef,
@@ -171,7 +171,7 @@ extern "C" {
 // a recorded window so its AXWindows can be walked under the Accessibility
 // permission replay already requires. Deliberately NOT CGWindowList, which
 // would demand the Screen Recording permission.
-extern "C" {
+unsafe extern "C" {
     fn proc_listallpids(buffer: *mut c_void, buffersize: c_int) -> c_int;
     fn proc_name(pid: c_int, buffer: *mut c_void, buffersize: u32) -> c_int;
 }
@@ -179,7 +179,7 @@ extern "C" {
 // IOKit HID access (Input Monitoring permission — required for keyboard
 // capture via event taps since macOS 10.15, separate from Accessibility).
 #[link(name = "IOKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     /// Returns kIOHIDAccessTypeGranted (0), Denied (1), or Unknown (2).
     fn IOHIDCheckAccess(request_type: u32) -> u32;
     /// Prompts the user (once) and returns a CoreFoundation Boolean (UInt8).
@@ -458,22 +458,24 @@ unsafe fn extract_modifiers(flags: u64) -> u8 {
 /// logged, and the cut never splits a surrogate pair (no manufactured
 /// U+FFFD replacement characters).
 unsafe fn extract_key_chars(event: CGEventRef) -> String {
-    let mut actual_len: usize = 0;
-    let mut buf = [0u16; 32];
-    CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
-    if actual_len == 0 {
-        return String::new();
-    }
-    let safe_len = utf16_capture_len(&buf, actual_len);
-    if actual_len > buf.len() {
-        tracing::warn!(
-            "keyboard event produced {} UTF-16 units; captured the first {} — \
+    unsafe {
+        let mut actual_len: usize = 0;
+        let mut buf = [0u16; 32];
+        CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
+        if actual_len == 0 {
+            return String::new();
+        }
+        let safe_len = utf16_capture_len(&buf, actual_len);
+        if actual_len > buf.len() {
+            tracing::warn!(
+                "keyboard event produced {} UTF-16 units; captured the first {} — \
              this recording may be missing typed characters",
-            actual_len,
-            safe_len
-        );
+                actual_len,
+                safe_len
+            );
+        }
+        String::from_utf16_lossy(&buf[..safe_len])
     }
-    String::from_utf16_lossy(&buf[..safe_len])
 }
 
 /// Clamp a reported UTF-16 length to what the capture buffer actually holds,
@@ -528,67 +530,69 @@ fn capture_click(
 /// Safe wrapper for event processing that returns Result instead of panicking.
 /// This is called from cg_event_callback which cannot unwind across FFI boundary.
 unsafe fn process_cg_event(etype: CGEventType, event: CGEventRef) -> Option<InputEvent> {
-    match etype {
-        kCGMouseEventLeftMouseDown
-        | kCGMouseEventLeftMouseUp
-        | kCGMouseEventRightMouseDown
-        | kCGMouseEventRightMouseUp => {
-            let loc = CGEventGetLocation(event);
-            let (x, y) = (loc.x as i32, loc.y as i32);
-            // The AX lookup runs for every press and release so the secure
-            // gate inside capture_click always sees the element under the
-            // cursor — a release over a password field must not leak its
-            // coordinates any more than a press.
-            capture_click(etype, x, y, ax_info_at(x, y))
+    unsafe {
+        match etype {
+            kCGMouseEventLeftMouseDown
+            | kCGMouseEventLeftMouseUp
+            | kCGMouseEventRightMouseDown
+            | kCGMouseEventRightMouseUp => {
+                let loc = CGEventGetLocation(event);
+                let (x, y) = (loc.x as i32, loc.y as i32);
+                // The AX lookup runs for every press and release so the secure
+                // gate inside capture_click always sees the element under the
+                // cursor — a release over a password field must not leak its
+                // coordinates any more than a press.
+                capture_click(etype, x, y, ax_info_at(x, y))
+            }
+            kCGKeyDown | kCGKeyUp => {
+                let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
+                let flags = CGEventGetFlags(event);
+                let modifiers = extract_modifiers(flags);
+                // Only extract characters on key-down; up events carry the same string redundantly
+                let chars = if etype == kCGKeyDown {
+                    extract_key_chars(event)
+                } else {
+                    String::new()
+                };
+                let action = if etype == kCGKeyDown {
+                    KeyAction::Down
+                } else {
+                    KeyAction::Up
+                };
+                Some(InputEvent::Key {
+                    code,
+                    chars,
+                    modifiers,
+                    action,
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                })
+            }
+            kCGScrollWheelEvent => {
+                let dx = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2) as i32;
+                let dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1) as i32;
+                // kCGScrollWheelEventScrollPhase: 0=none 1=began 2=changed 4=ended 128=mayBegin
+                // kCGScrollWheelEventMomentumPhase: 0=none 1=begin 2=continue 3=end
+                let scroll_phase =
+                    CGEventGetIntegerValueField(event, kCGScrollWheelEventScrollPhase) as u8;
+                let momentum_phase =
+                    CGEventGetIntegerValueField(event, kCGScrollWheelEventMomentumPhase) as u8;
+                // Prefer gesture phase; fall back to momentum phase for coasting scrolls
+                let phase = if scroll_phase != 0 {
+                    scroll_phase
+                } else {
+                    momentum_phase
+                };
+                Some(InputEvent::Scroll {
+                    dx,
+                    dy,
+                    phase,
+                    timestamp: None,
+                })
+            }
+            _ => None,
         }
-        kCGKeyDown | kCGKeyUp => {
-            let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u16;
-            let flags = CGEventGetFlags(event);
-            let modifiers = extract_modifiers(flags);
-            // Only extract characters on key-down; up events carry the same string redundantly
-            let chars = if etype == kCGKeyDown {
-                extract_key_chars(event)
-            } else {
-                String::new()
-            };
-            let action = if etype == kCGKeyDown {
-                KeyAction::Down
-            } else {
-                KeyAction::Up
-            };
-            Some(InputEvent::Key {
-                code,
-                chars,
-                modifiers,
-                action,
-                timestamp: None,
-                retry_count: None,
-                semantic_tag: None,
-            })
-        }
-        kCGScrollWheelEvent => {
-            let dx = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis2) as i32;
-            let dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1) as i32;
-            // kCGScrollWheelEventScrollPhase: 0=none 1=began 2=changed 4=ended 128=mayBegin
-            // kCGScrollWheelEventMomentumPhase: 0=none 1=begin 2=continue 3=end
-            let scroll_phase =
-                CGEventGetIntegerValueField(event, kCGScrollWheelEventScrollPhase) as u8;
-            let momentum_phase =
-                CGEventGetIntegerValueField(event, kCGScrollWheelEventMomentumPhase) as u8;
-            // Prefer gesture phase; fall back to momentum phase for coasting scrolls
-            let phase = if scroll_phase != 0 {
-                scroll_phase
-            } else {
-                momentum_phase
-            };
-            Some(InputEvent::Scroll {
-                dx,
-                dy,
-                phase,
-                timestamp: None,
-            })
-        }
-        _ => None,
     }
 }
 
@@ -598,63 +602,65 @@ unsafe extern "C" fn cg_event_callback(
     event: CGEventRef,
     user_info: *mut c_void,
 ) -> CGEventRef {
-    // Defensive: if user_info is null, just return the event unchanged
-    if user_info.is_null() {
-        return event;
-    }
+    unsafe {
+        // Defensive: if user_info is null, just return the event unchanged
+        if user_info.is_null() {
+            return event;
+        }
 
-    // Defensive: if event is null, return it unchanged (shouldn't happen but be safe)
-    if event.is_null() {
-        return event;
-    }
+        // Defensive: if event is null, return it unchanged (shouldn't happen but be safe)
+        if event.is_null() {
+            return event;
+        }
 
-    // Cast user_info to the sender. We've already checked it's not null.
-    let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
+        // Cast user_info to the sender. We've already checked it's not null.
+        let tx = &*(user_info as *mut mpsc::Sender<InputEvent>);
 
-    // TRIPWIRE: the catch_unwind below only works under the default "unwind"
-    // panic strategy. Setting `panic = "abort"` in a profile — a routine
-    // binary-size optimization — would silently turn every callback panic
-    // into an instant process abort with the OS event tap still installed.
-    // Fail the build instead of failing in the field:
-    #[cfg(panic = "abort")]
-    compile_error!(
-        "cg_event_callback relies on std::panic::catch_unwind to contain panics at the \
+        // TRIPWIRE: the catch_unwind below only works under the default "unwind"
+        // panic strategy. Setting `panic = "abort"` in a profile — a routine
+        // binary-size optimization — would silently turn every callback panic
+        // into an instant process abort with the OS event tap still installed.
+        // Fail the build instead of failing in the field:
+        #[cfg(panic = "abort")]
+        compile_error!(
+            "cg_event_callback relies on std::panic::catch_unwind to contain panics at the \
          CGEventTap FFI boundary; the abort panic strategy disables catch_unwind. Remove \
          `panic = \"abort\"` from the profile, or redesign the callback's panic containment \
          before shipping with it."
-    );
+        );
 
-    // Wrap everything in catch_unwind to prevent panics from escaping the FFI boundary.
-    // A panic in an extern "C" function causes abort, so we must catch any potential panic.
-    let result = std::panic::catch_unwind(|| unsafe { process_cg_event(etype, event) });
+        // Wrap everything in catch_unwind to prevent panics from escaping the FFI boundary.
+        // A panic in an extern "C" function causes abort, so we must catch any potential panic.
+        let result = std::panic::catch_unwind(|| process_cg_event(etype, event));
 
-    match result {
-        Ok(Some(input_event)) => {
-            // Send the event, but ignore send errors (receiver may have closed)
-            let _ = tx.send(input_event);
+        match result {
+            Ok(Some(input_event)) => {
+                // Send the event, but ignore send errors (receiver may have closed)
+                let _ = tx.send(input_event);
+            }
+            Ok(None) => {
+                // Event was filtered out (e.g., secure field) or unknown type
+                // Just pass it through unchanged
+            }
+            Err(e) => {
+                // A panic occurred inside the callback logic. Log it and continue.
+                // This should never happen, but if it does, we don't want to crash the app.
+                let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                eprintln!("PANIC in cg_event_callback (ignored): {}", msg);
+                // Optionally log with tracing if available
+                // tracing::error!("PANIC in cg_event_callback: {}", msg);
+            }
         }
-        Ok(None) => {
-            // Event was filtered out (e.g., secure field) or unknown type
-            // Just pass it through unchanged
-        }
-        Err(e) => {
-            // A panic occurred inside the callback logic. Log it and continue.
-            // This should never happen, but if it does, we don't want to crash the app.
-            let msg = if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "Unknown panic".to_string()
-            };
-            eprintln!("PANIC in cg_event_callback (ignored): {}", msg);
-            // Optionally log with tracing if available
-            // tracing::error!("PANIC in cg_event_callback: {}", msg);
-        }
+
+        // Always return the original event (listen-only tap, we don't modify events)
+        event
     }
-
-    // Always return the original event (listen-only tap, we don't modify events)
-    event
 }
 
 // ── AX string attribute helper ────────────────────────────────────────────────
@@ -672,67 +678,70 @@ impl ElementLocator for MacosLocator {
 /// Shared by the recorder (to tag captured clicks), the element inspector, and replay
 /// descriptor re-resolution.
 unsafe fn ax_info_at(x: i32, y: i32) -> Option<ElementInfo> {
-    let system_wide = AXUIElementCreateSystemWide();
-    if system_wide.is_null() {
-        return None;
-    }
+    unsafe {
+        let system_wide = AXUIElementCreateSystemWide();
+        if system_wide.is_null() {
+            return None;
+        }
 
-    let mut element: AXUIElementRef = std::ptr::null_mut();
-    let result = AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
+        let mut element: AXUIElementRef = std::ptr::null_mut();
+        let result =
+            AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
 
-    if result != kAXErrorSuccess || element.is_null() {
-        CFRelease(system_wide as *const c_void);
-        return None;
-    }
+        if result != kAXErrorSuccess || element.is_null() {
+            CFRelease(system_wide as *const c_void);
+            return None;
+        }
 
-    let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
-    let title = get_ax_string_attribute(element, kAXTitleAttribute);
-    let description = get_ax_string_attribute(element, kAXDescriptionAttribute);
-    let value = get_ax_string_attribute(element, kAXValueAttribute);
-    let identifier = get_ax_string_attribute(element, kAXIdentifierAttribute);
-    let role_description = get_ax_string_attribute(element, kAXRoleDescriptionAttribute);
-    let name = title
-        .clone()
-        .or_else(|| description.clone())
-        .or_else(|| value.clone())
-        .unwrap_or_default();
+        let role = get_ax_string_attribute(element, kAXRoleAttribute).unwrap_or_default();
+        let title = get_ax_string_attribute(element, kAXTitleAttribute);
+        let description = get_ax_string_attribute(element, kAXDescriptionAttribute);
+        let value = get_ax_string_attribute(element, kAXValueAttribute);
+        let identifier = get_ax_string_attribute(element, kAXIdentifierAttribute);
+        let role_description = get_ax_string_attribute(element, kAXRoleDescriptionAttribute);
+        let name = title
+            .clone()
+            .or_else(|| description.clone())
+            .or_else(|| value.clone())
+            .unwrap_or_default();
 
-    // Resolve app name via PID → AXUIElementCreateApplication → AXTitle
-    let app = {
-        let mut pid: i32 = 0;
-        if AXUIElementGetPid(element, &mut pid) == kAXErrorSuccess && pid > 0 {
-            let app_elem = AXUIElementCreateApplication(pid);
-            if !app_elem.is_null() {
-                let n = get_ax_string_attribute(app_elem, kAXTitleAttribute)
-                    .unwrap_or_else(|| String::from("Unknown"));
-                CFRelease(app_elem as *const c_void);
-                n
+        // Resolve app name via PID → AXUIElementCreateApplication → AXTitle
+        let app = {
+            let mut pid: i32 = 0;
+            if AXUIElementGetPid(element, &mut pid) == kAXErrorSuccess && pid > 0 {
+                let app_elem = AXUIElementCreateApplication(pid);
+                if !app_elem.is_null() {
+                    let n = get_ax_string_attribute(app_elem, kAXTitleAttribute)
+                        .unwrap_or_else(|| String::from("Unknown"));
+                    CFRelease(app_elem as *const c_void);
+                    n
+                } else {
+                    String::from("Unknown")
+                }
             } else {
                 String::from("Unknown")
             }
-        } else {
-            String::from("Unknown")
-        }
-    };
+        };
 
-    let (window_title, window_rel) = window_info_for(element, x, y);
+        let (window_title, window_rel) = window_info_for(element, x, y);
 
-    CFRelease(element as *const c_void);
-    CFRelease(system_wide as *const c_void);
+        CFRelease(element as *const c_void);
+        CFRelease(system_wide as *const c_void);
 
-    Some(ElementInfo {
-        role,
-        name,
-        app,
-        fallback_coords: Some((x, y)),
-        value,
-        description,
-        identifier,
-        role_description,
-        window_title,
-        window_rel,
-        template_png: None,
-    })
+        Some(ElementInfo {
+            role,
+            name,
+            app,
+            fallback_coords: Some((x, y)),
+            value,
+            description,
+            identifier,
+            role_description,
+            window_title,
+            window_rel,
+            template_png: None,
+        })
+    }
 }
 
 /// Resolve the window containing `element`: its title, and the click point
@@ -744,47 +753,51 @@ unsafe fn window_info_for(
     x: i32,
     y: i32,
 ) -> (Option<String>, Option<(i32, i32)>) {
-    let attr = str_to_cfstring(kAXWindowAttribute);
-    if attr.is_null() {
-        return (None, None);
-    }
-    let mut window: CFTypeRef = std::ptr::null();
-    let got = AXUIElementCopyAttributeValue(element, attr, &mut window);
-    CFRelease(attr);
-    if got != kAXErrorSuccess || window.is_null() {
-        return (None, None);
-    }
-    let window_el = window as AXUIElementRef;
+    unsafe {
+        let attr = str_to_cfstring(kAXWindowAttribute);
+        if attr.is_null() {
+            return (None, None);
+        }
+        let mut window: CFTypeRef = std::ptr::null();
+        let got = AXUIElementCopyAttributeValue(element, attr, &mut window);
+        CFRelease(attr);
+        if got != kAXErrorSuccess || window.is_null() {
+            return (None, None);
+        }
+        let window_el = window as AXUIElementRef;
 
-    let title = get_ax_string_attribute(window_el, kAXTitleAttribute).filter(|t| !t.is_empty());
-    let rel = ax_element_origin(window_el).map(|(ox, oy)| (x - ox, y - oy));
+        let title = get_ax_string_attribute(window_el, kAXTitleAttribute).filter(|t| !t.is_empty());
+        let rel = ax_element_origin(window_el).map(|(ox, oy)| (x - ox, y - oy));
 
-    CFRelease(window);
-    (title, rel)
+        CFRelease(window);
+        (title, rel)
+    }
 }
 
 /// Read an element's AXPosition — an AXValue-boxed CGPoint, not a CFString,
 /// so it must be unpacked with AXValueGetValue rather than the string helper.
 /// Best-effort: `None` on any failure.
 unsafe fn ax_element_origin(element: AXUIElementRef) -> Option<(i32, i32)> {
-    let pos_attr = str_to_cfstring(kAXPositionAttribute);
-    if pos_attr.is_null() {
-        return None;
+    unsafe {
+        let pos_attr = str_to_cfstring(kAXPositionAttribute);
+        if pos_attr.is_null() {
+            return None;
+        }
+        let mut pos_value: CFTypeRef = std::ptr::null();
+        let got = AXUIElementCopyAttributeValue(element, pos_attr, &mut pos_value);
+        CFRelease(pos_attr);
+        if got != kAXErrorSuccess || pos_value.is_null() {
+            return None;
+        }
+        let mut origin = CGPoint { x: 0.0, y: 0.0 };
+        let ok = AXValueGetValue(
+            pos_value,
+            kAXValueCGPointType,
+            &mut origin as *mut CGPoint as *mut c_void,
+        ) != 0;
+        CFRelease(pos_value);
+        ok.then_some((origin.x as i32, origin.y as i32))
     }
-    let mut pos_value: CFTypeRef = std::ptr::null();
-    let got = AXUIElementCopyAttributeValue(element, pos_attr, &mut pos_value);
-    CFRelease(pos_attr);
-    if got != kAXErrorSuccess || pos_value.is_null() {
-        return None;
-    }
-    let mut origin = CGPoint { x: 0.0, y: 0.0 };
-    let ok = AXValueGetValue(
-        pos_value,
-        kAXValueCGPointType,
-        &mut origin as *mut CGPoint as *mut c_void,
-    ) != 0;
-    CFRelease(pos_value);
-    ok.then_some((origin.x as i32, origin.y as i32))
 }
 
 /// Does a live process name match the recorded app name? `proc_name` output
@@ -859,38 +872,40 @@ fn find_window_origin(target: &ElementInfo) -> Option<(i32, i32)> {
 /// Walk one app's AXWindows for a window whose AXTitle equals `title`
 /// (case-insensitive) and return its origin.
 unsafe fn app_window_origin_by_title(pid: c_int, title: &str) -> Option<(i32, i32)> {
-    let app_el = AXUIElementCreateApplication(pid);
-    if app_el.is_null() {
-        return None;
-    }
-    let attr = str_to_cfstring(kAXWindowsAttribute);
-    if attr.is_null() {
-        CFRelease(app_el as *const c_void);
-        return None;
-    }
-    let mut windows: CFTypeRef = std::ptr::null();
-    let got = AXUIElementCopyAttributeValue(app_el, attr, &mut windows);
-    CFRelease(attr);
-
-    let mut origin = None;
-    if got == kAXErrorSuccess && !windows.is_null() {
-        let count = CFArrayGetCount(windows);
-        for i in 0..count {
-            // Array values follow the CF get-rule (borrowed): never released.
-            let win = CFArrayGetValueAtIndex(windows, i) as AXUIElementRef;
-            if win.is_null() {
-                continue;
-            }
-            let win_title = get_ax_string_attribute(win, kAXTitleAttribute).unwrap_or_default();
-            if win_title.eq_ignore_ascii_case(title) {
-                origin = ax_element_origin(win);
-                break;
-            }
+    unsafe {
+        let app_el = AXUIElementCreateApplication(pid);
+        if app_el.is_null() {
+            return None;
         }
-        CFRelease(windows);
+        let attr = str_to_cfstring(kAXWindowsAttribute);
+        if attr.is_null() {
+            CFRelease(app_el as *const c_void);
+            return None;
+        }
+        let mut windows: CFTypeRef = std::ptr::null();
+        let got = AXUIElementCopyAttributeValue(app_el, attr, &mut windows);
+        CFRelease(attr);
+
+        let mut origin = None;
+        if got == kAXErrorSuccess && !windows.is_null() {
+            let count = CFArrayGetCount(windows);
+            for i in 0..count {
+                // Array values follow the CF get-rule (borrowed): never released.
+                let win = CFArrayGetValueAtIndex(windows, i) as AXUIElementRef;
+                if win.is_null() {
+                    continue;
+                }
+                let win_title = get_ax_string_attribute(win, kAXTitleAttribute).unwrap_or_default();
+                if win_title.eq_ignore_ascii_case(title) {
+                    origin = ax_element_origin(win);
+                    break;
+                }
+            }
+            CFRelease(windows);
+        }
+        CFRelease(app_el as *const c_void);
+        origin
     }
-    CFRelease(app_el as *const c_void);
-    origin
 }
 
 /// AX exposes secure inputs as `AXSecureTextField` (casing has varied
@@ -953,53 +968,55 @@ fn resolve_press_traced(
 }
 
 unsafe fn get_ax_string_attribute(element: AXUIElementRef, attribute: &str) -> Option<String> {
-    let cf_string = str_to_cfstring(attribute);
-    if cf_string.is_null() {
-        return None;
-    }
+    unsafe {
+        let cf_string = str_to_cfstring(attribute);
+        if cf_string.is_null() {
+            return None;
+        }
 
-    let mut value: CFTypeRef = std::ptr::null();
-    if AXUIElementCopyAttributeValue(element, cf_string, &mut value) != kAXErrorSuccess {
+        let mut value: CFTypeRef = std::ptr::null();
+        if AXUIElementCopyAttributeValue(element, cf_string, &mut value) != kAXErrorSuccess {
+            CFRelease(cf_string);
+            return None;
+        }
         CFRelease(cf_string);
-        return None;
-    }
-    CFRelease(cf_string);
 
-    if value.is_null() {
-        return None;
-    }
+        if value.is_null() {
+            return None;
+        }
 
-    let c_str = CFStringGetCStringPtr(value, kCFStringEncodingUTF8);
-    let result = if !c_str.is_null() {
-        Some(CStr::from_ptr(c_str).to_string_lossy().into_owned())
-    } else {
-        let len = CFStringGetLength(value);
-        let max_size = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8);
-        if max_size > 0 {
-            let mut buffer = vec![0u8; (max_size + 1) as usize];
-            if CFStringGetCString(
-                value,
-                buffer.as_mut_ptr() as *mut c_char,
-                max_size + 1,
-                kCFStringEncodingUTF8,
-            ) != 0
-            {
-                Some(
-                    String::from_utf8_lossy(
-                        &buffer[..buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len())],
+        let c_str = CFStringGetCStringPtr(value, kCFStringEncodingUTF8);
+        let result = if !c_str.is_null() {
+            Some(CStr::from_ptr(c_str).to_string_lossy().into_owned())
+        } else {
+            let len = CFStringGetLength(value);
+            let max_size = CFStringGetMaximumSizeForEncoding(len, kCFStringEncodingUTF8);
+            if max_size > 0 {
+                let mut buffer = vec![0u8; (max_size + 1) as usize];
+                if CFStringGetCString(
+                    value,
+                    buffer.as_mut_ptr() as *mut c_char,
+                    max_size + 1,
+                    kCFStringEncodingUTF8,
+                ) != 0
+                {
+                    Some(
+                        String::from_utf8_lossy(
+                            &buffer[..buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len())],
+                        )
+                        .to_string(),
                     )
-                    .to_string(),
-                )
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    };
+        };
 
-    CFRelease(value);
-    result
+        CFRelease(value);
+        result
+    }
 }
 
 fn str_to_cfstring(s: &str) -> CFStringRef {
@@ -1159,43 +1176,30 @@ impl ReplayEngine for MacosReplayer {
                     on_mismatch,
                 } => match vision::capture_screenshot() {
                     Ok(img_bytes) => {
-                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                            if let Ok(similarity) =
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes)
+                            && let Ok(similarity) =
                                 vision::compare_images(baseline_screenshot, &current_img)
-                            {
-                                if similarity < *threshold {
-                                    tracing::warn!(
-                                        "Visual mismatch: {:.2} < {}",
-                                        similarity,
-                                        threshold
-                                    );
-                                    match on_mismatch {
-                                        crate::core::events::MismatchAction::Fail => {
-                                            return Err(anyhow::anyhow!(
-                                                "Visual regression detected"
-                                            ));
+                            && similarity < *threshold
+                        {
+                            tracing::warn!("Visual mismatch: {:.2} < {}", similarity, threshold);
+                            match on_mismatch {
+                                crate::core::events::MismatchAction::Fail => {
+                                    return Err(anyhow::anyhow!("Visual regression detected"));
+                                }
+                                crate::core::events::MismatchAction::Retry { attempts } => {
+                                    for _ in 0..*attempts {
+                                        thread::sleep(Duration::from_millis(500));
+                                        if let Ok(b) = vision::capture_screenshot()
+                                            && let Ok(img) = image::load_from_memory(&b)
+                                            && vision::compare_images(baseline_screenshot, &img)
+                                                .unwrap_or(1.0)
+                                                >= *threshold
+                                        {
+                                            break;
                                         }
-                                        crate::core::events::MismatchAction::Retry { attempts } => {
-                                            for _ in 0..*attempts {
-                                                thread::sleep(Duration::from_millis(500));
-                                                if let Ok(b) = vision::capture_screenshot() {
-                                                    if let Ok(img) = image::load_from_memory(&b) {
-                                                        if vision::compare_images(
-                                                            baseline_screenshot,
-                                                            &img,
-                                                        )
-                                                        .unwrap_or(1.0)
-                                                            >= *threshold
-                                                        {
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        crate::core::events::MismatchAction::LogOnly => {}
                                     }
                                 }
+                                crate::core::events::MismatchAction::LogOnly => {}
                             }
                         }
                     }
@@ -1307,7 +1311,7 @@ impl ReplayEngine for MacosReplayer {
                                         "Element \"{}\" not found after {} attempts",
                                         desc.name,
                                         max_attempts
-                                    ))
+                                    ));
                                 }
                                 replay_support::ResolutionKind::CoordinateFallback => {
                                     tracing::warn!(

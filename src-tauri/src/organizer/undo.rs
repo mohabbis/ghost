@@ -53,10 +53,10 @@ pub fn revert(journal: &UndoJournal) -> UndoReport {
                     report.skipped += 1;
                     continue;
                 }
-                if let Some(parent) = to.parent() {
-                    if !parent.exists() {
-                        let _ = fs::create_dir_all(parent);
-                    }
+                if let Some(parent) = to.parent()
+                    && !parent.exists()
+                {
+                    let _ = fs::create_dir_all(parent);
                 }
                 match fs::rename(from, to) {
                     Ok(()) => report.reverted += 1,
@@ -87,7 +87,7 @@ mod tests {
     use super::*;
     use crate::organizer::executor::execute_plan;
     use crate::organizer::planner::plan_with_rules;
-    use crate::organizer::testutil::{tempdir, TempDir};
+    use crate::organizer::testutil::{TempDir, tempdir};
     use crate::policy::FolderRule;
     use std::path::Path;
 

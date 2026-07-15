@@ -1,15 +1,15 @@
 //! Headless MCP execution helpers — canonical ActionPlan runtime.
 
-use crate::action_plan::{from_organizer_plan_with_source, PlanSource};
+use crate::action_plan::{PlanSource, from_organizer_plan_with_source};
 use crate::mcp::approval::verify_execution_token_with_hash;
 use crate::mcp::plan_hash::hash_organizer_plan;
 use crate::organizer::pipeline::undo_zone_run;
 use crate::organizer::planner::plan_zone;
 use crate::runtime::run_persisted_action_plan;
-use crate::storage::executions::{get_execution, ExecutionSummary};
+use crate::storage::executions::{ExecutionSummary, get_execution};
 use crate::storage::open_default;
 use crate::storage::zones::list_folder_rules;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub fn execute_approved_plan(zone_id: &str, approval_token: &str) -> Result<Value, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
@@ -96,7 +96,7 @@ pub fn undo_run(execution_id: &str) -> Result<Value, String> {
 mod tests {
     use super::*;
     use crate::mcp::approval::issue_approval_token;
-    use crate::organizer::planner::{plan_with_rules, PlanAction};
+    use crate::organizer::planner::{PlanAction, plan_with_rules};
     use crate::policy::{Capability, FolderRule, PolicyDecision, TrustLevel};
     use std::path::PathBuf;
 

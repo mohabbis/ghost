@@ -162,10 +162,10 @@ pub fn extract_period(text: &str) -> Option<Period> {
 
     // 1. ISO date: YYYY-MM-DD.
     for c in p.iso_date.captures_iter(&hay) {
-        if let (Some(y), Some(m), Some(d)) = (cap_i32(&c, 1), cap_i32(&c, 2), cap_i32(&c, 3)) {
-            if let Some(period) = make_day(y, m, d) {
-                return Some(period);
-            }
+        if let (Some(y), Some(m), Some(d)) = (cap_i32(&c, 1), cap_i32(&c, 2), cap_i32(&c, 3))
+            && let Some(period) = make_day(y, m, d)
+        {
+            return Some(period);
         }
     }
 
@@ -185,10 +185,9 @@ pub fn extract_period(text: &str) -> Option<Period> {
             c.get(1).and_then(|m| month_from_name(m.as_str())),
             cap_i32(&c, 2),
             cap_i32(&c, 3),
-        ) {
-            if let Some(period) = make_day(y, mon as i32, d) {
-                return Some(period);
-            }
+        ) && let Some(period) = make_day(y, mon as i32, d)
+        {
+            return Some(period);
         }
     }
 
@@ -197,88 +196,90 @@ pub fn extract_period(text: &str) -> Option<Period> {
         if let (Some(mon), Some(y)) = (
             c.get(1).and_then(|m| month_from_name(m.as_str())),
             cap_i32(&c, 2),
-        ) {
-            if valid_year(y) {
-                return Some(Period::Month {
-                    year: y,
-                    month: mon,
-                });
-            }
+        ) && valid_year(y)
+        {
+            return Some(Period::Month {
+                year: y,
+                month: mon,
+            });
         }
     }
     for c in p.year_month_name.captures_iter(&hay) {
         if let (Some(y), Some(mon)) = (
             cap_i32(&c, 1),
             c.get(2).and_then(|m| month_from_name(m.as_str())),
-        ) {
-            if valid_year(y) {
-                return Some(Period::Month {
-                    year: y,
-                    month: mon,
-                });
-            }
+        ) && valid_year(y)
+        {
+            return Some(Period::Month {
+                year: y,
+                month: mon,
+            });
         }
     }
 
     // 5. Quarter (either order).
     for c in p.quarter_first.captures_iter(&hay) {
-        if let (Some(q), Some(y)) = (cap_i32(&c, 1), cap_i32(&c, 2)) {
-            if valid_year(y) && (1..=4).contains(&q) {
-                return Some(Period::Quarter {
-                    year: y,
-                    quarter: q as u8,
-                });
-            }
+        if let (Some(q), Some(y)) = (cap_i32(&c, 1), cap_i32(&c, 2))
+            && valid_year(y)
+            && (1..=4).contains(&q)
+        {
+            return Some(Period::Quarter {
+                year: y,
+                quarter: q as u8,
+            });
         }
     }
     for c in p.year_quarter.captures_iter(&hay) {
-        if let (Some(y), Some(q)) = (cap_i32(&c, 1), cap_i32(&c, 2)) {
-            if valid_year(y) && (1..=4).contains(&q) {
-                return Some(Period::Quarter {
-                    year: y,
-                    quarter: q as u8,
-                });
-            }
+        if let (Some(y), Some(q)) = (cap_i32(&c, 1), cap_i32(&c, 2))
+            && valid_year(y)
+            && (1..=4).contains(&q)
+        {
+            return Some(Period::Quarter {
+                year: y,
+                quarter: q as u8,
+            });
         }
     }
 
     // 6. Numeric year-month (year-first, then month-first).
     for c in p.year_month_num.captures_iter(&hay) {
-        if let (Some(y), Some(m)) = (cap_i32(&c, 1), cap_i32(&c, 2)) {
-            if valid_year(y) && (1..=12).contains(&m) {
-                return Some(Period::Month {
-                    year: y,
-                    month: m as u8,
-                });
-            }
+        if let (Some(y), Some(m)) = (cap_i32(&c, 1), cap_i32(&c, 2))
+            && valid_year(y)
+            && (1..=12).contains(&m)
+        {
+            return Some(Period::Month {
+                year: y,
+                month: m as u8,
+            });
         }
     }
     for c in p.month_num_year.captures_iter(&hay) {
-        if let (Some(m), Some(y)) = (cap_i32(&c, 1), cap_i32(&c, 2)) {
-            if valid_year(y) && (1..=12).contains(&m) {
-                return Some(Period::Month {
-                    year: y,
-                    month: m as u8,
-                });
-            }
+        if let (Some(m), Some(y)) = (cap_i32(&c, 1), cap_i32(&c, 2))
+            && valid_year(y)
+            && (1..=12).contains(&m)
+        {
+            return Some(Period::Month {
+                year: y,
+                month: m as u8,
+            });
         }
     }
 
     // 7. Fiscal year (FY24 / FY2026 / FY'26).
     for c in p.fiscal_year.captures_iter(&hay) {
-        if let Some(raw) = c.get(1).map(|m| m.as_str()) {
-            if let Some(y) = normalize_year(raw) {
-                return Some(Period::Annual { year: y });
-            }
+        if let Some(raw) = c.get(1).map(|m| m.as_str())
+            && let Some(y) = normalize_year(raw)
+        {
+            return Some(Period::Annual { year: y });
         }
     }
 
     // 8. Bare four-digit year.
     for c in p.bare_year.captures_iter(&hay) {
-        if let Some(y) = cap_i32(&c, 1) {
-            if valid_year(y) {
-                return Some(Period::Annual { year: y });
-            }
+        if let Some(y) = cap_i32(&c, 1)
+            && valid_year(y)
+        {
+            return Some(Period::Annual { year: y });
         }
     }
 

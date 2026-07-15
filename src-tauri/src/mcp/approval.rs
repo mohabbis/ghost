@@ -47,10 +47,10 @@ fn signing_key() -> Vec<u8> {
 
 fn load_or_create_signing_key() -> Vec<u8> {
     let path = signing_key_path();
-    if let Ok(bytes) = fs::read(&path) {
-        if !bytes.is_empty() {
-            return bytes;
-        }
+    if let Ok(bytes) = fs::read(&path)
+        && !bytes.is_empty()
+    {
+        return bytes;
     }
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
@@ -61,8 +61,8 @@ fn load_or_create_signing_key() -> Vec<u8> {
 }
 
 fn rand_bytes() -> [u8; 32] {
-    use aes_gcm::aead::rand_core::RngCore;
     use aes_gcm::aead::OsRng;
+    use aes_gcm::aead::rand_core::RngCore;
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     bytes
@@ -119,10 +119,10 @@ pub fn verify_execution_token_with_hash(
     if !signed.claims.plan_id.contains(zone_id) {
         return Err("Approval token does not match the requested Zone".to_string());
     }
-    if let Some(expected_hash) = expected_plan_hash {
-        if signed.claims.plan_hash != expected_hash {
-            return Err("Plan has changed since approval — request a new token".to_string());
-        }
+    if let Some(expected_hash) = expected_plan_hash
+        && signed.claims.plan_hash != expected_hash
+    {
+        return Err("Plan has changed since approval — request a new token".to_string());
     }
     super::token_store::consume_nonce(&signed.claims.nonce)?;
     Ok(signed.claims)

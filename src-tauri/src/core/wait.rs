@@ -186,10 +186,10 @@ pub fn check_wait_condition(condition: &WaitCondition, locator: &dyn ElementLoca
             let (max_x, max_y) = crate::core::vision::display_bounds();
             for y in (0..max_y).step_by(48) {
                 for x in (0..max_x).step_by(48) {
-                    if let Ok(Some(el)) = locator.inspect_at(x, y) {
-                        if el.name.to_lowercase().contains(&text.to_lowercase()) {
-                            return WaitResult::Success;
-                        }
+                    if let Ok(Some(el)) = locator.inspect_at(x, y)
+                        && el.name.to_lowercase().contains(&text.to_lowercase())
+                    {
+                        return WaitResult::Success;
                     }
                 }
             }
@@ -273,14 +273,13 @@ pub fn resolve_selector(
 
             'scan: for y in (0..max_y).step_by(STRIDE as usize) {
                 for x in (0..max_x).step_by(STRIDE as usize) {
-                    if let Ok(Some(el)) = locator.inspect_at(x, y) {
-                        if el.role == *role
-                            && el.name.contains(name)
-                            && app.as_ref().is_none_or(|a| &el.app == a)
-                        {
-                            found = Some((x, y));
-                            break 'scan;
-                        }
+                    if let Ok(Some(el)) = locator.inspect_at(x, y)
+                        && el.role == *role
+                        && el.name.contains(name)
+                        && app.as_ref().is_none_or(|a| &el.app == a)
+                    {
+                        found = Some((x, y));
+                        break 'scan;
                     }
                 }
             }
@@ -334,7 +333,9 @@ pub fn resolve_selector(
                         ocr_results.iter().map(|res| res.text.clone()).collect();
                     anyhow::bail!(
                         "OCR selector target '{}' (fuzzy: {}) not found on screen. Recognized text: {:?}",
-                        text, fuzzy, all_text
+                        text,
+                        fuzzy,
+                        all_text
                     );
                 }
             }

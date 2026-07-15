@@ -1,19 +1,27 @@
 //! Ghost 2.0 runtime completion integration tests.
 
 use ghost_lib::action_plan::{
-    build_invoice_demo, from_organizer_plan_with_source, ActionKind, PlanSource,
+    ActionKind, PlanSource, build_invoice_demo, from_organizer_plan_with_source,
 };
 use ghost_lib::organizer::planner::plan_with_rules;
 use ghost_lib::policy::{FolderRule, TrustLevel};
 use ghost_lib::runtime::execute_action_plan_with_progress;
+#[cfg(not(target_os = "macos"))]
 use ghost_lib::runtime::semantic::{SemanticError, UiTarget};
 
 fn scratch_dir() -> std::path::PathBuf {
+    // pid + monotonic counter: a timestamp alone can collide across parallel
+    // tests and cross-contaminate their scratch dirs.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("ghost2_complete_{nanos}"));
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "ghost2_complete_{}_{nanos}_{n}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&path).unwrap();
     path
 }
@@ -56,17 +64,24 @@ fn demo_plan_includes_semantic_textedit_steps() {
     std::fs::create_dir_all(&downloads).unwrap();
     std::fs::write(downloads.join("invoice.pdf"), b"inv").unwrap();
     let plan = build_invoice_demo(&downloads, &finance).unwrap();
-    assert!(plan
-        .steps
-        .iter()
-        .any(|s| matches!(s.kind, ActionKind::SemanticSetValue { .. })));
-    assert!(plan
-        .steps
-        .iter()
-        .any(|s| matches!(s.kind, ActionKind::SemanticFocus { .. })));
+    assert!(
+        plan.steps
+            .iter()
+            .any(|s| matches!(s.kind, ActionKind::SemanticSetValue { .. }))
+    );
+    assert!(
+        plan.steps
+            .iter()
+            .any(|s| matches!(s.kind, ActionKind::SemanticFocus { .. }))
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+// Headless-only: asserts the no-helper path. On macOS the GhostAXHelper sidecar
+// may be built and present (release builds it; dev machines often have it), in
+// which case resolve_target actually runs the helper instead of reporting it
+// unavailable — so this invariant only holds off macOS.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn semantic_helper_unavailable_skips_focus_on_headless() {
     let target = UiTarget {

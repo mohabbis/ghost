@@ -8,8 +8,8 @@
 use crate::audit::replay_undo_journal::{ReplayRunReport, ReplayUndoJournal};
 use crate::core::events::{ElementInfo, InputEvent};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 /// How often replay re-checks the stop/pause flags while sleeping or paused.
@@ -184,10 +184,10 @@ pub fn pacing_gap_ms(prev_ts: Option<u64>, current_ts: Option<u64>) -> u64 {
 /// Does the live element `found` match the recorded `target` descriptor?
 /// Prefers the stable automation identifier when both sides have one.
 pub fn descriptor_matches(target: &ElementInfo, found: &ElementInfo) -> bool {
-    if let (Some(t_id), Some(f_id)) = (&target.identifier, &found.identifier) {
-        if !t_id.is_empty() {
-            return t_id == f_id;
-        }
+    if let (Some(t_id), Some(f_id)) = (&target.identifier, &found.identifier)
+        && !t_id.is_empty()
+    {
+        return t_id == f_id;
     }
     if target.role.is_empty() || !target.role.eq_ignore_ascii_case(&found.role) {
         return false;
@@ -316,22 +316,23 @@ where
     S: Fn() -> Option<image::DynamicImage>,
 {
     // Pass 1: Exact matches (avoiding decoy false-positives first)
-    if let Some(found) = lookup(rx, ry) {
-        if descriptor_matches(target, &found) {
-            return Some(((rx, ry), ResolutionKind::RecordedPoint));
-        }
+    if let Some(found) = lookup(rx, ry)
+        && descriptor_matches(target, &found)
+    {
+        return Some(((rx, ry), ResolutionKind::RecordedPoint));
     }
 
-    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
-        if let Some((ox, oy)) = window_origin(target) {
-            let (px, py) = (ox + relx, oy + rely);
-            if (px, py) != (rx, ry) && px >= 0 && py >= 0 {
-                if let Some(found) = lookup(px, py) {
-                    if descriptor_matches(target, &found) {
-                        return Some(((px, py), ResolutionKind::WindowRelative));
-                    }
-                }
-            }
+    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel)
+        && let Some((ox, oy)) = window_origin(target)
+    {
+        let (px, py) = (ox + relx, oy + rely);
+        if (px, py) != (rx, ry)
+            && px >= 0
+            && py >= 0
+            && let Some(found) = lookup(px, py)
+            && descriptor_matches(target, &found)
+        {
+            return Some(((px, py), ResolutionKind::WindowRelative));
         }
     }
 
@@ -341,31 +342,32 @@ where
             if px < 0 || py < 0 {
                 continue;
             }
-            if let Some(found) = lookup(px, py) {
-                if descriptor_matches(target, &found) {
-                    return Some(((px, py), ResolutionKind::SpiralReresolved));
-                }
+            if let Some(found) = lookup(px, py)
+                && descriptor_matches(target, &found)
+            {
+                return Some(((px, py), ResolutionKind::SpiralReresolved));
             }
         }
     }
 
     // Pass 2: Fuzzy matches (only when exact match couldn't be found)
-    if let Some(found) = lookup(rx, ry) {
-        if descriptor_matches_fuzzy(target, &found) {
-            return Some(((rx, ry), ResolutionKind::FuzzyReresolved));
-        }
+    if let Some(found) = lookup(rx, ry)
+        && descriptor_matches_fuzzy(target, &found)
+    {
+        return Some(((rx, ry), ResolutionKind::FuzzyReresolved));
     }
 
-    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel) {
-        if let Some((ox, oy)) = window_origin(target) {
-            let (px, py) = (ox + relx, oy + rely);
-            if (px, py) != (rx, ry) && px >= 0 && py >= 0 {
-                if let Some(found) = lookup(px, py) {
-                    if descriptor_matches_fuzzy(target, &found) {
-                        return Some(((px, py), ResolutionKind::FuzzyReresolved));
-                    }
-                }
-            }
+    if let (Some(_), Some((relx, rely))) = (target.window_title.as_deref(), target.window_rel)
+        && let Some((ox, oy)) = window_origin(target)
+    {
+        let (px, py) = (ox + relx, oy + rely);
+        if (px, py) != (rx, ry)
+            && px >= 0
+            && py >= 0
+            && let Some(found) = lookup(px, py)
+            && descriptor_matches_fuzzy(target, &found)
+        {
+            return Some(((px, py), ResolutionKind::FuzzyReresolved));
         }
     }
 
@@ -375,10 +377,10 @@ where
             if px < 0 || py < 0 {
                 continue;
             }
-            if let Some(found) = lookup(px, py) {
-                if descriptor_matches_fuzzy(target, &found) {
-                    return Some(((px, py), ResolutionKind::FuzzyReresolved));
-                }
+            if let Some(found) = lookup(px, py)
+                && descriptor_matches_fuzzy(target, &found)
+            {
+                return Some(((px, py), ResolutionKind::FuzzyReresolved));
             }
         }
     }
@@ -387,10 +389,10 @@ where
     // tree strategy above has already failed and a template was actually
     // captured; `screenshot()` is a no-op closure (`|| None`) for callers
     // that skip this strategy, so it costs nothing when unused.
-    if let Some(template_bytes) = &target.template_png {
-        if let Some(point) = resolve_via_template(template_bytes, rx, ry, &screenshot) {
-            return Some((point, ResolutionKind::TemplateMatched));
-        }
+    if let Some(template_bytes) = &target.template_png
+        && let Some(point) = resolve_via_template(template_bytes, rx, ry, &screenshot)
+    {
+        return Some((point, ResolutionKind::TemplateMatched));
     }
 
     None
@@ -441,8 +443,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     fn info(role: &str, name: &str, app: &str) -> ElementInfo {
         ElementInfo {

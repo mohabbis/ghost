@@ -4,7 +4,7 @@
 //! be a cloud AI classifier; it gives users an explainable safety review of the
 //! workflow they just recorded.
 
-use crate::core::compression::{CompressedStep, CompressionReport, Target, LOW_CONFIDENCE};
+use crate::core::compression::{CompressedStep, CompressionReport, LOW_CONFIDENCE, Target};
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -624,12 +624,16 @@ fn build_audit_layer(
 
     GuardAuditLayer {
         privacy_summary: if credential_count > 0 {
-            format!("Detected {credential_count} sensitive-input risk(s). Ghost should not store or replay those values.")
+            format!(
+                "Detected {credential_count} sensitive-input risk(s). Ghost should not store or replay those values."
+            )
         } else {
             "No obvious stored-password, token, or payment-field input was detected.".to_string()
         },
         replay_summary: if coordinate_clicks > 0 {
-            format!("{coordinate_clicks} click step(s) rely only on screen coordinates, which can break when windows move.")
+            format!(
+                "{coordinate_clicks} click step(s) rely only on screen coordinates, which can break when windows move."
+            )
         } else if unit_count == 0 {
             "There are no steps to replay yet.".to_string()
         } else {
@@ -784,7 +788,7 @@ mod tests {
         let sensitive = || Some(element("AXSecureTextField", "Password", "Login"));
         assert!(should_suppress_keyboard_after_click(&click(sensitive(), 0))); // left
         assert!(should_suppress_keyboard_after_click(&click(sensitive(), 2))); // right
-                                                                               // Middle-click (button 1) is not a field-focusing interaction.
+        // Middle-click (button 1) is not a field-focusing interaction.
         assert!(!should_suppress_keyboard_after_click(&click(
             sensitive(),
             1
@@ -829,20 +833,24 @@ mod tests {
     fn audit_flags_empty_workflow_without_requiring_confirmation() {
         let report = audit_workflow(&[]);
         assert_eq!(report.event_count, 0);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::EmptyWorkflow));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::EmptyWorkflow)
+        );
         assert!(!report.requires_confirmation);
     }
 
     #[test]
     fn audit_flags_destructive_action_and_requires_confirmation() {
         let report = audit_workflow(&[click(Some(element("AXButton", "Delete", "Files")), 0)]);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::DestructiveAction));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::DestructiveAction)
+        );
         assert!(report.requires_confirmation);
         // High severity, but not a credential, so the workflow is still saveable.
         assert!(!report.blocks_replay);
@@ -867,13 +875,17 @@ mod tests {
             Some(element("AXButton", "Accounts", "Bank of America")),
             0,
         )]);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::SensitiveApp));
-        assert!(report
-            .sensitive_apps
-            .contains(&"Bank of America".to_string()));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::SensitiveApp)
+        );
+        assert!(
+            report
+                .sensitive_apps
+                .contains(&"Bank of America".to_string())
+        );
     }
 
     #[test]
@@ -948,10 +960,12 @@ mod tests {
     fn compressed_audit_flags_empty_timeline_without_confirmation() {
         let report = audit_compressed(&report_of(vec![]));
         assert_eq!(report.event_count, 0);
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::EmptyWorkflow));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::EmptyWorkflow)
+        );
         assert!(!report.requires_confirmation);
     }
 
@@ -995,10 +1009,12 @@ mod tests {
             false,
             Some("sk-SECRETTokenValue123456789"),
         )]));
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::CredentialInput));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::CredentialInput)
+        );
         assert!(report.blocks_replay);
         assert!(!report.safe_to_save);
     }
@@ -1009,10 +1025,12 @@ mod tests {
             Some(target("Delete account", "AXButton", "Bank")),
             0.95,
         )]));
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::DestructiveAction));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::DestructiveAction)
+        );
         // "bank" also trips the sensitive-app hint list.
         assert!(report.sensitive_apps.contains(&"Bank".to_string()));
         assert!(report.requires_confirmation);
@@ -1039,10 +1057,12 @@ mod tests {
             Some(target("Button", "AXButton", "App")),
             0.4,
         )]));
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::ReplayReliability));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::ReplayReliability)
+        );
     }
 
     #[test]
@@ -1066,10 +1086,12 @@ mod tests {
             action: Some("delete".to_string()),
             raw_event_count: 1,
         })]));
-        assert!(report
-            .findings
-            .iter()
-            .any(|f| f.category == GuardCategory::DestructiveAction));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.category == GuardCategory::DestructiveAction)
+        );
     }
 
     #[test]

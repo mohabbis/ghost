@@ -2,7 +2,7 @@
 
 use chrono::{Duration, Utc};
 use ghost_lib::mcp::approval::{
-    claims_are_expired, issue_approval_token, verify_execution_token_with_hash, ApprovalTokenClaims,
+    ApprovalTokenClaims, claims_are_expired, issue_approval_token, verify_execution_token_with_hash,
 };
 use ghost_lib::mcp::plan_hash::hash_organizer_plan;
 use ghost_lib::mcp::token_store::consume_nonce;

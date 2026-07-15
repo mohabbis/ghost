@@ -133,10 +133,10 @@ impl WorkflowAnalyzer {
         let mut key_sequences: Vec<usize> = Vec::new();
 
         for (idx, event) in events.iter().enumerate() {
-            if let InputEvent::Key { action, .. } = event {
-                if matches!(action, crate::core::events::KeyAction::Down) {
-                    key_sequences.push(idx);
-                }
+            if let InputEvent::Key { action, .. } = event
+                && matches!(action, crate::core::events::KeyAction::Down)
+            {
+                key_sequences.push(idx);
             }
         }
 
@@ -195,10 +195,10 @@ impl WorkflowAnalyzer {
         let mut element_count = 0usize;
 
         for event in events {
-            if let InputEvent::MouseClick { element, .. } = event {
-                if element.is_some() {
-                    element_count += 1;
-                }
+            if let InputEvent::MouseClick { element, .. } = event
+                && element.is_some()
+            {
+                element_count += 1;
             }
         }
 
@@ -236,17 +236,17 @@ impl WorkflowAnalyzer {
 
         // Check for optimization opportunities
         for (idx, event) in events.iter().enumerate() {
-            if let InputEvent::Delay { ms, .. } = event {
-                if *ms > 1000 {
-                    optimizations.push(OptimizationSuggestion {
-                        suggestion_type: "conditional_wait".to_string(),
-                        description: format!(
-                            "Replace {ms}ms delay with conditional wait for element state"
-                        ),
-                        impact_score: 0.7,
-                        affected_events: vec![idx],
-                    });
-                }
+            if let InputEvent::Delay { ms, .. } = event
+                && *ms > 1000
+            {
+                optimizations.push(OptimizationSuggestion {
+                    suggestion_type: "conditional_wait".to_string(),
+                    description: format!(
+                        "Replace {ms}ms delay with conditional wait for element state"
+                    ),
+                    impact_score: 0.7,
+                    affected_events: vec![idx],
+                });
             }
         }
     }
@@ -275,15 +275,17 @@ impl WorkflowAnalyzer {
         let mut improvements = Vec::new();
 
         for event in events {
-            if let InputEvent::MouseClick { x, y, element, .. } = event {
-                if element.is_none() {
-                    improvements.push(ElementImprovement {
-                        event_index: 0,
-                        x: *x,
-                        y: *y,
-                        suggestion: "Element inspection recommended - consider verifying the target UI element".to_string(),
-                    });
-                }
+            if let InputEvent::MouseClick { x, y, element, .. } = event
+                && element.is_none()
+            {
+                improvements.push(ElementImprovement {
+                    event_index: 0,
+                    x: *x,
+                    y: *y,
+                    suggestion:
+                        "Element inspection recommended - consider verifying the target UI element"
+                            .to_string(),
+                });
             }
         }
 

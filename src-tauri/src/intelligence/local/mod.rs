@@ -3,5 +3,5 @@
 pub mod discovery;
 pub mod openai_compatible;
 
-pub use discovery::{discover_local_runtimes, LocalRuntimeDiscovery};
+pub use discovery::{LocalRuntimeDiscovery, discover_local_runtimes};
 pub use openai_compatible::LocalCompatibleProvider;

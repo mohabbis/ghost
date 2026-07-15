@@ -36,14 +36,14 @@ use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
 use crate::integrations::google::export::{GcsExportClient, GcsPushSummary};
 use crate::integrations::google::{GcsBucket, GcsClient, GoogleIntegrationService};
+use crate::integrations::microsoft::MicrosoftIntegrationService;
 use crate::integrations::microsoft::fabric::export::{FabricExportClient, FabricPushSummary};
 use crate::integrations::microsoft::fabric::triggers::FabricInboundIntent;
 use crate::integrations::microsoft::fabric::{FabricClient, FabricLakehouse, FabricWorkspace};
-use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
-use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
-use crate::integrations::microsoft::MicrosoftIntegrationService;
+use crate::integrations::microsoft::power_bi::export::{AuditExportPayload, build_export};
+use crate::integrations::microsoft::power_bi::{PowerBiClient, schema};
 use crate::storage::executions::list_full_executions_since;
-use crate::storage::{open_default, Db};
+use crate::storage::{Db, open_default};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 

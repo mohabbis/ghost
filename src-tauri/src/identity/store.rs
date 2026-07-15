@@ -476,12 +476,16 @@ mod tests {
 
         let grants = store.active_grants(&auth);
         assert_eq!(grants.len(), 2);
-        assert!(grants
-            .iter()
-            .any(|g| g.integration == IntegrationKind::Identity));
-        assert!(grants
-            .iter()
-            .any(|g| g.integration == IntegrationKind::MicrosoftPowerBi));
+        assert!(
+            grants
+                .iter()
+                .any(|g| g.integration == IntegrationKind::Identity)
+        );
+        assert!(
+            grants
+                .iter()
+                .any(|g| g.integration == IntegrationKind::MicrosoftPowerBi)
+        );
 
         std::fs::remove_dir_all(dir).ok();
     }
@@ -549,9 +553,11 @@ mod tests {
                 .as_deref(),
             Some("second-token")
         );
-        assert!(store
-            .access_token_for_grant(&auth, &first.grant_id)
-            .is_none());
+        assert!(
+            store
+                .access_token_for_grant(&auth, &first.grant_id)
+                .is_none()
+        );
 
         std::fs::remove_dir_all(dir).ok();
     }
@@ -618,22 +624,28 @@ mod tests {
             )
             .unwrap();
 
-        assert!(store
-            .access_token_for_grant(&auth, &grant.grant_id)
-            .is_some());
+        assert!(
+            store
+                .access_token_for_grant(&auth, &grant.grant_id)
+                .is_some()
+        );
 
         store
             .revoke_grant(&auth, IntegrationKind::MicrosoftPowerBi)
             .unwrap();
 
-        assert!(store
-            .access_token_for_grant(&auth, &grant.grant_id)
-            .is_none());
+        assert!(
+            store
+                .access_token_for_grant(&auth, &grant.grant_id)
+                .is_none()
+        );
         // Revoking keeps the record visible (not deleted) — just inactive.
         let bundle_grants = store.load(&auth).unwrap().grants;
-        assert!(bundle_grants
-            .iter()
-            .any(|g| g.grant_id == grant.grant_id && g.revoked_at.is_some()));
+        assert!(
+            bundle_grants
+                .iter()
+                .any(|g| g.grant_id == grant.grant_id && g.revoked_at.is_some())
+        );
 
         std::fs::remove_dir_all(dir).ok();
     }
@@ -705,12 +717,16 @@ mod tests {
             .unwrap();
 
         let grants = store.active_grants(&auth);
-        assert!(grants
-            .iter()
-            .all(|g| g.integration != IntegrationKind::MicrosoftFabric));
-        assert!(grants
-            .iter()
-            .all(|g| g.integration != IntegrationKind::MicrosoftPowerBi));
+        assert!(
+            grants
+                .iter()
+                .all(|g| g.integration != IntegrationKind::MicrosoftFabric)
+        );
+        assert!(
+            grants
+                .iter()
+                .all(|g| g.integration != IntegrationKind::MicrosoftPowerBi)
+        );
 
         std::fs::remove_dir_all(dir).ok();
     }

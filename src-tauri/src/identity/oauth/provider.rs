@@ -82,15 +82,15 @@ impl OAuthProvider {
             OAuthProvider::Microsoft => (&config.microsoft_client_id, "GHOST_MS_CLIENT_ID"),
             OAuthProvider::Google => (&config.google_client_id, "GHOST_GOOGLE_CLIENT_ID"),
         };
-        if let Some(id) = configured {
-            if !id.trim().is_empty() {
-                return Ok(id.clone());
-            }
+        if let Some(id) = configured
+            && !id.trim().is_empty()
+        {
+            return Ok(id.clone());
         }
-        if let Ok(id) = std::env::var(env_var) {
-            if !id.trim().is_empty() {
-                return Ok(id);
-            }
+        if let Ok(id) = std::env::var(env_var)
+            && !id.trim().is_empty()
+        {
+            return Ok(id);
         }
         if matches!(self, OAuthProvider::Google) {
             return Ok(crate::config::BUNDLED_GOOGLE_CLIENT_ID.to_string());

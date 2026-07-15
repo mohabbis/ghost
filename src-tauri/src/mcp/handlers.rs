@@ -3,10 +3,10 @@
 use crate::mcp::pending::ApprovalRequestStatus;
 use crate::mcp::tools::McpToolKind;
 use crate::mcp::{hash_organizer_plan, pending};
-use crate::organizer::planner::{plan_zone, OrganizerPlan};
+use crate::organizer::planner::{OrganizerPlan, plan_zone};
 use crate::storage::open_default;
 use crate::storage::zones::list_zones;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub fn handle_tool(name: &str, arguments: &Value) -> Result<Value, String> {
     let kind = tool_kind_from_name(name)?;
@@ -225,8 +225,10 @@ mod tests {
             .iter()
             .find(|t| t["name"] == McpToolKind::ExecuteApprovedPlan.name())
             .expect("execute tool advertised");
-        assert!(execute["inputSchema"]["properties"]
-            .get("approval_token")
-            .is_some());
+        assert!(
+            execute["inputSchema"]["properties"]
+                .get("approval_token")
+                .is_some()
+        );
     }
 }

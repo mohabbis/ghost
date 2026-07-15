@@ -103,10 +103,10 @@ impl GoogleIntegrationService {
         bucket: &str,
     ) -> Result<(), IntegrationError> {
         self.google_grant_active(auth)?;
-        if let Some(bound) = self.bound_export_bucket(auth) {
-            if bound != bucket {
-                return Err(IntegrationError::PermissionDenied);
-            }
+        if let Some(bound) = self.bound_export_bucket(auth)
+            && bound != bucket
+        {
+            return Err(IntegrationError::PermissionDenied);
         }
         Ok(())
     }
@@ -212,7 +212,7 @@ impl GcsClient {
 }
 
 pub fn google_error_message(status: u16, operation: &str) -> String {
-    let base = match status {
+    match status {
         401 | 403 => format!(
             "{} For Google Cloud Storage {operation}, ensure the account has Storage Object User (or higher) on the target bucket and reconnect in Settings.",
             IntegrationError::PermissionDenied.user_message()
@@ -221,8 +221,7 @@ pub fn google_error_message(status: u16, operation: &str) -> String {
         429 => IntegrationError::RateLimited.to_string(),
         code if code >= 500 => IntegrationError::ProviderUnavailable.to_string(),
         _ => IntegrationError::InvalidResponse.to_string(),
-    };
-    base
+    }
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use crate::core::compression::{CompressedStep, CompressionReport};
 use crate::core::events::InputEvent;
 use crate::organizer::planner::{OrganizerPlan, PlanAction};
 use crate::policy::routines::capability_for_step;
-use crate::policy::{evaluate_with_attribution, Capability};
+use crate::policy::{Capability, evaluate_with_attribution};
 use uuid::Uuid;
 
 pub fn from_organizer_plan(plan: &OrganizerPlan) -> ActionPlan {

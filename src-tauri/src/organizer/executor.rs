@@ -94,7 +94,7 @@ mod tests {
     use super::*;
     use crate::audit::{ActionOutcome, Provenance};
     use crate::organizer::planner::plan_with_rules;
-    use crate::organizer::testutil::{tempdir, TempDir};
+    use crate::organizer::testutil::{TempDir, tempdir};
     use crate::policy::{Capability, FolderRule};
     use std::path::Path;
 

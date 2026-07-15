@@ -1,7 +1,7 @@
-use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::OsRng;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
+use aes_gcm::aead::rand_core::RngCore;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
 use sha2::{Digest, Sha256};
 
 pub fn pkce_pair() -> (String, String) {

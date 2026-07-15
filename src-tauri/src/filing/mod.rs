@@ -23,5 +23,5 @@ pub mod preview;
 pub mod savings;
 
 pub use period::Period;
-pub use preview::{preview_filing, Audience, FiledItem, FilingPreview};
-pub use savings::{estimate_savings, SavingsEstimate, SavingsInputs};
+pub use preview::{Audience, FiledItem, FilingPreview, preview_filing};
+pub use savings::{SavingsEstimate, SavingsInputs, estimate_savings};

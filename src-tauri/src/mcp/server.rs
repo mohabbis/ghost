@@ -1,6 +1,6 @@
 //! Local stdio MCP server (JSON-RPC 2.0, newline-delimited).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 
 use super::handlers;

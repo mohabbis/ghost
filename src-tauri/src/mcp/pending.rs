@@ -46,10 +46,10 @@ fn store_path() -> PathBuf {
 
 fn load_store() -> Store {
     let path = store_path();
-    if let Ok(bytes) = fs::read(&path) {
-        if let Ok(store) = serde_json::from_slice::<Store>(&bytes) {
-            return store;
-        }
+    if let Ok(bytes) = fs::read(&path)
+        && let Ok(store) = serde_json::from_slice::<Store>(&bytes)
+    {
+        return store;
     }
     Store::default()
 }

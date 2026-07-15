@@ -123,10 +123,10 @@ pub fn scan_id_at(text: &str, today: (i32, u32, u32)) -> IdScan {
     } else if expires_soon == Some(true) {
         flags.push(format!("ID expires within {EXPIRES_SOON_DAYS} days"));
     }
-    if let Some(a) = age {
-        if a < ADULT_AGE {
-            flags.push(format!("Cardholder is a minor (age {a})"));
-        }
+    if let Some(a) = age
+        && a < ADULT_AGE
+    {
+        flags.push(format!("Cardholder is a minor (age {a})"));
     }
     if document_type == IdDocumentType::Unknown {
         flags.push("Document type not recognized".to_string());
@@ -305,10 +305,8 @@ fn detect_jurisdiction(text: &str, id_number: Option<&str>) -> Option<String> {
             let prefix: String = trimmed.chars().take(2).collect();
             let next = trimmed.chars().nth(2);
             let boundary = next.map(|c| !c.is_ascii_alphabetic()).unwrap_or(true);
-            if boundary {
-                if let Some(name) = state_name(&prefix.to_ascii_uppercase()) {
-                    return Some(name.to_string());
-                }
+            if boundary && let Some(name) = state_name(&prefix.to_ascii_uppercase()) {
+                return Some(name.to_string());
             }
         }
     }
@@ -384,12 +382,12 @@ const US_STATES: &[(&str, &str)] = &[
 fn first_capture(text: &str, patterns: &[&str]) -> Option<String> {
     for p in patterns {
         let re = Regex::new(p).ok()?;
-        if let Some(caps) = re.captures(text) {
-            if let Some(m) = caps.get(1) {
-                let s = m.as_str().trim();
-                if !s.is_empty() {
-                    return Some(s.to_string());
-                }
+        if let Some(caps) = re.captures(text)
+            && let Some(m) = caps.get(1)
+        {
+            let s = m.as_str().trim();
+            if !s.is_empty() {
+                return Some(s.to_string());
             }
         }
     }
@@ -594,14 +592,16 @@ mod tests {
         assert!(scan.expiry.is_none());
         assert_eq!(scan.document_type, IdDocumentType::Unknown);
         assert!(scan.flags.iter().any(|f| f.contains("name not detected")));
-        assert!(scan
-            .flags
-            .iter()
-            .any(|f| f.contains("Date of birth not detected")));
-        assert!(scan
-            .flags
-            .iter()
-            .any(|f| f.contains("Document type not recognized")));
+        assert!(
+            scan.flags
+                .iter()
+                .any(|f| f.contains("Date of birth not detected"))
+        );
+        assert!(
+            scan.flags
+                .iter()
+                .any(|f| f.contains("Document type not recognized"))
+        );
     }
 
     #[test]

@@ -159,10 +159,12 @@ fn coordinate_only_click_gets_low_confidence() {
         }
         other => panic!("expected click, got {other:?}"),
     }
-    assert!(report
-        .warnings
-        .iter()
-        .any(|w| matches!(w, CompressionWarning::CoordinateOnlyTarget { .. })));
+    assert!(
+        report
+            .warnings
+            .iter()
+            .any(|w| matches!(w, CompressionWarning::CoordinateOnlyTarget { .. }))
+    );
 }
 
 #[test]

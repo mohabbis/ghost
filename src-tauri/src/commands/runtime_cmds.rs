@@ -1,7 +1,7 @@
 //! Ghost 2.0 unified action plan commands — one pipeline for all intent sources.
 
 use crate::action_plan::{
-    build_invoice_demo, from_compression_report, from_organizer_plan, ActionPlan, PlanSource,
+    ActionPlan, PlanSource, build_invoice_demo, from_compression_report, from_organizer_plan,
 };
 use crate::core::compression::compress;
 use crate::core::events::InputEvent;
@@ -9,7 +9,7 @@ use crate::engine::GhostEngine;
 use crate::organizer::pipeline::undo_zone_run;
 use crate::organizer::planner::plan_zone;
 use crate::policy::{ensure_replayable, evaluate_compressed, fingerprint_events};
-use crate::runtime::{run_persisted_action_plan, ExecutionReceipt};
+use crate::runtime::{ExecutionReceipt, run_persisted_action_plan};
 use crate::storage::executions::get_execution;
 use crate::storage::zones::list_folder_rules;
 use serde::{Deserialize, Serialize};

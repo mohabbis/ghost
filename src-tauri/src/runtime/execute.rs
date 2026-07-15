@@ -1,9 +1,9 @@
 //! Canonical execution runtime — one pipeline for Organizer, Routines, MCP, and workflows.
 
-use super::fs::{apply_filesystem_step, FsOutcome};
-use super::receipt::{build_receipt, ExecutionReceipt};
-use super::ui::{dispatch_ui_step_with_reliability, UiOutcome};
-use super::verify::{verify_after_kind, StepVerification, VerificationStatus};
+use super::fs::{FsOutcome, apply_filesystem_step};
+use super::receipt::{ExecutionReceipt, build_receipt};
+use super::ui::{UiOutcome, dispatch_ui_step_with_reliability};
+use super::verify::{StepVerification, VerificationStatus, verify_after_kind};
 use crate::action_plan::types::ActionKind;
 use crate::action_plan::types::ActionPlan;
 use crate::audit::{ActionOutcome, Provenance, UndoJournal};

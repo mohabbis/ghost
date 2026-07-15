@@ -30,7 +30,7 @@ pub mod telemetry;
 mod test_support;
 
 macro_rules! run_with_commands {
-    ($builder:expr $(, $experimental_command:path)* $(,)?) => {
+    ($builder:expr_2021 $(, $experimental_command:path)* $(,)?) => {
         $builder
             .invoke_handler(tauri::generate_handler![
                 // Stable core: recording, replay, inspection, workflow storage, and permissions.

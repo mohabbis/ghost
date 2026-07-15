@@ -359,23 +359,27 @@ mod tests {
         }
 
         // Delete -> Deny (MVP never deletes).
-        assert!(policy::evaluate(
-            &Capability::DeleteFile {
-                path: PathBuf::from("/home/u/Downloads/a.pdf")
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            policy::evaluate(
+                &Capability::DeleteFile {
+                    path: PathBuf::from("/home/u/Downloads/a.pdf")
+                },
+                &rules,
+            )
+            .is_denied()
+        );
 
         // Out-of-boundary move -> Deny.
-        assert!(policy::evaluate(
-            &Capability::MoveFile {
-                from: PathBuf::from("/home/u/Downloads/a.pdf"),
-                to: PathBuf::from("/tmp/a.pdf"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            policy::evaluate(
+                &Capability::MoveFile {
+                    from: PathBuf::from("/home/u/Downloads/a.pdf"),
+                    to: PathBuf::from("/tmp/a.pdf"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]

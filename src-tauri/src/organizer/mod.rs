@@ -36,8 +36,8 @@ pub(crate) mod testutil;
 
 pub use classifier::{Category, Classification};
 pub use conflict::Conflict;
-pub use executor::{execute_plan, ExecutionReport};
-pub use pipeline::{execute_zone, undo_zone_run, ZoneRunOutcome};
-pub use planner::{plan_zone, OrganizerPlan, PlanAction, PlanSummary, SkipReason, SkippedFile};
+pub use executor::{ExecutionReport, execute_plan};
+pub use pipeline::{ZoneRunOutcome, execute_zone, undo_zone_run};
+pub use planner::{OrganizerPlan, PlanAction, PlanSummary, SkipReason, SkippedFile, plan_zone};
 pub use scanner::ScannedFile;
-pub use undo::{revert, UndoReport};
+pub use undo::{UndoReport, revert};

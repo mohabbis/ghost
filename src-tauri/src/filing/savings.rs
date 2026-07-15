@@ -235,10 +235,11 @@ mod tests {
     #[test]
     fn assumptions_are_disclosed() {
         let est = estimate_savings(&base());
-        assert!(est
-            .assumptions
-            .iter()
-            .any(|a| a.contains("Assisted handling assumed")));
+        assert!(
+            est.assumptions
+                .iter()
+                .any(|a| a.contains("Assisted handling assumed"))
+        );
     }
 
     #[test]

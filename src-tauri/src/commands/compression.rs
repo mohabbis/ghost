@@ -1,5 +1,5 @@
-use crate::core::compression::compress;
 use crate::core::compression::CompressionReport;
+use crate::core::compression::compress;
 use crate::core::events::InputEvent;
 
 /// Compress a raw event stream into semantic steps with warnings and metadata.

@@ -330,26 +330,30 @@ mod tests {
     #[test]
     fn read_outside_boundary_is_denied() {
         let rules = vec![FolderRule::read_only("/home/u/Downloads")];
-        assert!(evaluate(
-            &Capability::ReadFolder {
-                path: PathBuf::from("/etc"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::ReadFolder {
+                    path: PathBuf::from("/etc"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]
     fn create_requires_can_create() {
         // read-only rule does not grant creation
         let rules = vec![FolderRule::read_only("/home/u/Docs")];
-        assert!(evaluate(
-            &Capability::CreateFolder {
-                path: PathBuf::from("/home/u/Docs/New"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::CreateFolder {
+                    path: PathBuf::from("/home/u/Docs/New"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]
@@ -371,37 +375,43 @@ mod tests {
     #[test]
     fn move_outside_boundary_is_denied() {
         let rules = vec![full_rule("/home/u/Downloads")];
-        assert!(evaluate(
-            &Capability::MoveFile {
-                from: PathBuf::from("/home/u/Downloads/a.pdf"),
-                to: PathBuf::from("/tmp/a.pdf"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::MoveFile {
+                    from: PathBuf::from("/home/u/Downloads/a.pdf"),
+                    to: PathBuf::from("/tmp/a.pdf"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]
     fn delete_is_always_denied() {
         let rules = vec![full_rule("/home/u/Downloads")];
-        assert!(evaluate(
-            &Capability::DeleteFile {
-                path: PathBuf::from("/home/u/Downloads/a.pdf"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::DeleteFile {
+                    path: PathBuf::from("/home/u/Downloads/a.pdf"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]
     fn network_and_capture_are_denied() {
-        assert!(evaluate(
-            &Capability::UseNetwork {
-                host: "example.com".into(),
-            },
-            &[],
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::UseNetwork {
+                    host: "example.com".into(),
+                },
+                &[],
+            )
+            .is_denied()
+        );
         assert!(evaluate(&Capability::CaptureScreen, &[]).is_denied());
         assert!(evaluate(&Capability::GenerateWorkflowFromPrompt, &[]).is_denied());
     }
@@ -465,13 +475,15 @@ mod tests {
     #[test]
     fn never_rule_refuses_folder_creation_but_still_reads() {
         let rules = vec![full_rule_with_trust("/home/u/Downloads", TrustLevel::Never)];
-        assert!(evaluate(
-            &Capability::CreateFolder {
-                path: PathBuf::from("/home/u/Downloads/New"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::CreateFolder {
+                    path: PathBuf::from("/home/u/Downloads/New"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
         // Reads stay allowed at every trust level: the read grant is the scope.
         assert_eq!(
             evaluate(
@@ -529,25 +541,29 @@ mod tests {
             "/home/u/Downloads",
             TrustLevel::Automate,
         )];
-        assert!(evaluate(
-            &Capability::DeleteFile {
-                path: PathBuf::from("/home/u/Downloads/a.pdf"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::DeleteFile {
+                    path: PathBuf::from("/home/u/Downloads/a.pdf"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 
     #[test]
     fn sibling_prefix_is_not_inside_boundary() {
         // "/a/bc" must NOT be treated as inside "/a/b".
         let rules = vec![FolderRule::read_only("/a/b")];
-        assert!(evaluate(
-            &Capability::ReadFolder {
-                path: PathBuf::from("/a/bc"),
-            },
-            &rules,
-        )
-        .is_denied());
+        assert!(
+            evaluate(
+                &Capability::ReadFolder {
+                    path: PathBuf::from("/a/bc"),
+                },
+                &rules,
+            )
+            .is_denied()
+        );
     }
 }

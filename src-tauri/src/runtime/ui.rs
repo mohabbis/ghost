@@ -78,12 +78,12 @@ fn semantic_set_value(target: &UiTarget, value: &str) -> UiOutcome {
 fn semantic_verify(target: &UiTarget, expected_value: Option<&str>) -> UiOutcome {
     match semantic::verify_target(target, expected_value) {
         Ok(observed) => {
-            if let Some(expected) = expected_value {
-                if observed.trim() != expected.trim() {
-                    return UiOutcome::Failed(format!(
-                        "semantic verify mismatch (expected {expected}, observed {observed})"
-                    ));
-                }
+            if let Some(expected) = expected_value
+                && observed.trim() != expected.trim()
+            {
+                return UiOutcome::Failed(format!(
+                    "semantic verify mismatch (expected {expected}, observed {observed})"
+                ));
             }
             UiOutcome::Applied
         }

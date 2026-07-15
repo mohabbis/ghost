@@ -19,7 +19,7 @@
 //! matching the "Llama-3-8B or Phi-3" ask without a second code path.
 
 use crate::core::events::{ElementInfo, InputEvent};
-use crate::core::llm::{parse_events_json, LLMProvider};
+use crate::core::llm::{LLMProvider, parse_events_json};
 use candle_core::quantized::gguf_file;
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;

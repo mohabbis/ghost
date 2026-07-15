@@ -340,22 +340,24 @@ mod tests {
         )
         .unwrap();
 
-        assert!(mgr
-            .add_member(
+        assert!(
+            mgr.add_member(
                 &workspace.id,
                 "added-by-admin".to_string(),
                 MemberRole::Member,
                 "admin".to_string(),
             )
-            .is_ok());
-        assert!(mgr
-            .add_member(
+            .is_ok()
+        );
+        assert!(
+            mgr.add_member(
                 &workspace.id,
                 "added-by-member".to_string(),
                 MemberRole::Member,
                 "member".to_string(),
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]

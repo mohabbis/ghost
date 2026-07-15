@@ -1,19 +1,25 @@
 //! Ghost 2.0 unified pipeline integration tests.
 
-use ghost_lib::action_plan::{build_invoice_demo, from_organizer_plan, ActionPlan};
+use ghost_lib::action_plan::{ActionPlan, build_invoice_demo, from_organizer_plan};
 use ghost_lib::organizer::planner::plan_with_rules;
 use ghost_lib::policy::{FolderRule, TrustLevel};
 use ghost_lib::runtime::execute_action_plan_with_progress;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn scratch_dir() -> PathBuf {
+    // Uniqueness must not rely on timestamp resolution alone: parallel tests can
+    // read the same nanos value, collide on one dir, and cross-contaminate.
+    // pid + a monotonic counter guarantees a distinct dir per call.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("ghost2_test_{nanos}"));
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("ghost2_test_{}_{nanos}_{n}", std::process::id()));
     fs::create_dir_all(&path).unwrap();
     // Resolve symlinks (macOS `temp_dir()` is `/var/...` -> `/private/var/...`)
     // so the FolderRule path matches the canonicalized paths the planner emits;

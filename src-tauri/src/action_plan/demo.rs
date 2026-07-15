@@ -3,7 +3,7 @@
 use super::types::{ActionKind, ActionPlan, ActionStep, PlanSource};
 use crate::organizer::file_identity::FileIdentity;
 use crate::organizer::naming::dated_prefix;
-use crate::policy::{evaluate_with_attribution, Capability};
+use crate::policy::{Capability, evaluate_with_attribution};
 use crate::runtime::semantic::UiTarget;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -191,10 +191,10 @@ fn find_newest_invoice(downloads: &Path) -> Result<PathBuf, String> {
         if !looks_like_invoice {
             continue;
         }
-        if let Ok(meta) = entry.metadata() {
-            if let Ok(modified) = meta.modified() {
-                candidates.push((modified, path));
-            }
+        if let Ok(meta) = entry.metadata()
+            && let Ok(modified) = meta.modified()
+        {
+            candidates.push((modified, path));
         }
     }
     candidates
@@ -287,9 +287,10 @@ mod tests {
         let plan = build_invoice_demo(&downloads, &finance).unwrap();
         assert!(plan.summary.filesystem_steps >= 2);
         assert!(plan.summary.ui_steps >= 2);
-        assert!(plan
-            .steps
-            .iter()
-            .any(|s| matches!(s.kind, ActionKind::MoveFile { .. })));
+        assert!(
+            plan.steps
+                .iter()
+                .any(|s| matches!(s.kind, ActionKind::MoveFile { .. }))
+        );
     }
 }

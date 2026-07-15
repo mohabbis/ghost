@@ -17,10 +17,10 @@ pub mod zone;
 pub use boundary::verify_relocate_at_execution;
 pub use capability::Capability;
 pub use decision::PolicyDecision;
-pub use engine::{evaluate, evaluate_with_attribution, Evaluation};
+pub use engine::{Evaluation, evaluate, evaluate_with_attribution};
 pub use risk::RiskLevel;
 pub use routines::{
-    capability_for_step, ensure_replayable, evaluate_compressed, evaluate_compressed_with_rules,
-    fingerprint_events, RoutinePolicyPlan, RoutineStepDecision,
+    RoutinePolicyPlan, RoutineStepDecision, capability_for_step, ensure_replayable,
+    evaluate_compressed, evaluate_compressed_with_rules, fingerprint_events,
 };
 pub use zone::{DefaultDecision, FolderRule, TrustLevel, Zone};

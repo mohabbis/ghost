@@ -23,7 +23,7 @@ pub use capability::{ProviderCapabilities, ProviderHealth, ProviderId};
 pub use credentials::{CredentialProvider, CredentialStore};
 pub use disabled::DisabledProvider;
 pub use errors::ProviderError;
-pub use local::{discover_local_runtimes, LocalRuntimeDiscovery};
+pub use local::{LocalRuntimeDiscovery, discover_local_runtimes};
 pub use provider::IntelligenceProvider;
 pub use registry::ProviderRegistry;
 pub use router::{ProviderRouter, RoutingPolicy};

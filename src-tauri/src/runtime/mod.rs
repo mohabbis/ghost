@@ -9,9 +9,9 @@ pub mod ui;
 pub mod verify;
 
 pub use execute::{
-    execute_action_plan_with_progress, execute_action_plan_with_reliability, RuntimeResult,
+    RuntimeResult, execute_action_plan_with_progress, execute_action_plan_with_reliability,
 };
-pub use persist::{run_persisted_action_plan, PersistedRunOutcome};
-pub use receipt::{build_receipt, ExecutionReceipt, ReceiptStep};
+pub use persist::{PersistedRunOutcome, run_persisted_action_plan};
+pub use receipt::{ExecutionReceipt, ReceiptStep, build_receipt};
 pub use semantic::{ResolvedTarget, SemanticError, UiTarget};
 pub use verify::{StepVerification, VerificationStatus};

@@ -197,14 +197,12 @@ impl ExecutionHistory {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
-                        if record.workflow_name == workflow_name {
-                            records.push(record);
-                        }
-                    }
-                }
+            if path.extension().and_then(|s| s.to_str()) == Some("json")
+                && let Ok(content) = fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content)
+                && record.workflow_name == workflow_name
+            {
+                records.push(record);
             }
         }
 
@@ -226,12 +224,11 @@ impl ExecutionHistory {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
-                        records.push(record);
-                    }
-                }
+            if path.extension().and_then(|s| s.to_str()) == Some("json")
+                && let Ok(content) = fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content)
+            {
+                records.push(record);
             }
         }
 
@@ -306,12 +303,11 @@ impl ExecutionHistory {
             let entry = entry?;
             let path = entry.path();
 
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content) {
-                    if record.start_time < cutoff {
-                        let _ = fs::remove_file(&path);
-                    }
-                }
+            if let Ok(content) = fs::read_to_string(&path)
+                && let Ok(record) = serde_json::from_str::<ExecutionRecord>(&content)
+                && record.start_time < cutoff
+            {
+                let _ = fs::remove_file(&path);
             }
         }
 

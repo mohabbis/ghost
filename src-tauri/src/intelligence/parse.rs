@@ -1,7 +1,7 @@
 //! Parse structured JSON suggestions from provider text responses.
 
 use super::errors::ProviderError;
-use super::schema::{suggestion_is_safe, PlanningSuggestion};
+use super::schema::{PlanningSuggestion, suggestion_is_safe};
 
 /// Extract and validate a `PlanningSuggestion` from raw model text.
 pub fn parse_planning_suggestion(content: &str) -> Result<PlanningSuggestion, ProviderError> {
@@ -34,10 +34,10 @@ fn extract_json_object(content: &str) -> String {
             }
         }
     }
-    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
-        if start < end {
-            return trimmed[start..=end].to_string();
-        }
+    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}'))
+        && start < end
+    {
+        return trimmed[start..=end].to_string();
     }
     trimmed.to_string()
 }

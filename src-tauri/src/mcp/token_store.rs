@@ -16,10 +16,10 @@ fn store_path() -> PathBuf {
 
 fn load_used() -> HashSet<String> {
     let path = store_path();
-    if let Ok(bytes) = fs::read(&path) {
-        if let Ok(set) = serde_json::from_slice::<HashSet<String>>(&bytes) {
-            return set;
-        }
+    if let Ok(bytes) = fs::read(&path)
+        && let Ok(set) = serde_json::from_slice::<HashSet<String>>(&bytes)
+    {
+        return set;
     }
     HashSet::new()
 }

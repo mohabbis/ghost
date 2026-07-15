@@ -284,10 +284,10 @@ pub fn search(memories: &[Memory], query: &str, opts: &SearchOptions) -> Vec<Sea
         if mem.archived && !opts.include_archived {
             continue;
         }
-        if let Some(tag) = &opts.focus_tag {
-            if !mem.has_tag(tag) {
-                continue;
-            }
+        if let Some(tag) = &opts.focus_tag
+            && !mem.has_tag(tag)
+        {
+            continue;
         }
         let score = cosine(&q, &embed(&mem.content));
         if score >= opts.min_score {

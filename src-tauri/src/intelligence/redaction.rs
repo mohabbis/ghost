@@ -40,8 +40,10 @@ mod tests {
         };
         let redacted = redact_planning_request(request);
         assert_eq!(redacted.file_metadata[0].name, "invoice.pdf");
-        assert!(!serde_json::to_string(&redacted)
-            .unwrap()
-            .contains("/Users/"));
+        assert!(
+            !serde_json::to_string(&redacted)
+                .unwrap()
+                .contains("/Users/")
+        );
     }
 }
