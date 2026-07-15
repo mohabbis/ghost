@@ -40,13 +40,13 @@ function platformDetection() {
   document.body.dataset.platform = platform;
 
   const sub = $("#download-sub");
-  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v2.0.3 (notarized).";
-  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v2.0.3 (unsigned installer).";
+  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v2.0.4 (notarized).";
+  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v2.0.4 (unsigned installer).";
 
   const primaryLabel = $("[data-download-label]");
   if (primaryLabel) {
-    if (platform === "mac") primaryLabel.textContent = "Download v2.0.3 for macOS";
-    else if (platform === "windows") primaryLabel.textContent = "Download v2.0.3 for Windows";
+    if (platform === "mac") primaryLabel.textContent = "Download v2.0.4 for macOS";
+    else if (platform === "windows") primaryLabel.textContent = "Download v2.0.4 for Windows";
   }
 }
 
@@ -73,6 +73,10 @@ function revealOnScroll() {
 /* ---------- ghost cursor-tracking eyes ---------- */
 function setupGhostEyes() {
   if (reduce.matches) return;
+  // Cursor tracking only makes sense with a real pointing device. On touch /
+  // coarse-pointer devices the pointermove handler fires during scroll and
+  // causes jank, so skip it entirely there.
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
   const pupils = $$("[data-eye], .ghost-eye");
   if (!pupils.length) return;
   let raf = null;
