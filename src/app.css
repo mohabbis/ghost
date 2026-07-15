@@ -182,6 +182,12 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   border-radius: 16px;
   padding: 18px 20px;
   background: var(--bg-soft);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.panel:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 
 .panel h2 {
@@ -1029,6 +1035,27 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 14px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.organizer-field select:hover,
+.organizer-field input:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.organizer-field select:focus,
+.organizer-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46, 196, 162, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.organizer-field select:focus-visible,
+.organizer-field input:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
 }
 
 /* "What is Ghost?" modal: a scannable statement of what it is, does, can't do,
@@ -1123,6 +1150,24 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   resize: vertical;
   min-height: 96px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.filing-names-field textarea:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.filing-names-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46, 196, 162, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.filing-names-field textarea:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
 }
 
 .filing-savings-grid {
@@ -1519,18 +1564,33 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   font-size: 0.92rem;
   text-align: left;
   cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .nav__item:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
+  transform: translateX(2px);
+}
+
+.nav__item:active {
+  transform: translateX(0);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nav__item:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .nav__item.is-active {
   background: rgba(14, 143, 120, 0.16);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(14, 143, 120, 0.34);
+  transform: none;
 }
 
 .nav__ico {

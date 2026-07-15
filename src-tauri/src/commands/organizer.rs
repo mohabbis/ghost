@@ -191,6 +191,7 @@ pub fn organizer_create_zone(
     rename_dated: Option<bool>,
     engine: State<GhostEngine>,
 ) -> Result<Zone, String> {
+    let _timer = crate::performance::ScopedTimer::new(&engine.perf, "organizer_create_zone");
     super::auth::require_unlocked(&engine)?;
     let name = name.trim();
     if name.is_empty() {
@@ -223,6 +224,7 @@ pub fn organizer_add_folder_rule(
     rule: FolderRule,
     engine: State<GhostEngine>,
 ) -> Result<(), String> {
+    let _timer = crate::performance::ScopedTimer::new(&engine.perf, "organizer_add_folder_rule");
     super::auth::require_unlocked(&engine)?;
     // Ghost never grants delete through the Organizer surface (MVP never deletes,
     // and the policy engine denies it regardless). Refuse to even persist such a
@@ -304,7 +306,8 @@ mod path_tests {
 ///
 /// Risk class: safe-read. Touches: files (reads directory metadata; no writes).
 #[tauri::command]
-pub fn organizer_plan(zone_id: String) -> Result<OrganizerPlan, String> {
+pub fn organizer_plan(zone_id: String, engine: State<GhostEngine>) -> Result<OrganizerPlan, String> {
+    let _timer = crate::performance::ScopedTimer::new(&engine.perf, "organizer_plan");
     let conn = open_default().map_err(|e| e.to_string())?;
     organizer_plan_with_conn(&conn, &zone_id)
 }
@@ -343,6 +346,7 @@ pub fn organizer_execute(
     zone_id: String,
     engine: State<GhostEngine>,
 ) -> Result<ExecutionResult, String> {
+    let _timer = crate::performance::ScopedTimer::new(&engine.perf, "organizer_execute");
     super::auth::require_unlocked(&engine)?;
     let conn = open_default().map_err(|e| e.to_string())?;
     let audit = engine.get_config().audit;
