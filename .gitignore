@@ -1,5 +1,9 @@
 ```
 # Environment files
+# Dependencies
+node_modules/
+
+# Environment
 .env
 .env.local
 *.env.*
@@ -32,6 +36,30 @@ htmlcov/
 .coverage
 
 # Compression files
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+
+# Compression
 *.zip
 *.gz
 *.tar
@@ -54,4 +82,23 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Gradle
+.gradle/
+
+# Target
+target/
+
+# Virtual environments
+.venv/
+venv/
 ```
