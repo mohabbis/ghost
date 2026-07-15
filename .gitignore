@@ -1,4 +1,5 @@
 ```
+# Environment files
 # Dependencies
 node_modules/
 
@@ -7,6 +8,34 @@ node_modules/
 .env.local
 *.env.*
 
+# Logs and temporary files
+*.log
+*.tmp
+
+# Editors and IDEs
+.vscode/
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+build/
+target/
+__pycache__/
+*.pyc
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Compression files
 # Logs and temp files
 *.log
 *.tmp
