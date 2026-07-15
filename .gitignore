@@ -1,58 +1,36 @@
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
+```
 # Dependencies
 node_modules/
-venv/
-.venv/
+
+# Environment
 .env
 .env.local
-.env.*
-
-# Build directories
-dist/
-build/
-target/
-src-tauri/bin/ghost-ax-helper-*
-native/macos/ghost-ax-helper
-.gradle/
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage
-htmlcov/
-.coverage.*
-.pytest_cache/
-.mypy_cache/
+*.env.*
 
 # Logs and temp files
 *.log
 *.tmp
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-Thumbs.db
 
 # Editors
 .vscode/
-.idea/
 
-# Compression and archives
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+
+# Compression
 *.zip
 *.gz
 *.tar
@@ -75,3 +53,23 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Gradle
+.gradle/
+
+# Target
+target/
+
+# Virtual environments
+.venv/
+venv/
+```
