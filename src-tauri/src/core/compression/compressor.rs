@@ -4,10 +4,10 @@ use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 
 use super::confidence;
 use super::grouping::{
-    combo_label, is_shortcut, is_typed_char, known_action, mouse_kind, scroll_bucket, MouseKind,
-    MIN_MEANINGFUL_WAIT_MS,
+    MIN_MEANINGFUL_WAIT_MS, MouseKind, combo_label, is_shortcut, is_typed_char, known_action,
+    mouse_kind, scroll_bucket,
 };
-use super::redaction::{is_secure_target, resolve, REDACT_BY_DEFAULT};
+use super::redaction::{REDACT_BY_DEFAULT, is_secure_target, resolve};
 use super::types::*;
 
 pub fn compress(events: &[InputEvent]) -> CompressionReport {
@@ -193,10 +193,9 @@ fn collect_typed_text(events: &[InputEvent], i: usize, consumed: usize) -> Strin
             action: KeyAction::Down,
             ..
         } = ev
+            && is_typed_char(chars, *modifiers)
         {
-            if is_typed_char(chars, *modifiers) {
-                out.push_str(chars);
-            }
+            out.push_str(chars);
         }
     }
     out

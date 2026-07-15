@@ -10,7 +10,7 @@
 
 #[cfg(target_os = "macos")]
 #[link(name = "IOKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn IOHIDCheckAccess(request_type: u32) -> u32;
 }
 

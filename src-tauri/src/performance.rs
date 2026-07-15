@@ -215,7 +215,7 @@ impl<'a> Drop for ScopedTimer<'a> {
 /// Macro for easy scoped timing
 #[macro_export]
 macro_rules! time_operation {
-    ($monitor:expr, $operation:expr, $block:block) => {{
+    ($monitor:expr_2021, $operation:expr_2021, $block:block) => {{
         let _timer = $crate::performance::ScopedTimer::new($monitor, $operation);
         $block
     }};

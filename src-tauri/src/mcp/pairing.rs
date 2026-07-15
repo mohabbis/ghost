@@ -21,10 +21,10 @@ fn config_path() -> PathBuf {
 
 pub fn load_pairing_config() -> PairingConfig {
     let path = config_path();
-    if let Ok(bytes) = fs::read(&path) {
-        if let Ok(cfg) = serde_json::from_slice::<PairingConfig>(&bytes) {
-            return cfg;
-        }
+    if let Ok(bytes) = fs::read(&path)
+        && let Ok(cfg) = serde_json::from_slice::<PairingConfig>(&bytes)
+    {
+        return cfg;
     }
     PairingConfig::default()
 }
@@ -78,8 +78,8 @@ pub fn pairing_status() -> PairingConfig {
 }
 
 fn generate_code() -> String {
-    use aes_gcm::aead::rand_core::RngCore;
     use aes_gcm::aead::OsRng;
+    use aes_gcm::aead::rand_core::RngCore;
     const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut bytes = [0u8; 8];
     OsRng.fill_bytes(&mut bytes);

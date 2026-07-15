@@ -13,7 +13,7 @@
 //! `cargo test --manifest-path src-tauri/Cargo.toml --test resolution_benchmark`
 
 use ghost_lib::core::events::ElementInfo;
-use ghost_lib::core::replay_support::{try_resolve_click_point_traced, ResolutionKind};
+use ghost_lib::core::replay_support::{ResolutionKind, try_resolve_click_point_traced};
 use image::{DynamicImage, Rgb, RgbImage};
 use std::collections::HashMap;
 

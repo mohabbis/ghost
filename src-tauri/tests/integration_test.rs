@@ -252,7 +252,7 @@ mod workflow_tests {
 #[test]
 fn test_ghost_guard_flags_sensitive_destructive_workflow() {
     use ghost_lib::core::events::ElementInfo;
-    use ghost_lib::core::guard::{audit_workflow, GuardCategory, GuardSeverity};
+    use ghost_lib::core::guard::{GuardCategory, GuardSeverity, audit_workflow};
 
     let events = vec![InputEvent::MouseClick {
         x: 10,
@@ -276,9 +276,11 @@ fn test_ghost_guard_flags_sensitive_destructive_workflow() {
     assert!(report.requires_confirmation);
     assert_eq!(report.risk_level, "high");
     assert!(report.score < 65);
-    assert!(report
-        .sensitive_apps
-        .contains(&"System Settings".to_string()));
+    assert!(
+        report
+            .sensitive_apps
+            .contains(&"System Settings".to_string())
+    );
     // A "Delete password" control matches a secure-field hint, so the guard
     // categorizes it as a SensitiveField (the more specific finding) rather
     // than a generic SensitiveApp, while still recording the app above.

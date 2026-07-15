@@ -6,12 +6,12 @@
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction, ReliabilitySettings};
 use crate::core::replay_support::{
-    check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+    ReplayProgress, check_continue, interruptible_sleep, pacing_gap_ms,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 pub struct HeadlessBackend;
 

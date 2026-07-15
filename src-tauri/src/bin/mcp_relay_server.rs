@@ -162,16 +162,16 @@ fn handle_poll<S: Write>(
     loop {
         {
             let mut guard = state.lock().unwrap();
-            if let Some(device) = guard.devices.get_mut(&device_id) {
-                if !device.inbox.is_empty() {
-                    let messages: Vec<_> = device
-                        .inbox
-                        .drain(..)
-                        .map(|m| serde_json::json!({"id": m.id, "body": m.body}))
-                        .collect();
-                    let text = serde_json::json!({ "messages": messages });
-                    return write_json(stream, 200, &text.to_string());
-                }
+            if let Some(device) = guard.devices.get_mut(&device_id)
+                && !device.inbox.is_empty()
+            {
+                let messages: Vec<_> = device
+                    .inbox
+                    .drain(..)
+                    .map(|m| serde_json::json!({"id": m.id, "body": m.body}))
+                    .collect();
+                let text = serde_json::json!({ "messages": messages });
+                return write_json(stream, 200, &text.to_string());
             }
         }
         if Instant::now() >= deadline {
@@ -247,11 +247,7 @@ fn parse_query(path: &str, key: &str) -> Option<String> {
     let query = path.split('?').nth(1)?;
     query.split('&').find_map(|pair| {
         let (k, v) = pair.split_once('=')?;
-        if k == key {
-            Some(v.to_string())
-        } else {
-            None
-        }
+        if k == key { Some(v.to_string()) } else { None }
     })
 }
 

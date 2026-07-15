@@ -5,7 +5,7 @@
 
 use crate::auth::AuthManager;
 use crate::identity::{
-    run_sign_in_flow, AccountIdentity, IdentityStore, OAuthProvider, TokenMaterial,
+    AccountIdentity, IdentityStore, OAuthProvider, TokenMaterial, run_sign_in_flow,
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

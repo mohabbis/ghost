@@ -15,7 +15,7 @@ use crate::audit::pii::mask;
 use crate::audit::{ActionOutcome, AuditEvent, Provenance};
 use crate::policy::Capability;
 use crate::storage::executions::StoredExecution;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The three Power BI table row-sets this export produces, keyed by the
 /// table names in `super::schema`.

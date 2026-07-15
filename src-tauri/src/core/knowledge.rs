@@ -190,34 +190,34 @@ impl KnowledgeBase {
         // Look for key combinations (multiple keys without delay)
         let mut i = 0;
         while i < events.len() {
-            if let InputEvent::Key { modifiers, .. } = &events[i] {
-                if *modifiers > 0 && i + 1 < events.len() {
-                    if let InputEvent::Key { .. } = &events[i + 1] {
-                        // Likely a shortcut
-                        patterns.push(LearnedPattern {
-                            id: format!("shortcut_{}_{}", app_name, i),
-                            app_name: app_name.to_string(),
-                            pattern_type: LearningPatternType::ShortcutDiscovery,
-                            description: format!(
-                                "Potential keyboard shortcut detected: {} modifier + key",
-                                modifiers
-                            ),
-                            trigger_conditions: vec!["app_focus".to_string()],
-                            suggested_actions: vec![
-                                "Save as keyboard macro".to_string(),
-                                "Show in Geek Mode".to_string(),
-                            ],
-                            confidence: 0.75,
-                            first_seen: timestamp,
-                            last_seen: timestamp,
-                            occurrence_count: 1,
-                            events: vec![],
-                            geek_details: None,
-                        });
-                        i += 2;
-                        continue;
-                    }
-                }
+            if let InputEvent::Key { modifiers, .. } = &events[i]
+                && *modifiers > 0
+                && i + 1 < events.len()
+                && let InputEvent::Key { .. } = &events[i + 1]
+            {
+                // Likely a shortcut
+                patterns.push(LearnedPattern {
+                    id: format!("shortcut_{}_{}", app_name, i),
+                    app_name: app_name.to_string(),
+                    pattern_type: LearningPatternType::ShortcutDiscovery,
+                    description: format!(
+                        "Potential keyboard shortcut detected: {} modifier + key",
+                        modifiers
+                    ),
+                    trigger_conditions: vec!["app_focus".to_string()],
+                    suggested_actions: vec![
+                        "Save as keyboard macro".to_string(),
+                        "Show in Geek Mode".to_string(),
+                    ],
+                    confidence: 0.75,
+                    first_seen: timestamp,
+                    last_seen: timestamp,
+                    occurrence_count: 1,
+                    events: vec![],
+                    geek_details: None,
+                });
+                i += 2;
+                continue;
             }
             i += 1;
         }

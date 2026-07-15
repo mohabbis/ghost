@@ -209,8 +209,8 @@ pub fn get_replay_history(
 /// crash or kill mid-run. Returns summary metadata so the UI can offer undo or
 /// dismiss. Risk class: safe-read (DB only).
 #[tauri::command]
-pub fn replay_check_unfinished_run(
-) -> Result<Option<crate::storage::replay_runs::ReplayRunSummary>, String> {
+pub fn replay_check_unfinished_run()
+-> Result<Option<crate::storage::replay_runs::ReplayRunSummary>, String> {
     let conn = crate::storage::open_default().map_err(|e| e.to_string())?;
     crate::storage::replay_runs::find_unfinished_replay_summary(&conn).map_err(|e| e.to_string())
 }

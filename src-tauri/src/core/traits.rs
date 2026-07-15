@@ -3,8 +3,8 @@
 
 use crate::core::events::{ElementInfo, InputEvent, ReliabilitySettings};
 use crate::core::replay_support::ReplayProgress;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// Trait for recording input events from the native system.
 /// Implementations must be thread-safe (Send + Sync).

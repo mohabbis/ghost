@@ -13,8 +13,8 @@
 //! they require confirmation (or are denied). That matches AGENTS.md risk class
 //! `os-control` and keeps replay interruptible and explicit.
 
-use super::{evaluate, Capability, PolicyDecision};
-use crate::core::compression::{CompressedStep, CompressionReport, Target, LOW_CONFIDENCE};
+use super::{Capability, PolicyDecision, evaluate};
+use crate::core::compression::{CompressedStep, CompressionReport, LOW_CONFIDENCE, Target};
 use serde::{Deserialize, Serialize};
 
 /// One step in a routine policy plan: the capability Ghost would execute and

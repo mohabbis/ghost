@@ -210,8 +210,8 @@ fn execution_row_hash(
 fn insert_row(write_txn: &WriteTransaction, row: &ExecutionRow) -> anyhow::Result<u64> {
     let seq = {
         let table = write_txn.open_table(EXECUTIONS)?;
-        let next = table.last()?.map(|(k, _)| k.value() + 1).unwrap_or(0);
-        next
+
+        table.last()?.map(|(k, _)| k.value() + 1).unwrap_or(0)
     };
     {
         let mut table = write_txn.open_table(EXECUTIONS)?;
@@ -586,13 +586,14 @@ pub fn verify_chain(db: &Db) -> anyhow::Result<ChainVerification> {
 
         // (b) Does this run link to the previous sealed run? The first sealed
         // run is the anchor; earlier links may reference a pruned entry.
-        if let Some(prev) = &expected_prev {
-            if &row.prev_hash != prev && first_break.is_none() {
-                first_break = Some(ChainBreak {
-                    execution_id: row.id.clone(),
-                    reason: "run does not link to the previous run's seal".to_string(),
-                });
-            }
+        if let Some(prev) = &expected_prev
+            && &row.prev_hash != prev
+            && first_break.is_none()
+        {
+            first_break = Some(ChainBreak {
+                execution_id: row.id.clone(),
+                reason: "run does not link to the previous run's seal".to_string(),
+            });
         }
         expected_prev = Some(row.hash.clone());
     }
@@ -904,7 +905,7 @@ mod tests {
 
     #[test]
     fn finish_execution_persists_receipt_round_trip() {
-        use crate::runtime::{build_receipt, StepVerification};
+        use crate::runtime::{StepVerification, build_receipt};
 
         let tmp = Scratch::new();
         tmp.file("report.pdf", b"a");

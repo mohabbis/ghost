@@ -42,28 +42,28 @@ pub fn parse_inbound_body(body: &str) -> Result<ParsedInboundIntent, String> {
         return Err("empty body".into());
     }
 
-    if let Ok(native) = serde_json::from_str::<GhostNativePayload>(trimmed) {
-        if !native.summary.trim().is_empty() {
-            return Ok(ParsedInboundIntent {
-                zone_id: native.zone_id,
-                source: native
-                    .source
-                    .unwrap_or_else(|| "fabric-webhook".to_string()),
-                summary: native.summary,
-            });
-        }
+    if let Ok(native) = serde_json::from_str::<GhostNativePayload>(trimmed)
+        && !native.summary.trim().is_empty()
+    {
+        return Ok(ParsedInboundIntent {
+            zone_id: native.zone_id,
+            source: native
+                .source
+                .unwrap_or_else(|| "fabric-webhook".to_string()),
+            summary: native.summary,
+        });
     }
 
-    if let Ok(ce) = serde_json::from_str::<CloudEventsPayload>(trimmed) {
-        if ce.event_type.is_some() || ce.data.is_some() {
-            return Ok(from_cloud_events(ce));
-        }
+    if let Ok(ce) = serde_json::from_str::<CloudEventsPayload>(trimmed)
+        && (ce.event_type.is_some() || ce.data.is_some())
+    {
+        return Ok(from_cloud_events(ce));
     }
 
-    if let Ok(fe) = serde_json::from_str::<FabricItemEventPayload>(trimmed) {
-        if fe.event_type.is_some() || fe.subject.is_some() {
-            return Ok(from_fabric_item_event(fe));
-        }
+    if let Ok(fe) = serde_json::from_str::<FabricItemEventPayload>(trimmed)
+        && (fe.event_type.is_some() || fe.subject.is_some())
+    {
+        return Ok(from_fabric_item_event(fe));
     }
 
     Err(

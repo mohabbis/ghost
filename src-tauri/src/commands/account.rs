@@ -159,6 +159,9 @@ mod tests {
 
     #[test]
     fn no_account_reports_signed_out() {
+        // Hold the env lock: asserts on the default (unset) GHOST_MS_CLIENT_ID,
+        // which a concurrent test would otherwise leak into.
+        let _env = crate::test_support::env_lock();
         let app = managed_test_app();
         let status = account_status(app.state());
         assert!(!status.signed_in);
@@ -208,6 +211,8 @@ mod tests {
         };
         engine.accounts().store(&engine.auth(), &record).unwrap();
 
+        // Hold the env lock: asserts on the default (unset) GHOST_MS_CLIENT_ID.
+        let _env = crate::test_support::env_lock();
         let status = account_status(app.state());
         assert!(status.signed_in);
         assert!(status.google_sign_in_available);

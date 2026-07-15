@@ -1,7 +1,7 @@
 //! Push audit export payloads into a Fabric lakehouse via OneLake Files API.
 
 use crate::identity::IntegrationError;
-use crate::integrations::microsoft::fabric::{fabric_error_message, FabricOperation};
+use crate::integrations::microsoft::fabric::{FabricOperation, fabric_error_message};
 use crate::integrations::microsoft::power_bi::export::AuditExportPayload;
 use serde_json::Value;
 

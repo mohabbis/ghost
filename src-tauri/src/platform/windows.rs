@@ -3,7 +3,7 @@
 
 use crate::core::events::{ElementInfo, InputEvent, KeyAction};
 use crate::core::replay_support::{
-    self, check_continue, interruptible_sleep, pacing_gap_ms, ReplayProgress,
+    self, ReplayProgress, check_continue, interruptible_sleep, pacing_gap_ms,
 };
 use crate::core::traits::{ElementLocator, InputRecorder, ReplayEngine};
 use crate::core::vision;
@@ -846,7 +846,7 @@ impl ReplayEngine for WindowsReplayer {
                                         "Element \"{}\" not found after {} attempts",
                                         desc.name,
                                         max_attempts
-                                    ))
+                                    ));
                                 }
                                 replay_support::ResolutionKind::CoordinateFallback => {
                                     tracing::warn!(

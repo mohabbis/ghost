@@ -7,7 +7,7 @@
 //! preview -> approve -> execute -> audit -> undo pipeline.
 
 use crate::filing::{
-    estimate_savings, preview_filing, Audience, FilingPreview, SavingsEstimate, SavingsInputs,
+    Audience, FilingPreview, SavingsEstimate, SavingsInputs, estimate_savings, preview_filing,
 };
 
 /// Propose where a batch of files would be filed under an audience profile.

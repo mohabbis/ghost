@@ -432,25 +432,25 @@ impl LLMProvider for LocalFallback {
         let prompt_lower = prompt.to_lowercase();
 
         // Simple keyword matching for common actions
-        if prompt_lower.contains("click") || prompt_lower.contains("click on") {
-            if let Some(element) = element_context.first() {
-                events.push(InputEvent::MouseClick {
-                    x: element.fallback_coords.map(|(x, _y)| x).unwrap_or(0),
-                    y: element.fallback_coords.map(|(_x, y)| y).unwrap_or(0),
-                    button: 0,
-                    element: Some(element.clone()),
-                    timestamp: None,
-                    retry_count: None,
-                    semantic_tag: Some(crate::core::events::SemanticTag {
-                        action: "click".to_string(),
-                        target: element.name.clone(),
-                        confidence: 0.8,
-                        ui_element: Some(element.clone()),
-                        ai_generated: false,
-                    }),
-                    self_heal: Some(true),
-                });
-            }
+        if (prompt_lower.contains("click") || prompt_lower.contains("click on"))
+            && let Some(element) = element_context.first()
+        {
+            events.push(InputEvent::MouseClick {
+                x: element.fallback_coords.map(|(x, _y)| x).unwrap_or(0),
+                y: element.fallback_coords.map(|(_x, y)| y).unwrap_or(0),
+                button: 0,
+                element: Some(element.clone()),
+                timestamp: None,
+                retry_count: None,
+                semantic_tag: Some(crate::core::events::SemanticTag {
+                    action: "click".to_string(),
+                    target: element.name.clone(),
+                    confidence: 0.8,
+                    ui_element: Some(element.clone()),
+                    ai_generated: false,
+                }),
+                self_heal: Some(true),
+            });
         }
 
         if prompt_lower.contains("type") || prompt_lower.contains("enter") {

@@ -28,20 +28,20 @@
 use crate::engine::GhostEngine;
 use crate::organizer::executor::ExecutionReport;
 use crate::organizer::pipeline::{execute_zone, undo_zone_run};
-use crate::organizer::planner::{plan_zone, OrganizerPlan};
+use crate::organizer::planner::{OrganizerPlan, plan_zone};
 use crate::organizer::undo::UndoReport;
 use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
+use crate::storage::Db;
 use crate::storage::executions::{
-    find_unfinished_execution, get_execution, list_executions, mark_execution_finished,
-    verify_chain, ChainVerification, ExecutionSummary,
+    ChainVerification, ExecutionSummary, find_unfinished_execution, get_execution, list_executions,
+    mark_execution_finished, verify_chain,
 };
-use crate::storage::milestones::{list_milestones, record_milestone, Milestone};
+use crate::storage::milestones::{Milestone, list_milestones, record_milestone};
 use crate::storage::open_default;
 use crate::storage::zones::{
     add_folder_rule, create_zone, create_zone_with_rules, get_zone, list_folder_rules, list_zones,
     set_rule_trust,
 };
-use crate::storage::Db;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::State;

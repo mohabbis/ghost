@@ -136,11 +136,7 @@ fn normalized_cross_correlation(
     }
 
     let denom = (var_h * var_t).sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        cov / denom
-    }
+    if denom == 0.0 { 0.0 } else { cov / denom }
 }
 
 #[cfg(test)]

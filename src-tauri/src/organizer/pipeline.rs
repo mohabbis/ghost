@@ -1,14 +1,14 @@
 //! Shared Organizer run/undo pipeline for Tauri commands and the headless MCP server.
 
-use crate::action_plan::{from_organizer_plan_with_source, PlanSource};
+use crate::action_plan::{PlanSource, from_organizer_plan_with_source};
 use crate::organizer::executor::ExecutionReport;
 use crate::organizer::planner::plan_zone;
-use crate::organizer::undo::{revert, UndoReport};
+use crate::organizer::undo::{UndoReport, revert};
 use crate::runtime::run_persisted_action_plan;
-use crate::storage::executions::{get_execution, mark_execution_finished};
-use crate::storage::milestones::{record_milestone, Milestone};
-use crate::storage::zones::list_folder_rules;
 use crate::storage::Db;
+use crate::storage::executions::{get_execution, mark_execution_finished};
+use crate::storage::milestones::{Milestone, record_milestone};
+use crate::storage::zones::list_folder_rules;
 
 #[derive(Debug, Clone)]
 pub struct ZoneRunOutcome {

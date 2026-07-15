@@ -21,7 +21,7 @@ use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Se
 use image::DynamicImage;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 fn workflow_file_path(workflows_dir: &std::path::Path, name: &str) -> anyhow::Result<PathBuf> {
@@ -316,17 +316,15 @@ impl GhostEngine {
             element: Some(el),
             ..
         } = &mut event
+            && el.template_png.is_none()
+            && self
+                .config
+                .lock()
+                .unwrap()
+                .performance
+                .capture_element_templates
         {
-            if el.template_png.is_none()
-                && self
-                    .config
-                    .lock()
-                    .unwrap()
-                    .performance
-                    .capture_element_templates
-            {
-                el.template_png = capture_template_crop(*x, *y);
-            }
+            el.template_png = capture_template_crop(*x, *y);
         }
         self.recorded_events.lock().unwrap().push(event);
     }
@@ -391,15 +389,16 @@ impl GhostEngine {
 
         if let Some((db, id)) = wal {
             let cancelled = self.replay_stop_flag.load(Ordering::Relaxed);
-            if !cancelled && result.is_ok() {
-                if let Ok(stored) = storage::replay_runs::get_replay_run(&db, &id) {
-                    let report = crate::audit::ReplayRunReport {
-                        events_applied: stored.events_applied,
-                        events_total: stored.events_total,
-                        undo: stored.undo,
-                    };
-                    let _ = storage::replay_runs::finish_replay_run(&db, &id, &report);
-                }
+            if !cancelled
+                && result.is_ok()
+                && let Ok(stored) = storage::replay_runs::get_replay_run(&db, &id)
+            {
+                let report = crate::audit::ReplayRunReport {
+                    events_applied: stored.events_applied,
+                    events_total: stored.events_total,
+                    undo: stored.undo,
+                };
+                let _ = storage::replay_runs::finish_replay_run(&db, &id, &report);
             }
             self.replay_progress.clear_wal();
         }
@@ -419,7 +418,7 @@ impl GhostEngine {
         started: Instant,
         result: &anyhow::Result<()>,
     ) {
-        use crate::core::execution::{build_replay_record, ReplayOutcome};
+        use crate::core::execution::{ReplayOutcome, build_replay_record};
 
         // The platform replayers return Ok(()) on user cancel, so consult the
         // stop flag to distinguish a cancelled run from a completed one.
@@ -441,12 +440,11 @@ impl GhostEngine {
             self.replay_progress.take_trace(),
         );
 
-        if let Ok(guard) = self.execution_tracker.lock() {
-            if let Some(history) = guard.as_ref() {
-                if let Err(e) = history.save(&record) {
-                    tracing::warn!("Failed to save replay execution record: {e}");
-                }
-            }
+        if let Ok(guard) = self.execution_tracker.lock()
+            && let Some(history) = guard.as_ref()
+            && let Err(e) = history.save(&record)
+        {
+            tracing::warn!("Failed to save replay execution record: {e}");
         }
     }
 
@@ -1177,30 +1175,27 @@ impl GhostEngine {
             }
 
             // Perform visual check if configured
-            if let Some(checkpoint) = checkpoint {
-                if let Some(baseline_path) = &checkpoint.baseline_screenshot_path {
-                    if let Ok(img_bytes) = vision::capture_screenshot() {
-                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                            let similarity =
-                                vision::compare_images(baseline_path, &current_img).unwrap_or(1.0);
+            if let Some(checkpoint) = checkpoint
+                && let Some(baseline_path) = &checkpoint.baseline_screenshot_path
+                && let Ok(img_bytes) = vision::capture_screenshot()
+                && let Ok(current_img) = image::load_from_memory(&img_bytes)
+            {
+                let similarity = vision::compare_images(baseline_path, &current_img).unwrap_or(1.0);
 
-                            if similarity < checkpoint.threshold {
-                                tracing::warn!(
-                                    "Visual check '{}' failed: {:.2} < {}",
-                                    checkpoint.name,
-                                    similarity,
-                                    checkpoint.threshold
-                                );
-                                // Continue anyway - could be made configurable
-                            } else {
-                                tracing::info!(
-                                    "Visual check '{}' passed: {:.2}",
-                                    checkpoint.name,
-                                    similarity
-                                );
-                            }
-                        }
-                    }
+                if similarity < checkpoint.threshold {
+                    tracing::warn!(
+                        "Visual check '{}' failed: {:.2} < {}",
+                        checkpoint.name,
+                        similarity,
+                        checkpoint.threshold
+                    );
+                    // Continue anyway - could be made configurable
+                } else {
+                    tracing::info!(
+                        "Visual check '{}' passed: {:.2}",
+                        checkpoint.name,
+                        similarity
+                    );
                 }
             }
         }
@@ -1580,9 +1575,11 @@ mod tests {
         let (tx, _rx) = mpsc::channel();
         let result = engine.start_recording(tx);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Recording already active"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Recording already active")
+        );
     }
 }

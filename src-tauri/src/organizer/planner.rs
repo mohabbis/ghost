@@ -14,17 +14,17 @@
 //! skipped with [`SkipReason::NoDestination`] — deny-by-default, surfaced.
 
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
-use crate::storage::zones::{get_zone, list_folder_rules};
 use crate::storage::Db;
+use crate::storage::zones::{get_zone, list_folder_rules};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::classifier::{classify, LOW_CONFIDENCE};
+use super::classifier::{LOW_CONFIDENCE, classify};
 use super::conflict::Conflict;
 use super::file_identity::FileIdentity;
 use super::naming::{dated_prefix, deduplicate, safe_file_name};
-use super::scanner::{scan, ScannedFile};
+use super::scanner::{ScannedFile, scan};
 
 /// One proposed change, paired with its policy decision and the metadata the
 /// approval UI needs to explain it.
@@ -347,7 +347,7 @@ impl DirNames {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::organizer::testutil::{tempdir, TempDir};
+    use crate::organizer::testutil::{TempDir, tempdir};
     use crate::policy::RiskLevel;
     use crate::storage::{open_in_memory, zones};
 
@@ -451,10 +451,11 @@ mod tests {
         let plan = plan_with_rules("z", &rules);
         assert!(plan.actions.is_empty());
         assert_eq!(plan.summary.skipped, 1);
-        assert!(plan
-            .skipped
-            .iter()
-            .all(|s| s.reason == SkipReason::NoDestination));
+        assert!(
+            plan.skipped
+                .iter()
+                .all(|s| s.reason == SkipReason::NoDestination)
+        );
     }
 
     #[test]
@@ -481,11 +482,12 @@ mod tests {
         assert!(moves[0].decision.is_denied());
         assert!(plan.summary.denied >= 1);
         // Folder creation inside the destination is still allowed.
-        assert!(plan
-            .actions
-            .iter()
-            .any(|a| matches!(a.capability, Capability::CreateFolder { .. })
-                && a.decision.is_allowed()));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|a| matches!(a.capability, Capability::CreateFolder { .. })
+                    && a.decision.is_allowed())
+        );
     }
 
     #[test]
@@ -571,11 +573,12 @@ mod tests {
         tmp.file("Documents/done.pdf", b"x");
         let rules = vec![full_rule(tmp.path())];
         let plan = plan_with_rules("z", &rules);
-        assert!(plan
-            .skipped
-            .iter()
-            .any(|s| s.reason == SkipReason::AlreadyOrganized
-                && s.path.ends_with("Documents/done.pdf")));
+        assert!(
+            plan.skipped
+                .iter()
+                .any(|s| s.reason == SkipReason::AlreadyOrganized
+                    && s.path.ends_with("Documents/done.pdf"))
+        );
     }
 
     #[test]

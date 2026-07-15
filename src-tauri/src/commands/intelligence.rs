@@ -12,12 +12,12 @@
 //! Command: `intelligence_propose_plan` | risk: `external-mutate` | sends redacted metadata remotely; returns suggestion only
 
 use crate::engine::GhostEngine;
+use crate::intelligence::IntelligenceProvider;
 use crate::intelligence::capability::{ProviderHealth, ProviderId};
 use crate::intelligence::credentials::{CredentialProvider, CredentialStore};
 use crate::intelligence::discover_local_runtimes;
 use crate::intelligence::schema::PlanningRequest;
 use crate::intelligence::service::{build_router, provider_id_from_config};
-use crate::intelligence::IntelligenceProvider;
 use tauri::State;
 
 #[derive(serde::Serialize)]
@@ -208,7 +208,7 @@ pub async fn organizer_intelligence_suggest(
     zone_id: String,
     engine: State<'_, GhostEngine>,
 ) -> Result<OrganizerIntelligenceSuggestResult, String> {
-    use crate::intelligence::schema::{suggestion_is_safe, DataSensitivity, FileMetadataSummary};
+    use crate::intelligence::schema::{DataSensitivity, FileMetadataSummary, suggestion_is_safe};
     use crate::organizer::planner::scan_zone_files;
     use crate::storage::open_default;
 

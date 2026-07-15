@@ -5,24 +5,24 @@
 //! undo. The bridge deliberately exposes coarse commands and stable identifiers
 //! rather than Rust pointers or low-level filesystem handles.
 
-use ghost_lib::action_plan::{from_organizer_plan, ActionKind, ActionPlan};
+use ghost_lib::action_plan::{ActionKind, ActionPlan, from_organizer_plan};
 use ghost_lib::auth::AuthManager;
 use ghost_lib::mcp::approval::verify_execution_token_with_hash;
-use ghost_lib::mcp::{hash_organizer_plan, issue_approval_token, SignedApprovalToken};
-use ghost_lib::organizer::planner::{plan_zone, OrganizerPlan};
+use ghost_lib::mcp::{SignedApprovalToken, hash_organizer_plan, issue_approval_token};
+use ghost_lib::organizer::planner::{OrganizerPlan, plan_zone};
 use ghost_lib::organizer::scanner::scan;
 use ghost_lib::organizer::undo::UndoReport;
 use ghost_lib::organizer::undo_zone_run;
 use ghost_lib::policy::{DefaultDecision, FolderRule, PolicyDecision, TrustLevel};
-use ghost_lib::runtime::{build_receipt, execute_action_plan_with_progress, StepVerification};
+use ghost_lib::runtime::{StepVerification, build_receipt, execute_action_plan_with_progress};
 use ghost_lib::storage::executions::{
     begin_execution, finish_execution, get_execution, list_executions, update_execution_progress,
 };
-use ghost_lib::storage::milestones::{record_milestone, Milestone};
+use ghost_lib::storage::milestones::{Milestone, record_milestone};
 use ghost_lib::storage::zones::{create_zone_with_rules, list_folder_rules, list_zones};
-use ghost_lib::storage::{open_default, Db};
+use ghost_lib::storage::{Db, open_default};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};

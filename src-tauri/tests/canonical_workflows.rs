@@ -41,7 +41,7 @@ mod canonical_workflows {
     /// - Zero false positives (non-invoices classified as Invoices)
     #[test]
     fn test_canonical_invoice_filing_workflow() {
-        use ghost_lib::organizer::classifier::{classify, Category};
+        use ghost_lib::organizer::classifier::{Category, classify};
 
         let test_files = [
             ("invoice_acme_2026_06.pdf", Category::Invoices),
@@ -145,7 +145,7 @@ mod canonical_workflows {
     ///   silently guessed
     #[test]
     fn test_canonical_desktop_cleanup() {
-        use ghost_lib::organizer::classifier::{classify, Category, LOW_CONFIDENCE};
+        use ghost_lib::organizer::classifier::{Category, LOW_CONFIDENCE, classify};
 
         let desktop_files = [
             ("screenshot_2026-07-01.png", Category::Images),
@@ -326,7 +326,7 @@ mod canonical_workflows {
     /// classification is a pure function of the file's metadata.
     #[test]
     fn test_invoice_filing_determinism_benchmark() {
-        use ghost_lib::organizer::classifier::{classify, Category};
+        use ghost_lib::organizer::classifier::{Category, classify};
 
         let file = scanned_file("invoice_acme_2026_june.pdf");
 
@@ -392,7 +392,7 @@ mod canonical_workflows {
     /// approved Zone, regardless of trust level.
     #[test]
     fn test_policy_deny_by_default() {
-        use ghost_lib::policy::{evaluate, Capability, FolderRule, PolicyDecision, TrustLevel};
+        use ghost_lib::policy::{Capability, FolderRule, PolicyDecision, TrustLevel, evaluate};
         use std::path::PathBuf;
 
         let rules = vec![FolderRule {
@@ -435,7 +435,7 @@ mod canonical_workflows {
     /// it as pre-approved. Only explicit `Automate` trust removes the prompt.
     #[test]
     fn test_approval_gate_required_before_execution() {
-        use ghost_lib::policy::{evaluate, Capability, FolderRule, PolicyDecision, TrustLevel};
+        use ghost_lib::policy::{Capability, FolderRule, PolicyDecision, TrustLevel, evaluate};
         use std::path::PathBuf;
 
         let cap = Capability::MoveFile {

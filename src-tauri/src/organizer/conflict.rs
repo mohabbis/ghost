@@ -24,7 +24,9 @@ impl Conflict {
     pub fn describe(&self) -> String {
         match self {
             Conflict::TargetExists { original_target } => {
-                format!("A file already exists at {original_target}; will be renamed to avoid overwrite")
+                format!(
+                    "A file already exists at {original_target}; will be renamed to avoid overwrite"
+                )
             }
             Conflict::DuplicateInPlan { original_target } => {
                 format!(

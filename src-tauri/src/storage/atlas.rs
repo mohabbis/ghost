@@ -172,14 +172,14 @@ pub fn neighbors(db: &Db, id: &str) -> anyhow::Result<Vec<(Memory, f32)>> {
     for entry in links_table.iter()? {
         let (_k, v) = entry?;
         let link: MemoryLink = serde_json::from_str(v.value())?;
-        if let Some(other) = link.other(id) {
-            if let Some(m) = mem_table.get(other)? {
-                let mem: Memory = serde_json::from_str(m.value())?;
-                if mem.archived {
-                    continue;
-                }
-                out.push((mem, link.weight));
+        if let Some(other) = link.other(id)
+            && let Some(m) = mem_table.get(other)?
+        {
+            let mem: Memory = serde_json::from_str(m.value())?;
+            if mem.archived {
+                continue;
             }
+            out.push((mem, link.weight));
         }
     }
     out.sort_by(|a, b| {
@@ -239,11 +239,11 @@ fn set_archived(db: &Db, id: &str, archived: bool) -> anyhow::Result<bool> {
     {
         let existing = {
             let table = write_txn.open_table(MEMORIES)?;
-            let found = table
+
+            table
                 .get(id)?
                 .map(|v| serde_json::from_str::<Memory>(v.value()))
-                .transpose()?;
-            found
+                .transpose()?
         };
         match existing {
             Some(mut mem) => {

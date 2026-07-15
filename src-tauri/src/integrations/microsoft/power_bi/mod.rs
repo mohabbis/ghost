@@ -141,7 +141,7 @@ pub mod schema {
 /// can't exercise that against a real tenant).
 pub mod requests {
     use super::schema::{GHOST_ACTIONS_TABLE, GHOST_POLICY_EVENTS_TABLE, GHOST_RUNS_TABLE};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     fn column(name: &str, data_type: &str) -> Value {
         json!({ "name": name, "dataType": data_type })
