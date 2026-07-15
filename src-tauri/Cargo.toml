@@ -123,3 +123,19 @@ enigo = "0.2"
 # Explicit (matches cargo's own default) so iteration speed doesn't silently
 # regress if that default ever changes; keeps rebuilds cheap during local dev.
 incremental = true
+
+[profile.release]
+# Enable Link-Time Optimization for better runtime performance
+lto = "thin"
+# Optimize for performance over binary size
+codegen-units = 1
+# Strip debug symbols to reduce binary size
+strip = true
+# Panic abort for slightly better performance (vs panic unwind)
+panic = "abort"
+
+[profile.release-with-debug]
+inherits = "release"
+# Keep debug info for profiling while maintaining optimizations
+strip = false
+debug = true
