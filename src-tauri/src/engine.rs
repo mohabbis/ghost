@@ -616,7 +616,7 @@ impl GhostEngine {
         Ok(())
     }
 
-    /// List all saved workflows.
+    /// List all saved workflows with parallel directory scanning.
     pub fn list_workflows() -> anyhow::Result<Vec<String>> {
         use std::fs;
 
@@ -629,16 +629,23 @@ impl GhostEngine {
             return Ok(Vec::new());
         }
 
-        let mut workflows = Vec::new();
-        for entry in fs::read_dir(workflows_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                    workflows.push(name.to_string());
-                }
-            }
-        }
+        // Use jwalk for parallel directory traversal to speed up listing
+        let mut workflows: Vec<String> = jwalk::WalkDir::new(&workflows_dir)
+            .into_iter()
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        path.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+        
+        // Sort for deterministic ordering
+        workflows.sort();
 
         Ok(workflows)
     }
