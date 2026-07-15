@@ -113,7 +113,7 @@ jobs:
           # is not an updater-enabled target — Tauri warns and skips signatures.
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "Updater signing key present -> producing signed updater artifacts"
-            CFG=$(python3 -c 'import json; print(json.dumps({"bundle":{"createUpdaterArtifacts":true,"externalBin":["bin/ghost-ax-helper"]}}))')
+            CFG='{"bundle":{"createUpdaterArtifacts":true,"externalBin":["bin/ghost-ax-helper"]}}'
             cargo tauri build --target universal-apple-darwin --bundles app,dmg --config "$CFG"
           else
             echo "No updater signing key -> skipping updater artifacts"
