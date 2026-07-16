@@ -1,12 +1,30 @@
 ---
 issue_id: 072
 parent_epic: 070
-priority: P1
-status: ⚪ Todo
+priority: P2
+status: 🟡 Rescoped (2026-07-16)
 labels: [security, frontend, csp]
 ---
 
-# #072 Replace 'unsafe-inline' CSP with Nonce-Based Approach
+# #072 Remove style-src 'unsafe-inline' via class migration (was: nonce-based CSP)
+
+> **Rescope note (2026-07-16):** the nonce approach below is **infeasible in
+> Tauri** — the CSP is a static string in `tauri.conf.json`, there is no
+> per-request server to mint nonces, and Tauri's build-time hash injection does
+> not cover runtime `innerHTML` templates. Current verified state:
+>
+> - `script-src` is already exactly `'self'` (no `unsafe-inline`) — the
+>   security-relevant AC below is **met**, and it is now pinned by regression
+>   tests in `src-tauri/tests/frontend_dom_contract.rs`
+>   (`production_csp_stays_locked_down`, `index_html_has_no_inline_scripts`).
+> - `object-src 'none'` and `frame-src 'none'` added (2026-07-16).
+> - `style-src` still carries `'unsafe-inline'` because ~214 inline `style="…"`
+>   attributes exist across `src/index.html` and `src/main.js` template
+>   literals; style-src hashes do not apply to attributes.
+>
+> **Remaining scope:** migrate those inline style attributes to classes in
+> `src/styles.css` so `'unsafe-inline'` can be dropped from `style-src`.
+> Visual-QA-heavy refactor of a conflict-hotspot file; schedule deliberately.
 
 ## 📋 Summary
 Remove `'unsafe-inline'` from Content Security Policy by implementing nonce-based script/style loading for production builds.
@@ -18,12 +36,12 @@ Remove `'unsafe-inline'` from Content Security Policy by implementing nonce-base
 - **Trust**: Demonstrates serious security posture to enterprise users
 
 ## ✅ Acceptance Criteria
-- [ ] CSP header no longer contains `'unsafe-inline'` for script-src
-- [ ] Nonce generated per-request and injected into HTML
-- [ ] All inline scripts converted to external or use nonce attribute
-- [ ] Styles either externalized or use nonce (style-src)
-- [ ] Development mode still works (relaxed CSP acceptable for dev)
-- [ ] No console errors in production build
+- [x] CSP header no longer contains `'unsafe-inline'` for script-src *(verified + pinned by test, 2026-07-16)*
+- [ ] ~~Nonce generated per-request and injected into HTML~~ *(infeasible in Tauri — see rescope note)*
+- [x] All inline scripts converted to external or use nonce attribute *(no inline scripts exist; pinned by `index_html_has_no_inline_scripts`)*
+- [ ] Styles either externalized or use nonce (style-src) → **externalize the ~214 inline style attributes to classes**
+- [x] Development mode still works (relaxed CSP acceptable for dev)
+- [ ] No console errors in production build *(re-verify after style migration)*
 
 ## 🔗 Related Issues
 - Parent Epic: #070 (Security: Audit, Harden, Document)
