@@ -6,72 +6,69 @@
 [![Windows](https://img.shields.io/badge/Windows-10/11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Approve before it acts.** Local-first desktop automation for macOS and Windows.
+> **Automate the busywork. Catch the errors.** Local-first desktop automation for financial-services teams.
 
-Ghost turns repeated computer work — cleaning up folders, filing documents, replaying
-multi-step tasks — into **safe, reviewable, permission-bounded routines**. It can be smart
-about *proposing* what to do, but nothing touches your files or apps until you approve it,
-and every change is audited and reversible.
+Finance and operations teams still move numbers between spreadsheets and systems by hand —
+and one mistyped or mis-pasted figure is expensive to find later. Ghost records that repetitive
+data entry once, then **replays it on your Mac or PC and verifies every value against the one you
+approved**. A mismatch stops the run and surfaces the exception. Every change is audited and reversible.
 
-Ghost is **not** an autonomous cloud agent. AI may suggest; deterministic code executes
-only the plan you approved, on your machine, with your files never leaving it.
+Ghost is **not** an autonomous cloud agent and **not** a blind macro recorder. AI may suggest;
+deterministic code executes only the plan you approved, on your machine, with your files never
+leaving it — and it checks its own work before it asks you to sign off.
 
 ---
 
-## One pipeline, every task
+## The wedge
 
-Ghost 2.0 consolidates everything it does onto a single **Action Plan runtime**. Whether
-you point it at a messy folder, record a task, or accept a proposal from an AI assistant,
-the work compiles into the same reviewable plan and runs through the same trust pipeline:
+The error that hides between two spreadsheets: a figure copied into the wrong row, a transposed
+digit, a stale value no one re-checked. Ghost automates the transfer **and** checks the result,
+so the exception surfaces at the keystroke instead of in the close:
 
 ```
-Capture → Review → Approve → Execute → Verify → Recover
+Record → Review → Approve → Replay → Verify → Recover
 ```
 
-- **Capture** — scan a folder, record a task, or receive a proposal.
-- **Review** — raw input is compressed into *readable semantic steps* ("move invoice → Finance",
-  "focus TextEdit, set value"), not opaque mouse coordinates. Typed text is redacted; secrets are dropped.
-- **Approve** — deny-by-default. Risky actions need explicit consent, at the trust level you set per folder.
-- **Execute** — deterministic code runs the approved plan. No silent delete, no silent overwrite.
-- **Verify** — every step records *expected vs. observed*, sealed into a per-run execution receipt.
-- **Recover** — undo data is written before any reversible change, so one click puts things back.
-
-That one pipeline is what keeps Ghost powerful without becoming a black box.
+- **Record** — capture the exact re-keying or copy-across you do every period.
+- **Review** — raw input is compressed into *readable steps* ("set B7 · Revenue → 48,210.00"),
+  not opaque mouse coordinates. Typed text is redacted by default; secrets are dropped.
+- **Approve** — deny-by-default. Every step, and the value it will write, needs your explicit consent.
+- **Replay** — deterministic code runs the approved plan, preferring semantic UI resolution
+  (macOS Accessibility `set_value`) over raw coordinates.
+- **Verify** — each step confirms the approved value actually landed in the field; observed ≠
+  expected halts the run, and the whole run is sealed into an execution receipt.
+- **Recover** — undo data is written before any change, so one click puts things back.
 
 ## What Ghost does today
 
-### 🗂 Ghost Organizer — the wedge
-Point Ghost at `~/Downloads` (or any folder). It scans read-only, proposes moves and dated
-renames by file type and reporting period, detects conflicts, and **never overwrites or
-deletes silently**. Approve the plan and it executes with a tamper-evident audit chain and
-one-click undo. Filing profiles adapt to the work: software artifacts (test reports, coverage,
-build logs, traces), finance & operations, and student coursework.
-
-### 🎬 Ghost Routines — record, review, replay
-Record a multi-step task once. Ghost compresses the raw input into semantic steps you can
+### 🎬 Record → replay → verify (the flagship)
+Record a data-entry routine once. Ghost compresses the raw input into semantic steps you can
 read and approve, then replays them — preferring **semantic UI resolution** (macOS Accessibility
 `set_value`, window-relative targeting, pixel template match) with raw coordinates only as a
-last-resort fallback. Every replay traces how each target resolved, is interruptible, and writes
-undo data first.
+last-resort fallback. Each step is verified as it runs (the value you approved actually landed),
+every replay traces how its target resolved, the run is interruptible, and undo data is written first.
 
-### 🧠 Intelligent, but on your terms
+> **Honest scope:** verification today is *per-step* — Ghost confirms the value it wrote is the value
+> you approved. Full **source-vs-destination reconciliation** (comparing each transferred figure
+> against its source of truth and flagging every discrepancy) is the next milestone, not shipped yet.
+> See the roadmap below.
+
+### 🗂 Organizer — keep the outputs tidy
+Point Ghost at a folder. It scans read-only, proposes moves and dated renames by type and
+reporting period, detects conflicts, and **never overwrites or deletes silently**. Approve the
+plan and it executes with a tamper-evident audit chain and one-click undo.
+
+### 🔒 Local safety, no black box
 - **Deterministic event compression** — turns raw clicks/keystrokes into a reviewable timeline.
 - **Ghost Guard** — a local, deterministic safety layer that suppresses capture of password/OTP/
   payment fields and audits a plan for risk *before* replay. No network, no model.
-- **Ghost Atlas** — a local, offline semantic-memory graph for recall across routines. Retrieval
-  is deterministic and lexical (character/word hashing) — it runs entirely on-device with no model
-  download and no network. "Forgetting" is a reversible archive flag, never a delete.
-- **On-device OCR & ID parsing** — local OCR (macOS Vision / Windows OCR) over images you supply,
-  plus deterministic ID-document field parsing. No image ever leaves the machine.
-- **Suggestion-only AI planning** *(experimental, opt-in, off by default)* — optional OpenAI/Anthropic
-  providers that *propose* plans. They never execute; deterministic code still runs only what you approve.
-- **MCP surface** — an external AI assistant can *propose* an action, but a locally-issued, single-use,
-  plan-bound approval token is required before anything runs through the normal trust pipeline.
+- **Tamper-evident audit + undo** — every mutating run seals a hash-chained audit log and writes an
+  undo journal first, all on-device.
 
-### 🔌 Optional, disclosed integrations
-Account sign-in (Microsoft / Google) is **identity-only** and opt-in — signing in does not move
-your data anywhere. Stack integrations (e.g. Power BI audit export) are separately consented,
-scoped grants and are experimental. Ghost ships with no client IDs of its own; you configure your own.
+Additional subsystems exist in the codebase (on-device OCR/ID parsing, a local semantic-memory
+graph, an MCP approval surface, experimental suggestion-only AI providers, and optional
+Microsoft/Google identity sign-in). They are **off the default surface** — experimental pieces
+sit behind a Cargo feature flag and are not part of the shipping financial-services workflow above.
 
 ## Privacy by default
 
@@ -81,7 +78,7 @@ at rest. Keyboard and pointer are captured **only** while you explicitly record 
 
 ## Download
 
-Current release line: **v2.0.4** (macOS notarized; Windows unsigned). Get the latest build for your platform:
+Current release: **v2.0.3** (macOS notarized; Windows unsigned). Get the latest build for your platform:
 
 - **macOS** (Apple Silicon & Intel, macOS 12+) — [download the `.dmg`](https://github.com/mohabbis/ghost/releases/latest)
 - **Windows 10/11** — [download the installer](https://github.com/mohabbis/ghost/releases/latest)

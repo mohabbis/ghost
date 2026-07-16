@@ -20,11 +20,28 @@ Default behavior:
 
 ## Product identity
 
-Ghost is a local-first desktop automation product for macOS and Windows.
+Ghost is a local-first desktop **automation** product for macOS and Windows,
+positioned for **finance and operations teams**.
 
 Canonical positioning:
 
-> Ghost turns repeated computer work into safe, reusable, permission-bounded routines.
+> Ghost automates the repetitive data entry finance teams do by hand — replaying it
+> on your machine and verifying every value against what you approved, so a bad
+> transfer is caught at the keystroke instead of in the close.
+
+The public-facing product is one vertical (financial services) and one flagship
+workflow (record → replay → **verify** → undo for cross-sheet/data-transfer entry).
+The differentiator is **verification** — Ghost checks its own work before it asks
+you to sign off — not merely "approve before it acts," which is now table stakes.
+Organizer (safe file filing) remains a supporting capability that keeps the outputs
+tidy; it is no longer the headline wedge. Every other subsystem (broad Routines,
+Guard Desk/POS Bridge, Power BI/Fabric, MCP, Atlas, experimental AI, identity
+sign-in) stays **off the default/public surface** — see `docs/audiences.md`.
+
+Honest-scope guardrail (rule 10): today's verification is *per-step* (the value you
+approved actually landed in the field). Full **source-vs-destination reconciliation**
+(comparing each transferred figure against its source of truth) is roadmap, not
+shipped — market it as "next," never as a current capability.
 
 Do not frame Ghost as:
 
@@ -127,7 +144,7 @@ Organizer first. Routines second. Intelligence last.
 
 Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 
-**Version / release state (read first):** the repo is on **Ghost 2.0** (`src-tauri/Cargo.toml` + `tauri.conf.json` at `2.0.2`). Ghost 2.0 converges Organizer, Routines, and MCP onto one **Action Plan** runtime (`Capture → Review → Approve → Execute → Verify → Recover`; see `docs/GHOST_2_DEMO.md`, `docs/native-macos-preview.md`). Note the **release gap**: the newest *published* GitHub release is still **v1.2.9** — the v2.0.x code is merged to `master` but not cut as a public installer. Some state docs (`docs/PROJECT_STATE.md`, `docs/full-repo-audit-2026-07-13.md`) predate 2.0 and describe v1.2.9; treat them as historical for anything below.
+**Version / release state (read first):** the repo is on **Ghost 2.0** (`src-tauri/Cargo.toml` + `tauri.conf.json` at `2.0.4`). Ghost 2.0 converges Organizer, Routines, and MCP onto one **Action Plan** runtime (`Capture → Review → Approve → Execute → Verify → Recover`; see `docs/GHOST_2_DEMO.md`, `docs/native-macos-preview.md`). Note the **release gap**: the newest *published* GitHub release is **v2.0.3** (2026-07-15) — the source tree is at `2.0.4` but that has not been cut as a public installer, so any public-facing copy must reference **v2.0.3** as the downloadable build, not `2.0.4`. Some state docs (`docs/PROJECT_STATE.md`, `docs/full-repo-audit-2026-07-13.md`) predate 2.0 and describe v1.2.9; treat them as historical for anything below.
 
 Current structure:
 
