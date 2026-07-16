@@ -16,10 +16,11 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
-/// Prefix of the placeholder public key shipped in `tauri.conf.json`. Until the
-/// maintainer generates a real updater keypair (see `docs/auto-update.md`), the
-/// config still carries this sentinel and auto-update must stay inert rather
-/// than surface signature-verification noise to users.
+/// Historical placeholder prefix for the updater public key. The production
+/// `tauri.conf.json` now ships a real minisign key (see `docs/auto-update.md`),
+/// but forks or dev builds may scrub it back to the `REPLACE_WITH…` sentinel —
+/// this check keeps auto-update inert in that case rather than surfacing
+/// signature-verification noise to users.
 const PUBKEY_PLACEHOLDER_PREFIX: &str = "REPLACE_WITH";
 
 /// What the UI needs to describe an available update to the user.

@@ -1,5 +1,15 @@
 # Ghost Post-Audit Implementation Handoff
 
+> **Status note (2026-07-16):** several Phase 2 items this handoff anticipated
+> have since landed on `master`: replay is policy-bound with one-shot approval
+> tokens, replay WAL + undo merged (#232, `ac7c890`), `security.yml` runs on
+> `master` with correct manifest paths and Rust CodeQL, the updater ships a
+> real minisign pubkey, and GitHub Actions are SHA-pinned with Dependabot
+> keeping the pins fresh. See the "Status addendum — 2026-07-16" in
+> `docs/full-repo-audit-2026-07-13.md` for the verified per-finding status.
+> Still open: Windows Authenticode signing (deferred), bare-`Allow` app/window
+> Zones, and the routine vault.
+
 Use this handoff after the comprehensive audit report is complete. The audit report is the single source of truth for scope, severity, evidence, and acceptance criteria. Treat every audit finding as validated unless the report explicitly marks it as tentative or informational.
 
 ## Role
