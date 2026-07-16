@@ -324,3 +324,62 @@ fn wireup_delegates_account_sign_in_and_out() {
         "wireUpControls must delegate account sign-out clicks"
     );
 }
+
+/// Pins the production Content-Security-Policy. `script-src 'self'` is the
+/// XSS-relevant control for a Tauri webview (it is what keeps injected HTML
+/// from reaching the IPC bridge); this test keeps it from quietly regaining
+/// `'unsafe-inline'` or new sources. `style-src` intentionally still allows
+/// inline styles (~200 style attributes in the templates) — see
+/// `.github/ISSUES/072-csp-nonce.md` for the tracked migration.
+#[test]
+fn production_csp_stays_locked_down() {
+    let conf: serde_json::Value =
+        serde_json::from_str(&read("tauri.conf.json")).expect("tauri.conf.json parses");
+    let csp = conf["app"]["security"]["csp"]
+        .as_str()
+        .expect("app.security.csp is a string");
+
+    let directive = |name: &str| -> Option<String> {
+        csp.split(';')
+            .map(str::trim)
+            .find(|d| d.starts_with(name) && d[name.len()..].starts_with(' '))
+            .map(|d| d[name.len()..].trim().to_string())
+    };
+
+    assert_eq!(
+        directive("script-src").as_deref(),
+        Some("'self'"),
+        "script-src must be exactly 'self' — no inline scripts, no extra sources"
+    );
+    assert_eq!(
+        directive("default-src").as_deref(),
+        Some("'self'"),
+        "default-src must be exactly 'self'"
+    );
+    assert_eq!(
+        directive("object-src").as_deref(),
+        Some("'none'"),
+        "object-src must be 'none'"
+    );
+    assert_eq!(
+        directive("frame-src").as_deref(),
+        Some("'none'"),
+        "frame-src must be 'none'"
+    );
+}
+
+/// The CSP above only holds if the page itself carries no inline scripts:
+/// every `<script>` in index.html must load an external module (Vite keeps the
+/// bundle external-only; see vite.config.js).
+#[test]
+fn index_html_has_no_inline_scripts() {
+    let html = read("../src/index.html");
+    for (idx, _) in html.match_indices("<script") {
+        let tag_end = html[idx..].find('>').map(|e| idx + e).unwrap_or(html.len());
+        let tag = &html[idx..tag_end];
+        assert!(
+            tag.contains("src="),
+            "inline <script> without src= found in src/index.html: `{tag}`"
+        );
+    }
+}

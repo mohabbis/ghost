@@ -28,7 +28,8 @@ updates:
       - dependency-name: "tauri"
         update-types: ["version-update:semver-major"]
 
-  # GitHub Actions
+  # GitHub Actions — workflows pin actions to commit SHAs; Dependabot is what
+  # keeps those pins fresh, grouped into one PR per week to cap noise.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -43,5 +44,25 @@ updates:
       - "github-actions"
     commit-message:
       prefix: "ci:"
+      include: "scope"
+    rebase-strategy: "auto"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # npm (frontend toolchain: vite + typescript devDependencies only)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "mohabbis"
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps):"
       include: "scope"
     rebase-strategy: "auto"

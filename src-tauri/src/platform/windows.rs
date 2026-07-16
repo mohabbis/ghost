@@ -242,16 +242,16 @@ static mut GLOBAL_TX: Option<Arc<Mutex<mpsc::Sender<InputEvent>>>> = None;
 unsafe fn get_modifier_state() -> u8 {
     let mut m: u8 = 0;
     // GetKeyState bit 15 = 1 when the key is held down
-    if GetKeyState(VK_SHIFT) < 0 {
+    if unsafe { GetKeyState(VK_SHIFT) } < 0 {
         m |= 0x01;
     }
-    if GetKeyState(VK_CONTROL) < 0 {
+    if unsafe { GetKeyState(VK_CONTROL) } < 0 {
         m |= 0x02;
     }
-    if GetKeyState(VK_MENU) < 0 {
+    if unsafe { GetKeyState(VK_MENU) } < 0 {
         m |= 0x04;
     }
-    if GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0 {
+    if unsafe { GetKeyState(VK_LWIN) } < 0 || unsafe { GetKeyState(VK_RWIN) } < 0 {
         m |= 0x08;
     }
     m
@@ -261,18 +261,20 @@ unsafe fn get_modifier_state() -> u8 {
 /// taking the current keyboard layout and modifier state into account.
 unsafe fn get_key_char(vk_code: DWORD, scan_code: DWORD) -> String {
     let mut key_state = [0u8; 256];
-    if !GetKeyboardState(key_state.as_mut_ptr()) {
+    if !unsafe { GetKeyboardState(key_state.as_mut_ptr()) } {
         return String::new();
     }
     let mut buf = [0u16; 8];
-    let n = ToUnicode(
-        vk_code,
-        scan_code,
-        key_state.as_ptr(),
-        buf.as_mut_ptr(),
-        8,
-        0,
-    );
+    let n = unsafe {
+        ToUnicode(
+            vk_code,
+            scan_code,
+            key_state.as_ptr(),
+            buf.as_mut_ptr(),
+            8,
+            0,
+        )
+    };
     if n > 0 {
         String::from_utf16_lossy(&buf[..n as usize])
     } else {
@@ -285,13 +287,13 @@ unsafe fn get_key_char(vk_code: DWORD, scan_code: DWORD) -> String {
 /// app = root-owner window text.
 unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
     let point = POINT { x, y };
-    let hwnd = WindowFromPoint(point);
+    let hwnd = unsafe { WindowFromPoint(point) };
     if hwnd == 0 {
         return None;
     }
 
     let mut class_buf = [0u8; 256];
-    let class_len = GetClassNameA(hwnd, class_buf.as_mut_ptr(), 256);
+    let class_len = unsafe { GetClassNameA(hwnd, class_buf.as_mut_ptr(), 256) };
     let role = if class_len > 0 {
         String::from_utf8_lossy(&class_buf[..class_len as usize]).to_string()
     } else {
@@ -299,7 +301,7 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
     };
 
     let mut text_buf = [0u8; 512];
-    let text_len = GetWindowTextA(hwnd, text_buf.as_mut_ptr(), 512);
+    let text_len = unsafe { GetWindowTextA(hwnd, text_buf.as_mut_ptr(), 512) };
     let name = if text_len > 0 {
         String::from_utf8_lossy(&text_buf[..text_len as usize]).to_string()
     } else {
@@ -307,10 +309,10 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
     };
 
     // Walk to the root-owner window to find the app title
-    let root = GetAncestor(hwnd, GA_ROOTOWNER);
+    let root = unsafe { GetAncestor(hwnd, GA_ROOTOWNER) };
     let app = if root != 0 && root != hwnd {
         let mut app_buf = [0u8; 512];
-        let app_len = GetWindowTextA(root, app_buf.as_mut_ptr(), 512);
+        let app_len = unsafe { GetWindowTextA(root, app_buf.as_mut_ptr(), 512) };
         if app_len > 0 {
             String::from_utf8_lossy(&app_buf[..app_len as usize]).to_string()
         } else {
@@ -325,17 +327,17 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
     // Top-level window (GA_ROOT, not ROOTOWNER: dialogs count as their own
     // window) supplies the window-title locator and the frame for
     // window-relative coordinates. Best-effort — both stay None on failure.
-    let top = GetAncestor(hwnd, GA_ROOT);
+    let top = unsafe { GetAncestor(hwnd, GA_ROOT) };
     let (window_title, window_rel) = if top != 0 {
         let mut title_buf = [0u8; 512];
-        let title_len = GetWindowTextA(top, title_buf.as_mut_ptr(), 512);
+        let title_len = unsafe { GetWindowTextA(top, title_buf.as_mut_ptr(), 512) };
         let title = if title_len > 0 {
             Some(String::from_utf8_lossy(&title_buf[..title_len as usize]).to_string())
         } else {
             None
         };
         let mut rect = RECT::default();
-        let rel = if GetWindowRect(top, &mut rect) {
+        let rel = if unsafe { GetWindowRect(top, &mut rect) } {
             Some((x - rect.left, y - rect.top))
         } else {
             None
@@ -361,117 +363,117 @@ unsafe fn get_element_at(x: i32, y: i32) -> Option<ElementInfo> {
 unsafe extern "system" fn mouse_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
         let global_tx = &raw const GLOBAL_TX;
-        if let Some(tx_arc) = (*global_tx).as_ref() {
-            if let Ok(tx) = tx_arc.lock() {
-                let ms = &*(lParam as *const MSLLHOOKSTRUCT);
+        if let Some(tx_arc) = unsafe { (*global_tx).as_ref() }
+            && let Ok(tx) = tx_arc.lock()
+        {
+            let ms = unsafe { &*(lParam as *const MSLLHOOKSTRUCT) };
 
-                let event = match wParam as u32 {
-                    WM_LBUTTONDOWN => Some(InputEvent::MouseClick {
-                        x: ms.pt.x,
-                        y: ms.pt.y,
-                        button: 0,
-                        element: get_element_at(ms.pt.x, ms.pt.y),
+            let event = match wParam as u32 {
+                WM_LBUTTONDOWN => Some(InputEvent::MouseClick {
+                    x: ms.pt.x,
+                    y: ms.pt.y,
+                    button: 0,
+                    element: unsafe { get_element_at(ms.pt.x, ms.pt.y) },
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                    self_heal: None,
+                }),
+                WM_LBUTTONUP => Some(InputEvent::MouseClick {
+                    x: ms.pt.x,
+                    y: ms.pt.y,
+                    button: 1,
+                    element: None,
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                    self_heal: None,
+                }),
+                WM_RBUTTONDOWN => Some(InputEvent::MouseClick {
+                    x: ms.pt.x,
+                    y: ms.pt.y,
+                    button: 2,
+                    element: unsafe { get_element_at(ms.pt.x, ms.pt.y) },
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                    self_heal: None,
+                }),
+                WM_RBUTTONUP => Some(InputEvent::MouseClick {
+                    x: ms.pt.x,
+                    y: ms.pt.y,
+                    button: 3,
+                    element: None,
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                    self_heal: None,
+                }),
+                WM_MOUSEWHEEL => {
+                    // HIWORD of mouseData = signed wheel delta; positive = forward (up)
+                    let delta = (ms.mouseData >> 16) as i16;
+                    let dy = -(delta as i32) / 120; // normalise; negative = scroll up visually
+                    Some(InputEvent::Scroll {
+                        dx: 0,
+                        dy,
+                        phase: 0,
                         timestamp: None,
-                        retry_count: None,
-                        semantic_tag: None,
-                        self_heal: None,
-                    }),
-                    WM_LBUTTONUP => Some(InputEvent::MouseClick {
-                        x: ms.pt.x,
-                        y: ms.pt.y,
-                        button: 1,
-                        element: None,
-                        timestamp: None,
-                        retry_count: None,
-                        semantic_tag: None,
-                        self_heal: None,
-                    }),
-                    WM_RBUTTONDOWN => Some(InputEvent::MouseClick {
-                        x: ms.pt.x,
-                        y: ms.pt.y,
-                        button: 2,
-                        element: get_element_at(ms.pt.x, ms.pt.y),
-                        timestamp: None,
-                        retry_count: None,
-                        semantic_tag: None,
-                        self_heal: None,
-                    }),
-                    WM_RBUTTONUP => Some(InputEvent::MouseClick {
-                        x: ms.pt.x,
-                        y: ms.pt.y,
-                        button: 3,
-                        element: None,
-                        timestamp: None,
-                        retry_count: None,
-                        semantic_tag: None,
-                        self_heal: None,
-                    }),
-                    WM_MOUSEWHEEL => {
-                        // HIWORD of mouseData = signed wheel delta; positive = forward (up)
-                        let delta = (ms.mouseData >> 16) as i16;
-                        let dy = -(delta as i32) / 120; // normalise; negative = scroll up visually
-                        Some(InputEvent::Scroll {
-                            dx: 0,
-                            dy,
-                            phase: 0,
-                            timestamp: None,
-                        })
-                    }
-                    WM_MOUSEHWHEEL => {
-                        let delta = (ms.mouseData >> 16) as i16;
-                        let dx = delta as i32 / 120;
-                        Some(InputEvent::Scroll {
-                            dx,
-                            dy: 0,
-                            phase: 0,
-                            timestamp: None,
-                        })
-                    }
-                    _ => None,
-                };
-
-                if let Some(ev) = event {
-                    let _ = tx.send(ev);
+                    })
                 }
+                WM_MOUSEHWHEEL => {
+                    let delta = (ms.mouseData >> 16) as i16;
+                    let dx = delta as i32 / 120;
+                    Some(InputEvent::Scroll {
+                        dx,
+                        dy: 0,
+                        phase: 0,
+                        timestamp: None,
+                    })
+                }
+                _ => None,
+            };
+
+            if let Some(ev) = event {
+                let _ = tx.send(ev);
             }
         }
     }
-    CallNextHookEx(0, code, wParam, lParam)
+    unsafe { CallNextHookEx(0, code, wParam, lParam) }
 }
 
 unsafe extern "system" fn keyboard_hook_proc(code: i32, wParam: WPARAM, lParam: LPARAM) -> LRESULT {
     if code >= 0 {
         let global_tx = &raw const GLOBAL_TX;
-        if let Some(tx_arc) = (*global_tx).as_ref() {
-            if let Ok(tx) = tx_arc.lock() {
-                let kb = &*(lParam as *const KBDLLHOOKSTRUCT);
+        if let Some(tx_arc) = unsafe { (*global_tx).as_ref() }
+            && let Ok(tx) = tx_arc.lock()
+        {
+            let kb = unsafe { &*(lParam as *const KBDLLHOOKSTRUCT) };
 
-                let action = match wParam as u32 {
-                    WM_KEYDOWN | WM_SYSKEYDOWN => Some(KeyAction::Down),
-                    WM_KEYUP | WM_SYSKEYUP => Some(KeyAction::Up),
-                    _ => None,
+            let action = match wParam as u32 {
+                WM_KEYDOWN | WM_SYSKEYDOWN => Some(KeyAction::Down),
+                WM_KEYUP | WM_SYSKEYUP => Some(KeyAction::Up),
+                _ => None,
+            };
+
+            if let Some(action) = action {
+                let modifiers = unsafe { get_modifier_state() };
+                let chars = match action {
+                    KeyAction::Down => unsafe { get_key_char(kb.vkCode, kb.scanCode) },
+                    KeyAction::Up => String::new(),
                 };
-
-                if let Some(action) = action {
-                    let modifiers = get_modifier_state();
-                    let chars = match action {
-                        KeyAction::Down => get_key_char(kb.vkCode, kb.scanCode),
-                        KeyAction::Up => String::new(),
-                    };
-                    let _ = tx.send(InputEvent::Key {
-                        code: kb.vkCode as u16,
-                        chars,
-                        modifiers,
-                        action,
-                        timestamp: None,
-                        retry_count: None,
-                        semantic_tag: None,
-                    });
-                }
+                let _ = tx.send(InputEvent::Key {
+                    code: kb.vkCode as u16,
+                    chars,
+                    modifiers,
+                    action,
+                    timestamp: None,
+                    retry_count: None,
+                    semantic_tag: None,
+                });
             }
         }
     }
-    CallNextHookEx(0, code, wParam, lParam)
+    unsafe { CallNextHookEx(0, code, wParam, lParam) }
 }
 
 // ── Element locator ───────────────────────────────────────────────────────────
@@ -692,48 +694,35 @@ impl ReplayEngine for WindowsReplayer {
                     on_mismatch,
                 } => match crate::core::vision::capture_screenshot() {
                     Ok(img_bytes) => {
-                        if let Ok(current_img) = image::load_from_memory(&img_bytes) {
-                            if let Ok(similarity) = crate::core::vision::compare_images(
+                        if let Ok(current_img) = image::load_from_memory(&img_bytes)
+                            && let Ok(similarity) = crate::core::vision::compare_images(
                                 baseline_screenshot,
                                 &current_img,
-                            ) {
-                                if similarity < *threshold {
-                                    tracing::warn!(
-                                        "Visual mismatch: {:.2} < {}",
-                                        similarity,
-                                        threshold
-                                    );
-                                    match on_mismatch {
-                                        crate::core::events::MismatchAction::Fail => {
-                                            return Err(anyhow::anyhow!(
-                                                "Visual regression detected"
-                                            ));
+                            )
+                            && similarity < *threshold
+                        {
+                            tracing::warn!("Visual mismatch: {:.2} < {}", similarity, threshold);
+                            match on_mismatch {
+                                crate::core::events::MismatchAction::Fail => {
+                                    return Err(anyhow::anyhow!("Visual regression detected"));
+                                }
+                                crate::core::events::MismatchAction::Retry { attempts } => {
+                                    for _ in 0..*attempts {
+                                        std::thread::sleep(std::time::Duration::from_millis(500));
+                                        if let Ok(b) = crate::core::vision::capture_screenshot()
+                                            && let Ok(img) = image::load_from_memory(&b)
+                                            && crate::core::vision::compare_images(
+                                                baseline_screenshot,
+                                                &img,
+                                            )
+                                            .unwrap_or(1.0)
+                                                >= *threshold
+                                        {
+                                            break;
                                         }
-                                        crate::core::events::MismatchAction::Retry { attempts } => {
-                                            for _ in 0..*attempts {
-                                                std::thread::sleep(
-                                                    std::time::Duration::from_millis(500),
-                                                );
-                                                if let Ok(b) =
-                                                    crate::core::vision::capture_screenshot()
-                                                {
-                                                    if let Ok(img) = image::load_from_memory(&b) {
-                                                        if crate::core::vision::compare_images(
-                                                            baseline_screenshot,
-                                                            &img,
-                                                        )
-                                                        .unwrap_or(1.0)
-                                                            >= *threshold
-                                                        {
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        crate::core::events::MismatchAction::LogOnly => {}
                                     }
                                 }
+                                crate::core::events::MismatchAction::LogOnly => {}
                             }
                         }
                     }

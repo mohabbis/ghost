@@ -67,6 +67,8 @@ Select folder → Scan → Plan → Policy → Approve → Execute → Audit →
 | DOC-002 | Low | `HANDOFF.md` stale version/test counts | Fixed → v1.2.9 / ~694 tests |
 | DOC-003 | Low | `command-registry.md` missing rows for several stable commands | Fixed in PR #232 branch |
 
+(See the "Status addendum — 2026-07-16" at the end of this document for the current status of these findings.)
+
 ## 4. Doc drift register (resolved / remaining)
 
 | Document | Was wrong | Corrected to |
@@ -148,3 +150,19 @@ Report SHA and CI status in the PR that lands these fixes.
 - `docs/post-audit-implementation-handoff.md` — phased hardening checklist
 - `docs/manual-qa-checklist.md` — desktop QA paths
 - `AGENTS.md` / `CLAUDE.md` — agent contract and architecture map
+
+## Status addendum — 2026-07-16
+
+The sections above are a point-in-time record of `master` @ `eac84ca` and are left
+unedited. Verified against the current tree (Ghost 2.0, v2.0.4), the following
+findings have changed status:
+
+| ID | 2026-07-13 status | Current status (verified in code) |
+|---|---|---|
+| RPL-001 | Open (High) | **Substantially resolved.** Replay is policy-bound end to end: `routine_policy_plan` → `approve_routine_replay` → one-shot, TTL-bound approval token consumed by `replay_workflow` (`commands/core.rs`) and `execute_routine_action_plan` (`commands/runtime_cmds.rs`); plans are re-derived server-side and `ensure_replayable` refuses a Deny. Replay WAL + undo merged in #232 (`ac7c890`; `storage/replay_runs.rs`, `replay_check_unfinished_run`/`replay_undo`). Ghost Guard findings are routed into the review timeline (`src/compression-review.js` invokes `ghost_guard_audit_compressed` and renders per-step findings, with a CI contract test). Remaining: bare-`Allow` app/window Zones and the routine vault (tracked follow-up). |
+| SEC-001 | Fixed in PR #232 branch | **Merged** (#232, `ac7c890`): `security.yml` runs on `master`. |
+| SEC-002 | Fixed in PR #232 branch | **Merged** (#232, `ac7c890`): `cargo audit`/`deny` use `--manifest-path src-tauri/Cargo.toml`. |
+| SEC-003 | Fixed in PR #232 branch | **Merged** (#232, `ac7c890`): CodeQL matrix analyzes `rust`. |
+| REL-001 | Deferred | Unchanged — Windows Authenticode / Azure Trusted Signing still unconfigured. |
+| Updater signing | Improved | A real minisign pubkey ships in `tauri.conf.json` (`plugins.updater.pubkey`); `updater_configured` treats only a scrubbed placeholder key as inert. |
+| Supply chain | Open | GitHub Actions are now pinned to full commit SHAs across all workflows, with Dependabot keeping the pins fresh (this change). |

@@ -86,7 +86,9 @@ Current release line: **v2.0.4** (macOS notarized; Windows unsigned). Get the la
 - **macOS** (Apple Silicon & Intel, macOS 12+) — [download the `.dmg`](https://github.com/mohabbis/ghost/releases/latest)
 - **Windows 10/11** — [download the installer](https://github.com/mohabbis/ghost/releases/latest)
 
-Verify your download against `SHA256SUMS.txt` attached to each [release](https://github.com/mohabbis/ghost/releases/latest).
+Verify your download against `SHA256SUMS.txt` and the cosign signatures attached to each
+[release](https://github.com/mohabbis/ghost/releases/latest) — step-by-step commands in
+[docs/VERIFY_DOWNLOADS.md](docs/VERIFY_DOWNLOADS.md).
 
 **macOS Gatekeeper note:** if macOS blocks the app on first launch, right-click the app and choose
 **Open**, or clear the quarantine attribute:
