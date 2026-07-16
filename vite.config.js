@@ -26,7 +26,9 @@ export default defineConfig({
     target: ["es2022", "safari14"],
     // Keep the bundle CSP-clean: no inline preload polyfill script.
     modulePreload: { polyfill: false },
-    minify: "esbuild",
+    // Vite 8 bundles with rolldown and no longer ships esbuild; use the default
+    // (oxc) minifier rather than pulling esbuild back in as a separate dep.
+    minify: true,
     sourcemap: false,
   },
 });
