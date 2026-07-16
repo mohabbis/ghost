@@ -131,8 +131,10 @@ lto = "thin"
 codegen-units = 1
 # Strip debug symbols to reduce binary size
 strip = true
-# Panic abort for slightly better performance (vs panic unwind)
-panic = "abort"
+# NOTE: do not set `panic = "abort"` here. The macOS recorder's CGEventTap
+# callback contains panics at the FFI boundary via std::panic::catch_unwind,
+# which the abort strategy disables — platform/macos.rs enforces this with a
+# compile_error! guard (release builds fail on macOS with abort set).
 
 [profile.release-with-debug]
 inherits = "release"
