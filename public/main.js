@@ -40,13 +40,13 @@ function platformDetection() {
   document.body.dataset.platform = platform;
 
   const sub = $("#download-sub");
-  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v2.0.4 (notarized).";
-  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v2.0.4 (unsigned installer).";
+  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v2.0.3 (notarized).";
+  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v2.0.3 (unsigned installer).";
 
   const primaryLabel = $("[data-download-label]");
   if (primaryLabel) {
-    if (platform === "mac") primaryLabel.textContent = "Download v2.0.4 for macOS";
-    else if (platform === "windows") primaryLabel.textContent = "Download v2.0.4 for Windows";
+    if (platform === "mac") primaryLabel.textContent = "Download v2.0.3 for macOS";
+    else if (platform === "windows") primaryLabel.textContent = "Download v2.0.3 for Windows";
   }
 }
 
@@ -332,102 +332,7 @@ function organizerDemo() {
 }
 
 /* ============================================================
-   Demo B — Plan Filing (preview only; Organizer executes)
-   ============================================================ */
-function planFilingDemo() {
-  const filesEl = $("#filing-files");
-  const planEl = $("#filing-plan");
-  const auditBox = $("#filing-audit");
-  const auditEl = $("#filing-auditlist");
-  const btn = $("#filing-action");
-  const hint = $("#filing-hint");
-  const planHead = $("#filing-planhead");
-  if (!btn) return;
-
-  // Mirrors the desktop Plan Filing view: paste names → preview by profile.
-  // Nothing here mutates disk; Organizer is where approve / audit / undo live.
-  const FILES = [
-    { name: "junit-test-results-2026-07.xml", meta: "Test report" },
-    { name: "coverage-Q2-2026.html", meta: "Coverage" },
-    { name: "build-log-2026-07-12.txt", meta: "Build log" },
-    { name: "screenshot-flaky-login.png", meta: "Screenshot" },
-    { name: "trace-run-8842.zip", meta: "Trace" },
-  ];
-  const PLAN = [
-    { tag: "＋ folder", cls: "tag--new", strong: "Test reports", desc: "by artifact type" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Coverage", desc: "by reporting period" },
-    { tag: "＋ folder", cls: "tag--new", strong: "Build logs", desc: "by run date" },
-    { tag: "→ file", cls: "tag--move", strong: "junit-test-results-2026-07.xml", desc: "→ Test reports/2026-07 junit-test-results.xml", file: 0 },
-    { tag: "→ file", cls: "tag--move", strong: "coverage-Q2-2026.html", desc: "→ Coverage/2026-Q2 coverage.html", file: 1 },
-    { tag: "→ file", cls: "tag--move", strong: "build-log-2026-07-12.txt", desc: "→ Build logs/2026-07-12 build-log.txt", file: 2 },
-    { tag: "→ file", cls: "tag--move", strong: "screenshot-flaky-login.png", desc: "→ Screenshots/screenshot-flaky-login.png", file: 3 },
-    { tag: "→ file", cls: "tag--move", strong: "trace-run-8842.zip", desc: "→ Traces/trace-run-8842.zip", file: 4 },
-    { tag: "✕ denied", cls: "tag--deny", strong: "0 disk writes", desc: "preview only — Organizer executes", deny: true },
-  ];
-
-  let state = "idle";
-
-  function fileRow(f, i) {
-    const li = el("li", null, `<span class="fname">${f.name}</span><span class="fmeta">${f.meta}</span>`);
-    li.dataset.file = String(i);
-    li.style.animationDelay = reduce.matches ? "0s" : `${i * 0.06}s`;
-    return li;
-  }
-
-  function planRow(a) {
-    return el(
-      "li",
-      a.deny ? "is-deny" : null,
-      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc}</span>`,
-    );
-  }
-
-  function reset() {
-    filesEl.innerHTML = "";
-    planEl.innerHTML = "";
-    auditEl.innerHTML = "";
-    auditBox.hidden = true;
-    planHead.textContent = "Filing preview";
-    hint.className = "demo__hint";
-    hint.textContent = "Reads names only — Plan Filing never touches disk. Organizer adds approve, audit, and undo.";
-    btn.textContent = "Preview filing";
-    btn.disabled = false;
-    state = "idle";
-  }
-
-  async function preview() {
-    btn.disabled = true;
-    hint.textContent = "Building a local filing preview from pasted names…";
-    FILES.forEach((f, i) => filesEl.appendChild(fileRow(f, i)));
-    await sequence(
-      PLAN.map((a) => () => planEl.appendChild(planRow(a))),
-      220,
-    );
-    planHead.textContent = "Filing preview — disk untouched";
-    auditBox.hidden = false;
-    auditEl.appendChild(
-      el(
-        "li",
-        null,
-        "✓ Preview ready — hand off to <b>Organizer</b> for approve → execute → audit → undo",
-      ),
-    );
-    hint.textContent = "Same trust pipeline as the desktop app: Plan Filing proposes; Organizer acts only after you approve.";
-    btn.textContent = "Reset preview";
-    btn.disabled = false;
-    state = "previewed";
-  }
-
-  btn.addEventListener("click", () => {
-    if (state === "idle") preview();
-    else if (state === "previewed") reset();
-  });
-
-  reset();
-}
-
-/* ============================================================
-   Demo C — Record → Review → Replay → Audit → Undo
+   Demo C — Record → Review → Replay → Verify → Undo
    ============================================================ */
 function replayDemo() {
   const stepsEl = $("#rep-steps");
@@ -440,12 +345,15 @@ function replayDemo() {
   const title = $("#rec-title");
   if (!btn) return;
 
+  // Flagship workflow: re-keying figures from a source into a close workbook.
+  // Each step carries the value Ghost expects to see land in the field; on replay
+  // it verifies observed-vs-expected and halts the moment one doesn't match.
   const STEPS = [
-    { icon: "🖱️", html: 'Click <b>“Export report”</b>' },
-    { icon: "⌨️", html: 'Type <span class="redacted">redacted</span> into <b>Filename</b>' },
-    { icon: "🔒", html: 'Password field — <span class="secure">not captured</span>' },
-    { icon: "🖱️", html: 'Click <b>“Save”</b>' },
-    { icon: "⏳", html: "Wait for download (2.1s)" },
+    { icon: "📄", html: 'Open <b>Q3 close — summary.xlsx</b>', expect: "workbook focused" },
+    { icon: "⌨️", html: 'Set <b>B7 · Revenue</b> → <b>48,210.00</b>', expect: "48,210.00" },
+    { icon: "⌨️", html: 'Set <b>B8 · COGS</b> → <b>12,900.00</b>', expect: "12,900.00", drift: "12,090.00" },
+    { icon: "⌨️", html: 'Set <b>A1 · Period</b> → <b>2026-Q3</b>', expect: "2026-Q3" },
+    { icon: "⏳", html: "Wait for recalculation (1.4s)", expect: "recalculated" },
   ];
 
   let state = "idle";
@@ -456,6 +364,13 @@ function replayDemo() {
   function auditRow(html) {
     return el("li", null, `✓ ${html}`);
   }
+  function exceptionRow(html) {
+    return el("li", "is-warn", `⚠ ${html}`);
+  }
+
+  // Index of the step whose source value drifted since recording — the one
+  // Ghost is meant to catch on replay.
+  const DRIFT = STEPS.findIndex((s) => s.drift);
 
   function reset() {
     stepsEl.innerHTML = "";
@@ -465,8 +380,8 @@ function replayDemo() {
     dot.classList.remove("is-live");
     title.textContent = "Ready to record";
     hint.className = "demo__hint";
-    hint.textContent = "Typed text is redacted by default; secure fields are never captured.";
-    btn.textContent = "Record a task";
+    hint.textContent = "Record the transfer once. On replay, Ghost checks every value against what you approved.";
+    btn.textContent = "Record the transfer";
     btn.disabled = false;
     state = "idle";
   }
@@ -475,14 +390,14 @@ function replayDemo() {
     btn.disabled = true;
     dot.classList.add("is-live");
     title.textContent = "Recording…";
-    hint.textContent = "Capturing your actions — and redacting what's sensitive.";
+    hint.textContent = "Capturing each field and the exact value you enter.";
     await sequence(
       STEPS.map((s) => () => stepsEl.appendChild(stepRow(s))),
       420,
     );
     dot.classList.remove("is-live");
     title.textContent = `${STEPS.length} steps captured`;
-    hint.textContent = "Review the compressed steps before anything replays.";
+    hint.textContent = "Review the readable steps before anything replays.";
     btn.textContent = "Review & approve";
     btn.disabled = false;
     state = "recorded";
@@ -495,39 +410,70 @@ function replayDemo() {
       160,
     );
     hint.className = "demo__hint is-warn";
-    hint.textContent = "You approve every step. Deny-by-default until you say go.";
+    hint.textContent = "You approve every step and the value it should write. Deny-by-default until you say go.";
     btn.textContent = "Approve & replay";
     btn.disabled = false;
     state = "reviewed";
   }
 
+  // Replay, verifying observed-vs-expected. Stops the run at the first mismatch.
   async function replay() {
     btn.disabled = true;
     hint.className = "demo__hint";
-    hint.textContent = "Replaying your approved steps…";
+    hint.textContent = "Replaying — verifying every value as it lands…";
     auditBox.hidden = false;
     const rows = $$("li", stepsEl);
-    await sequence(
-      STEPS.map((s, i) => () => {
-        const check = $(".s-check", rows[i]);
-        rows[i]?.classList.add("is-done");
-        if (check) check.textContent = "●";
-        auditEl.appendChild(auditRow(s.html.replace(/<[^>]+>/g, "").trim() || "step"));
-      }),
-      420,
-    );
-    hint.textContent = "Replay complete — every click's target traced, logged, and reversible.";
-    btn.textContent = "↩︎ Undo replay";
+    for (let i = 0; i < STEPS.length; i++) {
+      const s = STEPS[i];
+      const check = $(".s-check", rows[i]);
+      if (s.drift) {
+        rows[i]?.classList.add("is-warn");
+        if (check) check.textContent = "⚠";
+        auditEl.appendChild(
+          exceptionRow(
+            `Exception at <b>B8 · COGS</b> — approved <b>${s.expect}</b>, source now reads <b>${s.drift}</b>. Run halted before writing.`,
+          ),
+        );
+        hint.className = "demo__hint is-warn";
+        hint.textContent = "Caught a mismatch — Ghost stopped before writing a wrong number. Nothing downstream changed.";
+        btn.textContent = "Review exception →";
+        btn.disabled = false;
+        state = "halted";
+        return;
+      }
+      rows[i]?.classList.add("is-done");
+      if (check) check.textContent = "●";
+      auditEl.appendChild(auditRow(`Verified — ${s.html.replace(/<[^>]+>/g, "").trim()} · reads “${s.expect}”`));
+      await sequence([() => {}], 380);
+    }
+  }
+
+  async function resolveException() {
+    btn.disabled = true;
+    hint.className = "demo__hint";
+    hint.textContent = "You reconciled the exception. Finishing the remaining approved steps…";
+    const rows = $$("li", stepsEl);
+    for (let i = DRIFT; i < STEPS.length; i++) {
+      const s = STEPS[i];
+      const check = $(".s-check", rows[i]);
+      rows[i]?.classList.remove("is-warn");
+      rows[i]?.classList.add("is-done");
+      if (check) check.textContent = "●";
+      auditEl.appendChild(auditRow(`Verified — ${s.html.replace(/<[^>]+>/g, "").trim()} · reads “${s.expect}”`));
+      await sequence([() => {}], 360);
+    }
+    hint.textContent = "Run complete — every value verified, receipt sealed, and reversible.";
+    btn.textContent = "↩︎ Undo run";
     btn.disabled = false;
     state = "replayed";
   }
 
   async function undo() {
     btn.disabled = true;
-    hint.textContent = "Undoing the replay's effects…";
-    auditEl.appendChild(auditRow("Reverted: file export removed, prior state restored"));
+    hint.textContent = "Reverting from the undo journal…";
+    auditEl.appendChild(auditRow("Reverted: every written cell restored to its prior value"));
     await sequence([() => {}], 500);
-    hint.textContent = "Back to where you started.";
+    hint.textContent = "Back to where you started. Nothing was lost.";
     btn.textContent = "Record again";
     btn.disabled = false;
     state = "undone";
@@ -537,115 +483,9 @@ function replayDemo() {
     if (state === "idle") record();
     else if (state === "recorded") review();
     else if (state === "reviewed") replay();
+    else if (state === "halted") resolveException();
     else if (state === "replayed") undo();
     else if (state === "undone") reset();
-  });
-
-  reset();
-}
-
-/* ============================================================
-   Demo D — Guard Desk → approve → POS Bridge
-   ============================================================ */
-function guardDeskDemo() {
-  const rulesEl = $("#guard-rules");
-  const verdictEl = $("#guard-verdict");
-  const auditBox = $("#guard-audit");
-  const auditEl = $("#guard-auditlist");
-  const btn = $("#guard-action");
-  const hint = $("#guard-hint");
-  const planHead = $("#guard-planhead");
-  if (!btn) return;
-
-  const RULES = [
-    { tag: "✓ pass", cls: "tag--new", strong: "Payee matches ID", desc: "JOHN DOE" },
-    { tag: "✓ pass", cls: "tag--new", strong: "ID not expired", desc: "2029-12-15" },
-    { tag: "✓ pass", cls: "tag--new", strong: "Check within 90 days", desc: "2026-07-09" },
-    { tag: "✓ pass", cls: "tag--new", strong: "Signature reviewed", desc: "on device" },
-    { tag: "✓ pass", cls: "tag--new", strong: "Under cashing limit", desc: "$1,450.00" },
-  ];
-
-  let state = "idle";
-
-  function row(a) {
-    return el(
-      "li",
-      null,
-      `<span class="tag ${a.cls}">${a.tag}</span> <span class="p-strong">${a.strong}</span> <span class="p-desc">${a.desc || ""}</span>`,
-    );
-  }
-
-  function reset() {
-    rulesEl.innerHTML = "";
-    verdictEl.innerHTML = "";
-    auditEl.innerHTML = "";
-    auditBox.hidden = true;
-    planHead.textContent = "Verdict";
-    hint.className = "demo__hint";
-    hint.textContent = "Local compliance check — nothing leaves your browser.";
-    btn.textContent = "Scan documents";
-    btn.disabled = false;
-    state = "idle";
-  }
-
-  async function scan() {
-    btn.disabled = true;
-    hint.textContent = "Scanning check + ID locally…";
-    await sequence(
-      RULES.map((a) => () => rulesEl.appendChild(row(a))),
-      220,
-    );
-    planHead.textContent = "Verdict — APPROVED";
-    verdictEl.appendChild(
-      row({ tag: "approve", cls: "tag--move", strong: "Safe to cash", desc: "awaiting your approval" }),
-    );
-    hint.textContent = "Ghost recommends. You still approve before POS Bridge types.";
-    btn.textContent = "Approve plan";
-    btn.disabled = false;
-    state = "scanned";
-  }
-
-  async function approve() {
-    btn.disabled = true;
-    hint.textContent = "Approved — POS Bridge unlocked.";
-    verdictEl.appendChild(
-      row({ tag: "✓ you", cls: "tag--new", strong: "Human approved", desc: "plan locked" }),
-    );
-    btn.textContent = "Auto-fill POS";
-    btn.disabled = false;
-    state = "approved";
-  }
-
-  async function autofill() {
-    btn.disabled = true;
-    auditBox.hidden = false;
-    hint.textContent = "Typing into POS Bridge…";
-    const fields = [
-      "Payee Full Name → JOHN DOE",
-      "ID Number → DL-98234812",
-      "Check Amount → 1,450.00",
-      "Routing → 121000248",
-      "Account → 987654321",
-      "Status → OK-88294",
-    ];
-    await sequence(
-      fields.map((f) => () => {
-        const li = el("li", null, `✓ ${f}`);
-        auditEl.appendChild(li);
-      }),
-      280,
-    );
-    hint.textContent = "Done — every field typed after your approval.";
-    btn.textContent = "Run again";
-    btn.disabled = false;
-    state = "done";
-  }
-
-  btn.addEventListener("click", () => {
-    if (state === "idle") scan();
-    else if (state === "scanned") approve();
-    else if (state === "approved") autofill();
-    else if (state === "done") reset();
   });
 
   reset();
@@ -670,7 +510,5 @@ window.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupScrollSpy();
   organizerDemo();
-  planFilingDemo();
   replayDemo();
-  guardDeskDemo();
 });

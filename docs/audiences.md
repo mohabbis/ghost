@@ -1,101 +1,81 @@
 # Ghost — Audiences
 
-Ghost is a general-purpose, local-first tool, not a single-industry product. Its
-value is a **trust pipeline** (preview → approve → execute → audit → undo) that
-turns repetitive computer work into safe, reversible, permission-bounded
-routines. That pipeline is audience-neutral; the *domain knowledge* that makes a
-preview genuinely useful is layered on top as **profiles**.
+Ghost has one buyer and one flagship workflow. Everything on the public surface
+reinforces the same story; capability that serves a different persona stays off
+the front page until the wedge has real, referenceable users.
 
-This document defines who Ghost is for, what each audience needs, which features
-serve them, and the concern each cares about most. Not everyone is a fit — for
-some workflows Ghost adds little, and that is fine. We would rather be excellent
-for a few audiences than mediocre for everyone.
+**Primary buyer:** finance and operations teams doing recurring, high-stakes
+data entry by hand.
 
-## Primary audiences
+**Flagship workflow:** *messy manual transfer → automated, verified transfer →
+human reviews the exceptions.* Ghost records the re-keying/copy-across you do
+every period, replays it, verifies every value against what you approved, and
+halts on any mismatch so a bad figure never flows downstream.
 
-### 1. Students
+Its value is the **trust pipeline** — record → review → approve → replay →
+verify → undo — applied to the one class of work where a single wrong number is
+expensive and a clean audit trail is not optional.
 
-- **Job to be done:** file coursework (assignments, lectures, labs, exams,
-  readings, projects, notes, syllabi) by course and academic term; rename messy
-  downloads like `hw3_final_FINAL.pdf`.
-- **Serving features:** the `Student` filing profile (`filing::academic`) — course
-  code + term ("Fall 2026") + assignment-type detection; the Organizer for the
-  actual safe move/rename.
-- **Top concern:** free/cheap, works offline, nothing uploaded, nothing deleted.
+## Who Ghost is for
 
-### 2. Finance / operations admins
+### 1. Bookkeepers & controllers
 
-- **Job to be done:** file recurring financial reports (income statements,
-  balance sheets, reconciliations, AR/AP aging, payroll, tax, budgets, bank
-  statements, compliance reports) by type and reporting period; quantify the time
-  and cost of doing it by hand.
-- **Serving features:** the `Finance` filing profile (`filing::finance`) +
-  period-based foldering; the savings estimator (`filing::savings`); the
-  Organizer's audited, undoable execution.
+- **Job to be done:** the month-end re-keying between systems, bank/statement
+  exports, and workbooks; recurring reconciliations and report prep.
+- **Serving features:** Record → replay with per-step verification (the value you
+  approved actually landed); the tamper-evident audit chain and undo journal; the
+  `Finance` filing profile + period foldering for the documents produced.
 - **Top concern:** regulated/PII data never leaves the machine, a human approves
-  every change, and there is a durable audit trail with undo. Ghost must be
-  assist-not-autonomy: it proposes, a person approves, the deterministic core
-  executes.
+  every change, a wrong value is caught before it ships, and there is a durable,
+  reversible audit trail.
 
-### 3. Freelancers / creatives
+### 2. FP&A & operations analysts
 
-- **Job to be done:** separate invoices, receipts, contracts, and deliverables by
-  client and date.
-- **Serving features:** Organizer categories (Invoices/Receipts/Statements),
-  dated renaming, the client filing preset; period parsing.
-- **Top concern:** clean client separation and zero accidental overwrite.
-
-### 4. Legal / paralegal and researchers
-
-- **Job to be done:** file documents by matter/case or project and date under a
-  strict "never delete, never overwrite" rule.
-- **Serving features:** Organizer with deny-by-default policy, the tamper-evident
-  audit chain, and undo journal.
-- **Top concern:** a defensible, chain-of-custody-style record of every change.
-
-### 5. Developers, general and household users
-
-- **Job to be done:** tidy Downloads — installers, media, archives, statements —
-  quickly and reversibly.
-- **Serving features:** the Organizer's deterministic classifier and safe
-  executor.
-- **Top concern:** simple, safe, reversible; no surprises.
-
-## Who Ghost is *not* for (today)
-
-- People who want a fully autonomous agent that acts without review — Ghost is
-  deliberately human-in-the-loop.
-- Cloud-first / multi-user collaboration workflows — Ghost is local-first.
-- Anything requiring the app to read email, browser, or screen contents in the
-  background — Ghost does not do hidden observation.
+- **Job to be done:** recurring cross-sheet transfers and report assembly where a
+  transposed digit can hide for weeks.
+- **Serving features:** the same record → replay → verify loop; execution receipts
+  that record expected-vs-observed per step; deny-by-default approval.
+- **Top concern:** catching the mismatch at the keystroke, with a defensible record
+  of what ran and what it changed.
 
 ## Cross-audience guarantees
 
-Every audience gets the same non-negotiables:
+Every user gets the same non-negotiables:
 
 - local-first: no cloud dependency, no telemetry, no network calls in the stock
-  build;
-- no silent delete, no silent overwrite;
-- preview before every mutation, approval required, audit written, undo
-  available for reversible operations;
-- AI (when enabled at all) only ever *suggests*; the deterministic core executes
-  only what the user approved.
+  build; regulated data never leaves the machine;
+- assist-not-autonomy: AI may *suggest*; the deterministic core executes only what
+  the user approved;
+- verify before commit: each step confirms the approved value landed; a mismatch
+  halts the run;
+- no silent delete, no silent overwrite; audit written, undo available for
+  reversible operations.
+
+## What Ghost is *not* for (today)
+
+- A fully autonomous agent that acts without review — Ghost is human-in-the-loop.
+- Cloud-first / multi-user collaboration — Ghost is local-first.
+- Background observation of email, browser, or screen — Ghost does not do it.
+- General-purpose file cleanup for every persona (students, household, legal,
+  freelancers, developers). Ghost *can* file those documents safely — the
+  Organizer trust pipeline is audience-neutral — but that is a supporting
+  capability, not who we position for or build features around.
+
+## Scope discipline
+
+The codebase carries more than this document lists (Routines beyond finance,
+on-device OCR/ID parsing, a semantic-memory graph, an MCP approval surface,
+experimental AI providers, optional identity sign-in and stack integrations).
+Those stay off the default surface and out of the primary pitch. A new audience or
+feature earns a place on the front page only when pull from real users in the
+vertical above justifies it — not engineering momentum.
 
 ## How profiles are implemented
 
-Profiles live in `src-tauri/src/filing/`:
-
-- `period.rs` — shared reporting/academic period + date extraction from file
-  names (pure, no IO);
-- `finance.rs` — financial-report-type classification;
-- `academic.rs` — coursework-type + course-code + term classification;
-- `preview.rs` — the `Audience` enum and the read-only `preview_filing` planner;
-- `savings.rs` — the time/cost savings estimator.
-
-These are surfaced by the safe-read commands `preview_file_filing` and
-`estimate_filing_savings` (`commands/filing.rs`), which touch **no filesystem**.
-The actual move/rename is still performed only by the Organizer's audited,
-undoable executor. See `docs/filing-profiles.md` for details.
-
-Adding an audience is additive: a new profile module + an `Audience` variant +
-tests, with no change to the trust pipeline.
+Filing profiles live in `src-tauri/src/filing/` (`period.rs`, `finance.rs`,
+`academic.rs`, `engineering.rs`, `preview.rs`, `savings.rs`) and are surfaced by
+the read-only commands `preview_file_filing` / `estimate_filing_savings`
+(`commands/filing.rs`), which touch **no filesystem**. The actual move/rename is
+performed only by the Organizer's audited, undoable executor. See
+`docs/filing-profiles.md`. The `Finance` profile serves the primary audience
+above; the others remain in the code but are not front-page positioning.
