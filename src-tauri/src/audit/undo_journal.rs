@@ -27,6 +27,18 @@ pub enum UndoOp {
     /// `from` is where the file now sits (the forward op's target); `to` is its
     /// original location (the forward op's source).
     Restore { from: PathBuf, to: PathBuf },
+    /// Record that a file was sent to the OS trash (see `organizer::trash`).
+    /// `original_path` is where it lived; `trash_ref` is the human-readable
+    /// reference the trasher returned. The OS trash — not Ghost — is the
+    /// authoritative recovery path for a delete, so the undo runner does not
+    /// programmatically restore this (that API is platform-variant and
+    /// unreliable); it surfaces the file's location instead. This variant
+    /// exists so the delete path is reversible-by-record from day one, before
+    /// delete execution is wired into the runtime.
+    Untrash {
+        original_path: PathBuf,
+        trash_ref: String,
+    },
 }
 
 /// An ordered, serializable journal of reversible steps. Steps are recorded in
@@ -113,6 +125,18 @@ mod tests {
             })
             .unwrap(),
             serde_json::json!({ "op": "restore", "from": "/b", "to": "/a" })
+        );
+        assert_eq!(
+            serde_json::to_value(UndoOp::Untrash {
+                original_path: PathBuf::from("/z/junk.tmp"),
+                trash_ref: "OS Trash/Recycle Bin: /z/junk.tmp".to_string(),
+            })
+            .unwrap(),
+            serde_json::json!({
+                "op": "untrash",
+                "original_path": "/z/junk.tmp",
+                "trash_ref": "OS Trash/Recycle Bin: /z/junk.tmp"
+            })
         );
     }
 

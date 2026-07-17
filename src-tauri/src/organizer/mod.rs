@@ -29,6 +29,7 @@ pub mod naming;
 pub mod pipeline;
 pub mod planner;
 pub mod scanner;
+pub mod trash;
 pub mod undo;
 
 #[cfg(test)]
