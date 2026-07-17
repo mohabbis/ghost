@@ -541,8 +541,22 @@ strong { font-weight: 650; }
   letter-spacing: 0.01em;
 }
 
+/* ───────────────────────── Demo before/after strip ───────────────────────── */
+.demo__ba { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.demo__ba-item {
+  display: inline-flex; align-items: center; gap: 8px; flex: 1 1 280px;
+  font-size: 13.5px; padding: 10px 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); color: var(--muted); background: var(--surface);
+}
+.demo__ba-item .i { flex: none; font-size: 16px; }
+.demo__ba-item--before { border-color: rgba(197, 48, 48, 0.25); background: var(--red-wash); }
+.demo__ba-item--before .i { color: var(--red); }
+.demo__ba-item--after { border-color: var(--violet-line); background: var(--green-wash); color: var(--paper); }
+.demo__ba-item--after .i { color: var(--green); }
+
 /* ───────────────────────── Compare ───────────────────────── */
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.compare--three { grid-template-columns: 1fr 1fr 1.15fr; }
 .compare__col { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px; background: #ffffff; }
 .compare__col h3 { display: flex; align-items: center; gap: 10px; font-size: 19px; margin-bottom: 20px; }
 .compare__col ul { display: flex; flex-direction: column; gap: 14px; }
@@ -558,12 +572,48 @@ strong { font-weight: 650; }
 .compare__col--us li { color: var(--paper); }
 .compare__col--us li::before { content: "✓"; color: var(--green); }
 
+/* ───────────────────────── Build vs buy strip ───────────────────────── */
+.buildbuy { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 16px; }
+.buildbuy__item {
+  border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; background: var(--surface);
+}
+.buildbuy__item h4 { font-size: 15px; margin-bottom: 6px; letter-spacing: 0; }
+.buildbuy__item p { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.buildbuy__item--ghost {
+  border-color: var(--violet-line);
+  background: linear-gradient(180deg, rgba(14, 143, 120, 0.08), var(--surface));
+}
+.buildbuy__item--ghost h4 { color: var(--violet-deep); }
+
 .anchor-quote {
   margin: 40px auto 0; max-width: 840px; text-align: center;
   font-size: 26px; font-weight: 600; line-height: 1.38;
   letter-spacing: 0; color: var(--paper);
 }
 .anchor-quote .grad { font-weight: 700; }
+
+/* ───────────────────────── Architecture trust strip ───────────────────────── */
+.arch-strip { margin-bottom: 22px; }
+.arch-strip .i { color: var(--violet); }
+
+/* ───────────────────────── Connect your AI ───────────────────────── */
+.connect-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 0; padding: 0; }
+.connect-steps li {
+  list-style: none; border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 26px; background: var(--surface);
+}
+.connect-steps h3 { font-size: 16px; margin: 12px 0 7px; letter-spacing: 0; }
+.connect-steps p { color: var(--muted); font-size: 14.5px; }
+.connect-code {
+  margin: 12px 0 0; padding: 14px 16px; border-radius: var(--r-sm);
+  background: var(--hero-ink); color: #d7e2ec; border: 1px solid var(--hero-line);
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  overflow-x: auto; user-select: all;
+}
+.connect-note {
+  margin-top: 20px; text-align: center; color: var(--faint); font-size: 13.5px;
+  font-family: var(--mono); letter-spacing: 0.01em;
+}
 
 /* ───────────────────────── Privacy ───────────────────────── */
 .privacy { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; }
@@ -643,7 +693,7 @@ body[data-platform="windows"] #dl-mac { background: rgba(255, 255, 255, 0.06); c
   .section__head h2 { font-size: 34px; }
   .mock { transform: none; }
   .demo__stage { grid-template-columns: 1fr; }
-  .compare { grid-template-columns: 1fr; }
+  .compare, .compare--three { grid-template-columns: 1fr; }
   .nav__links, .nav__end { display: none; }
   .nav__toggle {
     display: inline-flex; flex-direction: column; gap: 5px; margin-left: auto;

@@ -21,13 +21,13 @@
       content="Desktop automation for financial-services teams: replay repetitive spreadsheet and data-transfer work, verify every step against the plan you approved, and keep an audited, reversible receipt of every run. Local-first on your Mac or PC."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
-    <meta property="og:image" content="https://ghost.muharafiq.com/assets/og.png" />
+    <meta property="og:image" content="https://ghost.muharafiq.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Ghost — Automate the busywork. Catch the errors." />
     <meta name="twitter:description" content="Desktop automation for financial-services teams. Replay the data entry, verify every step, approve before it acts. Audited, undoable, local-first." />
-    <meta name="twitter:image" content="https://ghost.muharafiq.com/assets/og.png" />
+    <meta name="twitter:image" content="https://ghost.muharafiq.com/og.png" />
     <meta name="keywords" content="financial services automation, spreadsheet data entry automation, desktop automation Mac Windows, data transfer verification, local-first automation, audit undo" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -123,12 +123,12 @@
       <section class="hero reveal">
         <div class="hero__copy">
           <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span> Desktop automation for financial-services teams</p>
-          <h1>Automate the busywork.<br /><span class="grad">Catch the errors.</span></h1>
+          <h1>You typed 12,900. The sheet says 12,090.<br /><span class="grad">Ghost catches it at the keystroke.</span></h1>
           <p class="lede">
-            Finance teams still move numbers between spreadsheets and systems by hand — and one
-            mistyped or mis-pasted figure is expensive. Ghost records that repetitive data entry once,
-            then <strong>replays it on your Mac or PC and confirms every value landed where you approved</strong>.
-            A mismatch stops the run. Every change is audited and reversible.
+            One transposed digit between two spreadsheets can hide until the close. Ghost records
+            that transfer once, then <strong>replays it on your Mac or PC and verifies every value
+            against the one you approved</strong> — a mismatch halts the run before the wrong number
+            lands. Every change is audited and reversible.
           </p>
           <div class="hero__actions">
             <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download for Mac</span></a>
@@ -242,6 +242,10 @@
 
           <!-- Tab C: Record & Replay (flagship data-entry workflow) -->
           <div class="demo__panel is-active" role="tabpanel" data-panel="replay" aria-labelledby="tab-replay">
+            <div class="demo__ba" aria-hidden="false">
+              <span class="demo__ba-item demo__ba-item--before"><svg class="i"><use href="#i-x"/></svg> Without Ghost: 12,090 lands in the workbook and flows downstream</span>
+              <span class="demo__ba-item demo__ba-item--after"><svg class="i"><use href="#i-check-circle"/></svg> With Ghost: the run halts at that cell and shows you the exception</span>
+            </div>
             <div class="demo__stage">
               <div class="demo__left">
                 <div class="demo__screentitle"><span class="dot dot--rec" id="rec-dot"></span> <span id="rec-title">Ready to record</span></div>
@@ -368,13 +372,21 @@
           <h2>“Approve before it acts” is table stakes. Catching the error isn't.</h2>
           <p class="section__sub">Every serious automation now waits for a human. Ghost's difference is what it checks <em>before</em> it asks: it verifies each value it writes against the one you approved, so a bad transfer stops at the keystroke instead of surfacing in the close.</p>
         </div>
-        <div class="compare">
+        <div class="compare compare--three">
           <div class="compare__col compare__col--them">
-            <h3>Record-and-replay macros / cloud agents</h3>
+            <h3>Macro recorders</h3>
             <ul>
               <li>Replay keystrokes blindly — a wrong value flows straight through</li>
               <li>No check that what landed matches what was intended</li>
+              <li>Break silently when a window moves or a field renames</li>
+              <li>No receipt, no audit trail, no undo</li>
+            </ul>
+          </div>
+          <div class="compare__col compare__col--them">
+            <h3>RPA suites &amp; cloud agents</h3>
+            <ul>
               <li>Often run your data and logins on someone else's servers</li>
+              <li>“Human approves” the plan — but nothing verifies the result</li>
               <li>Hard to see exactly what changed, or to reverse it</li>
               <li>Errors surface downstream, after they've done damage</li>
             </ul>
@@ -390,6 +402,24 @@
             </ul>
           </div>
         </div>
+        <div class="buildbuy" role="list" aria-label="Paths to your first verified run">
+          <div class="buildbuy__item" role="listitem">
+            <h4>Keep re-keying by hand</h4>
+            <p>You are the verification. The mistake surfaces in reconciliation — if it surfaces.</p>
+          </div>
+          <div class="buildbuy__item" role="listitem">
+            <h4>Script it yourself</h4>
+            <p>Days to build, breaks when the UI shifts, and nothing checks the values it writes.</p>
+          </div>
+          <div class="buildbuy__item" role="listitem">
+            <h4>Buy an RPA suite</h4>
+            <p>Procurement, licenses, and consultants before the first run — usually cloud-hosted.</p>
+          </div>
+          <div class="buildbuy__item buildbuy__item--ghost" role="listitem">
+            <h4>Ghost</h4>
+            <p>Download, record the routine, and replay it verified — same machine, same day, free.</p>
+          </div>
+        </div>
         <p class="anchor-quote">
           “Automate the transfer, but catch the mistake — before it becomes someone's problem in the close.”
         </p>
@@ -400,6 +430,14 @@
         <div class="section__head">
           <p class="eyebrow">Privacy by default</p>
           <h2>What Ghost will never do.</h2>
+        </div>
+        <div class="trust-strip arch-strip" aria-label="Architecture guarantees">
+          <span><svg class="i"><use href="#i-cloud-off"/></svg> Local-first — data stays on your machine</span>
+          <span><svg class="i"><use href="#i-lock"/></svg> Encrypted at rest when you set a vault password</span>
+          <span><svg class="i"><use href="#i-ban"/></svg> Deny-by-default policy on every action</span>
+          <span><svg class="i"><use href="#i-undo"/></svg> Undo written before any change</span>
+          <span><svg class="i"><use href="#i-receipt"/></svg> Tamper-evident audit chain</span>
+          <span><svg class="i"><use href="#i-x"/></svg> Replay interruptible at any step</span>
         </div>
         <div class="privacy">
           <div class="privacy__card"><span class="privacy__ico"><svg class="i"><use href="#i-camera-off"/></svg></span><p>No camera or microphone access.</p></div>
@@ -443,6 +481,46 @@
         </div>
       </section>
 
+      <!-- ───────────────────────── Connect your AI ───────────────────────── -->
+      <section id="connect" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Connect your AI</p>
+          <h2>Use Ghost safely from the AI tools you already work with.</h2>
+          <p class="section__sub">
+            Claude, Cursor, and other MCP clients can propose plans — Ghost verifies and executes
+            only what you approve, on your machine. The AI proposes; you approve; deterministic code acts.
+          </p>
+        </div>
+        <ol class="connect-steps">
+          <li>
+            <span class="pipeline__n">1</span>
+            <h3>Install Ghost</h3>
+            <p>Download for macOS or Windows below. No account, no cloud setup.</p>
+          </li>
+          <li>
+            <span class="pipeline__n">2</span>
+            <h3>Add Ghost to your client</h3>
+            <p>Paste into Claude Desktop's or Cursor's MCP config (Windows: <code>C:\Program Files\Ghost\Ghost.exe</code>):</p>
+            <pre class="connect-code"><code>{
+  "mcpServers": {
+    "ghost": {
+      "command": "/Applications/Ghost.app/Contents/MacOS/Ghost",
+      "args": ["mcp", "serve"]
+    }
+  }
+}</code></pre>
+          </li>
+          <li>
+            <span class="pipeline__n">3</span>
+            <h3>Pair, then approve in Ghost</h3>
+            <p>Generate a pairing code in Settings so only your client can connect. Every proposed plan still waits for your approval in Ghost before anything runs.</p>
+          </li>
+        </ol>
+        <p class="connect-note">
+          Local only — Ghost's MCP server speaks over stdio on your machine. No listening socket, no relay, no uploads.
+        </p>
+      </section>
+
       <!-- ───────────────────────── Download ───────────────────────── -->
       <section id="download" class="download reveal">
         <div class="download__inner">
@@ -477,6 +555,7 @@
         <a href="#app">Inside the app</a>
         <a href="#audiences">Who it's for</a>
         <a href="#privacy">Privacy</a>
+        <a href="#connect">Connect your AI</a>
         <a href="#roadmap">Roadmap</a>
         <a href="https://github.com/mohabbis/ghost">GitHub</a>
       </nav>
