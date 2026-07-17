@@ -3139,21 +3139,46 @@ function showExecutionReceiptModal(title, res) {
   const content = modal?.querySelector(".modal-content");
   if (!content) return;
   const receiptHtml = res?.receipt ? renderExecutionReceipt(res.receipt) : "";
-  const summary = res?.report_summary || {};
   const stopped = res?.stopped_early
     ? `<p class="organizer-muted">Stopped early${res.stop_reason ? `: ${escapeHtml(res.stop_reason)}` : ""}</p>`
+    : "";
+  // Offer undo right where the user reads the receipt — replay → verify → undo
+  // should be one loop, not a trip through History. The stable
+  // undo_action_plan_execution command replays the run's undo journal in reverse.
+  const undoExecutionId = res?.receipt?.undo_available
+    ? res?.execution_id || res?.receipt?.execution_id || null
+    : null;
+  const undoButton = undoExecutionId
+    ? `<button class="btn btn--ghost btn--small" id="receiptUndoBtn" type="button" title="Reverse this run's reversible changes using its undo journal">Undo this run</button>`
     : "";
   content.innerHTML = `
     <h3 style="margin-top:0">${escapeHtml(title)}</h3>
     ${receiptHtml}
-    <div class="organizer-summary organizer-summary--done">
-      ✓ <strong>${summary.applied ?? 0}</strong> applied ·
-      <strong>${summary.skipped ?? 0}</strong> skipped ·
-      <strong>${summary.failed ?? 0}</strong> failed
-    </div>
     ${stopped}
-    <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+    <div class="btn-row" style="margin-top:16px">
+      ${undoButton}
+      <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button>
+    </div>`;
   showModal(modal);
+  if (undoExecutionId) {
+    document.getElementById("receiptUndoBtn")?.addEventListener("click", async () => {
+      const ok = await ghostConfirm(
+        "Undo this run? Ghost replays the undo journal in reverse — reversible changes are restored, nothing is deleted.",
+        "Undo run",
+      );
+      if (!ok) return;
+      try {
+        const report = await invoke("undo_action_plan_execution", { executionId: undoExecutionId });
+        closeModal("analysis-modal");
+        showNotification(
+          `Undo complete: ${report.reverted} reverted, ${report.skipped} skipped, ${report.failed} failed.`,
+          report.failed ? "error" : "info",
+        );
+      } catch (err) {
+        toastError("Undo failed: " + formatInvokeError(err));
+      }
+    });
+  }
 }
 
 async function loadGhost2Demo() {
@@ -5046,6 +5071,9 @@ async function initExperimentalPanel() {
   if (experimentalEnabled) {
     panel?.removeAttribute("hidden");
     document.getElementById("navExperimental")?.removeAttribute("hidden");
+    // Guard Desk is a prototype desk workflow, off the default surface
+    // (docs/audiences.md) — its nav entry rides the same reveal.
+    document.getElementById("navGuardDesk")?.removeAttribute("hidden");
     EXPERIMENTAL_ONLY_CONTROLS.forEach((id) =>
       document.getElementById(id)?.removeAttribute("hidden"),
     );
@@ -5117,7 +5145,8 @@ function initViewNav() {
     }
   });
 
-  show("organize");
+  // The flagship record → replay → verify workflow greets the user first.
+  show("record");
 }
 
 // ===== Guard Desk (local OCR + compliance → POS Bridge) =====
@@ -5933,7 +5962,7 @@ function filingConfidenceBadge(item) {
 
 async function filingPreview() {
   if (!invoke) return notAvailable();
-  const audience = document.getElementById("filingAudience")?.value || "engineering";
+  const audience = document.getElementById("filingAudience")?.value || "finance";
   const root = document.getElementById("filingRoot")?.value || "";
   const fileNames = filingParseNames(document.getElementById("filingNames")?.value);
   const result = document.getElementById("filingResult");
@@ -6055,7 +6084,7 @@ function filingInit() {
   if (!previewBtn) return;
   previewBtn.addEventListener("click", filingPreview);
   document.getElementById("filingSampleBtn")?.addEventListener("click", () => {
-    const audience = document.getElementById("filingAudience")?.value || "engineering";
+    const audience = document.getElementById("filingAudience")?.value || "finance";
     const ta = document.getElementById("filingNames");
     if (ta) ta.value = (FILING_SAMPLES[audience] || []).join("\n");
   });

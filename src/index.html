@@ -51,19 +51,21 @@
         </div>
 
         <div class="nav__items" role="tablist" aria-label="Views">
-          <button class="nav__item is-active" data-view="organize" role="tab" aria-selected="true" type="button" aria-label="Organize">
+          <button class="nav__item is-active" data-view="record" role="tab" aria-selected="true" type="button" aria-label="Record and Verify">
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span><span>Record &amp; Verify</span>
+          </button>
+          <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button" aria-label="Workflows">
+            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Workflows</span>
+          </button>
+          <button class="nav__item" data-view="organize" role="tab" aria-selected="false" type="button" aria-label="Organize">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-folder"/></svg></span><span>Organize</span>
           </button>
           <button class="nav__item" data-view="filing" role="tab" aria-selected="false" type="button" aria-label="Plan Filing">
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Plan Filing</span>
           </button>
-          <button class="nav__item" data-view="record" role="tab" aria-selected="false" type="button" aria-label="Record and Replay">
-            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span><span>Record &amp; Replay</span>
-          </button>
-          <button class="nav__item" data-view="workflows" role="tab" aria-selected="false" type="button" aria-label="Workflows">
-            <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-layers"/></svg></span><span>Workflows</span>
-          </button>
-          <button class="nav__item" data-view="guard-desk" role="tab" aria-selected="false" type="button" aria-label="Guard Desk">
+          <!-- Guard Desk is a prototype desk workflow — off the default surface
+               (docs/audiences.md); revealed only in experimental builds. -->
+          <button class="nav__item" id="navGuardDesk" data-view="guard-desk" role="tab" aria-selected="false" type="button" aria-label="Guard Desk" hidden>
             <span class="nav__ico" aria-hidden="true"><svg class="i"><use href="#i-shield"/></svg></span><span>Guard Desk</span>
           </button>
           <button class="nav__item" id="navExperimental" data-view="experimental" role="tab" aria-selected="false" type="button" hidden>
@@ -95,8 +97,8 @@
 
         <div class="workspace__body">
           <main class="app-main">
-            <!-- View: Organize (the wedge — shown first) -->
-            <section class="view is-active" data-view="organize" role="tabpanel" aria-label="Organize">
+            <!-- View: Organize (supporting capability — files what a run produces) -->
+            <section class="view" data-view="organize" role="tabpanel" aria-label="Organize" hidden>
               <section class="panel organizer-panel" id="organizerPanel" aria-labelledby="organizer-heading">
                 <div class="organizer-head">
                   <h2 id="organizer-heading">Ghost Organizer</h2>
@@ -172,8 +174,8 @@
                   <label class="organizer-field">
                     <span>Profile</span>
                     <select id="filingAudience" aria-label="Filing profile">
-                      <option value="engineering" selected>Software engineering &amp; automation</option>
-                      <option value="finance">Finance &amp; operations</option>
+                      <option value="finance" selected>Finance &amp; operations</option>
+                      <option value="engineering">Software engineering &amp; automation</option>
                       <option value="student">Student coursework</option>
                     </select>
                   </label>
@@ -185,7 +187,7 @@
 
                 <label class="organizer-field organizer-field--grow filing-names-field">
                   <span>File names (one per line)</span>
-                  <textarea id="filingNames" rows="6" spellcheck="false" placeholder="junit-test-results-2026-07.xml&#10;coverage-Q2-2026.html"></textarea>
+                  <textarea id="filingNames" rows="6" spellcheck="false" placeholder="invoice-acme-2026-07.pdf&#10;bank-statement-Q2-2026.csv"></textarea>
                 </label>
 
                 <div class="btn-row">
@@ -215,20 +217,20 @@
               </section>
             </section>
 
-            <!-- View: Record & Replay -->
-            <section class="view" data-view="record" role="tabpanel" aria-label="Record and replay" hidden>
+            <!-- View: Record & Verify (the flagship workflow — shown first) -->
+            <section class="view is-active" data-view="record" role="tabpanel" aria-label="Record and verify">
               <section class="mission-panel" aria-labelledby="mission-heading">
                 <div>
-                  <p class="mission-panel__eyebrow">Your first useful automation</p>
-                  <h2 id="mission-heading">Record a task once. Replay it whenever the work comes back.</h2>
-                  <p>Ghost is for tedious, repeatable desktop chores: exporting reports, moving files, filling internal tools, and checking UI flows. Keep it local, review each step, then run it with confidence.</p>
+                  <p class="mission-panel__eyebrow">The flagship workflow</p>
+                  <h2 id="mission-heading">Record the data entry once. Ghost replays it and checks every value.</h2>
+                  <p>Built for recurring, high-stakes data entry — cross-sheet transfers, statement re-keying, report assembly. Ghost records the task, replays it locally, and verifies each step against the plan you approved, so a wrong value is caught at the keystroke instead of downstream.</p>
                 </div>
                 <ol class="mission-steps" id="missionSteps" aria-label="Setup progress">
                   <li data-mission-step="permissions"><span>1</span><strong>Grant access</strong><em>Needed for clicks and keys</em></li>
                   <li data-mission-step="record"><span>2</span><strong>Record</strong><em>Capture a focused task</em></li>
                   <li data-mission-step="audit"><span>3</span><strong>Audit</strong><em>Ghost Guard reviews risk</em></li>
                   <li data-mission-step="policy"><span>4</span><strong>Policy</strong><em>Review OS-control approvals</em></li>
-                  <li data-mission-step="replay"><span>5</span><strong>Replay or save</strong><em>Make it reusable</em></li>
+                  <li data-mission-step="replay"><span>5</span><strong>Replay &amp; verify</strong><em>Each step checked as it runs</em></li>
                 </ol>
               </section>
 
@@ -568,8 +570,9 @@
           <span class="onboarding__glyph" aria-hidden="true"><svg class="i"><use href="#i-record"/></svg></span>
           <h2 id="onboarding-title">Welcome to Ghost</h2>
           <p class="onboarding__lead">
-            Clean a messy folder, run a compliance check, or record a routine —
-            Ghost shows the plan, waits for your approval, then keeps an audit trail you can undo.
+            Record a repetitive data-entry task once — Ghost shows you the exact plan,
+            waits for your approval, replays it, and verifies every value as it lands.
+            Audit trail and undo included.
           </p>
           <p class="onboarding__privacy"><svg class="i"><use href="#i-lock"/></svg>Ghost Guard blocks sensitive text-field capture and suppresses secret-like keystrokes.</p>
           <div class="onboarding__actions">
@@ -586,27 +589,27 @@
             <div class="flow-step">
               <span class="flow-step__icon"><svg class="i"><use href="#i-record"/></svg></span>
               <strong>1. Record</strong>
-              <p>Start an explicit recording or choose a folder.</p>
+              <p>Capture the task once, on your machine.</p>
             </div>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <div class="flow-step">
               <span class="flow-step__icon"><svg class="i"><use href="#i-shield"/></svg></span>
-              <strong>2. Review</strong>
-              <p>Inspect the exact plan and risk checks.</p>
+              <strong>2. Review &amp; approve</strong>
+              <p>Inspect the exact steps — only the approved plan can run.</p>
             </div>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <div class="flow-step">
-              <span class="flow-step__icon"><svg class="i"><use href="#i-play"/></svg></span>
-              <strong>3. Approve</strong>
-              <p>Only the approved plan can run.</p>
+              <span class="flow-step__icon"><svg class="i"><use href="#i-check-circle"/></svg></span>
+              <strong>3. Replay &amp; verify</strong>
+              <p>Ghost re-runs it and checks each step against the plan.</p>
             </div>
           </div>
-          <p class="onboarding__lead">A recorded workflow looks like this:</p>
+          <p class="onboarding__lead">A recorded transfer looks like this:</p>
           <div class="onboarding__demo-timeline" aria-label="Example recorded workflow">
-            <div class="timeline-item">Clicked button "Export" in Excel</div>
-            <div class="timeline-item">Typed "weekly_report"</div>
+            <div class="timeline-item">Clicked cell "B14" in Q3 workbook</div>
+            <div class="timeline-item">Typed "4,821.50"</div>
+            <div class="timeline-item">Verified — value matches the approved plan</div>
             <div class="timeline-item">Pressed ⌘ + "s"</div>
-            <div class="timeline-item">Saved the file after approval</div>
           </div>
           <div class="onboarding__actions">
             <button class="btn btn--ghost btn--small" id="onboardingBack" type="button">Back</button>
@@ -684,9 +687,9 @@
           <h2>You're all set</h2>
           <p class="onboarding__lead">Start with what you need today:</p>
           <ol class="onboarding__list">
-            <li><strong>Organizer</strong> — Browse Downloads, scan, approve, undo.</li>
-            <li><strong>Guard Desk</strong> — Scan (or upload), approve, Auto-fill POS.</li>
-            <li><strong>Record</strong> — Capture once, review every step, replay only what you approve.</li>
+            <li><strong>Record &amp; Verify</strong> — Capture a transfer once; replay it with every step checked against what you approved.</li>
+            <li><strong>Workflows</strong> — Save reviewed routines and rerun them when the work comes back.</li>
+            <li><strong>Organizer</strong> — File the documents a run produces; preview, approve, undo.</li>
           </ol>
           <p class="onboarding__note">New here? <strong>“What is Ghost?”</strong> in the sidebar explains what it does — and what it will never do — anytime.</p>
           <div class="onboarding__actions">
