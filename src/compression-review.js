@@ -116,13 +116,21 @@ export class CompressionReview {
           <div class="compression-guard">
             <div class="guard-title">Ghost Guard · ${escapeHtml(this.guardReport.risk_level)} risk</div>
             <div class="guard-summary">${escapeHtml(this.guardReport.summary)}</div>
+            ${this.renderSensitiveSuppressionNote()}
             ${this.guardReport.findings
               .slice(0, 6)
               .map((f) => this.renderGuardFinding(f))
               .join("")}
           </div>
         `
-            : ""
+            : this.report.redacted_fields > 0
+              ? `
+          <div class="compression-guard">
+            <div class="guard-title">Ghost Guard · secrets suppressed</div>
+            ${this.renderSensitiveSuppressionNote()}
+          </div>
+        `
+              : ""
         }
 
         ${
@@ -256,6 +264,19 @@ export class CompressionReview {
     const step =
       finding.step_index != null ? ` (step ${finding.step_index + 1})` : "";
     return `<div class="guard-finding guard-finding--${escapeHtml(finding.severity)}">${this.guardSeverityLabel(finding.severity)} ${escapeHtml(finding.title)}${step}</div>`;
+  }
+
+  /** Visible proof that password/OTP/payment keystrokes never landed in the recording. */
+  renderSensitiveSuppressionNote() {
+    const findings = this.guardReport?.findings || [];
+    const sensitive = findings.some((f) =>
+      ["sensitive_field", "credential_input", "sensitive_app"].includes(f.category),
+    );
+    const redacted = (this.report?.redacted_fields || 0) > 0;
+    if (!sensitive && !redacted) return "";
+    return `<div class="guard-suppression-note" data-guard-suppression-note>
+      Password, OTP, and payment keystrokes were suppressed during recording — secrets never leave this machine.
+    </div>`;
   }
 
   renderWarning(warning) {

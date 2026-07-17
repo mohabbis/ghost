@@ -179,6 +179,55 @@ async function ghostConfirm(message, confirmLabel = "Yes") {
   return choice === confirmLabel;
 }
 
+/**
+ * Aye-style approve gate for OS-control / Action Plan runs.
+ * Resolves `"confirm"` | `"review"` | `null` (cancel).
+ * Primary CTA never implies the action already started.
+ */
+function ghostApproveConfirm(options) {
+  const opts = options || {};
+  const title = opts.title || "Nothing runs until you approve";
+  const body = opts.body || "";
+  const detail =
+    opts.detail ||
+    "Ghost will only execute the exact plan you reviewed. You can pause or cancel during replay.";
+  const confirmLabel = opts.confirmLabel || "Confirm & Replay";
+  const reviewLabel = opts.reviewLabel || "Review again";
+
+  return new Promise((resolve) => {
+    const modal = document.getElementById("input-modal");
+    const content = modal?.querySelector(".modal-content");
+    if (!content) {
+      // Fallback when the shell dialog is unavailable (tests / headless).
+      const ok = window.confirm(`${title}\n\n${body}`);
+      resolve(ok ? "confirm" : null);
+      return;
+    }
+
+    content.innerHTML = `
+      <div class="approve-dialog" role="document">
+        <p class="approve-dialog__eyebrow">Approval required</p>
+        <h3 class="approve-dialog__title">${escapeHtml(title)}</h3>
+        ${body ? `<p class="approve-dialog__body">${escapeHtml(body)}</p>` : ""}
+        <p class="approve-dialog__detail">${escapeHtml(detail)}</p>
+        <div class="approve-dialog__actions btn-row">
+          <button class="btn btn--primary" type="button" data-approve-confirm>${escapeHtml(confirmLabel)}</button>
+          <button class="btn btn--ghost" type="button" data-approve-review>${escapeHtml(reviewLabel)}</button>
+          <button class="btn btn--ghost" type="button" data-approve-cancel>Cancel</button>
+        </div>
+      </div>`;
+    modal.style.display = "flex";
+
+    const done = (val) => {
+      modal.style.display = "none";
+      resolve(val);
+    };
+    content.querySelector("[data-approve-confirm]")?.addEventListener("click", () => done("confirm"));
+    content.querySelector("[data-approve-review]")?.addEventListener("click", () => done("review"));
+    content.querySelector("[data-approve-cancel]")?.addEventListener("click", () => done(null));
+  });
+}
+
 // ===== Accessibility permission gate =====
 
 // Recording needs BOTH macOS permissions: Accessibility (clicks) and
@@ -795,9 +844,16 @@ async function confirmGuardBeforeReplay() {
   }
 
   if (latestGuardReport?.requires_confirmation) {
-    const ok = await ghostPick("Ghost Guard found high-risk steps. Continue?", ["Review first", "Replay anyway"]);
-    if (ok !== "Replay anyway") {
+    const choice = await ghostApproveConfirm({
+      title: "Nothing runs until you approve",
+      body: "Ghost Guard found high-risk steps (sensitive apps, destructive actions, or credential-shaped fields).",
+      detail: "Review the timeline first. Secrets were suppressed during recording when Guard paused keyboard capture.",
+      confirmLabel: "Continue to policy check",
+      reviewLabel: "Review again",
+    });
+    if (choice !== "confirm") {
       showInsight("Review the timeline and Ghost Guard findings before replay.");
+      if (choice === "review") await openWorkflowReview();
       return false;
     }
   }
@@ -806,7 +862,8 @@ async function confirmGuardBeforeReplay() {
 }
 
 /** Guard → policy plan → explicit approve (server one-shot token) before OS replay. */
-async function confirmPolicyBeforeReplay(events) {
+async function confirmPolicyBeforeReplay(events, options) {
+  const alreadyApproved = !!(options && options.alreadyApproved);
   if (!events || events.length === 0) return false;
   if (!(await confirmGuardBeforeReplay())) return false;
 
@@ -829,15 +886,28 @@ async function confirmPolicyBeforeReplay(events) {
     return false;
   }
 
-  const confirmCount = plan.confirmation_count || 0;
-  const summary =
-    confirmCount > 0
-      ? `Policy requires confirmation for ${confirmCount} OS-control step(s). Approve and replay?`
-      : "Approve this routine policy plan and replay?";
-  const ok = await ghostConfirm(summary, "Approve & Replay");
-  if (!ok) {
-    showInsight("Replay cancelled — approve the policy plan when ready.");
-    return false;
+  if (!alreadyApproved) {
+    const confirmCount = plan.confirmation_count || 0;
+    const body =
+      confirmCount > 0
+        ? `Policy requires confirmation for ${confirmCount} OS-control step(s). Nothing is typed or clicked until you confirm.`
+        : "This routine will control the mouse and keyboard on your machine. Nothing runs until you approve.";
+    const choice = await ghostApproveConfirm({
+      title: "Nothing runs until you approve",
+      body,
+      detail: "Confirm only the plan you reviewed. Pause or cancel anytime during replay.",
+      confirmLabel: "Confirm & Replay",
+      reviewLabel: "Review again",
+    });
+    if (choice === "review") {
+      showInsight("Review the plan, then approve when ready.");
+      await openWorkflowReview();
+      return false;
+    }
+    if (choice !== "confirm") {
+      showInsight("Replay cancelled — nothing ran.");
+      return false;
+    }
   }
 
   try {
@@ -849,9 +919,11 @@ async function confirmPolicyBeforeReplay(events) {
   return true;
 }
 
-async function replayWorkflow() {
+async function replayWorkflow(options) {
+  // Event handlers pass a click Event; only our review-modal path passes { alreadyApproved }.
+  const alreadyApproved = !!(options && options.alreadyApproved);
   if (!invoke) return notAvailable();
-  if (!(await confirmPolicyBeforeReplay(recordedEvents))) return;
+  if (!(await confirmPolicyBeforeReplay(recordedEvents, { alreadyApproved }))) return;
 
   try {
     isPlaying = true;
@@ -1253,7 +1325,7 @@ function renderReviewModalActions(policyPlan) {
   if (!footer) {
     footer = document.createElement("div");
     footer.id = "review-modal-actions";
-    footer.className = "btn-row review-actions";
+    footer.className = "review-actions";
     footer.style.marginTop = "12px";
     modal.querySelector(".modal-content")?.appendChild(footer);
   }
@@ -1266,21 +1338,27 @@ function renderReviewModalActions(policyPlan) {
       : "Approve & Replay";
 
   footer.innerHTML = `
-    <button
-      class="btn btn--primary btn-review-replay"
-      id="review-modal-approve-replay"
-      type="button"
-      ${policyBlocked ? "disabled" : ""}
-      title="${policyBlocked ? "Policy denied one or more steps" : "Approve the policy plan and replay"}"
-    >${approveLabel}</button>
-    <button class="btn btn--ghost btn-review-cancel" type="button" data-close-modal="review-modal">Close</button>
+    <p class="approve-trust-strip" id="review-modal-trust-strip">
+      Nothing runs until you approve. Ghost executes only this reviewed plan — pause or cancel anytime.
+    </p>
+    <div class="btn-row">
+      <button
+        class="btn btn--primary btn-review-replay"
+        id="review-modal-approve-replay"
+        type="button"
+        ${policyBlocked ? "disabled" : ""}
+        title="${policyBlocked ? "Policy denied one or more steps" : "Approve the policy plan and replay"}"
+      >${approveLabel}</button>
+      <button class="btn btn--ghost btn-review-cancel" type="button" data-close-modal="review-modal">Close</button>
+    </div>
   `;
 
   const approveBtn = document.getElementById("review-modal-approve-replay");
   if (approveBtn && !policyBlocked) {
     approveBtn.onclick = async () => {
       hideModal(modal);
-      await replayWorkflow();
+      // User already confirmed from the review surface — skip the second dialog.
+      await replayWorkflow({ alreadyApproved: true });
     };
   }
 }
@@ -3263,11 +3341,18 @@ async function loadGhost2Demo() {
 }
 
 async function runGhost2Demo(downloads, financeRoot) {
-  const ok = await ghostConfirm(
-    "Run the Ghost 2.0 invoice demo? Files in Downloads may be renamed and moved; TextEdit will open on macOS.",
-    "Approve & Run",
-  );
-  if (!ok) return;
+  const choice = await ghostApproveConfirm({
+    title: "Nothing runs until you approve",
+    body: "Run the Ghost 2.0 invoice demo? Files in Downloads may be renamed and moved; TextEdit will open on macOS.",
+    detail: "Ghost will only apply the demo Action Plan you previewed. Undo is available after the run.",
+    confirmLabel: "Confirm & Run",
+    reviewLabel: "Review again",
+  });
+  if (choice === "review") {
+    await loadGhost2Demo();
+    return;
+  }
+  if (choice !== "confirm") return;
   try {
     const res = await invoke("execute_action_plan", {
       source: { kind: "demo" },

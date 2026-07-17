@@ -1959,3 +1959,59 @@ h3 .i,
 .ghost2-review-plan {
   margin-top: 16px;
 }
+
+/* Aye-style approve gate — explicit consent before OS control / Action Plan runs. */
+.approve-dialog__eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #9ca3af);
+}
+
+.approve-dialog__title {
+  margin: 0 0 10px;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.approve-dialog__body {
+  margin: 0 0 8px;
+  color: var(--text, inherit);
+  line-height: 1.45;
+}
+
+.approve-dialog__detail {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  color: var(--muted, #9ca3af);
+  line-height: 1.4;
+}
+
+.approve-dialog__actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.approve-trust-strip {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
+  background: rgba(131, 246, 196, 0.08);
+  color: var(--text, inherit);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.guard-suppression-note {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  background: rgba(234, 179, 8, 0.1);
+  color: var(--text, inherit);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}

@@ -314,6 +314,24 @@ test("policySummaryText prefers denied then confirm then allow counts", () => {
   assert.equal(r.policySummaryText(), "5 allowed");
 });
 
+test("renderSensitiveSuppressionNote surfaces password/OTP suppression", () => {
+  const r = review();
+  r.report = { redacted_fields: 0 };
+  r.guardReport = {
+    findings: [{ category: "sensitive_field", severity: "high", title: "Password field" }],
+  };
+  const note = r.renderSensitiveSuppressionNote();
+  assert.match(note, /Password, OTP, and payment keystrokes were suppressed/);
+  assert.match(note, /data-guard-suppression-note/);
+
+  r.guardReport = { findings: [] };
+  r.report = { redacted_fields: 2 };
+  assert.match(r.renderSensitiveSuppressionNote(), /suppressed/);
+
+  r.report = { redacted_fields: 0 };
+  assert.equal(r.renderSensitiveSuppressionNote(), "");
+});
+
 test("getRiskClass: policy deny takes precedence over compression heuristics", () => {
   const r = review();
   assert.equal(

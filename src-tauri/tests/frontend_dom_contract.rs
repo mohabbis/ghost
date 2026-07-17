@@ -303,12 +303,39 @@ fn review_modal_authors_policy_replay_actions() {
         "review-modal-approve-replay",
         "Approve & Replay",
         "can_proceed_with_approvals",
+        "Nothing runs until you approve",
+        "review-modal-trust-strip",
+        "alreadyApproved: true",
     ] {
         assert!(
             body.contains(marker),
             "renderReviewModalActions must wire policy replay controls `{marker}`"
         );
     }
+}
+
+#[test]
+fn approve_dialog_uses_aye_style_consent_copy() {
+    let js = read("../src/main.js");
+    let body = function_body(&js, "ghostApproveConfirm");
+    for marker in [
+        "Nothing runs until you approve",
+        "data-approve-confirm",
+        "data-approve-review",
+        "data-approve-cancel",
+        "Confirm & Replay",
+        "Review again",
+    ] {
+        assert!(
+            body.contains(marker),
+            "ghostApproveConfirm must author Aye-style consent control `{marker}`"
+        );
+    }
+    let policy = function_body(&js, "confirmPolicyBeforeReplay");
+    assert!(
+        policy.contains("ghostApproveConfirm"),
+        "confirmPolicyBeforeReplay must use ghostApproveConfirm before issuing the approval token"
+    );
 }
 
 #[test]
