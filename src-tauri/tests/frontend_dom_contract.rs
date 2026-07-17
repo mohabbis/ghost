@@ -448,4 +448,3 @@ fn index_html_has_no_inline_scripts() {
         );
     }
 }
-
