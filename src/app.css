@@ -1872,6 +1872,28 @@ h3 .i,
   font-size: 0.8rem;
   color: var(--text-muted, #9ca3af);
 }
+/* Per-step verification chips — the differentiator, kept legible at a glance. */
+.ghost2-verify-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted, #9ca3af);
+}
+.ghost2-verify-chip--verified { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.ghost2-verify-chip--failed { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+.ghost2-verify-chip--skipped { background: rgba(234, 179, 8, 0.15); color: #eab308; }
+.ghost2-receipt__verify {
+  margin: 6px 0;
+  font-size: 0.9rem;
+}
+.ghost2-receipt__verify--ok { color: var(--success, #34d399); }
+.ghost2-receipt__verify--failed { color: var(--danger, #f87171); font-weight: 600; }
 .ghost2-review-plan {
   margin-top: 16px;
 }
