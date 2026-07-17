@@ -487,8 +487,9 @@
           <p class="eyebrow">Connect your AI</p>
           <h2>Use Ghost safely from the AI tools you already work with.</h2>
           <p class="section__sub">
-            Claude, Cursor, and other MCP clients can propose plans — Ghost verifies and executes
-            only what you approve, on your machine. The AI proposes; you approve; deterministic code acts.
+            Claude Desktop and Cursor can propose Organizer plans over local stdio — Ghost verifies
+            and executes only what you approve, on your machine. The AI proposes; you approve;
+            deterministic code acts. ChatGPT / remote connectors require a future verified transport.
           </p>
         </div>
         <ol class="connect-steps">
@@ -517,7 +518,8 @@
           </li>
         </ol>
         <p class="connect-note">
-          Local only — Ghost's MCP server speaks over stdio on your machine. No listening socket, no relay, no uploads.
+          Local stdio only (Claude Desktop / Cursor). No listening socket, no relay, no uploads on the stock build.
+          ChatGPT is not supported on stock local stdio today.
         </p>
       </section>
 
