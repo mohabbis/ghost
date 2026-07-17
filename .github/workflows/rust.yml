@@ -183,13 +183,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Source manifests must agree with each other; marketing files must agree
+      # with each other on the *published* release, which may trail source.
+      # Forcing README/site to carry the source version made CI demand we
+      # advertise unreleased builds (the false claim #281 removed).
       - name: Check version alignment
         run: |
-          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "Expected version: $VERSION"
-          for f in src-tauri/Cargo.toml src-tauri/tauri.conf.json README.md public/index.html; do
-            grep -q "$VERSION" "$f" || { echo "Version $VERSION missing from $f"; exit 1; }
+          SRC=$(grep '^version' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Source version: $SRC"
+          for f in src-tauri/Cargo.toml src-tauri/tauri.conf.json; do
+            grep -q "$SRC" "$f" || { echo "Source version $SRC missing from $f"; exit 1; }
           done
+          REL=$(grep -oE 'v2\.[0-9]+\.[0-9]+' public/index.html | head -1)
+          echo "Advertised release: $REL"
+          [ -n "$REL" ] || { echo "No vX.Y.Z release in public/index.html"; exit 1; }
+          grep -q "$REL" README.md || { echo "Advertised release $REL missing from README.md"; exit 1; }
 
   frontend-contract:
     name: Frontend contract tests
