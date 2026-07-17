@@ -121,15 +121,22 @@ fn authorize_and_exchange(
     let http = reqwest::blocking::Client::builder()
         .timeout(CALLBACK_TIMEOUT)
         .build()?;
+    // reqwest 0.13's blocking RequestBuilder has no `.form()`; build the
+    // x-www-form-urlencoded body explicitly.
+    let token_body = form_urlencoded::Serializer::new(String::new())
+        .append_pair("client_id", client_id_owned.as_str())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", code.as_str())
+        .append_pair("redirect_uri", redirect_uri.as_str())
+        .append_pair("code_verifier", verifier.as_str())
+        .finish();
     let token_res: TokenResponse = http
         .post(provider.token_endpoint())
-        .form(&[
-            ("client_id", client_id_owned.as_str()),
-            ("grant_type", "authorization_code"),
-            ("code", code.as_str()),
-            ("redirect_uri", redirect_uri.as_str()),
-            ("code_verifier", verifier.as_str()),
-        ])
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
+        .body(token_body)
         .send()?
         .error_for_status()?
         .json()?;

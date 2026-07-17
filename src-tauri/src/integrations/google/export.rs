@@ -67,12 +67,14 @@ impl GcsExportClient {
     ) -> Result<(), String> {
         let body =
             serde_json::to_vec(rows).map_err(|_| IntegrationError::InvalidResponse.to_string())?;
+        let url = reqwest::Url::parse_with_params(
+            &format!("https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o"),
+            [("uploadType", "media"), ("name", object_name)],
+        )
+        .map_err(|_| IntegrationError::InvalidResponse.to_string())?;
         let res = self
             .http
-            .post(format!(
-                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o"
-            ))
-            .query(&[("uploadType", "media"), ("name", object_name)])
+            .post(url)
             .header("Content-Type", "application/json")
             .bearer_auth(access_token)
             .body(body)

@@ -165,7 +165,18 @@ fn relay_loop(options: RelayOptions, stop: Arc<AtomicBool>) {
         .unwrap_or_else(|_| reqwest::blocking::Client::new());
 
     let register_url = format!("{}/v1/device/register", options.relay_url);
-    let poll_url = format!("{}/v1/device/poll", options.relay_url);
+    // The device_id never changes for the life of the loop, so bake it into
+    // the poll URL once (reqwest 0.13's blocking builder has no `.query()`).
+    let poll_url = match reqwest::Url::parse_with_params(
+        &format!("{}/v1/device/poll", options.relay_url),
+        [("device_id", options.device_id.as_str())],
+    ) {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("MCP relay poll URL invalid: {e}");
+            return;
+        }
+    };
     let respond_url = format!("{}/v1/device/respond", options.relay_url);
 
     let reg_body = serde_json::json!({
@@ -189,9 +200,8 @@ fn relay_loop(options: RelayOptions, stop: Arc<AtomicBool>) {
 
     while !stop.load(Ordering::SeqCst) {
         let poll = client
-            .get(&poll_url)
+            .get(poll_url.clone())
             .bearer_auth(&options.device_token)
-            .query(&[("device_id", options.device_id.as_str())])
             .send();
 
         match poll {
