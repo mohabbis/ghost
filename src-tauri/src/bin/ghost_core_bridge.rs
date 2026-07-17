@@ -723,6 +723,11 @@ fn wire_plan(
                     Some(path.to_string_lossy().into_owned()),
                     None,
                 ),
+                ActionKind::DeleteFile { path } => (
+                    "delete_file",
+                    Some(path.to_string_lossy().into_owned()),
+                    None,
+                ),
                 _ => ("unsupported", None, None),
             };
             let (decision, decision_reason, risk) = match &step.decision {

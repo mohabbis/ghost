@@ -82,6 +82,13 @@ pub enum ActionKind {
         from: PathBuf,
         to: PathBuf,
     },
+    /// Delete a file by routing it through the OS Trash / Recycle Bin — never a
+    /// direct unlink. Gated by a zone rule's `can_delete` (deny-by-default) and
+    /// always High-risk confirmation; the planner never proposes this, it enters
+    /// only via an explicit user action.
+    DeleteFile {
+        path: PathBuf,
+    },
     OpenApplication {
         name: String,
     },
@@ -134,7 +141,8 @@ impl ActionPlan {
             match &step.kind {
                 ActionKind::CreateFolder { .. }
                 | ActionKind::MoveFile { .. }
-                | ActionKind::RenameFile { .. } => summary.filesystem_steps += 1,
+                | ActionKind::RenameFile { .. }
+                | ActionKind::DeleteFile { .. } => summary.filesystem_steps += 1,
                 ActionKind::VerifyPath { .. } => summary.verify_steps += 1,
                 ActionKind::OpenApplication { .. }
                 | ActionKind::SemanticFocus { .. }

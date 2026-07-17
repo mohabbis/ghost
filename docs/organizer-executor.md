@@ -130,8 +130,20 @@ step first), so files are moved out of a destination folder before that folder's
 
 ## Invariants
 
-- **No deletes.** The executor never removes files; undo only removes folders it
-  created, and only when empty.
+- **No proposed deletes, no silent deletes.** The Organizer planner never
+  proposes a delete, and `organizer_add_folder_rule` refuses to persist
+  `can_delete: true`, so nothing in the Organizer flow can remove a file. The
+  shared Action Plan runtime (`runtime/fs.rs`) *can* execute an
+  `ActionKind::DeleteFile` step, but only when an explicit user action created
+  it inside a zone whose rule grants `can_delete` (deny-by-default; always
+  High-risk confirmation, even at `Automate` trust — see `policy/engine.rs`),
+  and it never unlinks: the file is routed to the OS Trash / Recycle Bin via
+  `organizer::trash::Trasher` after re-checking existence, symlink status, file
+  identity (TOCTOU), and the canonical-path policy gate
+  (`policy::verify_delete_at_execution`). Success records
+  `UndoOp::Untrash { original_path, trash_ref }`; the OS trash is the
+  authoritative recovery path. Undo of Organizer runs only removes folders the
+  run created, and only when empty.
 - **No silent overwrite.** Targets are re-checked at execution and at undo.
 - **No implicit folder mutation.** Missing target parents skip the file instead
   of creating folders that were not separately planned, approved, audited, and

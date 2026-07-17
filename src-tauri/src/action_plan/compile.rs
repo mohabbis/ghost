@@ -215,6 +215,10 @@ fn capability_to_kind(cap: &Capability) -> ActionKind {
             from: from.clone(),
             to: to.clone(),
         },
+        // Only reachable when a covering rule grants `can_delete`: the planner
+        // never proposes deletes, and policy/engine.rs denies the capability
+        // everywhere else. Execution routes through the OS trash (runtime/fs.rs).
+        Capability::DeleteFile { path } => ActionKind::DeleteFile { path: path.clone() },
         other => ActionKind::VerifyPath {
             path: std::path::PathBuf::from(format!("{other:?}")),
             should_exist: false,
@@ -238,6 +242,9 @@ fn step_label(kind: &ActionKind, cap: &Capability) -> String {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| to.display().to_string())
             )
+        }
+        ActionKind::DeleteFile { path } => {
+            format!("Move {} to the OS Trash", path.display())
         }
         ActionKind::OpenApplication { name } => format!("Open {name}"),
         ActionKind::SemanticFocus { target } => {
