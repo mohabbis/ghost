@@ -196,11 +196,38 @@ pub fn evaluate_with_attribution(cap: &Capability, rules: &[FolderRule]) -> Eval
                 ))),
             }
         }
-        // The MVP never deletes files (AGENTS.md non-negotiable rule).
-        Capability::DeleteFile { path } => Evaluation::unmatched(deny(format!(
-            "Delete is disabled in the MVP ({})",
-            path.display()
-        ))),
+        // Delete is off by default (deny-by-default). It is granted only inside
+        // a zone whose rule explicitly sets `can_delete`, and even then it is
+        // NEVER silent: deletion is the highest-risk file op, so it always
+        // requires explicit High-risk confirmation — Automate does not
+        // auto-delete (that would violate the "no silent delete" non-negotiable
+        // in AGENTS.md). When it does run, execution routes through the OS trash
+        // (`organizer::trash`) so it stays recoverable; that executor wiring is
+        // the follow-up to this gate.
+        Capability::DeleteFile { path } => match covered_by(path, rules, |r| r.can_delete) {
+            Some(rule) if rule.trust == TrustLevel::Never => Evaluation::new(
+                deny(format!(
+                    "Delete at {} is refused: the rule for {} is set to never",
+                    path.display(),
+                    rule.path.display()
+                )),
+                Some(rule),
+            ),
+            Some(rule) => Evaluation::new(
+                confirm(
+                    format!(
+                        "Delete {} needs explicit high-risk approval (routed to the OS trash)",
+                        path.display()
+                    ),
+                    RiskLevel::High,
+                ),
+                Some(rule),
+            ),
+            None => Evaluation::unmatched(deny(format!(
+                "No approved zone grants delete at {} (deletes are off by default)",
+                path.display()
+            ))),
+        },
         // Everything below is outside the Organizer file scope.
         Capability::StartRecording => Evaluation::unmatched(deny(
             "Recording is not a policy-approved capability in the Organizer MVP",
@@ -550,6 +577,54 @@ mod tests {
             )
             .is_denied()
         );
+    }
+
+    #[test]
+    fn delete_is_gated_by_can_delete_and_never_silent() {
+        let del = |rule: FolderRule| {
+            evaluate(
+                &Capability::DeleteFile {
+                    path: PathBuf::from("/home/u/Downloads/a.pdf"),
+                },
+                &[rule],
+            )
+        };
+        let rule = |trust: TrustLevel, can_delete: bool| FolderRule {
+            path: PathBuf::from("/home/u/Downloads"),
+            can_read: true,
+            can_create: false,
+            can_rename: false,
+            can_move: false,
+            can_copy: false,
+            can_delete,
+            trust,
+        };
+
+        // Off by default: without a `can_delete` grant, denied at every trust level.
+        assert!(del(rule(TrustLevel::AskFirst, false)).is_denied());
+        assert!(del(rule(TrustLevel::Automate, false)).is_denied());
+
+        // Granted + AskFirst -> High-risk confirmation.
+        assert!(matches!(
+            del(rule(TrustLevel::AskFirst, true)),
+            PolicyDecision::RequireConfirmation {
+                risk: RiskLevel::High,
+                ..
+            }
+        ));
+
+        // Granted + Automate -> STILL a High-risk confirmation, never a silent
+        // auto-delete (the "no silent delete" non-negotiable overrides Automate).
+        assert!(matches!(
+            del(rule(TrustLevel::Automate, true)),
+            PolicyDecision::RequireConfirmation {
+                risk: RiskLevel::High,
+                ..
+            }
+        ));
+
+        // Granted but the zone is set to Never -> denied.
+        assert!(del(rule(TrustLevel::Never, true)).is_denied());
     }
 
     #[test]

@@ -76,6 +76,16 @@ pub fn revert(journal: &UndoJournal) -> UndoReport {
                     Err(_) => report.skipped += 1,
                 }
             }
+            UndoOp::Untrash { .. } => {
+                // A trashed file was routed to the OS Trash / Recycle Bin, which
+                // is the authoritative recovery path. Ghost does not
+                // programmatically restore from the system trash — that API is
+                // platform-variant and unreliable, and overpromising one-click
+                // undo for deletes would be dishonest. The file remains
+                // recoverable from the OS trash, so this step is a deliberate
+                // no-op here, counted as skipped rather than reverted or failed.
+                report.skipped += 1;
+            }
         }
     }
 
