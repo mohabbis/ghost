@@ -66,9 +66,12 @@ mod tests {
 
     #[test]
     fn partial_tls_env_reports_clear_error() {
-        let _cert =
-            crate::test_support::EnvVarGuard::set("GHOST_TEST_TLS_CERT_ONLY", "/tmp/cert.pem");
-        let _key = crate::test_support::EnvVarGuard::remove("GHOST_TEST_TLS_KEY_ONLY");
+        // One guard for both variables: stacking two EnvVarGuards deadlocks on
+        // the process-wide env lock the first guard holds for its lifetime.
+        let _env = crate::test_support::EnvVarGuard::apply(&[
+            ("GHOST_TEST_TLS_CERT_ONLY", Some("/tmp/cert.pem")),
+            ("GHOST_TEST_TLS_KEY_ONLY", None),
+        ]);
         let err =
             load_server_config_from_env("GHOST_TEST_TLS_CERT_ONLY", "GHOST_TEST_TLS_KEY_ONLY")
                 .unwrap_err();
