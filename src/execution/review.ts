@@ -15,6 +15,33 @@ function stepKindBadge(step: ActionStep): string {
   return "";
 }
 
+/** Wire shape from Rust `PolicyDecision` (`tag = "decision"`). */
+function decisionKind(decision: Record<string, unknown> | undefined): string {
+  if (!decision) return "";
+  if (typeof decision.decision === "string") return decision.decision;
+  if (typeof decision.kind === "string") return decision.kind;
+  if ("deny" in decision) return "deny";
+  if ("require_confirmation" in decision) return "require_confirmation";
+  if ("allow" in decision) return "allow";
+  return "";
+}
+
+function decisionRisk(decision: Record<string, unknown> | undefined): string {
+  if (!decision) return "";
+  if (typeof decision.risk === "string") return decision.risk;
+  const nested = decision.require_confirmation;
+  if (nested && typeof nested === "object" && typeof (nested as { risk?: unknown }).risk === "string") {
+    return (nested as { risk: string }).risk;
+  }
+  return "";
+}
+
+function decisionReason(decision: Record<string, unknown> | undefined): string {
+  if (!decision) return "";
+  if (typeof decision.reason === "string") return decision.reason;
+  return "";
+}
+
 /** Render semantic action steps for unified review (not raw mouse events). */
 export function renderActionPlanSteps(plan: ActionPlan): string {
   if (!plan?.steps?.length) {
@@ -24,7 +51,9 @@ export function renderActionPlanSteps(plan: ActionPlan): string {
     .map((step: ActionStep) => {
       const badge = decisionBadge(step.decision);
       const kindBadge = stepKindBadge(step);
-      return `<li class="ghost2-step">
+      const risk = decisionKind(step.decision) === "require_confirmation" ? decisionRisk(step.decision) : "";
+      const riskClass = risk ? ` ghost2-step--risk-${escapeAttr(risk)}` : "";
+      return `<li class="ghost2-step${riskClass}">
         <span class="ghost2-step__label">✓ ${escapeHtml(step.label)}</span>
         ${kindBadge}
         ${badge}
@@ -45,15 +74,70 @@ export function planSummaryHtml(plan: ActionPlan): string {
   </div>`;
 }
 
-function decisionBadge(decision: Record<string, unknown> | undefined): string {
+/**
+ * Aye-style approval strip shown above Confirm. Honest about the gate: nothing
+ * mutates until the user confirms. Surfaces confirmation risk counts from the
+ * plan summary / step decisions.
+ */
+export function planApprovalGateHtml(plan: ActionPlan | null | undefined): string {
+  const s = plan?.summary;
+  const steps = plan?.steps || [];
+  let needsConfirm = typeof s?.needs_confirmation === "number" ? s.needs_confirmation : 0;
+  let denied = typeof s?.denied === "number" ? s.denied : 0;
+  if (!s) {
+    needsConfirm = steps.filter((st) => decisionKind(st.decision) === "require_confirmation").length;
+    denied = steps.filter((st) => decisionKind(st.decision) === "deny").length;
+  }
+
+  const riskCounts: Record<string, number> = {};
+  for (const step of steps) {
+    if (decisionKind(step.decision) !== "require_confirmation") continue;
+    const risk = decisionRisk(step.decision) || "medium";
+    riskCounts[risk] = (riskCounts[risk] || 0) + 1;
+  }
+  const riskChips = Object.entries(riskCounts)
+    .map(
+      ([risk, n]) =>
+        `<span class="badge badge--confirm badge--risk-${escapeAttr(risk)}">${escapeHtml(risk)} · ${n}</span>`,
+    )
+    .join(" ");
+
+  const confirmLine =
+    needsConfirm > 0
+      ? `<p class="approve-gate__counts"><strong>${needsConfirm}</strong> step${needsConfirm === 1 ? "" : "s"} need confirmation${riskChips ? ` ${riskChips}` : ""}.</p>`
+      : `<p class="approve-gate__counts">All applyable steps are allowed under current Zone rules.</p>`;
+  const denyLine =
+    denied > 0
+      ? `<p class="approve-gate__denied"><strong>${denied}</strong> step${denied === 1 ? "" : "s"} denied by policy and will not run.</p>`
+      : "";
+
+  return `<aside class="approve-gate" role="status" aria-label="Approval required">
+    <p class="approve-gate__promise"><strong>Nothing runs until you approve.</strong></p>
+    ${confirmLine}
+    ${denyLine}
+  </aside>`;
+}
+
+export function decisionBadge(decision: Record<string, unknown> | undefined): string {
   if (!decision) return "";
-  if ("deny" in decision || decision.kind === "deny") {
-    return '<span class="badge badge--deny">denied</span>';
+  const kind = decisionKind(decision);
+  if (kind === "deny") {
+    const reason = decisionReason(decision);
+    const title = reason ? ` title="${escapeAttr(reason)}"` : "";
+    return `<span class="badge badge--deny"${title}>denied</span>`;
   }
-  if ("require_confirmation" in decision || decision.kind === "require_confirmation") {
-    return '<span class="badge badge--confirm">review</span>';
+  if (kind === "require_confirmation") {
+    const risk = decisionRisk(decision);
+    const reason = decisionReason(decision);
+    const label = risk ? `Needs approval · ${risk}` : "Needs approval";
+    const title = reason ? ` title="${escapeAttr(reason)}"` : "";
+    const riskClass = risk ? ` badge--risk-${escapeAttr(risk)}` : "";
+    return `<span class="badge badge--confirm${riskClass}"${title}>${escapeHtml(label)}</span>`;
   }
-  return '<span class="badge badge--allow">ok</span>';
+  if (kind === "allow") {
+    return '<span class="badge badge--allow">ok</span>';
+  }
+  return "";
 }
 
 function escapeHtml(s: string): string {
@@ -62,4 +146,8 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/'/g, "&#39;");
 }
