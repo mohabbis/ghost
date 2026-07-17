@@ -395,6 +395,44 @@ fn production_csp_stays_locked_down() {
     );
 }
 
+#[test]
+fn organizer_approve_uses_plan_risk_gate() {
+    let js = read("../src/main.js");
+    let organizer_run = function_body(&js, "organizerRun");
+    assert!(
+        organizer_run.contains("ghostApproveConfirm")
+            && organizer_run.contains("planApprovalGateHtml")
+            && organizer_run.contains("Nothing runs until you approve"),
+        "organizerRun must gate mutation behind ghostApproveConfirm + plan risk summary"
+    );
+
+    let approve = function_body(&js, "ghostApproveConfirm");
+    assert!(
+        approve.contains("summaryHtml"),
+        "ghostApproveConfirm must accept summaryHtml for Action Plan risk badges"
+    );
+
+    let review = read("../src/execution/review.js");
+    for marker in [
+        "planApprovalGateHtml",
+        "Needs approval",
+        "badge--confirm",
+        "decision.decision",
+        "Nothing runs until you approve",
+    ] {
+        assert!(
+            review.contains(marker),
+            "execution/review.js must surface Action Plan risk badges / approve gate `{marker}`"
+        );
+    }
+
+    let html = read("../src/index.html");
+    assert!(
+        html.contains("Nothing runs until you approve"),
+        "organizerRunBtn title must advertise the approve gate"
+    );
+}
+
 /// The CSP above only holds if the page itself carries no inline scripts:
 /// every `<script>` in index.html must load an external module (Vite keeps the
 /// bundle external-only; see vite.config.js).
@@ -410,3 +448,4 @@ fn index_html_has_no_inline_scripts() {
         );
     }
 }
+

@@ -3,7 +3,11 @@
 // (not the marketing site — that lives in public/).
 
 import { CompressionReview } from "./compression-review.js";
-import { renderActionPlanSteps, planSummaryHtml } from "./execution/review.js";
+import {
+  renderActionPlanSteps,
+  planSummaryHtml,
+  planApprovalGateHtml,
+} from "./execution/review.js";
 import { renderExecutionReceipt } from "./execution/receipt.js";
 
 const { invoke } = window.__TAURI__?.core || {};
@@ -180,9 +184,10 @@ async function ghostConfirm(message, confirmLabel = "Yes") {
 }
 
 /**
- * Aye-style approve gate for OS-control / Action Plan runs.
+ * Aye-style approve gate for OS-control / Action Plan / Organizer runs.
  * Resolves `"confirm"` | `"review"` | `null` (cancel).
  * Primary CTA never implies the action already started.
+ * Optional `summaryHtml` (e.g. planApprovalGateHtml) surfaces risk badges.
  */
 function ghostApproveConfirm(options) {
   const opts = options || {};
@@ -193,6 +198,7 @@ function ghostApproveConfirm(options) {
     "Ghost will only execute the exact plan you reviewed. You can pause or cancel during replay.";
   const confirmLabel = opts.confirmLabel || "Confirm & Replay";
   const reviewLabel = opts.reviewLabel || "Review again";
+  const summaryHtml = opts.summaryHtml || "";
 
   return new Promise((resolve) => {
     const modal = document.getElementById("input-modal");
@@ -209,6 +215,7 @@ function ghostApproveConfirm(options) {
         <p class="approve-dialog__eyebrow">Approval required</p>
         <h3 class="approve-dialog__title">${escapeHtml(title)}</h3>
         ${body ? `<p class="approve-dialog__body">${escapeHtml(body)}</p>` : ""}
+        ${summaryHtml}
         <p class="approve-dialog__detail">${escapeHtml(detail)}</p>
         <div class="approve-dialog__actions btn-row">
           <button class="btn btn--primary" type="button" data-approve-confirm>${escapeHtml(confirmLabel)}</button>
@@ -1390,6 +1397,7 @@ async function openWorkflowReview() {
       planHost.innerHTML = `
         <h4 class="organizer-subhead">Semantic plan</h4>
         ${planSummaryHtml(actionPlan)}
+        ${planApprovalGateHtml(actionPlan)}
         ${renderActionPlanSteps(actionPlan)}
       `;
     }
@@ -3324,35 +3332,39 @@ async function loadGhost2Demo() {
     content.innerHTML = `
       <h3 style="margin-top:0">Ghost 2.0 — Invoice → Finance</h3>
       ${planSummaryHtml(plan)}
+      ${planApprovalGateHtml(plan)}
       ${renderActionPlanSteps(plan)}
       <p class="organizer-muted">Places a sample invoice in Downloads, moves it to Finance/Invoices, opens TextEdit, inserts a log line, and saves.</p>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn--primary btn--small" id="ghost2DemoRunBtn" type="button">Approve &amp; Run</button>
-        <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal" type="button">Close</button>
+      <div class="btn-row approve-gate__actions" style="margin-top:12px">
+        <button class="btn btn--ghost btn--small" data-close-modal="analysis-modal" type="button">Review again</button>
+        <button class="btn btn--primary btn--small" id="ghost2DemoRunBtn" type="button">Confirm</button>
       </div>`;
     showModal(modal);
     document.getElementById("ghost2DemoRunBtn")?.addEventListener("click", async () => {
       closeModal("analysis-modal");
-      await runGhost2Demo(downloads, financeRoot);
+      // Plan was already reviewed in this modal (Review again / Confirm).
+      await runGhost2Demo(downloads, financeRoot, { alreadyApproved: true });
     });
     return;
   }
   await runGhost2Demo(downloads, financeRoot);
 }
 
-async function runGhost2Demo(downloads, financeRoot) {
-  const choice = await ghostApproveConfirm({
-    title: "Nothing runs until you approve",
-    body: "Run the Ghost 2.0 invoice demo? Files in Downloads may be renamed and moved; TextEdit will open on macOS.",
-    detail: "Ghost will only apply the demo Action Plan you previewed. Undo is available after the run.",
-    confirmLabel: "Confirm & Run",
-    reviewLabel: "Review again",
-  });
-  if (choice === "review") {
-    await loadGhost2Demo();
-    return;
+async function runGhost2Demo(downloads, financeRoot, opts = {}) {
+  if (!opts.alreadyApproved) {
+    const choice = await ghostApproveConfirm({
+      title: "Nothing runs until you approve",
+      body: "Run the Ghost 2.0 invoice demo? Files in Downloads may be renamed and moved; TextEdit will open on macOS.",
+      detail: "Ghost will only apply the demo Action Plan you previewed. Undo is available after the run.",
+      confirmLabel: "Confirm & Run",
+      reviewLabel: "Review again",
+    });
+    if (choice === "review") {
+      await loadGhost2Demo();
+      return;
+    }
+    if (choice !== "confirm") return;
   }
-  if (choice !== "confirm") return;
   try {
     const res = await invoke("execute_action_plan", {
       source: { kind: "demo" },
@@ -3439,6 +3451,8 @@ async function loadVariablesFromSource() {
 let organizerZones = [];
 let organizerSelectedZoneId = null;
 let organizerHasReviewedPlan = false;
+/** Last Action Plan from Scan & Preview — feeds the Aye-style approve moment. */
+let organizerLastActionPlan = null;
 
 async function organizerInit() {
   await organizerPrefillPaths();
@@ -3565,6 +3579,7 @@ async function organizerRefreshZones() {
   }
   // Switching Zones invalidates any previewed plan.
   organizerHasReviewedPlan = false;
+  organizerLastActionPlan = null;
   await organizerRefreshRules();
 }
 
@@ -3641,6 +3656,7 @@ async function organizerSetRuleTrust(path, trust) {
     await invoke("organizer_set_rule_trust", { zoneId: zone.id, path, trust });
     // Trust changes what the next plan proposes; force a fresh review.
     organizerHasReviewedPlan = false;
+    organizerLastActionPlan = null;
     await organizerRefreshRules();
     showNotification(`Trust for ${path} set to ${trust.replace("_", " ")}.`, "info");
   } catch (err) {
@@ -3857,6 +3873,7 @@ async function organizerRunWizard() {
       await invoke("organizer_add_folder_rule", { zoneId: zone.id, rule });
     }
     organizerHasReviewedPlan = false;
+    organizerLastActionPlan = null;
     await organizerRefreshZones();
     showNotification(`"${presetName}" Zone created. Previewing the plan now.`, "info");
     await organizerScan();
@@ -3953,6 +3970,7 @@ async function organizerAddFolder() {
     const input = document.getElementById("organizerFolderPath");
     if (input) input.value = "";
     organizerHasReviewedPlan = false;
+    organizerLastActionPlan = null;
     await organizerRefreshRules();
     showNotification("Folder added to the Zone.", "info");
   } catch (err) {
@@ -4064,18 +4082,19 @@ async function organizerScan() {
   } finally {
     if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
+  organizerLastActionPlan = actionPlan || null;
   if (actionPlan) organizerRenderActionPlan(actionPlan);
   organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
   if (result) {
     result.innerHTML = organizerHasReviewedPlan
-      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed.</p>`
+      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed. Nothing runs until you approve.</p>`
       : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
   }
   organizerUpdateButtons(await safeRules(zone.id));
   if (!organizerHasReviewedPlan) {
     showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
   } else {
-    showInsight("Preview ready. Nothing moved yet — review each step, then approve.");
+    showInsight("Preview ready. Nothing runs until you approve — review each step, then Confirm.");
   }
 }
 
@@ -4128,6 +4147,7 @@ async function organizerAiSuggest() {
     const suggestion = await invoke("organizer_intelligence_suggest", { zoneId: zone.id });
     organizerRenderAiSuggestion(suggestion);
     organizerHasReviewedPlan = false;
+    organizerLastActionPlan = null;
     organizerUpdateButtons(await safeRules(zone.id));
     showInsight("AI suggestions are advisory only — scan for the deterministic plan before approving.");
   } catch (err) {
@@ -4176,6 +4196,7 @@ function organizerRenderActionPlan(actionPlan) {
   el.innerHTML = `
     <h3 class="organizer-subhead">Review plan</h3>
     ${planSummaryHtml(actionPlan)}
+    ${planApprovalGateHtml(actionPlan)}
     ${renderActionPlanSteps(actionPlan)}
   `;
 }
@@ -4230,10 +4251,15 @@ async function organizerRun() {
   if (!invoke) return notAvailable();
   const zone = organizerSelectedZone();
   if (!zone) return;
-  const ok = await ghostConfirm(
-    `Organize "${zone.name}" now? Files move into category folders. You can undo this afterward.`,
-  );
-  if (!ok) return;
+  const choice = await ghostApproveConfirm({
+    title: "Nothing runs until you approve",
+    body: `Organize "${zone.name}"? Ghost will apply only the reviewed plan.`,
+    detail: "Undo is written before every change. Review again returns you to the plan without mutating anything.",
+    summaryHtml: planApprovalGateHtml(organizerLastActionPlan),
+    confirmLabel: "Confirm",
+    reviewLabel: "Review again",
+  });
+  if (choice === "review" || choice !== "confirm") return;
 
   const runBtn = document.getElementById("organizerRunBtn");
   const prevLabel = runBtn?.textContent;
@@ -4298,6 +4324,7 @@ async function organizerRun() {
     if (signedBtn) signedBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "signed"));
   }
   organizerHasReviewedPlan = false;
+  organizerLastActionPlan = null;
   organizerUpdateButtons(await safeRules(zone.id));
   if (runBtn) runBtn.textContent = prevLabel || "Approve & Organize";
   showNotification(`Organized: ${r.applied ?? 0} change(s) applied.`, "info");
@@ -4996,8 +5023,11 @@ function wireUpControls() {
     zoneSelect.addEventListener("change", (e) => {
       organizerSelectedZoneId = e.target.value || null;
       organizerHasReviewedPlan = false;
+      organizerLastActionPlan = null;
       const result = document.getElementById("organizerResult");
       if (result) result.innerHTML = "";
+      const planEl = document.getElementById("organizerActionPlan");
+      if (planEl) planEl.innerHTML = "";
       organizerRefreshRules();
     });
   }
