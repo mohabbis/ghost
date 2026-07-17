@@ -664,8 +664,14 @@ fn domcontentloaded_checks_replay_unfinished_run() {
 #[test]
 fn replay_workflow_still_goes_through_policy_approval() {
     let js = read("../src/main.js");
-    let re = regex::Regex::new(r"(?s)async function replayWorkflow\(\)\s*\{.*?\n\}").unwrap();
-    let body = re.find(&js).expect("replayWorkflow must exist").as_str();
+    let start = js
+        .find("async function replayWorkflow(")
+        .expect("replayWorkflow must exist");
+    let after = &js[start..];
+    let end = after
+        .find("\nasync function ")
+        .unwrap_or(after.len().min(5000));
+    let body = &after[..end];
     assert!(
         body.contains("confirmPolicyBeforeReplay"),
         "replayWorkflow must gate on confirmPolicyBeforeReplay"
@@ -677,6 +683,10 @@ fn replay_workflow_still_goes_through_policy_approval() {
     assert!(
         confirm_idx < replay_idx,
         "confirmPolicyBeforeReplay must run before execute_routine_action_plan"
+    );
+    assert!(
+        body.contains("alreadyApproved"),
+        "replayWorkflow must accept alreadyApproved so the review modal can skip a double prompt"
     );
 }
 

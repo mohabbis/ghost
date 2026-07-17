@@ -39,6 +39,12 @@ Each step records **Expected / Observed / Verified** in the execution receipt.
 After closing the completion modal, reopen **Replay History → Verification
 receipts** to inspect the persisted result and its per-step verification chips.
 
+### Approval moment
+
+Nothing runs until you approve. The review modal trust strip and Confirm dialog
+both say so explicitly — Confirm & Replay / Review again / Cancel — before Ghost
+issues the one-shot approval token.
+
 ### Recovery
 
 Filesystem steps write undo data before mutation. Use **Undo this run** or `undo_action_plan_execution`.
