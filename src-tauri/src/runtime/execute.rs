@@ -10,6 +10,7 @@ use crate::audit::{ActionOutcome, Provenance, UndoJournal};
 use crate::core::events::ReliabilitySettings;
 use crate::engine::GhostEngine;
 use crate::organizer::executor::ExecutionReport;
+use crate::organizer::trash::{OsTrasher, Trasher};
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -30,6 +31,7 @@ fn now_epoch_string() -> String {
 }
 
 /// Execute an approved [`ActionPlan`] through policy → dispatch → verify → audit.
+/// Deletes (if any) route through the real OS trash ([`OsTrasher`]).
 pub fn execute_action_plan_with_progress(
     plan: &ActionPlan,
     rules: &[FolderRule],
@@ -37,7 +39,15 @@ pub fn execute_action_plan_with_progress(
     execution_id: Option<String>,
     on_progress: impl FnMut(&ExecutionReport),
 ) -> RuntimeResult {
-    execute_action_plan_with_options(plan, rules, engine, execution_id, None, on_progress)
+    execute_action_plan_with_options(
+        plan,
+        rules,
+        engine,
+        execution_id,
+        None,
+        &OsTrasher,
+        on_progress,
+    )
 }
 
 /// Like [`execute_action_plan_with_progress`], but enables reliability retries for UI replay steps.
@@ -55,6 +65,7 @@ pub fn execute_action_plan_with_reliability(
         engine,
         execution_id,
         Some(reliability),
+        &OsTrasher,
         on_progress,
     )
 }
@@ -65,6 +76,7 @@ fn execute_action_plan_with_options(
     engine: Option<&GhostEngine>,
     execution_id: Option<String>,
     reliability: Option<&ReliabilitySettings>,
+    trasher: &dyn Trasher,
     mut on_progress: impl FnMut(&ExecutionReport),
 ) -> RuntimeResult {
     let started_at = now_epoch_string();
@@ -106,6 +118,7 @@ fn execute_action_plan_with_options(
             rules,
             engine,
             reliability,
+            trasher,
             &mut report.undo,
         );
 
@@ -183,6 +196,7 @@ enum DispatchOutcome {
     Failed(String),
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dispatch_step(
     kind: &ActionKind,
     capability: &Capability,
@@ -190,13 +204,15 @@ fn dispatch_step(
     rules: &[FolderRule],
     engine: Option<&GhostEngine>,
     reliability: Option<&ReliabilitySettings>,
+    trasher: &dyn Trasher,
     undo: &mut UndoJournal,
 ) -> DispatchOutcome {
     match kind {
         ActionKind::CreateFolder { .. }
         | ActionKind::MoveFile { .. }
-        | ActionKind::RenameFile { .. } => {
-            match apply_filesystem_step(kind, capability, source_identity, rules, undo) {
+        | ActionKind::RenameFile { .. }
+        | ActionKind::DeleteFile { .. } => {
+            match apply_filesystem_step(kind, capability, source_identity, rules, trasher, undo) {
                 FsOutcome::Applied => DispatchOutcome::Applied,
                 FsOutcome::Skipped(r) => DispatchOutcome::Skipped(r),
                 FsOutcome::Failed(e) => DispatchOutcome::Failed(e),
@@ -281,6 +297,117 @@ mod tests {
         let result = execute_action_plan_with_progress(&plan, &rules, None, None, |_| {});
         assert!(result.stopped_early);
         assert_eq!(result.report.failed, 1);
+    }
+
+    fn rule(path: &std::path::Path, can_delete: bool) -> crate::policy::FolderRule {
+        crate::policy::FolderRule {
+            path: path.to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete,
+            trust: crate::policy::TrustLevel::Automate,
+        }
+    }
+
+    fn delete_plan(path: &std::path::Path) -> ActionPlan {
+        ActionPlan::new(
+            "t".into(),
+            "delete".into(),
+            PlanSource::Demo,
+            vec![fs_step(
+                "d1",
+                "delete junk",
+                ActionKind::DeleteFile {
+                    path: path.to_path_buf(),
+                },
+                Capability::DeleteFile {
+                    path: path.to_path_buf(),
+                },
+            )],
+        )
+    }
+
+    #[test]
+    fn delete_without_can_delete_grant_is_policy_denied_and_skipped() {
+        let tmp = tempdir();
+        let f = tmp.file("junk.tmp", b"x");
+        let rules = vec![rule(tmp.path(), false)];
+        let trasher =
+            crate::organizer::trash::test_support::RecordingTrasher::new(tmp.path().join(".hold"));
+        let result = execute_action_plan_with_options(
+            &delete_plan(&f),
+            &rules,
+            None,
+            None,
+            None,
+            &trasher,
+            |_| {},
+        );
+        assert_eq!(result.report.skipped, 1);
+        assert_eq!(result.report.applied, 0);
+        assert!(f.exists(), "denied delete must leave the file untouched");
+        assert!(trasher.trashed_paths().is_empty());
+        assert!(result.report.undo.is_empty());
+        assert_eq!(
+            result.verifications[0].status,
+            VerificationStatus::Skipped,
+            "a policy-denied delete is a skip, not a hard failure"
+        );
+    }
+
+    #[test]
+    fn delete_with_grant_routes_through_trash_verifies_absence_and_records_undo() {
+        let tmp = tempdir();
+        let f = tmp.file("junk.tmp", b"x");
+        let rules = vec![rule(tmp.path(), true)];
+        // The plan's policy decision is RequireConfirmation (High risk, never
+        // silent); execute_action_plan runs only after that approval upstream.
+        let trasher =
+            crate::organizer::trash::test_support::RecordingTrasher::new(tmp.path().join(".hold"));
+        let result = execute_action_plan_with_options(
+            &delete_plan(&f),
+            &rules,
+            None,
+            None,
+            None,
+            &trasher,
+            |_| {},
+        );
+        assert_eq!(result.report.applied, 1);
+        assert!(!f.exists(), "source must be gone after the delete");
+        assert_eq!(trasher.trashed_paths(), vec![f.clone()]);
+        assert!(matches!(
+            result.report.undo.ops(),
+            [crate::audit::UndoOp::Untrash { original_path, .. }] if *original_path == f
+        ));
+        assert_eq!(result.verifications[0].status, VerificationStatus::Verified);
+        assert!(!result.stopped_early);
+    }
+
+    #[test]
+    fn delete_toctou_swap_is_skipped_and_file_kept() {
+        let tmp = tempdir();
+        let f = tmp.file("junk.tmp", b"original");
+        let identity =
+            crate::organizer::file_identity::FileIdentity::from_path(&f).expect("identity");
+        let rules = vec![rule(tmp.path(), true)];
+        let mut plan = delete_plan(&f);
+        plan.steps[0].source_identity = Some(identity);
+        // Swap the file after planning: same path, different inode/contents.
+        std::fs::remove_file(&f).unwrap();
+        tmp.file("junk.tmp", b"swapped");
+        let trasher =
+            crate::organizer::trash::test_support::RecordingTrasher::new(tmp.path().join(".hold"));
+        let result =
+            execute_action_plan_with_options(&plan, &rules, None, None, None, &trasher, |_| {});
+        assert_eq!(result.report.skipped, 1);
+        assert_eq!(result.report.applied, 0);
+        assert!(f.exists(), "swapped file must not be deleted");
+        assert!(trasher.trashed_paths().is_empty());
+        assert!(result.report.undo.is_empty());
     }
 
     #[test]

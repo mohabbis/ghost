@@ -12,10 +12,12 @@
 //! needs (send an already-vetted path to the OS trash); [`OsTrasher`] is the
 //! real implementation, and the in-memory test double lets executor tests assert
 //! behavior deterministically without touching a real system trash that CI
-//! cannot observe. Deletion is **not yet wired into the runtime executor** — the
-//! policy gate (`can_delete`) and this seam are the safe-by-construction
-//! foundation so that when delete ships, it routes through the OS trash from day
-//! one rather than being retrofitted afterward.
+//! cannot observe. The Action Plan runtime (`runtime/fs.rs`) executes
+//! `ActionKind::DeleteFile` through this seam — re-checking existence, symlink
+//! status, file identity (TOCTOU), and the `can_delete` policy gate before the
+//! platform call, and recording `UndoOp::Untrash` after success. The Organizer
+//! planner still never *proposes* deletes; they enter only via an explicit user
+//! action on a `can_delete` zone.
 
 use std::path::Path;
 
@@ -42,30 +44,31 @@ impl Trasher for OsTrasher {
     }
 }
 
+/// Test-only trasher double, shared by executor/runtime tests so they can
+/// assert delete behavior deterministically without a real system trash.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::organizer::testutil::tempdir;
+pub mod test_support {
+    use super::Trasher;
     use std::cell::RefCell;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     /// A test double that "trashes" by moving files into a holding directory it
     /// owns, so tests can assert the source is gone without depending on a real
     /// system trash CI cannot observe.
-    struct RecordingTrasher {
+    pub struct RecordingTrasher {
         holding: PathBuf,
         trashed: RefCell<Vec<PathBuf>>,
     }
 
     impl RecordingTrasher {
-        fn new(holding: PathBuf) -> Self {
+        pub fn new(holding: PathBuf) -> Self {
             std::fs::create_dir_all(&holding).ok();
             Self {
                 holding,
                 trashed: RefCell::new(Vec::new()),
             }
         }
-        fn trashed_paths(&self) -> Vec<PathBuf> {
+        pub fn trashed_paths(&self) -> Vec<PathBuf> {
             self.trashed.borrow().clone()
         }
     }
@@ -79,6 +82,13 @@ mod tests {
             Ok(format!("test-holding:{}", dest.display()))
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::RecordingTrasher;
+    use super::*;
+    use crate::organizer::testutil::tempdir;
 
     #[test]
     fn recording_trasher_removes_source_and_records_it() {

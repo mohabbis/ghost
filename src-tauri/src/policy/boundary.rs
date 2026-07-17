@@ -84,6 +84,23 @@ pub fn verify_relocate_at_execution(
     }
 }
 
+/// Re-verify that a delete target still lies inside a `can_delete`-granting
+/// folder rule after canonicalization — the delete-side twin of
+/// [`verify_relocate_at_execution`], catching symlink/TOCTOU path escapes.
+pub fn verify_delete_at_execution(path: &Path, rules: &[FolderRule]) -> Result<(), String> {
+    let path = canonicalize_relocate_path(path);
+    let rules = rules_with_canonical_paths(rules);
+    let evaluation = evaluate_with_attribution(&Capability::DeleteFile { path }, &rules);
+    if evaluation.decision.is_denied() {
+        Err(match evaluation.decision {
+            PolicyDecision::Deny { reason } => reason,
+            other => format!("delete denied after canonicalize: {other:?}"),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +142,19 @@ mod tests {
         let err = verify_relocate_at_execution(&file, &dest, &rules, true).unwrap_err();
         assert!(err.contains("boundary") || err.contains("denied"));
         let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn delete_outside_can_delete_boundary_fails_after_canonicalize() {
+        let tmp = tempdir();
+        let file = tmp.file("junk.tmp", b"x");
+        // The covering rule does not grant delete → denied even in-boundary.
+        let rules = vec![full_rule(tmp.path())];
+        assert!(verify_delete_at_execution(&file, &rules).is_err());
+        // With the grant, the same path passes.
+        let mut granting = full_rule(tmp.path());
+        granting.can_delete = true;
+        assert!(verify_delete_at_execution(&file, &[granting]).is_ok());
     }
 
     #[test]

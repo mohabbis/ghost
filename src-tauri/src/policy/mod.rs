@@ -14,7 +14,7 @@ pub mod risk;
 pub mod routines;
 pub mod zone;
 
-pub use boundary::verify_relocate_at_execution;
+pub use boundary::{verify_delete_at_execution, verify_relocate_at_execution};
 pub use capability::Capability;
 pub use decision::PolicyDecision;
 pub use engine::{Evaluation, evaluate, evaluate_with_attribution};

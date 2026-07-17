@@ -97,6 +97,11 @@ pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepV
         ActionKind::MoveFile { to, .. } | ActionKind::RenameFile { to, .. } => {
             StepVerification::verify_fs_applied(step_id, label, to)
         }
+        // A delete is verified by absence: the source must no longer exist
+        // (it now lives in the OS Trash / Recycle Bin, per the undo record).
+        ActionKind::DeleteFile { path } => {
+            StepVerification::verify_path(step_id, label, path, false)
+        }
         ActionKind::VerifyPath { path, should_exist } => {
             StepVerification::verify_path(step_id, label, path, *should_exist)
         }
