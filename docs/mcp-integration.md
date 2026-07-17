@@ -51,9 +51,27 @@ Phase 1 is a local stdio server launched by the installed app or CLI:
 ghost mcp serve
 ```
 
-Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan/execute/undo tools), `approval.rs` (signed tokens + plan hash), `pending.rs` (approval request queue), `pairing.rs` (optional initialize gate).
+Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan/execute/undo tools), `approval.rs` (signed tokens + plan hash), `pending.rs` (approval request queue), `pairing.rs` (optional pairing gate).
 
-Optional pairing: enable in Settings → MCP access; clients must pass `pairing_code` in `initialize` params (`capabilities.ghost.pairing_code` or top-level `pairing_code`).
+### Pairing (session gate)
+
+Pairing is enforced per **session**, not just at `initialize`: when a pairing
+code is configured, `tools/list` and `tools/call` return error `-32001` until
+the session has passed `initialize` with the correct code. A client that skips
+`initialize` never gets tool access.
+
+Enable it in Settings → "Connect an AI assistant (MCP)". The code can reach the
+server two ways (explicit `initialize` params win over the environment):
+
+1. **Launch environment (recommended for standard clients):** set
+   `GHOST_MCP_PAIRING_CODE` in the client config's `env` block — Claude
+   Desktop and Cursor can't inject custom `initialize` params, but they do
+   pass `env` to the spawned server.
+2. **`initialize` params:** `capabilities.ghost.pairing_code` or top-level
+   `pairing_code`, for clients that support custom params.
+
+The Settings view renders the paste-ready config below with the freshly
+generated code already filled in.
 
 Example macOS client configuration:
 
@@ -61,8 +79,9 @@ Example macOS client configuration:
 {
   "mcpServers": {
     "ghost": {
-      "command": "/Applications/Ghost.app/Contents/MacOS/ghost",
-      "args": ["mcp", "serve"]
+      "command": "/Applications/Ghost.app/Contents/MacOS/Ghost",
+      "args": ["mcp", "serve"],
+      "env": { "GHOST_MCP_PAIRING_CODE": "ABCD2345" }
     }
   }
 }
@@ -74,12 +93,16 @@ Example Windows client configuration:
 {
   "mcpServers": {
     "ghost": {
-      "command": "C:\\Program Files\\Ghost\\ghost.exe",
-      "args": ["mcp", "serve"]
+      "command": "C:\\Program Files\\Ghost\\Ghost.exe",
+      "args": ["mcp", "serve"],
+      "env": { "GHOST_MCP_PAIRING_CODE": "ABCD2345" }
     }
   }
 }
 ```
+
+With pairing disabled (the default), omit the `env` block — any local client
+can connect.
 
 Local stdio preserves Ghost's local-first posture: no Ghost cloud account, no provider upload requirement, and no network listener by default.
 
