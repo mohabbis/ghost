@@ -1968,7 +1968,7 @@ async function openSettings() {
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-copy-config>Copy config</button>
     </div>
-    <p class="panel__hint" style="margin: 8px 0 8px;"><strong>Step 3 — Approve in Ghost.</strong> When the assistant proposes a plan, review it in the Organizer view and click <em>Issue MCP approval token</em> — the token is single-use, expires in ~5 minutes, and is bound to the exact plan you reviewed.</p>
+    <p class="panel__hint" style="margin: 8px 0 8px;"><strong>Step 3 — Approve in Ghost.</strong> Claude Desktop / Cursor can list and preview saved routines, then request approval. Review the exact steps here (or an Organizer plan), approve locally — nothing runs until you do. Tokens are single-use, ~5 minutes, bound to the exact plan hash. ChatGPT is not supported on stock local stdio (needs remote HTTP/connector, still experimental).</p>
     ${
       experimentalEnabled
         ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `${mcpHttpStatus.tls_enabled ? "https" : "http"}://${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN)" : ""}` : "stopped"}</p>
@@ -5364,6 +5364,61 @@ function initMcpApprovalPolling() {
   setInterval(pollMcpPendingApprovals, 5000);
 }
 
+async function handleMcpRoutineApprovalRequest(req) {
+  const banner = document.getElementById("mcpRoutineApprovalBanner");
+  const name = req?.routine_name;
+  if (!name || !banner) {
+    showNotification("An MCP client requested routine approval — load the routine and review it.");
+    return;
+  }
+  try {
+    recordedEvents = await invoke("load_workflow", { name });
+    resetReplayInspectionState();
+    guardAuditCompleted = false;
+    latestGuardReport = null;
+    hasReplayedCurrentWorkflow = false;
+    hasSavedCurrentWorkflow = true;
+    updateRecordingUI();
+    await refreshTimeline();
+  } catch (err) {
+    toastError("Could not load routine for MCP review: " + formatInvokeError(err));
+    return;
+  }
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>MCP routine approval requested.</strong>
+      Review <code>${escapeHtml(name)}</code>, then approve so Claude/Cursor can execute only this exact plan.
+      Nothing runs until you approve.</span>
+      <div class="banner__actions">
+        <button class="btn btn--primary btn--small" id="mcpRoutineApproveBtn" type="button">Approve for MCP</button>
+        <button class="btn btn--ghost btn--small" id="mcpRoutineDismissBtn" type="button">Dismiss</button>
+      </div>
+    </section>`;
+  document.getElementById("mcpRoutineApproveBtn")?.addEventListener("click", async () => {
+    try {
+      const token = await invoke("routine_issue_mcp_approval_token", {
+        requestId: req.request_id,
+      });
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(token);
+      }
+      banner.innerHTML = "";
+      showNotification(
+        "Routine MCP approval issued — the assistant can poll get_approval_status, then execute. Token is single-use (~5 min).",
+      );
+    } catch (err) {
+      toastError("Could not approve routine for MCP: " + formatInvokeError(err));
+    }
+  });
+  document.getElementById("mcpRoutineDismissBtn")?.addEventListener("click", () => {
+    banner.innerHTML = "";
+  });
+  showNotification(
+    `MCP client requested approval for routine "${name}" — review steps, then Approve for MCP.`,
+  );
+  void openWorkflowReview().catch(() => {});
+}
+
 function initViewNav() {
   const items = document.querySelectorAll(".nav__item");
   const views = document.querySelectorAll(".view");
@@ -5388,12 +5443,17 @@ function initViewNav() {
 
   window.addEventListener("ghost:mcp-approval-request", (event) => {
     const req = event.detail;
+    if (req?.kind === "routine" || req?.routine_name) {
+      show("record");
+      void handleMcpRoutineApprovalRequest(req);
+      return;
+    }
     show("organize");
     if (req?.zone_id) {
       organizerSelectedZoneId = req.zone_id;
       void organizerRefreshZones().then(() => {
         showNotification(
-          "An MCP client requested plan approval — scan, review, then issue an MCP token.",
+          "An MCP client requested Organizer plan approval — scan, review, then issue an MCP token.",
         );
       });
     }

@@ -3,7 +3,8 @@
 Ghost should expose one Model Context Protocol (MCP) integration surface instead of separate ChatGPT, Claude, Codex, Cursor, or vendor-specific integrations.
 
 ```text
-Codex / ChatGPT / Claude / Cursor / other MCP clients
+Claude Desktop / Cursor  (stock local stdio — supported now)
+ChatGPT / remote clients (experimental HTTP/relay — not stock)
                          |
                          v
                  Ghost MCP Server
@@ -16,6 +17,8 @@ Codex / ChatGPT / Claude / Cursor / other MCP clients
                          v
               Audit log + Undo journal
 ```
+
+**Client support (honest):** stock Ghost exposes local **stdio** MCP (`ghost mcp serve`). That works with Claude Desktop and Cursor via their MCP `command`/`env` config. ChatGPT does **not** use local stdio the same way; any ChatGPT path needs remote HTTP/connector support, which remains **experimental** and is not claimed as shipping in the default installer (v2.0.3). Do not market ChatGPT as ready until that transport is verified.
 
 The MCP server is an interoperability layer. It must not become a shortcut around Ghost Guard, Zones, policy checks, desktop approval, audit logging, or undo journals.
 
@@ -156,11 +159,23 @@ Start deliberately small and read-first.
 
 | Tool | Risk | Notes |
 |---|---|---|
-| `ghost_request_approval` | `safe-read` | Opens or focuses the Ghost desktop approval view. |
-| `ghost_get_approval_status` | `safe-read` | Reports pending/approved/denied/expired. |
-| `ghost_execute_approved_plan` | `local-mutate` or `os-control` | Fails unless desktop UI approved the exact plan and issued a valid token. |
-| `ghost_cancel_plan` | `safe-read`/`local-mutate` | Cancels pending plan state; must not touch user files. |
-| `ghost_undo_run` | `local-mutate` | Uses undo journal and policy checks; never invents reverse operations from AI output. |
+| `ghost.request_approval` | `safe-read` | Opens or focuses the Ghost desktop approval view. |
+| `ghost.get_approval_status` | `safe-read` | Reports pending/approved/denied/expired; returns `approval_token` after local approval. |
+| `ghost.execute_approved_plan` | `local-mutate` | Fails unless desktop UI approved the exact Organizer plan and issued a valid token. |
+| `ghost.undo_run` | `local-mutate` | Uses undo journal and policy checks; never invents reverse operations from AI output. |
+
+### Phase 3b: saved routines (built — flagship vertical slice)
+
+| Tool | Risk | Notes |
+|---|---|---|
+| `ghost.list_routines` | `safe-read` | Saved routine **names only** — no events, no typed text. |
+| `ghost.preview_routine` | `safe-read` / `sensitive-read` (metadata) | Redacted semantic steps + policy plan; typed text always null/redacted. |
+| `ghost.request_routine_approval` | `safe-read` | Creates a pending local approval bound to exact routine plan hash. |
+| `ghost.get_approval_status` | `safe-read` | Same status tool; includes `kind: routine` and token when approved. |
+| `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime; returns receipt. |
+| `ghost.get_run` | `safe-read` | Run summary + receipt when present. |
+
+Desktop: Ghost polls pending approvals; for `kind: routine` it loads the routine, shows review, and `routine_issue_mcp_approval_token` issues the bound token (no auto-run).
 
 Do not add a broad `ghost_run` tool.
 

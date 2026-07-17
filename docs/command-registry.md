@@ -268,6 +268,7 @@ plan can never reach the filesystem.
 | `organizer_import_policy_pack` | stable | ✓ | – | – | – | ~ | – | medium | **local-mutate (DB only).** Imports a policy pack JSON string, creating the Zone and rules after validation (no delete rules; paths must exist). Requires vault unlock when configured. |
 | `organizer_verify_signed_report` | stable | – | – | – | – | – | – | low | **safe-read.** Verifies the machine-local signature on an exported compliance report; returns `false` on tamper or mismatch. Writes nothing. |
 | `organizer_issue_mcp_approval_token` | stable | ✓ | – | – | – | ✓ | – | medium | **safe-read.** Issues a signed, short-lived, single-use MCP token bound to the current server-side plan hash. Requires vault unlock; user must have reviewed the plan in Organizer. |
+| `routine_issue_mcp_approval_token` | stable | ✓ | – | – | – | ✓ | – | high | **os-control (approval only).** Reloads a saved routine for a pending MCP request, re-hashes the plan, refuses policy Deny, issues a signed single-use token, and marks that request approved. Does not synthesize input. |
 
 ### `commands/runtime_cmds.rs` — Ghost 2.0 unified execution (stable)
 
@@ -292,7 +293,7 @@ MCP headless execution (`mcp/execute.rs::execute_approved_plan`) uses the same `
 | `mcp_pairing_status` | stable | ✓ | – | – | – | – | – | low | Reports whether MCP stdio clients must supply a pairing code on `initialize`. |
 | `mcp_enable_pairing` | stable | ✓ | – | – | – | – | – | low | Generates and persists a pairing code; shown once to the user. |
 | `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
-| `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (polled by the UI). |
+| `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (Organizer + routine; polled by the UI). |
 | `mcp_http_server_status` | experimental | ✓ | – | – | – | – | – | low | Reports MCP/Fabric HTTP listener state (bind, port, LAN exposure). |
 | `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener; LAN requires bearer token; optional in-process TLS PEM paths. |
 | `mcp_stop_http_server` | experimental | ✓ | – | – | – | – | – | low | Stops the HTTP listener started by `mcp_start_http_server`. |

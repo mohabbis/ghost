@@ -117,6 +117,7 @@ macro_rules! run_with_commands {
                 commands::organizer_time_to_value,
                 commands::organizer_verify_audit_chain,
                 commands::organizer_issue_mcp_approval_token,
+                commands::routine_issue_mcp_approval_token,
                 // Ghost 2.0 — unified action plan pipeline
                 commands::action_plan_from_zone,
                 commands::action_plan_from_events,

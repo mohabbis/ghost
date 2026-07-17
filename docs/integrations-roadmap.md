@@ -73,8 +73,12 @@ Every integration below is additive to that pipeline, never a bypass of it.
 - **Local MCP stdio server** (`mcp/server.rs`, `main.rs` `ghost mcp serve`):
   JSON-RPC tools for status, Zone listing, plan creation/validation,
   approval request/status (`ghost.request_approval`, `ghost.get_approval_status`),
-  signed-token-gated execution, undo, and optional pairing. See
-  `docs/mcp-integration.md`.
+  signed-token-gated Organizer execution, **saved-routine** list/preview/
+  request-approval/execute-with-receipt (`ghost.list_routines`,
+  `ghost.preview_routine`, `ghost.request_routine_approval`,
+  `ghost.execute_approved_routine`), undo, and optional pairing. Stock
+  transport is Claude Desktop / Cursor over stdio; ChatGPT is not supported
+  until a verified remote connector ships. See `docs/mcp-integration.md`.
 - **Integration module boundaries** (`integrations/`, `intelligence/`, `mcp/`):
   Layer B business connectors (Power BI + partial Fabric), Layer C internal
   providers (disabled by default, gated behind `--features experimental`),
@@ -151,15 +155,19 @@ Ghost-initiated reads/exports (e.g. writing an audit export to a bucket the
 user already owns), and treat any inbound trigger as subject to full policy
 review before it can propose a mutation.
 
-## Planned: AI-assistant connectors (Claude, Cursor, Codex, ChatGPT)
+## AI-assistant connectors (Claude, Cursor, Codex, ChatGPT)
 
 These are different in kind from Fabric/Google Cloud: they're coding/agent
 tools, not data platforms, so the integration point is "let the assistant
 call Ghost's MCP planning surface" rather than "sync data with Ghost."
-Concretely, this means exposing the same status/plan/approve/execute/undo
-surface described in `docs/mcp-integration.md` to more MCP-capable clients,
-not building bespoke per-vendor code paths. The model proposes a plan; it
-never gets standing authority to execute one unapproved.
+
+**Now (stock local stdio):** Claude Desktop and Cursor can drive Organizer and
+saved-routine preview → local approval → execute → receipt. The model proposes;
+it never gets standing authority to execute unapproved.
+
+**Roadmap:** ChatGPT and other remote-only clients need HTTP/connector or
+relay transport (experimental today). Do not claim ChatGPT support in public
+copy until that path is verified end-to-end.
 
 ## What must never change because of this roadmap
 
