@@ -679,3 +679,30 @@ fn replay_workflow_still_goes_through_policy_approval() {
         "confirmPolicyBeforeReplay must run before execute_routine_action_plan"
     );
 }
+
+#[test]
+fn replay_history_surfaces_persisted_routine_receipts() {
+    let js = read("../src/main.js");
+    let start = js
+        .find("async function showReplayHistory()")
+        .expect("showReplayHistory must exist");
+    let end = js[start..]
+        .find("// ===== Replay inspection =====")
+        .map(|offset| start + offset)
+        .expect("Replay inspection section must follow showReplayHistory");
+    let body = &js[start..end];
+
+    for marker in [
+        r#"invoke("get_replay_history""#,
+        r#"invoke("organizer_list_executions""#,
+        r#"run.zone_id === "routine""#,
+        r#"invoke("get_execution_receipt""#,
+        "data-replay-receipt-exec",
+        "Verification receipts",
+    ] {
+        assert!(
+            body.contains(marker),
+            "Replay History must include persisted verification-receipt marker `{marker}`"
+        );
+    }
+}

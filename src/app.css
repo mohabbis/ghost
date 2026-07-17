@@ -1426,6 +1426,68 @@ body[data-view="guard-desk"] .rail-record { display: none; }
   padding-bottom: 6px;
 }
 
+.replay-history__intro {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.replay-history__heading {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.replay-history--receipts {
+  max-height: 260px;
+  margin-bottom: 16px;
+}
+
+.replay-receipt-row {
+  gap: 7px !important;
+  padding: 10px 0 !important;
+}
+
+.replay-receipt-status {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.replay-receipt-status--verified {
+  color: var(--success);
+}
+
+.replay-receipt-status--failed {
+  color: #ff8da0;
+}
+
+.replay-receipt-status--completed,
+.replay-receipt-status--unavailable {
+  color: var(--muted);
+}
+
+.replay-receipt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.replay-receipt-chips .ghost2-verify-chip {
+  margin-left: 0;
+}
+
+.replay-receipt-empty {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .replay-meta {
   font-size: 11px;
   color: var(--muted);

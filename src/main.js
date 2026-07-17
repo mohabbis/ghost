@@ -4344,16 +4344,54 @@ async function organizerVerifyIntegrity() {
   }
 }
 
-// Replay history: surface past replay runs (status, duration, failure reason)
-// recorded by the engine's execution history. Read-only; mirrors the Organizer
-// history modal.
+function summarizePersistedReceipt(receipt) {
+  const counts = { verified: 0, failed: 0, skipped: 0, not_applicable: 0 };
+  for (const step of receipt?.steps || []) {
+    const status = String(step.verification?.status || step.outcome || "").toLowerCase();
+    if (status in counts) counts[status] += 1;
+  }
+  const mismatch = counts.failed > 0 || (receipt?.failed || 0) > 0 || receipt?.stopped_early;
+  return {
+    counts,
+    label: mismatch ? "Mismatch" : counts.verified > 0 ? "Verified" : "Completed",
+    className: mismatch ? "failed" : counts.verified > 0 ? "verified" : "completed",
+  };
+}
+
+// Replay history joins two persisted, local stores:
+// - Action Plan executions provide the authoritative verification receipts.
+// - Legacy replay records provide target-resolution diagnostics and reliability.
+// Keeping both in one view means the flagship verification result remains
+// inspectable after its completion modal closes.
 async function showReplayHistory() {
   if (!invoke) return notAvailable();
   let history = [];
+  let persistedRuns = [];
   try {
     history = await invoke("get_replay_history", { limit: 50 });
   } catch (err) {
     return toastError("Could not load replay history: " + formatInvokeError(err));
+  }
+  try {
+    const executions = await invoke("organizer_list_executions");
+    const routineExecutions = (executions || [])
+      .filter((run) => run.zone_id === "routine" && run.finished)
+      .slice(0, 50);
+    persistedRuns = await Promise.all(
+      routineExecutions.map(async (run) => {
+        try {
+          const receipt = await invoke("get_execution_receipt", { executionId: run.id });
+          return { run, receipt };
+        } catch (error) {
+          console.error(`Could not load persisted receipt ${run.id}:`, error);
+          return { run, receipt: null };
+        }
+      }),
+    );
+  } catch (error) {
+    // The legacy diagnostics log is still useful when the Action Plan store is
+    // unavailable, so degrade this section without hiding Replay History.
+    console.error("Could not load persisted routine receipts:", error);
   }
   const modal = document.getElementById("analysis-modal");
   const content = modal?.querySelector(".modal-content");
@@ -4363,6 +4401,14 @@ async function showReplayHistory() {
     secs ? new Date(secs * 1000).toLocaleString() : "—";
   const fmtDur = (ms) =>
     ms || ms === 0 ? `${(ms / 1000).toFixed(1)}s` : "—";
+  const fmtReceiptWhen = (receipt, fallback) => {
+    const raw = receipt?.finished_at || receipt?.started_at || fallback;
+    if (/^\d+$/.test(String(raw || ""))) {
+      return new Date(Number(raw) * 1000).toLocaleString();
+    }
+    const parsed = raw ? new Date(raw) : null;
+    return parsed && Number.isFinite(parsed.getTime()) ? parsed.toLocaleString() : "—";
+  };
 
   // Summarize the run's resolution trace: how each click found its target,
   // with coordinate-fallback steps called out individually — this is where
@@ -4438,13 +4484,64 @@ async function showReplayHistory() {
           </li>`;
         })
         .join("")
-    : "<li>No replays yet.</li>";
+    : "<li>No diagnostic replays yet.</li>";
+
+  const receiptRows = persistedRuns.length
+    ? persistedRuns
+        .map(({ run, receipt }) => {
+          if (!receipt) {
+            return `<li class="replay-receipt-row">
+              <div><strong>Recorded routine</strong>
+                <span class="replay-receipt-status replay-receipt-status--unavailable">Receipt unavailable</span></div>
+              <div class="replay-meta">${escapeHtml(fmtReceiptWhen(null, run.created_at))}</div>
+            </li>`;
+          }
+          const summary = summarizePersistedReceipt(receipt);
+          const chips = [
+            summary.counts.verified
+              ? `<span class="ghost2-verify-chip ghost2-verify-chip--verified">${summary.counts.verified} verified</span>`
+              : "",
+            summary.counts.failed
+              ? `<span class="ghost2-verify-chip ghost2-verify-chip--failed">${summary.counts.failed} mismatch</span>`
+              : "",
+            summary.counts.skipped
+              ? `<span class="ghost2-verify-chip ghost2-verify-chip--skipped">${summary.counts.skipped} skipped</span>`
+              : "",
+            summary.counts.not_applicable
+              ? `<span class="ghost2-verify-chip">${summary.counts.not_applicable} not checked</span>`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("");
+          return `<li class="replay-receipt-row">
+            <div><strong>${escapeHtml(receipt.plan_title || "Recorded routine")}</strong>
+              <span class="replay-receipt-status replay-receipt-status--${summary.className}">${summary.label}</span></div>
+            <div class="replay-meta">${escapeHtml(fmtReceiptWhen(receipt, run.created_at))} · ${receipt.applied} applied · ${receipt.failed} failed${receipt.stopped_early ? " · stopped early" : ""}</div>
+            <div class="replay-receipt-chips">${chips}</div>
+            <div><button class="btn btn--ghost btn--small" type="button" data-replay-receipt-exec="${escapeAttr(run.id)}">View receipt</button></div>
+          </li>`;
+        })
+        .join("")
+    : `<li class="replay-receipt-empty">No verification receipts yet. Your next approved Record &amp; Verify run will appear here.</li>`;
 
   content.innerHTML = `
     <h3 style="margin-top:0">Replay history</h3>
+    <p class="replay-history__intro">Every completed Record &amp; Verify run keeps its receipt here, including the approved and observed values.</p>
+    <h4 class="replay-history__heading">Verification receipts</h4>
+    <ul class="replay-history replay-history--receipts">${receiptRows}</ul>
+    <h4 class="replay-history__heading">Replay diagnostics</h4>
     ${statsHtml}
     <ul class="replay-history">${rows}</ul>
     <div style="margin-top:16px"><button class="btn btn--ghost btn--small" data-close-modal="analysis-modal">Close</button></div>`;
+  const receiptsByExecution = new Map(
+    persistedRuns.filter(({ receipt }) => receipt).map(({ run, receipt }) => [run.id, receipt]),
+  );
+  content.querySelectorAll("[data-replay-receipt-exec]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const receipt = receiptsByExecution.get(button.dataset.replayReceiptExec);
+      if (receipt) showExecutionReceiptModal("Verification receipt", { receipt });
+    });
+  });
   showModal(modal);
 }
 

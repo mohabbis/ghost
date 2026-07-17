@@ -36,6 +36,8 @@ execute_action_plan(source: demo, downloads, finance_root)
 ### Verification
 
 Each step records **Expected / Observed / Verified** in the execution receipt.
+After closing the completion modal, reopen **Replay History → Verification
+receipts** to inspect the persisted result and its per-step verification chips.
 
 ### Recovery
 
