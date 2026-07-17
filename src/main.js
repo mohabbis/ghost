@@ -1948,8 +1948,8 @@ async function openSettings() {
     }
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">Connect an AI assistant (MCP)</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Let Claude, Cursor, or any MCP client propose Organizer plans. The assistant can only <em>propose</em> — nothing runs until you approve it in Ghost, same as always.</p>
-    <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 1 — Get a pairing code.</strong> ${mcpPairingStatus.enabled ? `Pairing is on (${escapeAttr(mcpPairingStatus.code_hint || "active")}). The full code is shown once when generated — rotate it if you've lost it.` : "Pairing is off, so any local MCP client can connect. Recommended: enable it."}</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Let Claude Desktop or Cursor propose Organizer plans over local stdio. The assistant can only <em>propose</em> — nothing runs until you approve it in Ghost, same as always. ChatGPT / remote connectors require a future verified transport and are not supported on the stock build.</p>
+    <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 1 — Get a pairing code.</strong> ${mcpPairingStatus.enabled ? `Pairing is on (${escapeAttr(mcpPairingStatus.code_hint || "active")}). The full code is shown once when generated — rotate it if you've lost it.` : "Pairing is off, so Claude Desktop or Cursor can connect without a code. Recommended: enable it."}</p>
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>${mcpPairingStatus.enabled ? "Rotate pairing code" : "Enable pairing code"}</button>
       <button class="btn btn--ghost btn--small" type="button" data-mcp-disable-pairing ${mcpPairingStatus.enabled ? "" : "disabled"}>Disable pairing</button>
