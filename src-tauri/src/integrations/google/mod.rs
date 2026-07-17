@@ -185,10 +185,12 @@ impl GcsClient {
         access_token: &str,
         project_id: &str,
     ) -> Result<Vec<GcsBucket>, String> {
+        let url =
+            reqwest::Url::parse_with_params(&format!("{STORAGE_API}/b"), [("project", project_id)])
+                .map_err(|_| IntegrationError::InvalidResponse.to_string())?;
         let res = self
             .http
-            .get(format!("{STORAGE_API}/b"))
-            .query(&[("project", project_id)])
+            .get(url)
             .bearer_auth(access_token)
             .send()
             .map_err(|_| IntegrationError::NetworkUnavailable.to_string())?;

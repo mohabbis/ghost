@@ -23,10 +23,11 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
-# Pinned to 0.12: reqwest 0.13 removed `query`/`form` from the blocking
-# RequestBuilder (used by integrations/google + mcp/relay + identity/oauth),
-# which broke the build. Revisit as a deliberate 0.13 migration PR, not a bump.
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.13", features = ["json", "blocking"] }
+# reqwest 0.13 dropped `query`/`form` from the blocking RequestBuilder;
+# form_urlencoded (already in the tree via `url`) builds the OAuth token
+# request body, and query strings go through `reqwest::Url::parse_with_params`.
+form_urlencoded = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
