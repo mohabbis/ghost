@@ -28,5 +28,5 @@ pub use pairing::{disable_pairing, enable_pairing, pairing_is_required, pairing_
 pub use plan_hash::hash_organizer_plan;
 #[cfg(feature = "experimental")]
 pub use relay::{RelayOptions, RelayStatus, relay_status, start_relay, stop_relay};
-pub use server::run_stdio;
+pub use server::{McpSession, run_stdio};
 pub use tools::McpToolKind;

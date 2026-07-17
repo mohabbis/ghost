@@ -1869,13 +1869,20 @@ async function openSettings() {
         : ""
     }
 
-    <h4 style="color: #0e8f78; margin: 12px 0 4px;">MCP access</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Local MCP clients run <code>ghost mcp serve</code> (stdio) or start the HTTP server below. Pairing codes apply to MCP routes.</p>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Pairing: ${mcpPairingStatus.enabled ? `enabled (${escapeAttr(mcpPairingStatus.code_hint || "active")})` : "disabled — any local client can connect"}</p>
+    <h4 style="color: #0e8f78; margin: 12px 0 4px;">Connect an AI assistant (MCP)</h4>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Let Claude, Cursor, or any MCP client propose Organizer plans. The assistant can only <em>propose</em> — nothing runs until you approve it in Ghost, same as always.</p>
+    <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 1 — Get a pairing code.</strong> ${mcpPairingStatus.enabled ? `Pairing is on (${escapeAttr(mcpPairingStatus.code_hint || "active")}). The full code is shown once when generated — rotate it if you've lost it.` : "Pairing is off, so any local MCP client can connect. Recommended: enable it."}</p>
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-      <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>Enable pairing code</button>
+      <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>${mcpPairingStatus.enabled ? "Rotate pairing code" : "Enable pairing code"}</button>
       <button class="btn btn--ghost btn--small" type="button" data-mcp-disable-pairing ${mcpPairingStatus.enabled ? "" : "disabled"}>Disable pairing</button>
     </div>
+    <pre id="mcp-pairing-code" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
+    <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 2 — Paste this into your client's MCP config.</strong> Claude Desktop: <code>claude_desktop_config.json</code>. Cursor: <code>~/.cursor/mcp.json</code>. Adjust the path if Ghost is installed elsewhere.</p>
+    <pre id="mcp-client-config" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; user-select: all;">${escapeHtml(mcpClientConfigSnippet(mcpPairingStatus.enabled ? null : undefined))}</pre>
+    <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+      <button class="btn btn--ghost btn--small" type="button" data-mcp-copy-config>Copy config</button>
+    </div>
+    <p class="panel__hint" style="margin: 8px 0 8px;"><strong>Step 3 — Approve in Ghost.</strong> When the assistant proposes a plan, review it in the Organizer view and click <em>Issue MCP approval token</em> — the token is single-use, expires in ~5 minutes, and is bound to the exact plan you reviewed.</p>
     ${
       experimentalEnabled
         ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `${mcpHttpStatus.tls_enabled ? "https" : "http"}://${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN)" : ""}` : "stopped"}</p>
@@ -1916,7 +1923,6 @@ async function openSettings() {
            <p class="panel__hint" style="margin: 0 0 8px;">See <code>docs/mcp-relay.md</code> for the reference relay server.</p>`
         : ""
     }
-    <pre id="mcp-pairing-code" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
     <p class="panel__hint" id="mcp-pairing-note" style="margin: 8px 0 12px;"></p>
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">Replay</h4>
@@ -2496,17 +2502,49 @@ async function revokeGoogleCloudGrant() {
   }
 }
 
+// Paste-ready MCP client config (Claude Desktop / Cursor share this shape).
+// `code`: a string embeds the real pairing code; `null` embeds a placeholder
+// (pairing on, code unknown because it's masked); `undefined` omits the env
+// block entirely (pairing off).
+function mcpClientConfigSnippet(code) {
+  const isMac = /Mac/i.test(navigator.userAgent);
+  const command = isMac
+    ? "/Applications/Ghost.app/Contents/MacOS/Ghost"
+    : "C:\\Program Files\\Ghost\\Ghost.exe";
+  const server = { command, args: ["mcp", "serve"] };
+  if (code !== undefined) {
+    server.env = { GHOST_MCP_PAIRING_CODE: code ?? "PASTE-PAIRING-CODE-HERE" };
+  }
+  return JSON.stringify({ mcpServers: { ghost: server } }, null, 2);
+}
+
+async function copyMcpClientConfig() {
+  const pre = document.getElementById("mcp-client-config");
+  const text = pre?.textContent || "";
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotification("MCP client config copied.");
+  } catch {
+    showInsight("Copy failed — select the config text and copy manually.");
+  }
+}
+
 async function enableMcpPairing() {
   if (!invoke) return notAvailable();
   const note = document.getElementById("mcp-pairing-note");
   const pre = document.getElementById("mcp-pairing-code");
+  const configPre = document.getElementById("mcp-client-config");
   try {
     const result = await invoke("mcp_enable_pairing");
     if (pre) {
       pre.style.display = "block";
-      pre.textContent = `Pairing code (copy into your MCP client initialize params):\n${result.code}`;
+      pre.textContent = `Pairing code (shown once — it's already in the Step 2 config below):\n${result.code}`;
     }
-    if (note) note.textContent = "Pairing enabled. Clients must send this code on initialize.";
+    // Fill the real code into the paste-ready config so Step 2 needs no
+    // manual substitution while the code is still on screen.
+    if (configPre) configPre.textContent = mcpClientConfigSnippet(result.code);
+    if (note) note.textContent = "Pairing enabled. Copy the Step 2 config into your MCP client, then restart the client.";
     showNotification("MCP pairing enabled.");
   } catch (error) {
     toastError(`Could not enable MCP pairing: ${formatInvokeError(error)}`);
@@ -4931,6 +4969,10 @@ function wireUpControls() {
     }
     if (e.target.closest("[data-mcp-disable-pairing]")) {
       disableMcpPairing();
+      return;
+    }
+    if (e.target.closest("[data-mcp-copy-config]")) {
+      copyMcpClientConfig();
       return;
     }
     if (e.target.closest("[data-mcp-http-start]")) {

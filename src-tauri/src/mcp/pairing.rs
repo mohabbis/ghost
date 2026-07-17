@@ -40,12 +40,21 @@ fn save_pairing_config(cfg: &PairingConfig) {
 }
 
 pub fn pairing_is_required() -> bool {
-    let cfg = load_pairing_config();
+    pairing_is_required_with(&load_pairing_config())
+}
+
+/// Pure form of [`pairing_is_required`] — lets the server logic be tested
+/// against an explicit config instead of the on-disk global.
+pub fn pairing_is_required_with(cfg: &PairingConfig) -> bool {
     cfg.enabled && !cfg.code.is_empty()
 }
 
 pub fn verify_pairing_code(code: &str) -> bool {
-    let cfg = load_pairing_config();
+    verify_pairing_code_with(&load_pairing_config(), code)
+}
+
+/// Pure form of [`verify_pairing_code`] against an explicit config.
+pub fn verify_pairing_code_with(cfg: &PairingConfig, code: &str) -> bool {
     if !cfg.enabled {
         return true;
     }
