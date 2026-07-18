@@ -257,6 +257,7 @@ mod tests {
                 prev_hash: String::new(),
                 finished: true,
                 receipt: None,
+                label_notes: Vec::new(),
             }
         }
     }
