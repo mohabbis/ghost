@@ -71,7 +71,7 @@ struct SettingsView: View {
             }
 
             Section("macOS permissions") {
-                Text("Ghost works partially when some permissions are denied. Organizer never requires Screen Recording or Input Monitoring.")
+                Text("Ghost works partially when some permissions are denied. Organizer never requires Screen Recording or Input Monitoring. Refresh checks status only — it does not prompt.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -89,12 +89,21 @@ struct SettingsView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.orange)
                         }
+                        if record.permission == .automation && record.state == .unknown {
+                            Text("Automation is per-app; Ghost cannot report a single process-wide status.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                         HStack {
                             Button("Open Settings") {
                                 permissions.openSystemSettings(for: record.permission)
                             }
                             if record.permission == .accessibility {
                                 Button("Request Accessibility", action: permissions.requestAccessibility)
+                                    .disabled(record.isGranted)
+                            }
+                            if record.permission == .inputMonitoring {
+                                Button("Request Input Monitoring", action: permissions.requestInputMonitoring)
                                     .disabled(record.isGranted)
                             }
                         }
