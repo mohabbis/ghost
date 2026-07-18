@@ -3,13 +3,14 @@
 use crate::action_plan::types::ActionKind;
 use crate::core::events::{InputEvent, ReliabilitySettings};
 use crate::engine::GhostEngine;
+use crate::runtime::evidence::StepEvidence;
 use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use enigo::{Enigo, Key, Keyboard, Settings};
 use std::thread;
 use std::time::Duration;
 
 pub enum UiOutcome {
-    Applied,
+    Applied(Option<StepEvidence>),
     Skipped(String),
     Failed(String),
 }
@@ -35,7 +36,7 @@ pub fn dispatch_ui_step_with_reliability(
         ActionKind::Shortcut { combo } => send_shortcut(combo),
         ActionKind::Wait { ms } => {
             thread::sleep(Duration::from_millis(*ms));
-            UiOutcome::Applied
+            UiOutcome::Applied(Some(StepEvidence::coordinates(format!("wait {ms} ms"))))
         }
         ActionKind::UiReplay { events, .. } => {
             replay_events_with_reliability(engine, events, reliability)
@@ -46,7 +47,7 @@ pub fn dispatch_ui_step_with_reliability(
 
 fn semantic_focus(target: &UiTarget) -> UiOutcome {
     match semantic::focus_target(target) {
-        Ok(()) => UiOutcome::Applied,
+        Ok(evidence) => UiOutcome::Applied(Some(evidence)),
         Err(SemanticError::HelperUnavailable(msg)) => UiOutcome::Skipped(msg),
         Err(SemanticError::Ambiguous(n)) => {
             UiOutcome::Skipped(format!("refusing ambiguous focus ({n} matches)"))
@@ -60,10 +61,16 @@ fn semantic_focus(target: &UiTarget) -> UiOutcome {
 
 fn semantic_set_value(target: &UiTarget, value: &str) -> UiOutcome {
     match semantic::set_target_value(target, value) {
-        Ok(()) => UiOutcome::Applied,
+        Ok(evidence) => UiOutcome::Applied(Some(evidence)),
         Err(SemanticError::HelperUnavailable(_)) => {
             // Fall back to keyboard typing when the AX helper is not present.
-            type_text(value)
+            match type_text(value) {
+                UiOutcome::Applied(Some(mut ev)) => {
+                    ev.detail = Some("typed via enigo; AX helper unavailable".into());
+                    UiOutcome::Applied(Some(ev))
+                }
+                other => other,
+            }
         }
         Err(SemanticError::Ambiguous(n)) => {
             UiOutcome::Skipped(format!("refusing ambiguous set_value ({n} matches)"))
@@ -85,7 +92,7 @@ fn semantic_verify(target: &UiTarget, expected_value: Option<&str>) -> UiOutcome
                     "semantic verify mismatch (expected {expected}, observed {observed})"
                 ));
             }
-            UiOutcome::Applied
+            UiOutcome::Applied(Some(StepEvidence::ax(0u32, observed)))
         }
         Err(SemanticError::HelperUnavailable(msg)) => UiOutcome::Skipped(msg),
         Err(SemanticError::StaleTarget { expected, observed }) => UiOutcome::Skipped(format!(
@@ -102,7 +109,7 @@ fn open_application(name: &str) -> UiOutcome {
             return UiOutcome::Failed(format!("open application failed: {e}"));
         }
         thread::sleep(Duration::from_millis(800));
-        UiOutcome::Applied
+        UiOutcome::Applied(Some(StepEvidence::coordinates(format!("opened {name}"))))
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
@@ -117,7 +124,7 @@ fn type_text(text: &str) -> UiOutcome {
             if let Err(e) = enigo.text(text) {
                 return UiOutcome::Failed(format!("type text failed: {e}"));
             }
-            UiOutcome::Applied
+            UiOutcome::Applied(Some(StepEvidence::coordinates("typed via enigo")))
         }
         Err(e) => UiOutcome::Failed(format!("enigo init failed: {e}")),
     }
@@ -164,7 +171,7 @@ fn send_shortcut(combo: &str) -> UiOutcome {
             return UiOutcome::Failed(format!("shortcut release failed: {e}"));
         }
     }
-    UiOutcome::Applied
+    UiOutcome::Applied(Some(StepEvidence::coordinates(format!("shortcut {combo}"))))
 }
 
 fn replay_events_with_reliability(
@@ -184,7 +191,7 @@ fn replay_events_with_reliability(
         engine.replay(events, None)
     };
     match result {
-        Ok(()) => UiOutcome::Applied,
+        Ok(()) => UiOutcome::Applied(Some(StepEvidence::coordinates("ui replay slice"))),
         Err(e) => UiOutcome::Failed(e.to_string()),
     }
 }

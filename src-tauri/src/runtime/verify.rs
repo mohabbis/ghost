@@ -1,6 +1,7 @@
 //! Per-step verification: expected vs observed.
 
 use crate::action_plan::types::ActionKind;
+use crate::runtime::evidence::{StepEvidence, UiResolutionStrategy};
 use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -22,6 +23,18 @@ pub struct StepVerification {
     pub observed: String,
     pub status: VerificationStatus,
     pub continue_execution: bool,
+    /// How the UI target was resolved (absent for pure FS steps / old receipts).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_strategy: Option<UiResolutionStrategy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ax_quality: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    /// Honest undo guidance when the step is not journal-reversible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempts: Option<u32>,
 }
 
 impl StepVerification {
@@ -49,6 +62,11 @@ impl StepVerification {
                 VerificationStatus::Failed
             },
             continue_execution: ok,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: None,
+            attempts: None,
         }
     }
 
@@ -64,6 +82,11 @@ impl StepVerification {
             observed: reason.into(),
             status: VerificationStatus::NotApplicable,
             continue_execution: true,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: None,
+            attempts: None,
         }
     }
 
@@ -75,6 +98,11 @@ impl StepVerification {
             observed: reason.into(),
             status: VerificationStatus::Skipped,
             continue_execution: true,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: None,
+            attempts: None,
         }
     }
 
@@ -86,6 +114,11 @@ impl StepVerification {
             observed: observed.into(),
             status: VerificationStatus::Failed,
             continue_execution: false,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: None,
+            attempts: None,
         }
     }
 
@@ -97,7 +130,37 @@ impl StepVerification {
             observed: observed.into(),
             status: VerificationStatus::Verified,
             continue_execution: true,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: None,
+            attempts: None,
         }
+    }
+
+    /// Merge dispatch evidence onto this verification (strategy / quality / undo note).
+    pub fn with_evidence(mut self, evidence: StepEvidence) -> Self {
+        if self.resolution_strategy.is_none() {
+            self.resolution_strategy = evidence.resolution_strategy;
+        }
+        if self.ax_quality.is_none() {
+            self.ax_quality = evidence.ax_quality;
+        }
+        if self.fingerprint.is_none() {
+            self.fingerprint = evidence.fingerprint;
+        }
+        if self.undo_note.is_none() {
+            self.undo_note = evidence.undo_note;
+        }
+        if self.attempts.is_none() {
+            self.attempts = evidence.attempts;
+        }
+        if let Some(detail) = evidence.detail
+            && self.observed.is_empty()
+        {
+            self.observed = detail;
+        }
+        self
     }
 }
 
@@ -123,6 +186,11 @@ fn verify_semantic_focus(step_id: &str, label: &str, target: &UiTarget) -> StepV
                 observed: e.to_string(),
                 status: VerificationStatus::Failed,
                 continue_execution: true,
+                resolution_strategy: None,
+                ax_quality: None,
+                fingerprint: None,
+                undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
+                attempts: None,
             }
         }
     }
@@ -150,6 +218,11 @@ fn verify_semantic_set_value(
                     observed,
                     status: VerificationStatus::Failed,
                     continue_execution: true,
+                    resolution_strategy: None,
+                    ax_quality: None,
+                    fingerprint: None,
+                    undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
+                    attempts: None,
                 }
             }
         }
@@ -163,12 +236,22 @@ fn verify_semantic_set_value(
             observed: e.to_string(),
             status: VerificationStatus::Failed,
             continue_execution: true,
+            resolution_strategy: None,
+            ax_quality: None,
+            fingerprint: None,
+            undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
+            attempts: None,
         },
     }
 }
 
-pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepVerification {
-    match kind {
+pub fn verify_after_kind(
+    kind: &ActionKind,
+    step_id: &str,
+    label: &str,
+    evidence: Option<StepEvidence>,
+) -> StepVerification {
+    let mut verification = match kind {
         ActionKind::CreateFolder { path } => {
             StepVerification::verify_fs_applied(step_id, label, path)
         }
@@ -223,7 +306,11 @@ pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepV
             StepVerification::not_applicable(step_id, label, "UI replay step completed")
         }
         ActionKind::Wait { .. } => StepVerification::not_applicable(step_id, label, "wait elapsed"),
+    };
+    if let Some(ev) = evidence {
+        verification = verification.with_evidence(ev);
     }
+    verification
 }
 
 #[cfg(test)]

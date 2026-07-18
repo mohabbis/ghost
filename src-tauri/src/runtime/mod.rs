@@ -1,6 +1,7 @@
 //! Canonical execution runtime for Ghost 2.0.
 
 pub mod capture;
+pub mod evidence;
 pub mod execute;
 pub mod fs;
 pub mod locator;
@@ -16,6 +17,7 @@ pub use capture::{
     capture_latest_frame_bytes_with_opts, capture_still, capture_still_bytes,
     capture_stream_latest,
 };
+pub use evidence::{StepEvidence, UiResolutionStrategy};
 pub use execute::{
     RuntimeResult, execute_action_plan_with_progress, execute_action_plan_with_reliability,
 };

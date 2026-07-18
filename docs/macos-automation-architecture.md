@@ -331,7 +331,8 @@ visual matching before AX targeting and permissions are solid.
    retry policy on ActionStep wired; UI postconditions remain best-effort)
 8. Visual template matching only where OCR and AX fail ✅ (Action Plan semantic
    path; opt-in `template_png` only — not ambient capture; not business-effect proof)
-9. Evidence capture, audit records, and undo integration
+9. Evidence capture, audit records, and undo integration ✅ (receipt records
+   ax/ocr/template/coordinates + ax_quality + honest UI undo_note; no screenshot retention)
 10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass)
 
 ## Honest status (do not overclaim)
@@ -381,6 +382,18 @@ Also present (item 7 — partial, honest):
   presence); UI failures are recorded honestly but do not hard-stop the plan
   (ADR-0007). Path pre/postconditions can hard-fail a step.
 
+Also present (item 9 — honest):
+
+- Action Plan receipts carry `resolution_strategy` (`ax` / `ocr` / `template` /
+  `coordinates`), optional `ax_quality`, `fingerprint`, `attempts`, and
+  `undo_note` on each step (`runtime/evidence.rs` → `StepVerification` /
+  `ReceiptStep`);
+- UI steps record `undo_note: n/a: UI click/type is not reversible via the undo
+  journal`; FS mutations note that an undo journal entry was written;
+- Postcondition results remain on `verification.status` / `observed` (UI is
+  best-effort, ADR-0007);
+- Receipts never retain screenshot bytes.
+
 Not yet the architecture above:
 
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
@@ -389,8 +402,8 @@ Not yet the architecture above:
 - Input Monitoring / Notifications probe implementations;
 - automatic template capture into Action Plans (fragments must be supplied opt-in on
   `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
-- evidence / audit fields for which strategy (ax / ocr / template / coordinates),
-  capture path (still vs stream), or retry attempt count served a UI step.
+- capture path (still vs stream) recorded on the receipt;
+- MCP exposure of semantic/vision ops (must stay approval-bound).
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
