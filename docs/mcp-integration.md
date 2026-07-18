@@ -171,16 +171,35 @@ Live demo script (Claude Desktop / Cursor, stock stdio only): [`docs/claude-ghos
 | Tool | Risk | Notes |
 |---|---|---|
 | `ghost.list_routines` | `safe-read` | Saved routine **names only** — no events, no typed text. |
-| `ghost.preview_routine` | `safe-read` / `sensitive-read` (metadata) | Redacted semantic steps + policy plan; typed text always null/redacted. |
+| `ghost.preview_routine` | `safe-read` / `sensitive-read` (metadata) | Redacted compressed steps + **compiled Action Plan** (timeouts, retry class, fallback strategy, Semantic* targets without template PNG / set_value text) + policy; typed text and raw UI events always omitted. |
 | `ghost.request_routine_approval` | `safe-read` | Creates a pending local approval bound to exact routine plan hash. |
 | `ghost.get_approval_status` | `safe-read` | Same status tool; includes `kind: routine` and token when approved. |
-| `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime; returns receipt. |
+| `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime (AX→OCR→template for Semantic* steps); returns receipt + `macos_ui` path note. |
 | `ghost.get_run` | `safe-read` | Run summary + receipt when present. |
 
+### macOS semantic / vision ops (honest)
+
+AX focus/set_value, ScreenCaptureKit still/stream capture, Vision OCR, and
+template match are **not** separate MCP tools. They run only inside the Action
+Plan runtime after desktop approval (`ghost.execute_approved_*`). `ghost.status`
+advertises that boundary and lists denied direct tool names
+(`ghost.focus_target`, `ghost.ocr_click`, etc.).
+
+Clients may:
+
+- preview the redacted Action Plan (`ghost.preview_routine`);
+- request desktop approval;
+- execute only with a plan-hash-bound, single-use token.
+
+Clients may not:
+
+- call capture/OCR/AX/template APIs directly over MCP;
+- approve their own proposals;
+- receive typed text, raw UI event payloads, or `template_png` bytes in previews.
 
 Desktop: Ghost polls pending approvals; for `kind: routine` it loads the routine, shows review, and `routine_issue_mcp_approval_token` issues the bound token (no auto-run).
 
-Do not add a broad `ghost_run` tool.
+Do not add a broad `ghost_run` tool. Do not add direct vision/AX mutate tools.
 
 ## Plan result shape
 

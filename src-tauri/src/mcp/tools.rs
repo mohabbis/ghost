@@ -43,7 +43,9 @@ impl McpToolKind {
 
     pub fn description(self) -> &'static str {
         match self {
-            McpToolKind::Status => "Ghost app status and trust pipeline info",
+            McpToolKind::Status => {
+                "Ghost app status, trust pipeline, and how macOS semantic/vision ops are exposed (approval-bound only)"
+            }
             McpToolKind::ListZones => "List user-approved Zones (metadata only)",
             McpToolKind::ScanZone => "Scan a Zone and return file metadata (read-only)",
             McpToolKind::CreatePlan => "Create a deterministic Organizer plan (no execution)",
@@ -59,13 +61,13 @@ impl McpToolKind {
                 "List saved routine names only (no recorded input or typed text)"
             }
             McpToolKind::PreviewRoutine => {
-                "Preview redacted semantic steps and policy decisions (no execution)"
+                "Preview redacted compressed steps, compiled Action Plan (incl. semantic UI reliability), and policy — no execution, no AX/OCR/capture"
             }
             McpToolKind::RequestRoutineApproval => {
                 "Request local Ghost review for an exact saved routine"
             }
             McpToolKind::ExecuteApprovedRoutine => {
-                "Execute an unchanged routine approved in Ghost and return its receipt"
+                "Execute an unchanged routine approved in Ghost via Action Plan runtime (AX→OCR→template for Semantic* steps); returns receipt — requires plan-hash token"
             }
         }
     }
