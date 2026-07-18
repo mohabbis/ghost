@@ -1,5 +1,6 @@
 //! Canonical execution runtime — one pipeline for Organizer, Routines, MCP, and workflows.
 
+use super::evidence::StepEvidence;
 use super::fs::{FsOutcome, apply_filesystem_step};
 use super::receipt::{ExecutionReceipt, build_receipt};
 use super::ui::{UiOutcome, dispatch_ui_step_with_reliability};
@@ -123,8 +124,8 @@ fn execute_action_plan_with_options(
             &mut report.undo,
         );
 
-        match &outcome {
-            DispatchOutcome::Applied => {
+        let evidence = match &outcome {
+            DispatchOutcome::Applied(ev) => {
                 report.applied += 1;
                 report.audit.record_attributed(
                     step.capability.clone(),
@@ -132,6 +133,7 @@ fn execute_action_plan_with_options(
                     rule_path,
                     Some(provenance),
                 );
+                ev.clone()
             }
             DispatchOutcome::Skipped(reason) => {
                 record_skip(
@@ -140,6 +142,7 @@ fn execute_action_plan_with_options(
                     reason.clone(),
                     rule_path,
                 );
+                None
             }
             DispatchOutcome::Failed(error) => {
                 report.failed += 1;
@@ -151,10 +154,11 @@ fn execute_action_plan_with_options(
                     rule_path,
                     Some(provenance),
                 );
+                None
             }
-        }
+        };
 
-        let mut verification = verify_after_kind(&step.kind, &step.id, &step.label);
+        let mut verification = verify_after_kind(&step.kind, &step.id, &step.label, evidence);
         if matches!(outcome, DispatchOutcome::Failed(_)) {
             verification.continue_execution = false;
             verification.status = VerificationStatus::Failed;
@@ -192,7 +196,7 @@ fn execute_action_plan_with_options(
 }
 
 enum DispatchOutcome {
-    Applied,
+    Applied(Option<StepEvidence>),
     Skipped(String),
     Failed(String),
 }
@@ -238,11 +242,21 @@ fn execute_step_with_reliability(
             undo,
         );
         match outcome {
-            DispatchOutcome::Applied => {
+            DispatchOutcome::Applied(evidence) => {
                 if let Err(reason) = check_postconditions(&step.postconditions) {
                     return DispatchOutcome::Failed(reason);
                 }
-                return DispatchOutcome::Applied;
+                let attempts_used = attempt + 1;
+                let evidence = evidence
+                    .map(|ev| ev.with_attempts(attempts_used))
+                    .or_else(|| {
+                        if attempts_used > 1 {
+                            Some(StepEvidence::default().with_attempts(attempts_used))
+                        } else {
+                            None
+                        }
+                    });
+                return DispatchOutcome::Applied(evidence);
             }
             DispatchOutcome::Skipped(reason) => return DispatchOutcome::Skipped(reason),
             DispatchOutcome::Failed(error) => {
@@ -360,20 +374,22 @@ fn dispatch_step(
         | ActionKind::RenameFile { .. }
         | ActionKind::DeleteFile { .. } => {
             match apply_filesystem_step(kind, capability, source_identity, rules, trasher, undo) {
-                FsOutcome::Applied => DispatchOutcome::Applied,
+                FsOutcome::Applied => {
+                    DispatchOutcome::Applied(Some(StepEvidence::filesystem_undo_recorded()))
+                }
                 FsOutcome::Skipped(r) => DispatchOutcome::Skipped(r),
                 FsOutcome::Failed(e) => DispatchOutcome::Failed(e),
             }
         }
         ActionKind::VerifyPath { path, should_exist } => {
             if path.exists() == *should_exist {
-                DispatchOutcome::Applied
+                DispatchOutcome::Applied(None)
             } else {
                 DispatchOutcome::Failed(format!("verification failed for {}", path.display()))
             }
         }
         _ => match dispatch_ui_step_with_reliability(kind, engine, reliability) {
-            UiOutcome::Applied => DispatchOutcome::Applied,
+            UiOutcome::Applied(ev) => DispatchOutcome::Applied(ev),
             UiOutcome::Skipped(r) => DispatchOutcome::Skipped(r),
             UiOutcome::Failed(e) => DispatchOutcome::Failed(e),
         },
@@ -580,6 +596,45 @@ mod tests {
         assert_eq!(result.report.applied, 1);
         assert!(folder.is_dir());
         assert!(!result.receipt.steps.is_empty());
+        assert!(
+            result.receipt.steps[0]
+                .undo_note
+                .as_deref()
+                .unwrap_or("")
+                .contains("undo journal"),
+            "FS apply should note undo journal on receipt"
+        );
+    }
+
+    #[test]
+    fn ui_wait_step_records_coordinates_strategy_and_n_a_undo() {
+        use crate::action_plan::ActionKind;
+        let plan = ActionPlan::new(
+            "t".into(),
+            "wait".into(),
+            PlanSource::Demo,
+            vec![ActionStep::new(
+                "w1",
+                "wait briefly",
+                ActionKind::Wait { ms: 1 },
+                Capability::OsWait,
+                PolicyDecision::Allow,
+            )],
+        );
+        let result = execute_action_plan_with_progress(&plan, &[], None, None, |_| {});
+        assert_eq!(result.report.applied, 1);
+        assert_eq!(
+            result.receipt.steps[0].resolution_strategy,
+            Some(crate::runtime::UiResolutionStrategy::Coordinates)
+        );
+        assert!(
+            result.receipt.steps[0]
+                .undo_note
+                .as_deref()
+                .unwrap_or("")
+                .contains("n/a"),
+            "UI steps must not claim journal undo"
+        );
     }
 
     #[test]

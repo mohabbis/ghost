@@ -1,5 +1,6 @@
 //! Human-readable execution receipt built on the audit log.
 
+use super::evidence::UiResolutionStrategy;
 use super::verify::StepVerification;
 use crate::organizer::executor::ExecutionReport;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,15 @@ pub struct ReceiptStep {
     pub label: String,
     pub outcome: String,
     pub verification: StepVerification,
+    /// Surfaced for quick receipt scanning (also on `verification`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_strategy: Option<UiResolutionStrategy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ax_quality: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub undo_note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempts: Option<u32>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -47,6 +57,10 @@ pub fn build_receipt(
             id: v.step_id.clone(),
             label: v.label.clone(),
             outcome: format!("{:?}", v.status).to_lowercase(),
+            resolution_strategy: v.resolution_strategy,
+            ax_quality: v.ax_quality,
+            undo_note: v.undo_note.clone(),
+            attempts: v.attempts,
             verification: v.clone(),
         })
         .collect();
@@ -64,5 +78,35 @@ pub fn build_receipt(
         undo_available: !report.undo.is_empty(),
         steps,
         audit_event_count: report.audit.len(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::evidence::{StepEvidence, UiResolutionStrategy};
+    use crate::runtime::verify::{StepVerification, VerificationStatus};
+
+    #[test]
+    fn receipt_surfaces_ui_strategy_and_honest_undo_note() {
+        let v = StepVerification::verified("s1", "Focus", "focused", "ok")
+            .with_evidence(StepEvidence::ocr("ocr|Save|...", "Save"));
+        let report = ExecutionReport::default();
+        let receipt = build_receipt("p1", "demo", None, &report, &[v], "1", "2", false, None);
+        assert_eq!(
+            receipt.steps[0].resolution_strategy,
+            Some(UiResolutionStrategy::Ocr)
+        );
+        assert!(
+            receipt.steps[0]
+                .undo_note
+                .as_deref()
+                .unwrap()
+                .contains("n/a")
+        );
+        assert_eq!(
+            receipt.steps[0].verification.status,
+            VerificationStatus::Verified
+        );
     }
 }

@@ -1,5 +1,6 @@
 //! macOS Accessibility semantic UI operations via optional GhostAXHelper.
 
+use crate::runtime::evidence::StepEvidence;
 use crate::runtime::locator::{self, AxQuality, Locator};
 
 use serde::{Deserialize, Serialize};
@@ -407,7 +408,7 @@ fn map_vision_err(err: crate::runtime::vision_fallback::VisionFallbackError) -> 
     }
 }
 
-fn try_vision_focus(target: &UiTarget) -> Result<(), SemanticError> {
+fn try_vision_focus(target: &UiTarget) -> Result<StepEvidence, SemanticError> {
     // Order: OCR (needs title) → template (needs opt-in template_png) → fail.
     let mut last = None;
     if let Some(needle) = search_text(target) {
@@ -416,21 +417,23 @@ fn try_vision_focus(target: &UiTarget) -> Result<(), SemanticError> {
             target.bundle_id.as_deref(),
             target.window_title.as_deref(),
         ) {
-            Ok(_) => return Ok(()),
+            Ok(hit) => {
+                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
+            }
             Err(e) => last = Some(e),
         }
     }
     if let Some(png) = target.template_png.as_deref() {
-        return crate::runtime::vision_fallback::focus_via_template(png)
-            .map(|_| ())
-            .map_err(map_vision_err);
+        let hit =
+            crate::runtime::vision_fallback::focus_via_template(png).map_err(map_vision_err)?;
+        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
     }
     Err(map_vision_err(last.unwrap_or(
         crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
     )))
 }
 
-fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<(), SemanticError> {
+fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<StepEvidence, SemanticError> {
     let mut last = None;
     if let Some(needle) = search_text(target) {
         match crate::runtime::vision_fallback::set_value_via_ocr(
@@ -439,14 +442,16 @@ fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<(), SemanticEr
             target.bundle_id.as_deref(),
             target.window_title.as_deref(),
         ) {
-            Ok(_) => return Ok(()),
+            Ok(hit) => {
+                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
+            }
             Err(e) => last = Some(e),
         }
     }
     if let Some(png) = target.template_png.as_deref() {
-        return crate::runtime::vision_fallback::set_value_via_template(png, value)
-            .map(|_| ())
-            .map_err(map_vision_err);
+        let hit = crate::runtime::vision_fallback::set_value_via_template(png, value)
+            .map_err(map_vision_err)?;
+        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
     }
     Err(map_vision_err(last.unwrap_or(
         crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
@@ -480,10 +485,10 @@ pub fn ensure_app_running(target: &UiTarget) -> Result<(), SemanticError> {
 fn with_ax_then_vision<F>(
     target: &UiTarget,
     mut ax_action: F,
-    vision_action: impl FnOnce() -> Result<(), SemanticError>,
-) -> Result<(), SemanticError>
+    vision_action: impl FnOnce() -> Result<StepEvidence, SemanticError>,
+) -> Result<StepEvidence, SemanticError>
 where
-    F: FnMut(&ResolvedTarget) -> Result<(), SemanticError>,
+    F: FnMut(&ResolvedTarget) -> Result<StepEvidence, SemanticError>,
 {
     ensure_app_running(target)?;
     let has_text = search_text(target).is_some();
@@ -498,7 +503,7 @@ where
                 return ax_action(&resolved);
             }
             match ax_action(&resolved) {
-                Ok(()) => Ok(()),
+                Ok(evidence) => Ok(evidence),
                 Err(ax_err)
                     if crate::runtime::vision_fallback::should_attempt_vision_for_error(
                         vision_failure_kind(&ax_err),
@@ -524,15 +529,23 @@ where
     }
 }
 
-pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
+/// Focus a target; returns compact resolution evidence (no screenshot retention).
+pub fn focus_target(target: &UiTarget) -> Result<StepEvidence, SemanticError> {
     with_ax_then_vision(
         target,
-        |resolved| activate_resolved(target, resolved),
+        |resolved| {
+            activate_resolved(target, resolved)?;
+            Ok(StepEvidence::ax(
+                resolved.quality.score,
+                resolved.fingerprint.clone(),
+            ))
+        },
         || try_vision_focus(target),
     )
 }
 
-pub fn set_target_value(target: &UiTarget, value: &str) -> Result<(), SemanticError> {
+/// Set a value on a target; returns compact resolution evidence (no screenshot retention).
+pub fn set_target_value(target: &UiTarget, value: &str) -> Result<StepEvidence, SemanticError> {
     with_ax_then_vision(
         target,
         |resolved| {
@@ -542,7 +555,10 @@ pub fn set_target_value(target: &UiTarget, value: &str) -> Result<(), SemanticEr
             req.fingerprint = Some(resolved.fingerprint.clone());
             let resp = call_helper(&req)?;
             if resp.ok {
-                Ok(())
+                Ok(StepEvidence::ax(
+                    resolved.quality.score,
+                    resolved.fingerprint.clone(),
+                ))
             } else {
                 Err(SemanticError::Failed(resp.detail))
             }

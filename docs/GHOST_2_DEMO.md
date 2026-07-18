@@ -35,7 +35,10 @@ execute_action_plan(source: demo, downloads, finance_root)
 
 ### Verification
 
-Each step records **Expected / Observed / Verified** in the execution receipt.
+Each step records **Expected / Observed / Verified** in the execution receipt,
+plus UI resolution evidence when applicable (`resolution_strategy`: ax / ocr /
+template / coordinates, optional `ax_quality`, honest `undo_note` — UI clicks/types
+are not journal-reversible; no screenshot retention).
 After closing the completion modal, reopen **Replay History → Verification
 receipts** to inspect the persisted result and its per-step verification chips.
 
