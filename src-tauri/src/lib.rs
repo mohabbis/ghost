@@ -185,6 +185,7 @@ macro_rules! run_experimental_app {
             commands::fabric_list_lakehouses,
             commands::fabric_push_audit_export,
             commands::fabric_list_inbound_intents,
+            commands::fabric_convert_inbound_intent,
             commands::fabric_dismiss_inbound_intent,
             commands::fabric_record_inbound_intent,
             commands::fabric_webhook_status,

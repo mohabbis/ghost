@@ -1,0 +1,5 @@
+{
+  "zone_id": "register-close-zone",
+  "source": "pos.close",
+  "summary": "Shift closed — file today's receipts"
+}

@@ -53,7 +53,7 @@ Commands (`commands/integrations.rs`, experimental):
 
 ## Inbound intents (experimental, read-only queue)
 
-`fabric_record_inbound_intent` stores a pending intent locally (webhook simulation / manual registration). `fabric_list_inbound_intents` and Organizer UI banners surface it — the user must still scan, review, and approve in Organizer. `fabric_dismiss_inbound_intent` clears without executing.
+`fabric_record_inbound_intent` stores a pending intent locally (webhook simulation / manual registration). `fabric_list_inbound_intents` and Organizer UI banners surface it, `fabric_convert_inbound_intent` turns a pending signal into a read-only Organizer preview, and `fabric_dismiss_inbound_intent` clears without executing. The user must still review and approve in Organizer.
 
 ### Webhook ingestion (experimental)
 
@@ -64,10 +64,10 @@ POST /fabric/webhook HTTP/1.1
 X-Ghost-Webhook-Secret: <secret from fabric_set_webhook_secret>
 Content-Type: application/json
 
-{"zone_id":"optional-zone-id","source":"fabric-pipeline","summary":"Pipeline completed — review exports"}
+{"zone_id":"optional-zone-id","source":"ops.pipeline","summary":"Pipeline completed — review exports"}
 ```
 
-Ghost records the intent via `triggers::record_intent` and returns the intent JSON. No filesystem or replay mutation occurs.
+Ghost records the intent via `triggers::record_intent` and returns the intent JSON. No filesystem or replay mutation occurs. Bridges may also post `source: "pos.close"` to open today's Organizer plan; that still never types into a POS or triggers OS control from the webhook.
 
 Commands: `fabric_set_webhook_secret`, `fabric_webhook_status`.
 

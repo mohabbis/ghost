@@ -38,6 +38,15 @@ struct Store {
 
 static STORE: Mutex<Option<Store>> = Mutex::new(None);
 
+fn normalize_source(source: &str) -> String {
+    match source.trim() {
+        "fabric-pipeline" => "ops.pipeline".to_string(),
+        "eventstream-activator" => "hub.bridge".to_string(),
+        value if !value.is_empty() => value.to_string(),
+        _ => "hub.bridge".to_string(),
+    }
+}
+
 fn store_path() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(std::env::temp_dir)
@@ -84,7 +93,7 @@ pub fn record_intent(zone_id: Option<String>, source: &str, summary: &str) -> Fa
     let intent = FabricInboundIntent {
         intent_id: uuid::Uuid::new_v4().to_string(),
         zone_id,
-        source: super::inbound_payload::normalize_source(Some(source)),
+        source: normalize_source(source),
         summary: summary.trim().to_string(),
         status: InboundIntentStatus::Pending,
         received_at: now,
@@ -106,7 +115,7 @@ pub fn list_pending() -> Vec<FabricInboundIntent> {
             .filter(|i| i.status == InboundIntentStatus::Pending)
             .cloned()
             .collect();
-        intents.sort_by_key(|b| std::cmp::Reverse(b.received_at));
+        intents.sort_by(|a, b| b.received_at.cmp(&a.received_at));
         intents
     })
 }

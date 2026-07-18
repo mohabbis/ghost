@@ -158,7 +158,7 @@ packet; user decides next steps.
 |---|---|---|---|---|
 | P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Partial — `Scanner Inbox` preset + local ready-to-file banner; manual `Scan & Preview`, no watcher/vendor SDK |
 | P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Built in experimental: pending-intent list + Dismiss + Create plan (`Converted`), no auto-execute |
-| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Partial (experimental intent card + Create plan/Select Zone; no routine preview, no POS control) |
+| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Partial (this merge): experimental intent card + Create plan/Select Zone; no routine preview, no POS control |
 | P2 | F4 File-and-label | Post-run optional print | Label preview/export text after Approve; real printer follow-up | Partial (preview/export text only; no DYMO/Brother/CUPS yet) |
 | P2 | F5 Check/ID assist | Guard Desk | User-chosen image OCR | Partial core OCR; desk workflow prototype |
 

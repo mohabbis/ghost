@@ -32,19 +32,19 @@
 //! client-supplied plan" principle `organizer_execute` already follows for
 //! Organizer plans.
 
-use crate::action_plan::{from_organizer_plan, ActionPlan};
+use crate::action_plan::{ActionPlan, from_organizer_plan};
 use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
 use crate::integrations::google::export::{GcsExportClient, GcsPushSummary};
 use crate::integrations::google::{GcsBucket, GcsClient, GoogleIntegrationService};
+use crate::integrations::microsoft::MicrosoftIntegrationService;
 use crate::integrations::microsoft::fabric::export::{FabricExportClient, FabricPushSummary};
 use crate::integrations::microsoft::fabric::triggers::{FabricInboundIntent, InboundIntentStatus};
 use crate::integrations::microsoft::fabric::{FabricClient, FabricLakehouse, FabricWorkspace};
-use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
-use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
-use crate::integrations::microsoft::MicrosoftIntegrationService;
+use crate::integrations::microsoft::power_bi::export::{AuditExportPayload, build_export};
+use crate::integrations::microsoft::power_bi::{PowerBiClient, schema};
 use crate::storage::executions::list_full_executions_since;
-use crate::storage::{open_default, Db};
+use crate::storage::{Db, open_default};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -669,8 +669,8 @@ mod tests {
 
         let intent = crate::integrations::microsoft::fabric::triggers::record_intent(
             Some(zone.id.clone()),
-            "fabric",
-            "Nightly batch landed",
+            "pos.close",
+            "Shift closed — file today's receipts",
         );
         let result = fabric_create_inbound_plan_with_db(&db, &intent.intent_id).unwrap();
         assert_eq!(result.intent.status, InboundIntentStatus::Converted);
