@@ -18,5 +18,16 @@ fn main() {
         ghost_lib::mcp::run_stdio();
         return;
     }
+    if args.len() >= 3 && args[1] == "mcp" && args[2] == "demo" {
+        let approve_and_run = args.iter().any(|a| a == "--approve-and-run");
+        if let Err(e) = ghost_lib::mcp::demo::run_demo(ghost_lib::mcp::demo::DemoOptions {
+            approve_and_run,
+            root: None,
+        }) {
+            eprintln!("ghost mcp demo failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     ghost_lib::run()
 }

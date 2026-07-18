@@ -4,6 +4,7 @@
 //! style connectors remain experimental. See `docs/mcp-integration.md`.
 
 pub mod approval;
+pub mod demo;
 pub mod errors;
 pub mod execute;
 pub mod handlers;
