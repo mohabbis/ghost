@@ -406,7 +406,7 @@ fn receipt_surfaces_mismatch_halt_money_shot() {
         "ghost2-receipt-step__halt-line",
         "formatMismatchHaltLine",
         "findFirstMismatchStep",
-        r"\u201c", // curly open quote used in money-shot copy
+        r"\u201c",       // curly open quote used in money-shot copy
         "\u{2192} stop", // → stop
         "failed: \"Mismatch\"",
         "Ghost halted the run",
