@@ -333,7 +333,7 @@ visual matching before AX targeting and permissions are solid.
    path; opt-in `template_png` only — not ambient capture; not business-effect proof)
 9. Evidence capture, audit records, and undo integration ✅ (receipt records
    ax/ocr/template/coordinates + ax_quality + honest UI undo_note; no screenshot retention)
-10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass)
+10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass) ✅
 
 ## Honest status (do not overclaim)
 
@@ -363,7 +363,13 @@ Already present:
 - on-device OCR for **user-supplied** images (`run_ocr_on_image`) and for
   vision-fallback frames;
 - Action Plan runtime with verify/receipt/undo;
-- native SwiftUI Organizer scaffold over the Rust bridge.
+- native SwiftUI Organizer scaffold over the Rust bridge;
+- MCP exposure of semantic/vision ops **only** through the existing pairing +
+  plan-hash approval queue (`ghost.preview_routine` surfaces a redacted compiled
+  Action Plan; `ghost.execute_approved_routine` / `ghost.execute_approved_plan`
+  run the Action Plan runtime after a desktop-issued token). There are **no**
+  direct MCP tools for AX focus/set_value, ScreenCaptureKit capture, OCR click,
+  or template match — `ghost.status` lists those names as denied.
 
 Also present (item 7 — partial, honest):
 
@@ -403,9 +409,11 @@ Not yet the architecture above:
 - automatic template capture into Action Plans (fragments must be supplied opt-in on
   `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
 - capture path (still vs stream) recorded on the receipt;
-- MCP exposure of semantic/vision ops (must stay approval-bound).
+- compiling recorded clicks into `SemanticFocus` by default (today many routine
+  clicks remain `UiReplay`; Semantic* steps use AX→OCR→template when present).
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
 screen observation, do not claim universal step retries or verified UI settlement,
-and do not market template match as proof of business effect.
+do not market template match as proof of business effect, and do not claim MCP
+clients can drive AX/OCR/capture without desktop approval.

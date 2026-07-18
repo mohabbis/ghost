@@ -1,5 +1,6 @@
 //! Headless MCP tool handlers — domain logic only, no Tauri.
 
+use crate::action_plan::{ActionKind, ActionPlan, ActionStep, from_compression_report};
 use crate::core::compression::{CompressedStep, compress};
 use crate::core::dry_run::preview_workflow;
 use crate::engine::GhostEngine;
@@ -9,6 +10,7 @@ use crate::mcp::plan_hash::{hash_organizer_plan, hash_routine_plan, routine_plan
 use crate::mcp::tools::McpToolKind;
 use crate::organizer::planner::{OrganizerPlan, plan_zone};
 use crate::policy::evaluate_compressed;
+use crate::runtime::semantic::UiTarget;
 use crate::storage::open_default;
 use crate::storage::zones::list_zones;
 use serde_json::{Value, json};
@@ -16,17 +18,7 @@ use serde_json::{Value, json};
 pub fn handle_tool(name: &str, arguments: &Value) -> Result<Value, String> {
     let kind = tool_kind_from_name(name)?;
     match kind {
-        McpToolKind::Status => Ok(json!({
-            "app": "ghost",
-            "mcp": "local-stdio",
-            "clients": {
-                "supported_now": ["claude_desktop", "cursor"],
-                "transport": "stdio",
-                "chatgpt": "not_supported_on_stock_stdio — needs remote HTTP/connector (experimental)"
-            },
-            "trust_pipeline": "Intent -> Plan -> Policy -> Approval -> Execution -> Audit -> Undo",
-            "routines": "list/preview/request_approval/execute_approved via ghost.*_routine tools",
-        })),
+        McpToolKind::Status => Ok(status_payload()),
         McpToolKind::ListZones => {
             let db = open_default().map_err(|e| e.to_string())?;
             let zones = list_zones(&db).map_err(|e| e.to_string())?;
@@ -163,6 +155,33 @@ fn load_routine_events(
     Ok((engine, events))
 }
 
+fn status_payload() -> Value {
+    json!({
+        "app": "ghost",
+        "mcp": "local-stdio",
+        "clients": {
+            "supported_now": ["claude_desktop", "cursor"],
+            "transport": "stdio",
+            "chatgpt": "not_supported_on_stock_stdio — needs remote HTTP/connector (experimental)"
+        },
+        "trust_pipeline": "Intent -> Plan -> Policy -> Approval -> Execution -> Audit -> Undo",
+        "routines": "list/preview/request_approval/execute_approved via ghost.*_routine tools",
+        "macos_automation": {
+            "semantic_vision_ops": "exposed only through approved Action Plan execution (ghost.execute_approved_routine / ghost.execute_approved_plan)",
+            "resolution_order_for_semantic_steps": ["ax", "ocr", "template", "coordinates"],
+            "direct_tools_denied": [
+                "ghost.focus_target",
+                "ghost.set_value",
+                "ghost.capture_still",
+                "ghost.capture_stream",
+                "ghost.ocr_click",
+                "ghost.template_match"
+            ],
+            "note": "MCP clients may preview plans and request desktop approval. They cannot call AX, ScreenCaptureKit, OCR, or template match directly, and cannot approve their own proposals.",
+        },
+    })
+}
+
 fn preview_routine(routine_name: &str) -> Result<Value, String> {
     let (_engine, events) = load_routine_events(routine_name)?;
     let report = compress(&events);
@@ -170,6 +189,7 @@ fn preview_routine(routine_name: &str) -> Result<Value, String> {
     let plan_hash = hash_routine_plan(routine_name, &events);
     let dry_run = preview_workflow(&events);
     let steps = redacted_steps_json(&report.steps);
+    let action_plan = from_compression_report(&report, &events, Some(routine_name.to_string()));
 
     Ok(json!({
         "routine_name": routine_name,
@@ -179,11 +199,168 @@ fn preview_routine(routine_name: &str) -> Result<Value, String> {
         "event_count": events.len(),
         "compressed_step_count": report.compressed_step_count,
         "steps": steps,
+        "action_plan": redacted_action_plan_json(&action_plan),
         "dry_run": dry_run,
         "policy": redacted_policy_json(&policy),
         "warnings": report.warnings,
-        "message": "Review these steps in Ghost, then approve locally. Typed text is never included.",
+        "message": "Review these steps in Ghost, then approve locally. Typed text and UI event payloads are never included. Semantic/vision resolution runs only after desktop approval via ghost.execute_approved_routine.",
     }))
+}
+
+/// Redact an Action Plan for MCP clients: no typed text, no raw UI events,
+/// no template PNG bytes. Reliability metadata stays so reviewers see timeouts /
+/// fallback strategy before approving.
+fn redacted_action_plan_json(plan: &ActionPlan) -> Value {
+    let steps: Vec<Value> = plan.steps.iter().map(redacted_action_step_json).collect();
+    json!({
+        "version": plan.version,
+        "title": plan.title,
+        "source": plan.source,
+        "summary": plan.summary,
+        "steps": steps,
+        "macos_ui": {
+            "resolution_order_for_semantic_steps": ["ax", "ocr", "template", "coordinates"],
+            "note": "SemanticFocus / SemanticSetValue / SemanticVerify use AX then vision fallbacks at execute time. UiReplay uses the replay resolution chain. Neither path is available as a standalone MCP mutate tool.",
+        },
+    })
+}
+
+fn redacted_action_step_json(step: &ActionStep) -> Value {
+    let (kind, sensitive) = redacted_action_kind_json(&step.kind);
+    json!({
+        "id": step.id,
+        "label": redacted_step_label(step),
+        "kind": kind,
+        "decision": redacted_decision_json(&step.decision),
+        "confidence": step.confidence,
+        "reason": redact_key_description(&step.reason),
+        "timeout_ms": step.timeout_ms,
+        "retry_policy": step.retry_policy,
+        "preconditions": redacted_conditions_json(&step.preconditions),
+        "postconditions": redacted_conditions_json(&step.postconditions),
+        "fallback_strategy": step.fallback_strategy,
+        "risk_level": step.risk_level,
+        "sensitive_payload_redacted": sensitive,
+    })
+}
+
+fn redacted_step_label(step: &ActionStep) -> String {
+    // Compile may embed typed characters into the human label ("Type secret…")
+    // or Unknown keystroke descriptions ("Press key 'x'"). MCP previews must
+    // never surface that, even when kind payloads are redacted.
+    match &step.kind {
+        ActionKind::TypeText { .. } | ActionKind::SemanticSetValue { .. } => {
+            "Type text (redacted)".into()
+        }
+        ActionKind::UiReplay { .. }
+            if step.label.starts_with("Type ") && !step.label.contains("redacted") =>
+        {
+            "Type text (redacted)".into()
+        }
+        _ => redact_key_description(&step.label),
+    }
+}
+
+fn redacted_decision_json(decision: &crate::policy::PolicyDecision) -> Value {
+    let mut value = serde_json::to_value(decision).unwrap_or(json!({}));
+    if let Some(reason) = value
+        .get("reason")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+    {
+        if reason.contains("Press key '") || reason.contains("Release key '") {
+            value["reason"] =
+                json!("Unrecognized routine step cannot be approved: keystroke (redacted)");
+        } else {
+            value["reason"] = json!(redact_key_description(&reason));
+        }
+    }
+    value
+}
+
+fn redacted_action_kind_json(kind: &ActionKind) -> (Value, bool) {
+    match kind {
+        ActionKind::SemanticSetValue { target, value } => (
+            json!({
+                "kind": "semantic_set_value",
+                "target": redacted_ui_target_json(target),
+                "value": Value::Null,
+                "value_char_count": value.chars().count(),
+                "redacted": true,
+            }),
+            true,
+        ),
+        ActionKind::SemanticFocus { target } => (
+            json!({
+                "kind": "semantic_focus",
+                "target": redacted_ui_target_json(target),
+            }),
+            false,
+        ),
+        ActionKind::SemanticVerify {
+            target,
+            expected_value,
+        } => (
+            json!({
+                "kind": "semantic_verify",
+                "target": redacted_ui_target_json(target),
+                "expected_value": expected_value,
+            }),
+            false,
+        ),
+        ActionKind::TypeText { text, app } => (
+            json!({
+                "kind": "type_text",
+                "app": app,
+                "text": Value::Null,
+                "char_count": text.chars().count(),
+                "redacted": true,
+            }),
+            true,
+        ),
+        ActionKind::UiReplay { step_index, .. } => (
+            json!({
+                "kind": "ui_replay",
+                "step_index": step_index,
+                "events": Value::Null,
+                "events_omitted": true,
+            }),
+            true,
+        ),
+        other => (serde_json::to_value(other).unwrap_or(json!({})), false),
+    }
+}
+
+fn redacted_ui_target_json(target: &UiTarget) -> Value {
+    json!({
+        "app": target.app,
+        "role": target.role,
+        "title": target.title,
+        "identifier": target.identifier,
+        "bundle_id": target.bundle_id,
+        "window_title": target.window_title,
+        "fingerprint": target.fingerprint,
+        // Never leak opt-in template PNG bytes over MCP.
+        "has_template_png": target.template_png.is_some(),
+        "template_png": Value::Null,
+    })
+}
+
+fn redacted_conditions_json(conditions: &[crate::action_plan::StepCondition]) -> Vec<Value> {
+    conditions
+        .iter()
+        .map(|c| match c {
+            crate::action_plan::StepCondition::SemanticTarget {
+                target,
+                expected_value,
+            } => json!({
+                "kind": "semantic_target",
+                "target": redacted_ui_target_json(target),
+                "expected_value": expected_value,
+            }),
+            other => serde_json::to_value(other).unwrap_or(json!({})),
+        })
+        .collect()
 }
 
 fn redact_key_description(desc: &str) -> String {
@@ -378,6 +555,37 @@ mod tests {
                 .unwrap()
                 .contains("not_supported")
         );
+        let macos = &out["macos_automation"];
+        assert!(
+            macos["semantic_vision_ops"]
+                .as_str()
+                .unwrap()
+                .contains("approved Action Plan")
+        );
+        let denied = macos["direct_tools_denied"].as_array().unwrap();
+        assert!(denied.iter().any(|t| t.as_str() == Some("ghost.ocr_click")));
+    }
+
+    #[test]
+    fn list_tools_does_not_advertise_direct_vision_or_ax_mutate_tools() {
+        let tools = list_tools();
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        for banned in [
+            "ghost.focus_target",
+            "ghost.set_value",
+            "ghost.capture_still",
+            "ghost.capture_stream",
+            "ghost.ocr_click",
+            "ghost.template_match",
+            "ghost.run",
+        ] {
+            assert!(
+                !names.contains(&banned),
+                "MCP must not advertise bypass tool {banned}"
+            );
+        }
+        assert!(names.contains(&McpToolKind::ExecuteApprovedRoutine.name()));
+        assert!(names.contains(&McpToolKind::PreviewRoutine.name()));
     }
 
     #[test]
@@ -472,7 +680,56 @@ mod tests {
         let out = preview_routine(&name).unwrap();
         let serialized = serde_json::to_string(&out).unwrap();
         assert!(!serialized.contains(secret), "preview leaked typed text");
+        assert!(out["action_plan"]["steps"].is_array());
+        assert!(out["action_plan"]["macos_ui"]["resolution_order_for_semantic_steps"].is_array());
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn redacted_action_plan_omits_set_value_text_and_template_bytes() {
+        use crate::action_plan::{ActionKind, ActionPlan, ActionStep, PlanSource};
+        use crate::policy::{Capability, PolicyDecision};
+        use crate::runtime::semantic::UiTarget;
+
+        let secret = "invoice-amount-9999";
+        let png = b"fakepngbytes".to_vec().into_boxed_slice();
+        let mut target = UiTarget::new("Numbers", "AXTextField").with_template_png(png);
+        target.title = Some("Amount".into());
+        let step = ActionStep::new(
+            "s1",
+            "Set amount",
+            ActionKind::SemanticSetValue {
+                target,
+                value: secret.into(),
+            },
+            Capability::OsType {
+                app: Some("Numbers".into()),
+                secure_field: false,
+                redacted: false,
+            },
+            PolicyDecision::Allow,
+        );
+        let plan = ActionPlan::new(
+            "plan-1".into(),
+            "Semantic preview".into(),
+            PlanSource::Demo,
+            vec![step],
+        );
+        let out = redacted_action_plan_json(&plan);
+        let serialized = serde_json::to_string(&out).unwrap();
+        assert!(!serialized.contains(secret), "set_value leaked");
+        assert!(!serialized.contains("fakepngbytes"), "template png leaked");
+        assert_eq!(out["steps"][0]["kind"]["kind"], "semantic_set_value");
+        assert_eq!(out["steps"][0]["kind"]["value"], Value::Null);
+        assert_eq!(out["steps"][0]["kind"]["target"]["has_template_png"], true);
+        assert_eq!(
+            out["steps"][0]["kind"]["target"]["template_png"],
+            Value::Null
+        );
+        assert_eq!(
+            out["steps"][0]["fallback_strategy"],
+            "ax_then_vision_then_coordinates"
+        );
     }
 
     #[test]

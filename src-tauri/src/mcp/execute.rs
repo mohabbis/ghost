@@ -59,6 +59,7 @@ pub fn execute_approved_plan(zone_id: &str, approval_token: &str) -> Result<Valu
         },
         "receipt": outcome.runtime.receipt,
         "plan_source": "mcp",
+        "macos_ui": approved_execution_macos_ui_note(),
     }))
 }
 
@@ -127,7 +128,16 @@ pub fn execute_approved_routine_with_db(
         },
         "receipt": outcome.runtime.receipt,
         "plan_source": "routine_mcp",
+        "macos_ui": approved_execution_macos_ui_note(),
     }))
+}
+
+fn approved_execution_macos_ui_note() -> Value {
+    json!({
+        "path": "action_plan_runtime",
+        "resolution_order_for_semantic_steps": ["ax", "ocr", "template", "coordinates"],
+        "note": "AX / ScreenCaptureKit / OCR / template match run only inside this approved Action Plan. There is no direct MCP mutate tool for those ops.",
+    })
 }
 
 pub fn get_run_summary(execution_id: &str) -> Result<Value, String> {
@@ -245,6 +255,14 @@ mod tests {
         let result = execute_approved_routine_with_db(&name, &token, &engine, &db).unwrap();
         assert_eq!(result["status"], "completed");
         assert_eq!(result["receipt"]["failed"], 0);
+        assert_eq!(result["macos_ui"]["path"], "action_plan_runtime");
+        assert!(
+            result["macos_ui"]["resolution_order_for_semantic_steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.as_str() == Some("ocr"))
+        );
         let execution_id = result["execution_id"].as_str().unwrap();
         let stored = get_execution(&db, execution_id).unwrap().expect("row");
         assert!(stored.receipt.is_some());
