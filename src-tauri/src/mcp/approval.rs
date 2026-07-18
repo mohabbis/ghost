@@ -107,6 +107,18 @@ pub fn verify_execution_token_with_hash(
     zone_id: &str,
     expected_plan_hash: Option<&str>,
 ) -> Result<ApprovalTokenClaims, String> {
+    verify_execution_token_for_plan(token_json, &format!("plan_{zone_id}"), expected_plan_hash)
+}
+
+/// Verify a signed token against an exact plan id and optional plan hash.
+///
+/// This is the provider-neutral primitive used by both Organizer Zones and
+/// saved routines. The nonce is consumed only after every binding check passes.
+pub fn verify_execution_token_for_plan(
+    token_json: &str,
+    expected_plan_id: &str,
+    expected_plan_hash: Option<&str>,
+) -> Result<ApprovalTokenClaims, String> {
     let signed: SignedApprovalToken = serde_json::from_str(token_json)
         .map_err(|_| "Invalid approval token format".to_string())?;
     let expected = sign_claims(&signed.claims, &signing_key());
@@ -116,8 +128,8 @@ pub fn verify_execution_token_with_hash(
     if claims_are_expired(&signed.claims, Utc::now()) {
         return Err("Approval token has expired".to_string());
     }
-    if !signed.claims.plan_id.contains(zone_id) {
-        return Err("Approval token does not match the requested Zone".to_string());
+    if signed.claims.plan_id != expected_plan_id {
+        return Err("Approval token does not match the requested plan".to_string());
     }
     if let Some(expected_hash) = expected_plan_hash
         && signed.claims.plan_hash != expected_hash
@@ -167,7 +179,7 @@ mod tests {
         let json = serde_json::to_string(&signed).unwrap();
         let err = verify_execution_token(&json, "zone-b").unwrap_err();
         assert!(
-            err.contains("does not match the requested Zone"),
+            err.contains("does not match the requested plan"),
             "got: {err}"
         );
     }

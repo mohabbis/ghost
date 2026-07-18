@@ -13,6 +13,10 @@ pub enum McpToolKind {
     ExecuteApprovedPlan,
     GetRun,
     UndoRun,
+    ListRoutines,
+    PreviewRoutine,
+    RequestRoutineApproval,
+    ExecuteApprovedRoutine,
 }
 
 impl McpToolKind {
@@ -30,6 +34,10 @@ impl McpToolKind {
             McpToolKind::ExecuteApprovedPlan,
             McpToolKind::GetRun,
             McpToolKind::UndoRun,
+            McpToolKind::ListRoutines,
+            McpToolKind::PreviewRoutine,
+            McpToolKind::RequestRoutineApproval,
+            McpToolKind::ExecuteApprovedRoutine,
         ]
     }
 
@@ -47,6 +55,18 @@ impl McpToolKind {
             McpToolKind::ExecuteApprovedPlan => "Execute a plan approved in Ghost desktop UI",
             McpToolKind::GetRun => "Get run summary and audit metadata",
             McpToolKind::UndoRun => "Undo an eligible completed run",
+            McpToolKind::ListRoutines => {
+                "List saved routine names only (no recorded input or typed text)"
+            }
+            McpToolKind::PreviewRoutine => {
+                "Preview redacted semantic steps and policy decisions (no execution)"
+            }
+            McpToolKind::RequestRoutineApproval => {
+                "Request local Ghost review for an exact saved routine"
+            }
+            McpToolKind::ExecuteApprovedRoutine => {
+                "Execute an unchanged routine approved in Ghost and return its receipt"
+            }
         }
     }
 
@@ -64,17 +84,26 @@ impl McpToolKind {
             McpToolKind::ExecuteApprovedPlan => "ghost.execute_approved_plan",
             McpToolKind::GetRun => "ghost.get_run",
             McpToolKind::UndoRun => "ghost.undo_run",
+            McpToolKind::ListRoutines => "ghost.list_routines",
+            McpToolKind::PreviewRoutine => "ghost.preview_routine",
+            McpToolKind::RequestRoutineApproval => "ghost.request_routine_approval",
+            McpToolKind::ExecuteApprovedRoutine => "ghost.execute_approved_routine",
         }
     }
 
     pub fn requires_approval(self) -> bool {
-        matches!(self, McpToolKind::ExecuteApprovedPlan)
+        matches!(
+            self,
+            McpToolKind::ExecuteApprovedPlan | McpToolKind::ExecuteApprovedRoutine
+        )
     }
 
     pub fn mutates(self) -> bool {
         matches!(
             self,
-            McpToolKind::ExecuteApprovedPlan | McpToolKind::UndoRun
+            McpToolKind::ExecuteApprovedPlan
+                | McpToolKind::ExecuteApprovedRoutine
+                | McpToolKind::UndoRun
         )
     }
 }
@@ -86,6 +115,7 @@ mod tests {
     #[test]
     fn execute_requires_approval() {
         assert!(McpToolKind::ExecuteApprovedPlan.requires_approval());
+        assert!(McpToolKind::ExecuteApprovedRoutine.requires_approval());
         assert!(!McpToolKind::CreatePlan.requires_approval());
     }
 }

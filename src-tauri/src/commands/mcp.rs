@@ -1,15 +1,23 @@
-//! MCP pairing and Organizer approval-token commands (stable core).
+//! MCP pairing and approval-token commands (stable core).
 //!
 //! Command: `organizer_issue_mcp_approval_token` | risk: `safe-read` | issues a
 //! short-lived signed token after the user reviews a plan in the desktop UI.
+//!
+//! Command: `routine_issue_mcp_approval_token` | risk: `os-control` (approval
+//! only — does not synthesize input) | issues a token bound to an exact saved
+//! routine plan hash after desktop review of a pending MCP request.
 //!
 //! Command: `mcp_pairing_status` | risk: `safe-read`
 //! Command: `mcp_enable_pairing` | risk: `local-mutate`
 //! Command: `mcp_disable_pairing` | risk: `local-mutate`
 
+use crate::core::compression::compress;
 use crate::engine::GhostEngine;
-use crate::mcp::{hash_organizer_plan, issue_approval_token, pairing, pending};
+use crate::mcp::{
+    hash_organizer_plan, hash_routine_plan, issue_approval_token, pairing, pending, routine_plan_id,
+};
 use crate::organizer::planner::plan_zone;
+use crate::policy::evaluate_compressed;
 use crate::storage::open_default;
 use tauri::State;
 
@@ -70,8 +78,53 @@ pub fn organizer_issue_mcp_approval_token(
     let plan = plan_zone(&conn, &zone_id).map_err(|e| e.to_string())?;
     let plan_hash = hash_organizer_plan(&plan);
     let signed = issue_approval_token(&format!("plan_{zone_id}"), &plan_hash);
-    pending::mark_approved_for_zone(&zone_id);
-    serde_json::to_string(&signed).map_err(|e| e.to_string())
+    let token = serde_json::to_string(&signed).map_err(|e| e.to_string())?;
+    pending::mark_approved_for_zone(&zone_id, token.clone());
+    Ok(token)
+}
+
+/// Issue a signed, short-lived approval token for a pending routine MCP request.
+///
+/// Re-loads the saved routine and re-hashes the plan server-side — never trusts
+/// a client-supplied hash. Marks the exact request approved so
+/// `ghost.get_approval_status` can return the token to the MCP client.
+///
+/// Risk class: `os-control` (records approval only; does not synthesize input).
+#[tauri::command]
+pub fn routine_issue_mcp_approval_token(
+    request_id: String,
+    engine: State<GhostEngine>,
+) -> Result<String, String> {
+    super::auth::require_unlocked(&engine)?;
+    let req = pending::get_request(&request_id)
+        .ok_or_else(|| format!("Unknown approval request '{request_id}'"))?;
+    if req.kind != pending::ApprovalRequestKind::Routine {
+        return Err("This request is not a routine approval".to_string());
+    }
+    if req.status != pending::ApprovalRequestStatus::Pending {
+        return Err("Approval request is no longer pending".to_string());
+    }
+    let routine_name = req
+        .routine_name
+        .clone()
+        .ok_or_else(|| "Routine approval is missing a routine name".to_string())?;
+    let events = engine
+        .load_workflow(&routine_name)
+        .map_err(|e| format!("Could not load routine '{routine_name}': {e}"))?;
+    let report = compress(&events);
+    let policy = evaluate_compressed(&report);
+    crate::policy::ensure_replayable(&policy)?;
+    let plan_hash = hash_routine_plan(&routine_name, &events);
+    if plan_hash != req.plan_hash {
+        return Err(
+            "Routine changed since the MCP request — ask the client to preview and request approval again"
+                .to_string(),
+        );
+    }
+    let signed = issue_approval_token(&routine_plan_id(&routine_name), &plan_hash);
+    let token = serde_json::to_string(&signed).map_err(|e| e.to_string())?;
+    pending::mark_approved(&request_id, &plan_hash, token.clone())?;
+    Ok(token)
 }
 
 #[cfg(feature = "experimental")]

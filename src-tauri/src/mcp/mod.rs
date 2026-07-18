@@ -1,7 +1,7 @@
-//! Provider-neutral MCP server for external AI clients (planned).
+//! Provider-neutral MCP server for external AI clients.
 //!
-//! All MCP clients (Claude, Codex, Cursor, ChatGPT-compatible) share this surface.
-//! See `docs/mcp-integration.md`.
+//! Stock transport is local stdio (Claude Desktop / Cursor). Remote ChatGPT-
+//! style connectors remain experimental. See `docs/mcp-integration.md`.
 
 pub mod approval;
 pub mod errors;
@@ -25,7 +25,7 @@ pub use http::{
     run_localhost_http, start_http_server, stop_http_server,
 };
 pub use pairing::{disable_pairing, enable_pairing, pairing_is_required, pairing_status};
-pub use plan_hash::hash_organizer_plan;
+pub use plan_hash::{hash_organizer_plan, hash_routine_plan, routine_plan_id};
 #[cfg(feature = "experimental")]
 pub use relay::{RelayOptions, RelayStatus, relay_status, start_relay, stop_relay};
 pub use server::{McpSession, run_stdio};
