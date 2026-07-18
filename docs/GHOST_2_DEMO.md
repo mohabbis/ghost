@@ -74,8 +74,16 @@ export GHOST_AX_HELPER="$(pwd)/native/macos/ghost-ax-helper"
 
 Operations: `resolve_target`, `list_matches`, `activate_element`, `set_value`, `verify_element`, `enumerate_children`, `permission_status`, `frontmost_app`.
 
+Request fields (optional beyond `op` / `app` / `role`): `title`, `identifier`,
+`bundle_id`, `window_title`, `fingerprint`, `value`, `expected_value`.
+Responses may include `ax_quality` (0–100), `identifier`, and `actionable`.
+
 Ambiguous matches are refused. Stale target fingerprints are rejected at execution time.
-`list_matches` is the read-only exception: it enumerates every candidate element (fingerprint + value) so an ambiguous target can be inspected and disambiguated before an action is approved — it mutates nothing.
+`list_matches` is the read-only exception: it enumerates every candidate element (fingerprint + value + quality) so an ambiguous target can be inspected and disambiguated before an action is approved — it mutates nothing.
+
+Targeting prefers exact bundle id / app name, then contains-fallback; `window_title`
+narrows the AX search root; activate tries `AXPress` before raise/focus. See
+[`macos-automation-architecture.md`](macos-automation-architecture.md).
 
 ### Real Mac validation (required before claiming demo-complete)
 

@@ -335,7 +335,15 @@ visual matching before AX targeting and permissions are solid.
 
 Already present:
 
-- AX helper ops (`resolve_target`, `list_matches`, `activate_element`, `set_value`, …);
+- AX helper ops (`resolve_target`, `list_matches`, `activate_element`, `set_value`, …)
+  with exact bundle-id / app-name targeting, optional `window_title` search root,
+  `identifier` matching, AXPress-first activate, and per-match `ax_quality`;
+- Rust shared locator + AX quality types (`runtime/locator.rs`) and extended
+  `UiTarget` (`identifier`, `bundle_id`, `window_title`); quality is reported on
+  resolve — vision fallback is not yet driven by the score;
+- native `PermissionService` coordinator with per-permission why/degraded-mode
+  metadata (Accessibility + Screen Recording probed; Input Monitoring /
+  Notifications / Automation still honest `unknown` until probes land);
 - Rust macOS platform backend (CGEventTap + AX inspection);
 - descriptor-first resolution chain with template and coordinate fallbacks;
 - on-device OCR for **user-supplied** images (`run_ocr_on_image`);
@@ -345,9 +353,9 @@ Already present:
 Not yet the architecture above:
 
 - ScreenCaptureKit-backed capture path as the default visual layer;
-- AX quality scoring that drives vision fallback;
-- unified `AutomationStep` / multi-strategy `Locator` shared across Swift and Rust;
-- centralized permission coordinator with per-permission degraded modes;
+- AX quality scoring that **automatically** switches to vision fallback;
+- full `AutomationStep` runtime fields (preconditions / retry policy wired end to end);
+- Input Monitoring / Notifications probe implementations;
 - postcondition-verified UI steps as a universal Routines contract.
 
 Until those land, marketing and README copy must stay within what the repo
