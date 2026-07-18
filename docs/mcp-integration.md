@@ -54,7 +54,24 @@ Phase 1 is a local stdio server launched by the installed app or CLI:
 ghost mcp serve
 ```
 
-Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan/execute/undo tools), `approval.rs` (signed tokens + plan hash), `pending.rs` (approval request queue), `pairing.rs` (optional pairing gate).
+**Local dogfood (seeded Zone + real plan):** empty `list_zones` / curl against a
+cold DB is not a useful smoke test. Use the seeded harness instead:
+
+```bash
+# Seed ~/ghost-mcp-demo with messy invoices, ensure Zone "MCP Demo Inbox",
+# print the real MCP plan + pending approval request
+ghost mcp demo
+
+# Same, then locally approve + execute (CLI user approval — not the MCP client)
+ghost mcp demo --approve-and-run
+```
+
+On a Mac with Ghost installed, point Cursor at the app binary, then ask it to
+`ghost.list_zones` / `ghost.create_plan` for the printed zone id. Approval still
+happens in Ghost (or via `--approve-and-run` on this CLI) — the MCP client cannot
+approve its own plan.
+
+Status: **built** — `src-tauri/src/mcp/server.rs` (JSON-RPC 2.0 over stdin/stdout), `handlers.rs` (read/plan/execute/undo tools), `approval.rs` (signed tokens + plan hash), `pending.rs` (approval request queue), `pairing.rs` (optional pairing gate), `demo.rs` (seeded Organizer dogfood).
 
 ### Pairing (session gate)
 
