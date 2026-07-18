@@ -21,6 +21,20 @@ use std::io::{BufRead, BufReader, Write};
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
+/// Which request-scoped capture API produced a frame (never ambient).
+///
+/// Recorded on OCR/template step evidence — never stores screenshot bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapturePath {
+    /// ScreenCaptureKit single still frame (`capture_still`).
+    Still,
+    /// Bounded SCStream sample → latest complete frame (`capture_stream_latest`).
+    Stream,
+    /// Legacy `screencapture` / platform path when the SCK helper is unavailable.
+    Legacy,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CaptureError {
     PermissionDenied(String),
@@ -355,10 +369,13 @@ pub fn capture_stream_latest_with_budget(
 }
 
 /// Prefer ScreenCaptureKit helper; fall back to legacy `screencapture` / platform path.
+///
+/// Returns which path produced the bytes (`still` or `legacy`). Never retains
+/// the frame beyond this call site's use.
 pub fn capture_still_bytes(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
-) -> Result<Vec<u8>, CaptureError> {
+) -> Result<(Vec<u8>, CapturePath), CaptureError> {
     capture_still_bytes_with_budget(bundle_id, window_title, None)
 }
 
@@ -367,24 +384,25 @@ pub fn capture_still_bytes_with_budget(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
     budget: Option<HelperBudget>,
-) -> Result<Vec<u8>, CaptureError> {
+) -> Result<(Vec<u8>, CapturePath), CaptureError> {
     let dest = std::env::temp_dir().join(format!("ghost_sck_{}.png", uuid::Uuid::new_v4()));
     match capture_still_with_budget(&dest, bundle_id, window_title, budget) {
         Ok(frame) => {
             let bytes =
                 std::fs::read(&frame.path).map_err(|e| CaptureError::Failed(e.to_string()))?;
             let _ = std::fs::remove_file(&frame.path);
-            Ok(bytes)
+            Ok((bytes, CapturePath::Still))
         }
         Err(CaptureError::TimedOut(d)) => Err(CaptureError::TimedOut(d)),
         Err(CaptureError::HelperUnavailable(_)) | Err(CaptureError::PermissionDenied(_)) => {
             crate::core::vision::capture_screenshot()
+                .map(|bytes| (bytes, CapturePath::Legacy))
                 .map_err(|e| CaptureError::Failed(e.to_string()))
         }
         Err(e) => {
             // Helper present but capture failed — try legacy path once.
             match crate::core::vision::capture_screenshot() {
-                Ok(bytes) => Ok(bytes),
+                Ok(bytes) => Ok((bytes, CapturePath::Legacy)),
                 Err(_) => Err(e),
             }
         }
@@ -395,10 +413,13 @@ pub fn capture_still_bytes_with_budget(
 ///
 /// Stream is the reliability upgrade; still-frame remains the fallback when the
 /// stream op is unavailable or fails. Never starts ambient capture.
+///
+/// The [`CapturePath`] reports which tier succeeded (`stream` / `still` /
+/// `legacy`) so receipts can record it without storing screenshot bytes.
 pub fn capture_latest_frame_bytes(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
-) -> Result<Vec<u8>, CaptureError> {
+) -> Result<(Vec<u8>, CapturePath), CaptureError> {
     capture_latest_frame_bytes_with_opts(bundle_id, window_title, StreamCaptureOpts::default())
 }
 
@@ -407,7 +428,7 @@ pub fn capture_latest_frame_bytes_with_opts(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
     opts: StreamCaptureOpts,
-) -> Result<Vec<u8>, CaptureError> {
+) -> Result<(Vec<u8>, CapturePath), CaptureError> {
     capture_latest_frame_bytes_with_budget(bundle_id, window_title, opts, None)
 }
 
@@ -417,14 +438,14 @@ pub fn capture_latest_frame_bytes_with_budget(
     window_title: Option<&str>,
     opts: StreamCaptureOpts,
     budget: Option<HelperBudget>,
-) -> Result<Vec<u8>, CaptureError> {
+) -> Result<(Vec<u8>, CapturePath), CaptureError> {
     let dest = std::env::temp_dir().join(format!("ghost_sck_stream_{}.png", uuid::Uuid::new_v4()));
     match capture_stream_latest_with_budget(&dest, bundle_id, window_title, opts, budget) {
         Ok(frame) => {
             let bytes =
                 std::fs::read(&frame.path).map_err(|e| CaptureError::Failed(e.to_string()))?;
             let _ = std::fs::remove_file(&frame.path);
-            Ok(bytes)
+            Ok((bytes, CapturePath::Stream))
         }
         Err(CaptureError::TimedOut(d)) => Err(CaptureError::TimedOut(d)),
         Err(CaptureError::HelperUnavailable(_)) | Err(CaptureError::PermissionDenied(_)) => {
@@ -554,4 +575,20 @@ mod tests {
         let err = map_helper_response(resp).unwrap_err();
         assert!(matches!(err, CaptureError::TimedOut(_)));
     }
+    #[test]
+    fn capture_path_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&CapturePath::Still).unwrap(),
+            "\"still\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CapturePath::Stream).unwrap(),
+            "\"stream\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CapturePath::Legacy).unwrap(),
+            "\"legacy\""
+        );
+    }
+
 }

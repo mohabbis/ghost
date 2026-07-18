@@ -358,7 +358,8 @@ visual matching before AX targeting and permissions are solid.
 8. Visual template matching only where OCR and AX fail ✅ (Action Plan semantic
    path; opt-in `template_png` only — not ambient capture; not business-effect proof)
 9. Evidence capture, audit records, and undo integration ✅ (receipt records
-   ax/ocr/template/coordinates + ax_quality + honest UI undo_note; no screenshot retention)
+   ax/ocr/template/coordinates + ax_quality + capture_path when vision used +
+   honest UI undo_note; no screenshot retention)
 10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass) ✅
 
 ## Honest status (do not overclaim)
@@ -374,7 +375,8 @@ Already present:
   SCStream (default ≤400 ms / ≤3 frames, hard-capped at 2 s / 8 frames), writes the
   latest complete frame, then stops — request-scoped only, **not** ambient observation;
 - Rust `runtime/capture.rs`: `capture_still` / `capture_stream_latest` /
-  `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback;
+  `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback,
+  returning which `CapturePath` succeeded so receipts can record it;
 - Rust `runtime/vision_fallback.rs`: when AX resolve fails or quality is insufficient,
   latest-frame capture → OCR (needs `UiTarget.title`) → opt-in template match
   (`UiTarget.template_png` + `core/template_match`) → coordinate click for
@@ -422,14 +424,16 @@ Also present (item 7 — partial, honest):
 Also present (item 9 — honest):
 
 - Action Plan receipts carry `resolution_strategy` (`ax` / `ocr` / `template` /
-  `coordinates`), optional `ax_quality`, `fingerprint`, `attempts`, and
-  `undo_note` on each step (`runtime/evidence.rs` → `StepVerification` /
-  `ReceiptStep`);
+  `coordinates`), optional `ax_quality`, `fingerprint`, `attempts`,
+  `capture_path` (`still` / `stream` / `legacy` when OCR/template used a
+  request-scoped frame), and `undo_note` on each step (`runtime/evidence.rs` →
+  `StepVerification` / `ReceiptStep`);
 - UI steps record `undo_note: n/a: UI click/type is not reversible via the undo
   journal`; FS mutations note that an undo journal entry was written;
 - Postcondition results remain on `verification.status` / `observed` (UI is
   best-effort, ADR-0007);
-- Receipts never retain screenshot bytes.
+- Receipts never retain screenshot bytes; `capture_path` is metadata only
+  (serde-defaulted so older receipts still load; AX-only steps omit it).
 
 Also present (interruptible mid-op helper budgets — partial):
 
@@ -453,7 +457,6 @@ Not yet the architecture above (implementation gaps — distinct from
 - hard preemption of in-flight AX attribute writes / ScreenCaptureKit encode (budget
   checks are cooperative only);
 - Input Monitoring / Notifications probe implementations;
-- capture path (still vs stream) recorded on the receipt;
 - automatic promotion of every click to Semantic* (coordinate-only and
   low-confidence targets correctly remain UiReplay).
 

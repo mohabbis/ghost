@@ -1,5 +1,6 @@
 //! Human-readable execution receipt built on the audit log.
 
+use super::capture::CapturePath;
 use super::evidence::UiResolutionStrategy;
 use super::verify::StepVerification;
 use crate::organizer::executor::ExecutionReport;
@@ -37,6 +38,8 @@ pub struct ReceiptStep {
     pub undo_note: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempts: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture_path: Option<CapturePath>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -61,6 +64,7 @@ pub fn build_receipt(
             ax_quality: v.ax_quality,
             undo_note: v.undo_note.clone(),
             attempts: v.attempts,
+            capture_path: v.capture_path,
             verification: v.clone(),
         })
         .collect();
@@ -84,6 +88,7 @@ pub fn build_receipt(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::capture::CapturePath;
     use crate::runtime::evidence::{StepEvidence, UiResolutionStrategy};
     use crate::runtime::verify::{StepVerification, VerificationStatus};
 
@@ -108,5 +113,22 @@ mod tests {
             receipt.steps[0].verification.status,
             VerificationStatus::Verified
         );
+    }
+
+    #[test]
+    fn receipt_surfaces_capture_path_from_ocr_evidence() {
+        let v = StepVerification::verified("s1", "Focus", "focused", "ok").with_evidence(
+            StepEvidence::ocr("ocr|Save|...", "Save").with_capture_path(CapturePath::Stream),
+        );
+        let report = ExecutionReport::default();
+        let receipt = build_receipt("p1", "demo", None, &report, &[v], "1", "2", false, None);
+        assert_eq!(receipt.steps[0].capture_path, Some(CapturePath::Stream));
+        assert_eq!(
+            receipt.steps[0].verification.capture_path,
+            Some(CapturePath::Stream)
+        );
+        let json = serde_json::to_string(&receipt.steps[0]).unwrap();
+        assert!(json.contains("\"capture_path\":\"stream\""));
+        assert!(!json.contains("iVBORw0")); // no PNG base64
     }
 }

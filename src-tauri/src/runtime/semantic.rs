@@ -470,7 +470,11 @@ fn try_vision_focus(
             budget,
         ) {
             Ok(hit) => {
-                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
+                let mut ev = StepEvidence::ocr(hit.fingerprint, hit.text);
+                if let Some(path) = hit.capture_path {
+                    ev = ev.with_capture_path(path);
+                }
+                return Ok(ev);
             }
             Err(e) => last = Some(e),
         }
@@ -478,7 +482,11 @@ fn try_vision_focus(
     if let Some(png) = target.template_png.as_deref() {
         let hit = crate::runtime::vision_fallback::focus_via_template_with_budget(png, budget)
             .map_err(map_vision_err)?;
-        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
+        let mut ev = StepEvidence::template(hit.fingerprint, hit.text);
+        if let Some(path) = hit.capture_path {
+            ev = ev.with_capture_path(path);
+        }
+        return Ok(ev);
     }
     Err(map_vision_err(last.unwrap_or(
         crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
@@ -500,7 +508,11 @@ fn try_vision_set_value(
             budget,
         ) {
             Ok(hit) => {
-                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
+                let mut ev = StepEvidence::ocr(hit.fingerprint, hit.text);
+                if let Some(path) = hit.capture_path {
+                    ev = ev.with_capture_path(path);
+                }
+                return Ok(ev);
             }
             Err(e) => last = Some(e),
         }
@@ -509,7 +521,11 @@ fn try_vision_set_value(
         let hit =
             crate::runtime::vision_fallback::set_value_via_template_with_budget(png, value, budget)
                 .map_err(map_vision_err)?;
-        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
+        let mut ev = StepEvidence::template(hit.fingerprint, hit.text);
+        if let Some(path) = hit.capture_path {
+            ev = ev.with_capture_path(path);
+        }
+        return Ok(ev);
     }
     Err(map_vision_err(last.unwrap_or(
         crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
