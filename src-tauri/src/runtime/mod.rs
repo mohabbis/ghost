@@ -11,7 +11,11 @@ pub mod ui;
 pub mod verify;
 pub mod vision_fallback;
 
-pub use capture::{CaptureError, StillFrame, capture_still, capture_still_bytes};
+pub use capture::{
+    CaptureError, StillFrame, StreamCaptureOpts, capture_latest_frame_bytes,
+    capture_latest_frame_bytes_with_opts, capture_still, capture_still_bytes,
+    capture_stream_latest,
+};
 pub use execute::{
     RuntimeResult, execute_action_plan_with_progress, execute_action_plan_with_reliability,
 };

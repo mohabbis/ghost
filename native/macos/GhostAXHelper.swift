@@ -8,20 +8,23 @@
 // Precondition ops (no Accessibility required):
 //         app_running
 // Capture ops (Screen Recording; no Accessibility required):
-//         capture_permission_status, capture_still
+//         capture_permission_status, capture_still, capture_stream_latest
 //
 // Targeting order (see docs/macos-automation-architecture.md):
 //   exact bundle id → exact app name → contains fallback
 //   optional window_title narrows the search root
 //   identifier (when set) is required
 //   AXPress preferred over coordinate-style raise/focus
-//   AX → Vision/OCR → coordinates (capture_still feeds OCR fallback)
+//   AX → Vision/OCR → coordinates (still or bounded stream feeds OCR)
 
 import Foundation
 import AppKit
 import ApplicationServices
 import ScreenCaptureKit
 import CoreGraphics
+import CoreMedia
+import CoreVideo
+import CoreImage
 
 struct AXRequest: Codable {
     let op: String
@@ -34,8 +37,12 @@ struct AXRequest: Codable {
     let identifier: String?
     let bundle_id: String?
     let window_title: String?
-    /// Destination PNG path for `capture_still`.
+    /// Destination PNG path for capture ops.
     let path: String?
+    /// Bounded stream: max wall-clock ms (clamped in helper; default 400).
+    let duration_ms: UInt32?
+    /// Bounded stream: stop after this many complete frames (default 3, max 8).
+    let max_frames: UInt32?
 }
 
 struct AXResponse: Codable {
@@ -50,6 +57,8 @@ struct AXResponse: Codable {
     let path: String?
     let width: UInt32?
     let height: UInt32?
+    /// Complete frames observed during a bounded stream sample.
+    let frames: UInt32?
 }
 
 func respond(_ resp: AXResponse) {
@@ -68,7 +77,8 @@ func fail(
     actionable: Bool? = nil,
     path: String? = nil,
     width: UInt32? = nil,
-    height: UInt32? = nil
+    height: UInt32? = nil,
+    frames: UInt32? = nil
 ) {
     respond(AXResponse(
         ok: false,
@@ -81,7 +91,8 @@ func fail(
         actionable: actionable,
         path: path,
         width: width,
-        height: height
+        height: height,
+        frames: frames
     ))
 }
 
@@ -95,7 +106,8 @@ func ok(
     actionable: Bool? = nil,
     path: String? = nil,
     width: UInt32? = nil,
-    height: UInt32? = nil
+    height: UInt32? = nil,
+    frames: UInt32? = nil
 ) {
     respond(AXResponse(
         ok: true,
@@ -108,7 +120,8 @@ func ok(
         actionable: actionable,
         path: path,
         width: width,
-        height: height
+        height: height,
+        frames: frames
     ))
 }
 
@@ -351,6 +364,127 @@ func readValue(_ match: Match) -> String? {
     axString(match.element, kAXValueAttribute)
 }
 
+/// Shared ScreenCaptureKit filter + configuration for still and bounded stream.
+@available(macOS 14.0, *)
+func makeCaptureFilter(
+    content: SCShareableContent,
+    bundleId: String?,
+    windowTitle: String?
+) -> Result<(SCContentFilter, SCStreamConfiguration), String> {
+    let config = SCStreamConfiguration()
+    config.showsCursor = false
+    config.pixelFormat = kCVPixelFormatType_32BGRA
+    config.queueDepth = 3
+
+    if let bundleId, !bundleId.isEmpty {
+        let apps = content.applications.filter { $0.bundleIdentifier == bundleId }
+        var windows = content.windows.filter { window in
+            guard let owner = window.owningApplication else { return false }
+            return apps.contains(where: { $0.processID == owner.processID })
+        }
+        if let windowTitle, !windowTitle.isEmpty {
+            let lower = windowTitle.lowercased()
+            windows = windows.filter { ($0.title ?? "").lowercased().contains(lower) }
+        }
+        if let window = windows.first {
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            config.width = max(Int(window.frame.width), 1)
+            config.height = max(Int(window.frame.height), 1)
+            return .success((filter, config))
+        } else if let app = apps.first, let display = content.displays.first {
+            let filter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
+            config.width = display.width
+            config.height = display.height
+            return .success((filter, config))
+        }
+        return .failure("no matching window/app for ScreenCaptureKit capture")
+    }
+    if let display = content.displays.first {
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        config.width = display.width
+        config.height = display.height
+        return .success((filter, config))
+    }
+    return .failure("no display available for ScreenCaptureKit capture")
+}
+
+@available(macOS 14.0, *)
+func cgImageFromSampleBuffer(_ sampleBuffer: CMSampleBuffer) -> CGImage? {
+    guard CMSampleBufferIsValid(sampleBuffer),
+          let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+          let statusRaw = attachments.first?[.status] as? Int,
+          let status = SCFrameStatus(rawValue: statusRaw),
+          status == .complete,
+          let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+    else {
+        return nil
+    }
+    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+    let context = CIContext(options: [.useSoftwareRenderer: false])
+    return context.createCGImage(ciImage, from: ciImage.extent)
+}
+
+func writePng(image: CGImage, path: String) -> Result<(UInt32, UInt32), String> {
+    let rep = NSBitmapImageRep(cgImage: image)
+    guard let png = rep.representation(using: .png, properties: [:]) else {
+        return .failure("failed to encode PNG")
+    }
+    do {
+        try png.write(to: URL(fileURLWithPath: path))
+        return .success((UInt32(image.width), UInt32(image.height)))
+    } catch {
+        return .failure("failed to write PNG: \(error.localizedDescription)")
+    }
+}
+
+/// Short-lived SCStream sample: collect up to `maxFrames` complete frames or
+/// `durationMs` wall-clock time (whichever first), write the **latest** frame, stop.
+/// Not ambient observation — request-scoped and hard-capped.
+@available(macOS 14.0, *)
+final class BoundedStreamCollector: NSObject, SCStreamOutput, SCStreamDelegate {
+    private let lock = NSLock()
+    private var latest: CGImage?
+    private var frames: UInt32 = 0
+    private let targetFrames: UInt32
+    private let completion = DispatchSemaphore(value: 0)
+    private var signaled = false
+
+    init(targetFrames: UInt32) {
+        self.targetFrames = max(targetFrames, 1)
+        super.init()
+    }
+
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard type == .screen else { return }
+        guard let image = cgImageFromSampleBuffer(sampleBuffer) else { return }
+        lock.lock()
+        latest = image
+        frames += 1
+        let reached = frames >= targetFrames
+        lock.unlock()
+        if reached { signalOnce() }
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        signalOnce()
+    }
+
+    private func signalOnce() {
+        lock.lock()
+        let already = signaled
+        if !already { signaled = true }
+        lock.unlock()
+        if !already { completion.signal() }
+    }
+
+    func wait(timeoutSeconds: Double) -> (CGImage?, UInt32) {
+        _ = completion.wait(timeout: .now() + timeoutSeconds)
+        lock.lock()
+        defer { lock.unlock() }
+        return (latest, frames)
+    }
+}
+
 /// ScreenCaptureKit still-frame capture (macOS 14+ SCScreenshotManager).
 /// Does not require Accessibility; requires Screen Recording.
 @available(macOS 14.0, *)
@@ -363,56 +497,21 @@ func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) ->
     Task {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            let filter: SCContentFilter
-            let config = SCStreamConfiguration()
-
-            if let bundleId, !bundleId.isEmpty {
-                let apps = content.applications.filter { $0.bundleIdentifier == bundleId }
-                var windows = content.windows.filter { window in
-                    guard let owner = window.owningApplication else { return false }
-                    return apps.contains(where: { $0.processID == owner.processID })
+            switch makeCaptureFilter(content: content, bundleId: bundleId, windowTitle: windowTitle) {
+            case .failure(let detail):
+                box.result = (false, detail, nil, nil)
+            case .success(let (filter, config)):
+                let image = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: config
+                )
+                switch writePng(image: image, path: path) {
+                case .failure(let detail):
+                    box.result = (false, detail, nil, nil)
+                case .success(let (w, h)):
+                    box.result = (true, path, w, h)
                 }
-                if let windowTitle, !windowTitle.isEmpty {
-                    let lower = windowTitle.lowercased()
-                    windows = windows.filter { ($0.title ?? "").lowercased().contains(lower) }
-                }
-                if let window = windows.first {
-                    filter = SCContentFilter(desktopIndependentWindow: window)
-                    let scale = Int(window.frame.width)
-                    config.width = max(scale, 1)
-                    config.height = max(Int(window.frame.height), 1)
-                } else if let app = apps.first, let display = content.displays.first {
-                    filter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
-                    config.width = display.width
-                    config.height = display.height
-                } else {
-                    box.result = (false, "no matching window/app for ScreenCaptureKit capture", nil, nil)
-                    semaphore.signal()
-                    return
-                }
-            } else if let display = content.displays.first {
-                filter = SCContentFilter(display: display, excludingWindows: [])
-                config.width = display.width
-                config.height = display.height
-            } else {
-                box.result = (false, "no display available for ScreenCaptureKit capture", nil, nil)
-                semaphore.signal()
-                return
             }
-
-            config.showsCursor = false
-            let image = try await SCScreenshotManager.captureImage(
-                contentFilter: filter,
-                configuration: config
-            )
-            let rep = NSBitmapImageRep(cgImage: image)
-            guard let png = rep.representation(using: .png, properties: [:]) else {
-                box.result = (false, "failed to encode PNG", nil, nil)
-                semaphore.signal()
-                return
-            }
-            try png.write(to: URL(fileURLWithPath: path))
-            box.result = (true, path, UInt32(image.width), UInt32(image.height))
         } catch {
             box.result = (false, "ScreenCaptureKit capture failed: \(error.localizedDescription)", nil, nil)
         }
@@ -420,6 +519,65 @@ func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) ->
     }
     _ = semaphore.wait(timeout: .now() + 20)
     return (box.result.0, box.result.1, box.result.2, box.result.3)
+}
+
+/// Bounded ScreenCaptureKit stream → latest complete frame as PNG.
+/// Caps: duration 50…2000 ms (default 400), frames 1…8 (default 3).
+@available(macOS 14.0, *)
+func captureStreamLatestFrame(
+    path: String,
+    bundleId: String?,
+    windowTitle: String?,
+    durationMs: UInt32?,
+    maxFrames: UInt32?
+) -> (ok: Bool, detail: String, width: UInt32?, height: UInt32?, frames: UInt32?) {
+    let duration = min(max(durationMs ?? 400, 50), 2000)
+    let frameTarget = min(max(maxFrames ?? 3, 1), 8)
+    let semaphore = DispatchSemaphore(value: 0)
+    final class Box: @unchecked Sendable {
+        var result: (Bool, String, UInt32?, UInt32?, UInt32?) = (false, "stream capture timed out", nil, nil, nil)
+    }
+    let box = Box()
+    Task {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let built = makeCaptureFilter(content: content, bundleId: bundleId, windowTitle: windowTitle)
+            switch built {
+            case .failure(let detail):
+                box.result = (false, detail, nil, nil, nil)
+                semaphore.signal()
+                return
+            case .success(let (filter, config)):
+                // ~10 fps is enough for a short OCR freshening sample.
+                config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
+                let collector = BoundedStreamCollector(targetFrames: frameTarget)
+                let stream = SCStream(filter: filter, configuration: config, delegate: collector)
+                try stream.addStreamOutput(collector, type: .screen, sampleHandlerQueue: DispatchQueue(label: "ghost.sck.stream"))
+                try await stream.startCapture()
+                let timeoutSec = Double(duration) / 1000.0
+                let (image, frames) = collector.wait(timeoutSeconds: timeoutSec)
+                try await stream.stopCapture()
+                guard let image else {
+                    box.result = (false, "stream produced no complete frames", nil, nil, frames)
+                    semaphore.signal()
+                    return
+                }
+                switch writePng(image: image, path: path) {
+                case .failure(let detail):
+                    box.result = (false, detail, nil, nil, frames)
+                case .success(let (w, h)):
+                    box.result = (true, path, w, h, frames)
+                }
+            }
+        } catch {
+            box.result = (false, "ScreenCaptureKit stream failed: \(error.localizedDescription)", nil, nil, nil)
+        }
+        semaphore.signal()
+    }
+    // Outer wait slightly above the stream duration so stopCapture can finish.
+    let outerTimeout = (Double(duration) / 1000.0) + 5.0
+    _ = semaphore.wait(timeout: .now() + outerTimeout)
+    return (box.result.0, box.result.1, box.result.2, box.result.3, box.result.4)
 }
 
 guard let line = readLine(strippingNewline: true),
@@ -490,6 +648,40 @@ if req.op == "capture_still" {
         }
     } else {
         fail("capture_still requires macOS 14+")
+        exit(1)
+    }
+}
+
+// Bounded stream sample → latest frame. Opt-in upgrade over still; not ambient.
+if req.op == "capture_stream_latest" {
+    guard let path = req.path, !path.isEmpty else {
+        fail("capture_stream_latest requires path")
+        exit(1)
+    }
+    if #available(macOS 14.0, *) {
+        let result = captureStreamLatestFrame(
+            path: path,
+            bundleId: req.bundle_id,
+            windowTitle: req.window_title,
+            durationMs: req.duration_ms,
+            maxFrames: req.max_frames
+        )
+        if result.ok {
+            let n = result.frames ?? 0
+            ok(
+                "captured stream latest frame (\(n) frames)",
+                path: path,
+                width: result.width,
+                height: result.height,
+                frames: result.frames
+            )
+            exit(0)
+        } else {
+            fail(result.detail, path: path, frames: result.frames)
+            exit(1)
+        }
+    } else {
+        fail("capture_stream_latest requires macOS 14+")
         exit(1)
     }
 }

@@ -76,12 +76,13 @@ Operations: `resolve_target`, `list_matches`, `activate_element`, `set_value`, `
 
 Request fields (optional beyond `op` / `app` / `role`): `title`, `identifier`,
 `bundle_id`, `window_title`, `fingerprint`, `value`, `expected_value`, `path`
-(for `capture_still`).
+(for capture ops), `duration_ms` / `max_frames` (for `capture_stream_latest`).
 Responses may include `ax_quality` (0–100), `identifier`, `actionable`, and for
-capture ops `path` / `width` / `height`.
+capture ops `path` / `width` / `height` / `frames` (stream samples).
 
 Capture ops (Screen Recording; Accessibility not required):
-`capture_permission_status`, `capture_still`.
+`capture_permission_status`, `capture_still`, `capture_stream_latest`
+(bounded SCStream sample → latest frame; not ambient observation).
 
 Precondition ops (no Accessibility required): `app_running`.
 
@@ -93,7 +94,8 @@ fallback when `title` is set. Postconditions use AX verify or OCR text presence.
 Targeting prefers exact bundle id / app name, then contains-fallback; `window_title`
 narrows the AX search root; activate tries `AXPress` before raise/focus. When AX
 fails or scores insufficient and `title` is set, `focus_target` may fall back to
-ScreenCaptureKit still + Vision OCR + coordinate click. See
+ScreenCaptureKit latest-frame capture (bounded stream, still fallback) + Vision OCR
++ coordinate click. See
 [`macos-automation-architecture.md`](macos-automation-architecture.md).
 
 ### Real Mac validation (required before claiming demo-complete)

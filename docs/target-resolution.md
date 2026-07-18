@@ -5,8 +5,9 @@ validated. Code: `src-tauri/src/core/replay_support.rs`; benchmark:
 `src-tauri/tests/resolution_benchmark.rs`.
 
 This documents the **current** Tauri replay resolution chain. The Action Plan
-semantic path (`focus_target`) also has an AX → ScreenCaptureKit still + OCR →
-coordinate-click fallback when `UiTarget.title` is set — see
+semantic path (`focus_target`) also has an AX → ScreenCaptureKit latest-frame
+(bounded stream, still fallback) + OCR → coordinate-click fallback when
+`UiTarget.title` is set — see
 [`macos-automation-architecture.md`](macos-automation-architecture.md) and
 `runtime/vision_fallback.rs`.
 

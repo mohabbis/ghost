@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/native/macos/GhostAXHelper.swift"
 OUT_DIR="$ROOT/src-tauri/bin"
-# ScreenCaptureKit still-frame ops use SCScreenshotManager (macOS 14+).
+# ScreenCaptureKit still + bounded stream ops (SCScreenshotManager / SCStream; macOS 14+).
 MIN_MACOS="14.0"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then

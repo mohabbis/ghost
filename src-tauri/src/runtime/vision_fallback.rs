@@ -1,8 +1,9 @@
 //! Vision / OCR fallback when Accessibility resolution is insufficient.
 //!
-//! Order: AX lookup → (on failure / weak tree) ScreenCaptureKit still + OCR →
-//! coordinate click. Never treat framework names (Electron/Flutter) as automatic
-//! vision targets — use [`crate::runtime::locator::AxQuality`].
+//! Order: AX lookup → (on failure / weak tree) ScreenCaptureKit latest frame
+//! (bounded stream, still fallback) + OCR → coordinate click. Never treat
+//! framework names (Electron/Flutter) as automatic vision targets — use
+//! [`crate::runtime::locator::AxQuality`].
 
 use crate::core::ocr::{self, OcrResult};
 use crate::core::vision;
@@ -137,7 +138,7 @@ pub struct VisionHit {
     pub fingerprint: String,
 }
 
-/// Capture (ScreenCaptureKit preferred) + OCR + unique text match.
+/// Capture (bounded stream latest → still → legacy) + OCR + unique text match.
 pub fn resolve_text(
     needle: &str,
     bundle_id: Option<&str>,
@@ -149,7 +150,7 @@ pub fn resolve_text(
         return Err(VisionFallbackError::NoSearchText);
     }
 
-    let bytes = capture::capture_still_bytes(bundle_id, window_title)
+    let bytes = capture::capture_latest_frame_bytes(bundle_id, window_title)
         .map_err(VisionFallbackError::Capture)?;
 
     let results = ocr::run_ocr(&bytes).map_err(|e| VisionFallbackError::Ocr(e.to_string()))?;
