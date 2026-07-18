@@ -116,6 +116,10 @@ pub struct Target {
     pub role: String,
     pub app: String,
     pub identifier: Option<String>,
+    /// Containing window title when captured — serde-defaulted for older
+    /// compression reports that only stored name/role/app/identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_title: Option<String>,
 }
 
 impl Target {
@@ -125,7 +129,24 @@ impl Target {
             role: el.role.clone(),
             app: el.app.clone(),
             identifier: el.identifier.as_ref().filter(|s| !s.is_empty()).cloned(),
+            window_title: el
+                .window_title
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
         }
+    }
+
+    /// Enough AX signal to prefer SemanticFocus / SemanticSetValue over
+    /// coordinate UiReplay. Requires app + role plus a discriminator
+    /// (identifier, or a non-empty name with confidence above the review floor).
+    pub fn is_semantically_addressable(&self, confidence: f32) -> bool {
+        let app_ok = !self.app.trim().is_empty();
+        let role_ok = !self.role.trim().is_empty();
+        let has_id = self.identifier.as_deref().is_some_and(|s| !s.is_empty());
+        let has_name = !self.name.trim().is_empty();
+        app_ok && role_ok && (has_id || (has_name && confidence > LOW_CONFIDENCE))
     }
 }
 

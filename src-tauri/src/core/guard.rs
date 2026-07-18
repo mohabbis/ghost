@@ -916,6 +916,7 @@ mod tests {
             role: role.to_string(),
             app: app.to_string(),
             identifier: None,
+            window_title: None,
         }
     }
 

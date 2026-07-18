@@ -177,6 +177,7 @@ mod tests {
             role: "AXButton".into(),
             app: app.into(),
             identifier: None,
+            window_title: None,
         }
     }
 
