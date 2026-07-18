@@ -211,14 +211,64 @@ fn verify_semantic_focus(step_id: &str, label: &str, target: &UiTarget) -> StepV
 
 /// True when observed field text matches the approved value.
 ///
-/// OCR fallback observations (`ocr:…`) pass only when the approved value appears
-/// in the payload — a bare `ocr:` prefix alone does not count as a match.
+/// OCR fallback observations use an `ocr:` prefix; only the payload after that
+/// prefix is matched. Matching is **digit-boundary aware** so a wrong amount
+/// like `112,900` cannot pass an approved `12,900` via naive substring search.
+/// A trailing zero fraction (`12,900.00`) still counts as a match; a bare `ocr:`
+/// prefix alone does not.
 fn observed_matches_approved(observed: &str, value: &str) -> bool {
-    let value = value.trim();
-    if value.is_empty() {
+    let want = value.trim();
+    if want.is_empty() {
         return observed.trim().is_empty();
     }
-    observed.contains(value) || observed.trim() == value
+    let got = observed.trim();
+    let payload = got.strip_prefix("ocr:").unwrap_or(got).trim();
+    payload_matches_approved(payload, want)
+}
+
+fn payload_matches_approved(payload: &str, want: &str) -> bool {
+    if payload == want {
+        return true;
+    }
+    let mut start = 0;
+    while start + want.len() <= payload.len() {
+        let Some(rel) = payload[start..].find(want) else {
+            break;
+        };
+        let abs = start + rel;
+        let before_ok = abs == 0
+            || !payload
+                .as_bytes()
+                .get(abs - 1)
+                .is_some_and(u8::is_ascii_digit);
+        let after = &payload[abs + want.len()..];
+        if before_ok && after_matches_approved_suffix(after) {
+            return true;
+        }
+        // Advance one Unicode scalar so we never slice mid-codepoint.
+        start = payload[abs..]
+            .chars()
+            .next()
+            .map(|c| abs + c.len_utf8())
+            .unwrap_or(payload.len());
+    }
+    false
+}
+
+/// Accept end-of-string, non-digit OCR noise, or a trailing `.0+` fraction.
+fn after_matches_approved_suffix(after: &str) -> bool {
+    if after.is_empty() {
+        return true;
+    }
+    if let Some(rest) = after.strip_prefix('.') {
+        let zero_len = rest.chars().take_while(|c| *c == '0').count();
+        if zero_len == 0 {
+            return false;
+        }
+        let rem = &rest[zero_len..];
+        return rem.is_empty() || rem.chars().next().is_some_and(|c| !c.is_ascii_digit());
+    }
+    after.chars().next().is_some_and(|c| !c.is_ascii_digit())
 }
 
 fn verify_semantic_set_value(
@@ -227,7 +277,7 @@ fn verify_semantic_set_value(
     target: &UiTarget,
     value: &str,
 ) -> StepVerification {
-    let expected = format!("value contains {value}");
+    let expected = format!("value matches {value}");
     match semantic::verify_postcondition(target, Some(value)) {
         Ok(observed) => {
             if observed_matches_approved(&observed, value) {
@@ -369,8 +419,20 @@ mod tests {
     }
 
     #[test]
+    fn observed_match_rejects_digit_adjacent_false_positives() {
+        // Naive `contains` would accept these — that is the money-shot bug.
+        assert!(!observed_matches_approved("112,900", "12,900"));
+        assert!(!observed_matches_approved("ocr:112,900", "12,900"));
+        assert!(!observed_matches_approved("12,9001", "12,900"));
+        assert!(!observed_matches_approved("12,900.50", "12,900"));
+        // Non-digit boundaries / OCR noise around the exact amount still pass.
+        assert!(observed_matches_approved("Amount: 12,900 USD", "12,900"));
+        assert!(observed_matches_approved("ocr:12,900.00", "12,900"));
+    }
+
+    #[test]
     fn value_mismatch_verification_halts() {
-        let mut v = StepVerification::failed("s1", "Set amount", "value contains 12,900", "12,090");
+        let mut v = StepVerification::failed("s1", "Set amount", "value matches 12,900", "12,090");
         v.undo_note = Some(StepEvidence::UI_UNDO_NOTE.into());
         assert_eq!(v.status, VerificationStatus::Failed);
         assert!(!v.continue_execution);
