@@ -165,6 +165,20 @@ fn execute_action_plan_with_options(
             verification.status = VerificationStatus::Failed;
             stopped_early = true;
             stop_reason = Some(format!("step {} failed", step.label));
+        } else if !verification.continue_execution {
+            // Verify mismatch (or other hard postcondition fail): seal the halt on the receipt.
+            stopped_early = true;
+            stop_reason = Some(format!(
+                "verification halted on {}: expected «{}» · observed «{}»",
+                step.label, verification.expected, verification.observed
+            ));
+            if matches!(
+                verification.status,
+                VerificationStatus::Verified | VerificationStatus::NotApplicable
+            ) {
+                verification.status = VerificationStatus::Failed;
+            }
+            report.failed += 1;
         }
         verifications.push(verification.clone());
         on_progress(&report);
@@ -454,6 +468,65 @@ mod tests {
         let result = execute_action_plan_with_progress(&plan, &rules, None, None, |_| {});
         assert!(result.stopped_early);
         assert_eq!(result.report.failed, 1);
+        assert!(
+            result
+                .stop_reason
+                .as_deref()
+                .is_some_and(|r| r.contains("verify missing")),
+            "expected stop_reason to name the failed step, got {:?}",
+            result.stop_reason
+        );
+        assert!(result.receipt.stopped_early);
+        assert_eq!(result.receipt.stop_reason, result.stop_reason);
+    }
+
+    #[test]
+    fn postcondition_verify_halt_sets_receipt_stop_reason() {
+        // CreateFolder applies, then VerifyPath (should_exist=false) on that folder
+        // fails in dispatch — still seals stopped_early + stop_reason on the receipt.
+        // Semantic value-mismatch halt uses the same seal path when continue_execution
+        // is false after an Applied dispatch (covered by runtime::verify unit tests).
+        let tmp = tempdir();
+        let folder = tmp.path().join("created");
+        let rules = vec![rule(tmp.path(), false)];
+        let plan = ActionPlan::new(
+            "t".into(),
+            "test".into(),
+            PlanSource::Demo,
+            vec![
+                fs_step(
+                    "c1",
+                    "create folder",
+                    ActionKind::CreateFolder {
+                        path: folder.clone(),
+                    },
+                    Capability::CreateFolder {
+                        path: folder.clone(),
+                    },
+                ),
+                fs_step(
+                    "v1",
+                    "verify absent",
+                    ActionKind::VerifyPath {
+                        path: folder.clone(),
+                        should_exist: false,
+                    },
+                    Capability::ReadFolder { path: folder },
+                ),
+            ],
+        );
+        let result = execute_action_plan_with_progress(&plan, &rules, None, None, |_| {});
+        assert_eq!(result.report.applied, 1);
+        assert!(result.stopped_early);
+        assert!(result.receipt.stopped_early);
+        assert!(
+            result
+                .stop_reason
+                .as_deref()
+                .is_some_and(|r| r.contains("verify absent")),
+            "got {:?}",
+            result.stop_reason
+        );
     }
 
     fn rule(path: &std::path::Path, can_delete: bool) -> crate::policy::FolderRule {
