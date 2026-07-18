@@ -46,8 +46,11 @@ Every integration below is additive to that pipeline, never a bypass of it.
   (`fabric_list_lakehouses`), export preview (`fabric_export_preview`), and
   OneLake push (`fabric_push_audit_export`). Settings UI uses workspace/lakehouse
   dropdown pickers. Inbound intent queue (`fabric_list_inbound_intents`,
-  `fabric_record_inbound_intent`, `fabric_dismiss_inbound_intent`) surfaces
-  external signals without auto-executing. **Webhook ingestion**
+  `fabric_record_inbound_intent`, `fabric_convert_inbound_intent`,
+  `fabric_dismiss_inbound_intent`) surfaces external signals without
+  auto-executing. The shared queue now accepts bridge taxonomy such as
+  `ops.pipeline` and `pos.close`, so a POS closeout can open an Organizer plan
+  without ever triggering POS typing. **Webhook ingestion**
   (`POST /fabric/webhook`, `fabric_set_webhook_secret`) records intents when the
   HTTP server is running. See `docs/fabric-integration.md`.
 - **Google Cloud Storage export** (`integrations/google/`,

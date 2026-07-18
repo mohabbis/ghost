@@ -92,6 +92,29 @@ fn guard_desk_id_scan_elements_exist() {
     }
 }
 
+#[test]
+fn guard_desk_copy_stays_prototype_and_file_based() {
+    let html = read("../src/index.html");
+    let js = read("../src/main.js");
+
+    assert!(
+        html.contains("Prototype desk workflow — not certified compliance."),
+        "Guard Desk must stay labeled as a prototype, not certified compliance",
+    );
+    assert!(
+        html.contains("scanner folder or file for local OCR"),
+        "Guard Desk must describe the chosen-file OCR path in the main UI",
+    );
+    assert!(
+        html.contains("No camera permission."),
+        "Guard Desk must keep the no-camera-permission disclosure",
+    );
+    assert!(
+        js.contains("choose an on-demand check or ID image from a scanner folder or file"),
+        "About copy must describe Guard Desk as a chosen-file OCR flow",
+    );
+}
+
 /// Every `bind("id", …)` in wireUpControls must point at a real element.
 fn bind_targets(js: &str) -> Vec<String> {
     let re = regex::Regex::new(r#"bind\(\s*["']([A-Za-z0-9_-]+)["']\s*,"#).unwrap();

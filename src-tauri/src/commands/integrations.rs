@@ -32,18 +32,19 @@
 //! client-supplied plan" principle `organizer_execute` already follows for
 //! Organizer plans.
 
+use crate::action_plan::{from_organizer_plan, ActionPlan};
 use crate::engine::GhostEngine;
 use crate::identity::IntegrationKind;
 use crate::integrations::google::export::{GcsExportClient, GcsPushSummary};
 use crate::integrations::google::{GcsBucket, GcsClient, GoogleIntegrationService};
-use crate::integrations::microsoft::MicrosoftIntegrationService;
 use crate::integrations::microsoft::fabric::export::{FabricExportClient, FabricPushSummary};
-use crate::integrations::microsoft::fabric::triggers::FabricInboundIntent;
+use crate::integrations::microsoft::fabric::triggers::{FabricInboundIntent, InboundIntentStatus};
 use crate::integrations::microsoft::fabric::{FabricClient, FabricLakehouse, FabricWorkspace};
-use crate::integrations::microsoft::power_bi::export::{AuditExportPayload, build_export};
-use crate::integrations::microsoft::power_bi::{PowerBiClient, schema};
+use crate::integrations::microsoft::power_bi::export::{build_export, AuditExportPayload};
+use crate::integrations::microsoft::power_bi::{schema, PowerBiClient};
+use crate::integrations::microsoft::MicrosoftIntegrationService;
 use crate::storage::executions::list_full_executions_since;
-use crate::storage::{Db, open_default};
+use crate::storage::{open_default, Db};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -354,19 +355,59 @@ pub async fn fabric_push_audit_export(
     .map_err(|e| format!("fabric push task failed: {e}"))?
 }
 
-/// Pending inbound Fabric intents waiting for user review (no auto-execute).
+/// Pending inbound intents waiting for user review (no auto-execute).
+/// The queue is shared by Fabric, batch-pipeline, and POS-close webhook bridges.
 #[tauri::command]
 pub fn fabric_list_inbound_intents() -> Vec<FabricInboundIntent> {
     crate::integrations::microsoft::fabric::triggers::list_pending()
 }
 
-/// Dismiss an inbound Fabric intent without acting on it.
+#[derive(serde::Serialize)]
+pub struct FabricInboundPlanResult {
+    pub intent: FabricInboundIntent,
+    pub action_plan: ActionPlan,
+}
+
+/// Convert a pending inbound intent into an Organizer plan preview.
+///
+/// Risk class: local state mutation + read-only file planning. Never executes the
+/// resulting plan; it only compiles the reviewable preview and marks the intent
+/// as `Converted` once that preview succeeds.
+#[tauri::command]
+pub fn fabric_convert_inbound_intent(intent_id: String) -> Result<FabricInboundPlanResult, String> {
+    let db = open_default().map_err(|e| e.to_string())?;
+    fabric_create_inbound_plan_with_db(&db, &intent_id)
+}
+
+fn fabric_create_inbound_plan_with_db(
+    db: &Db,
+    intent_id: &str,
+) -> Result<FabricInboundPlanResult, String> {
+    let intent = crate::integrations::microsoft::fabric::triggers::get_intent(intent_id)?;
+    if intent.status != InboundIntentStatus::Pending {
+        return Err(format!(
+            "Inbound intent '{intent_id}' is not pending and cannot create a new plan preview"
+        ));
+    }
+    let zone_id = intent
+        .zone_id
+        .as_deref()
+        .ok_or_else(|| format!("Inbound intent '{intent_id}' has no zone_id to plan"))?;
+    let organizer_plan = crate::commands::organizer::organizer_plan_with_conn(db, zone_id)?;
+    let converted = crate::integrations::microsoft::fabric::triggers::convert_intent(intent_id)?;
+    Ok(FabricInboundPlanResult {
+        intent: converted,
+        action_plan: from_organizer_plan(&organizer_plan),
+    })
+}
+
+/// Dismiss an inbound intent without acting on it.
 #[tauri::command]
 pub fn fabric_dismiss_inbound_intent(intent_id: String) -> Result<(), String> {
     crate::integrations::microsoft::fabric::triggers::dismiss_intent(&intent_id)
 }
 
-/// Record an inbound Fabric intent (webhook simulation / manual registration).
+/// Record an inbound bridge intent (webhook simulation / manual registration).
 /// Does not execute anything — surfaces in Organizer for user review.
 #[tauri::command]
 pub fn fabric_record_inbound_intent(
@@ -523,6 +564,8 @@ pub async fn google_push_audit_export(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::{DefaultDecision, FolderRule, TrustLevel};
+    use crate::storage::zones::{add_folder_rule, create_zone};
     use std::sync::atomic::{AtomicU32, Ordering};
     use tauri::Manager;
 
@@ -537,6 +580,19 @@ mod tests {
         let app = tauri::test::mock_app();
         app.manage(GhostEngine::with_auth_path(auth_path));
         app
+    }
+
+    fn scratch_dir(label: &str) -> std::path::PathBuf {
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "ghost_integrations_{label}_{}_{}",
+            std::process::id(),
+            n
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        path
     }
 
     #[test]
@@ -579,5 +635,55 @@ mod tests {
         let db = crate::storage::open_in_memory().unwrap();
         let payload = export_preview_with_db(&db, None).unwrap();
         assert!(payload.is_empty());
+    }
+
+    #[test]
+    fn fabric_convert_inbound_intent_marks_intent_converted_and_returns_action_plan() {
+        crate::integrations::microsoft::fabric::triggers::reset_store_for_tests();
+        let temp = scratch_dir("fabric_inbound");
+        let source = temp.join("source");
+        let dest = temp.join("dest");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(source.join("invoice-1001.pdf"), b"pdf").unwrap();
+
+        let db = crate::storage::open_in_memory().unwrap();
+        let zone = create_zone(&db, "Inbound", None, DefaultDecision::Ask, false).unwrap();
+        for path in [&source, &dest] {
+            add_folder_rule(
+                &db,
+                &zone.id,
+                &FolderRule {
+                    path: path.to_path_buf(),
+                    can_read: true,
+                    can_create: true,
+                    can_rename: true,
+                    can_move: true,
+                    can_copy: true,
+                    can_delete: false,
+                    trust: TrustLevel::AskFirst,
+                },
+            )
+            .unwrap();
+        }
+
+        let intent = crate::integrations::microsoft::fabric::triggers::record_intent(
+            Some(zone.id.clone()),
+            "fabric",
+            "Nightly batch landed",
+        );
+        let result = fabric_create_inbound_plan_with_db(&db, &intent.intent_id).unwrap();
+        assert_eq!(result.intent.status, InboundIntentStatus::Converted);
+        assert!(matches!(
+            result.action_plan.source,
+            crate::action_plan::PlanSource::Organizer { ref zone_id } if zone_id == &zone.id
+        ));
+        assert_eq!(result.action_plan.steps.len(), 2);
+        assert!(
+            crate::integrations::microsoft::fabric::triggers::list_pending().is_empty(),
+            "converted intents must leave the pending queue"
+        );
+        crate::integrations::microsoft::fabric::triggers::reset_store_for_tests();
+        let _ = std::fs::remove_dir_all(&temp);
     }
 }

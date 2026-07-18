@@ -1,5 +1,5 @@
 {
   "zone_id": null,
-  "source": "eventstream-activator",
+  "source": "hub.bridge",
   "summary": "Avg temperature 82.4 exceeded threshold in 5m window (device-7)"
 }

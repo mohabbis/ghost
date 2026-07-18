@@ -1628,7 +1628,7 @@ function openAbout() {
       <ul class="about-list">
         <li><strong>Organize</strong> — pick a folder, preview every move and rename, approve, then undo if needed. Never deletes or overwrites silently.</li>
         <li><strong>Plan Filing</strong> — preview how software automation artifacts, finance reports, or student coursework would be sorted by type and period (from file names only), and estimate the time it saves.</li>
-        <li><strong>Guard Desk</strong> — read a check or ID image with on-device OCR and run compliance checks locally; nothing is uploaded.</li>
+        <li><strong>Guard Desk</strong> — choose an on-demand check or ID image from a scanner folder or file, run on-device OCR locally, and review the extracted fields; prototype, not certified compliance.</li>
         <li><strong>Record &amp; Replay</strong> — capture a task once, review each step, and replay only the steps you approved.</li>
       </ul>
     </div>
@@ -1930,7 +1930,7 @@ async function openSettings() {
            <p class="panel__hint" id="fabric-note" style="margin: 8px 0 12px;"></p>
 
            <h4 style="color: #0e8f78; margin: 12px 0 4px;">Fabric inbound webhook</h4>
-           <p class="panel__hint" style="margin: 4px 0 8px;">When the MCP HTTP server is running, POST to <code>${escapeAttr(fabricWebhookStatus.endpoint_path || "/fabric/webhook")}</code> with header <code>X-Ghost-Webhook-Secret</code>. Intents surface in Organizer — nothing auto-executes.</p>
+          <p class="panel__hint" style="margin: 4px 0 8px;">When the MCP HTTP server is running, POST to <code>${escapeAttr(fabricWebhookStatus.endpoint_path || "/fabric/webhook")}</code> with header <code>X-Ghost-Webhook-Secret</code>. Optional alias: <code>/inbound/webhook</code>. Intents surface in Organizer — nothing auto-executes.</p>
            <p class="panel__hint" style="margin: 4px 0 8px;">Secret: ${fabricWebhookStatus.configured ? `configured (${escapeAttr(fabricWebhookStatus.secret_hint || "set")})` : "not set"}</p>
            <button class="btn btn--ghost btn--small" type="button" data-fabric-webhook-secret>${fabricWebhookStatus.configured ? "Rotate webhook secret" : "Generate webhook secret"}</button>
            <pre id="fabric-webhook-secret" class="panel__hint" style="margin: 4px 0 8px; white-space: pre-wrap; display: none;"></pre>
@@ -2699,7 +2699,7 @@ async function startMcpHttpServer() {
       tlsKeyPath,
     });
     if (note) {
-      note.textContent = `HTTP server running on ${status.bind_host}:${status.port}. POST /mcp for MCP; POST /fabric/webhook for inbound intents.`;
+      note.textContent = `HTTP server running on ${status.bind_host}:${status.port}. POST /mcp for MCP; POST /fabric/webhook (or /inbound/webhook) for inbound intents.`;
     }
     showNotification("MCP HTTP server started.");
     openSettings();
@@ -3467,6 +3467,7 @@ let organizerSelectedZoneId = null;
 let organizerHasReviewedPlan = false;
 /** Last Action Plan from Scan & Preview — feeds the Aye-style approve moment. */
 let organizerLastActionPlan = null;
+const ORGANIZER_SCANNER_INBOX_PRESET = "Scanner Inbox";
 
 async function organizerInit() {
   await organizerPrefillPaths();
@@ -3474,6 +3475,75 @@ async function organizerInit() {
   await organizerRefreshZones();
   await organizerCheckUnfinishedRun();
   await organizerCheckFabricInbound();
+}
+
+function organizerInboundIntentSourceLabel(source) {
+  switch ((source || "").trim()) {
+    case "pos.close":
+      return "Shift-close intent";
+    case "ops.pipeline":
+      return "Batch landed intent";
+    case "scanner.folder":
+      return "Scanner inbox intent";
+    case "hub.bridge":
+      return "Bridge intent";
+    default:
+      return "Inbound intent";
+  }
+}
+
+function organizerInboundIntentCopy(intent) {
+  const source = (intent?.source || "").trim();
+  if (source === "pos.close") {
+    return {
+      heading: "Shift-close intent",
+      message: `${intent.summary} — create today's Organizer plan or pick a Zone first. Ghost never types into the POS from a webhook.`,
+      primaryLabel: intent.zone_id ? "Create plan" : "Select Zone",
+      showSelectZone: !!intent.zone_id,
+      selectLabel: "Select Zone",
+      dismissNotice: "Shift-close intent dismissed.",
+      convertedNotice: "Shift-close intent converted into today's Organizer plan. Review before approving.",
+      prototypeNote:
+        "Guard Desk / POS Bridge stays a prototype desk workflow — not certified compliance.",
+    };
+  }
+
+  return {
+    heading: organizerInboundIntentSourceLabel(source),
+    message: `${intent.summary} — create the Organizer plan, review it, then approve if it looks right. Ghost will not auto-execute.`,
+    primaryLabel: intent.zone_id ? "Create plan" : "Select Zone",
+    showSelectZone: false,
+    selectLabel: "Select Zone",
+    dismissNotice: "Inbound intent dismissed.",
+    convertedNotice: "Inbound intent converted into an Organizer plan. Review before approving.",
+    prototypeNote: "",
+  };
+}
+
+async function organizerSelectInboundZone(zoneId) {
+  if (zoneId) {
+    organizerSelectedZoneId = zoneId;
+    await organizerRefreshZones();
+  }
+  document.getElementById("organizerZoneSelect")?.focus();
+}
+
+async function organizerShowActionPlanPreview(zoneId, actionPlan) {
+  organizerLastActionPlan = actionPlan || null;
+  if (actionPlan) organizerRenderActionPlan(actionPlan);
+  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
+  const result = document.getElementById("organizerResult");
+  if (result) {
+    result.innerHTML = organizerHasReviewedPlan
+      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed. Nothing runs until you approve.</p>`
+      : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
+  }
+  organizerUpdateButtons(await safeRules(zoneId));
+  if (!organizerHasReviewedPlan) {
+    showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
+  } else {
+    showInsight("Preview ready. Nothing runs until you approve — review each step, then Confirm.");
+  }
 }
 
 async function organizerCheckFabricInbound() {
@@ -3493,30 +3563,79 @@ async function organizerCheckFabricInbound() {
     banner.innerHTML = "";
     return;
   }
-  const first = pending[0];
   banner.innerHTML = `
-    <section class="banner banner--warn">
-      <span><strong>Fabric inbound intent:</strong> ${escapeHtml(first.summary)} — review and scan before approving. Ghost will not auto-execute.</span>
-      <div class="banner__actions">
-        <button class="btn btn--ghost btn--small" id="organizerFabricInboundReviewBtn" type="button">Review Zone</button>
-        <button class="btn btn--ghost btn--small" id="organizerFabricInboundDismissBtn" type="button">Dismiss</button>
+    <section class="banner banner--warn organizer-inbound-banner">
+      <div class="organizer-inbound-banner__body">
+        <div>
+          <strong>${pending.length} inbound intent${pending.length === 1 ? "" : "s"} ready for review.</strong>
+          <div class="organizer-muted">Create plan compiles a read-only Organizer preview and marks only that intent converted. Nothing auto-executes.</div>
+        </div>
+        <div class="organizer-inbound-list">
+          ${pending
+            .map((intent) => {
+              const card = organizerInboundIntentCopy(intent);
+              return `
+                <div class="organizer-inbound-list__item">
+                  <div class="organizer-inbound-list__summary">
+                    <strong>${escapeHtml(card.heading)}:</strong> ${escapeHtml(card.message)}
+                    ${card.prototypeNote ? `<div class="organizer-muted" style="margin-top:4px;">${escapeHtml(card.prototypeNote)}</div>` : ""}
+                  </div>
+                  <div class="banner__actions">
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-intent-primary="${escapeAttr(intent.intent_id)}">${escapeHtml(card.primaryLabel)}</button>
+                    ${card.showSelectZone ? `<button class="btn btn--ghost btn--small" type="button" data-fabric-intent-select="${escapeAttr(intent.intent_id)}">${escapeHtml(card.selectLabel)}</button>` : ""}
+                    <button class="btn btn--ghost btn--small" type="button" data-fabric-intent-dismiss="${escapeAttr(intent.intent_id)}">Dismiss</button>
+                  </div>
+                </div>`;
+            })
+            .join("")}
+        </div>
       </div>
     </section>`;
-  document.getElementById("organizerFabricInboundReviewBtn")?.addEventListener("click", async () => {
-    if (first.zone_id) {
-      organizerSelectedZoneId = first.zone_id;
-      await organizerRefreshZones();
-    }
-    showNotification("Scan and review the plan — inbound Fabric signals never auto-run.");
+  const pendingById = new Map(pending.map((intent) => [intent.intent_id, intent]));
+  banner.querySelectorAll("[data-fabric-intent-primary]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const intentId = btn.getAttribute("data-fabric-intent-primary");
+      const intent = intentId ? pendingById.get(intentId) : null;
+      if (!intent) return;
+      const card = organizerInboundIntentCopy(intent);
+      if (!intent.zone_id) {
+        await organizerSelectInboundZone(null);
+        showNotification("Select the Zone you want, then run Scan & Preview. Inbound intents never auto-run.", "info");
+        return;
+      }
+      try {
+        const converted = await invoke("fabric_convert_inbound_intent", { intentId });
+        await organizerSelectInboundZone(converted.intent.zone_id);
+        await organizerShowActionPlanPreview(converted.intent.zone_id, converted.action_plan);
+        showNotification(card.convertedNotice, "info");
+      } catch (err) {
+        toastError("Could not create a plan from the inbound intent: " + formatInvokeError(err));
+      }
+      await organizerCheckFabricInbound();
+    });
   });
-  document.getElementById("organizerFabricInboundDismissBtn")?.addEventListener("click", async () => {
-    try {
-      await invoke("fabric_dismiss_inbound_intent", { intentId: first.intent_id });
-      showNotification("Inbound Fabric intent dismissed.");
-    } catch (err) {
-      toastError("Could not dismiss: " + formatInvokeError(err));
-    }
-    await organizerCheckFabricInbound();
+  banner.querySelectorAll("[data-fabric-intent-select]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const intentId = btn.getAttribute("data-fabric-intent-select");
+      const intent = intentId ? pendingById.get(intentId) : null;
+      if (!intent) return;
+      await organizerSelectInboundZone(intent.zone_id);
+      showNotification("Zone selected. Create the plan when ready — inbound intents never auto-run.", "info");
+    });
+  });
+  banner.querySelectorAll("[data-fabric-intent-dismiss]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const intentId = btn.getAttribute("data-fabric-intent-dismiss");
+      const intent = intentId ? pendingById.get(intentId) : null;
+      if (!intentId || !intent) return;
+      try {
+        await invoke("fabric_dismiss_inbound_intent", { intentId });
+        showNotification(organizerInboundIntentCopy(intent).dismissNotice);
+      } catch (err) {
+        toastError("Could not dismiss: " + formatInvokeError(err));
+      }
+      await organizerCheckFabricInbound();
+    });
   });
 }
 
@@ -3567,6 +3686,100 @@ function organizerSelectedZone() {
   return organizerZones.find((z) => z.id === organizerSelectedZoneId) || null;
 }
 
+function organizerIsScannerInboxZone(zone) {
+  if (!zone) return false;
+  const name = String(zone.name || "").trim().toLowerCase();
+  const description = String(zone.description || "").toLowerCase();
+  return (
+    name === ORGANIZER_SCANNER_INBOX_PRESET.toLowerCase() ||
+    description.includes("scanner inbox") ||
+    description.includes("scan-to-folder")
+  );
+}
+
+function organizerScannerInboxZone() {
+  return organizerZones.find((zone) => organizerIsScannerInboxZone(zone)) || null;
+}
+
+async function organizerSelectZone(zoneId, { scan = false } = {}) {
+  if (!zoneId) return;
+  organizerSelectedZoneId = zoneId;
+  await organizerRefreshZones();
+  if (scan) await organizerScan();
+}
+
+async function organizerRefreshScannerInboxBanner() {
+  const banner = document.getElementById("organizerScannerInboxBanner");
+  if (!banner) return;
+  if (!invoke) {
+    banner.innerHTML = "";
+    return;
+  }
+
+  const selectedZone = organizerSelectedZone();
+  const scannerZone = organizerIsScannerInboxZone(selectedZone)
+    ? selectedZone
+    : organizerScannerInboxZone();
+
+  if (!scannerZone) {
+    banner.innerHTML = `
+      <section class="banner banner--warn">
+        <span><strong>Scanner Inbox:</strong> Point Ghost at the folder your scanner writes PDFs/JPEGs into. Ghost only prepares a reviewable plan here — it never auto-moves files from an IoT signal.</span>
+        <div class="banner__actions">
+          <button class="btn btn--ghost btn--small" id="organizerScannerInboxSetupBtn" type="button">Set up Scanner Inbox</button>
+        </div>
+      </section>`;
+    document
+      .getElementById("organizerScannerInboxSetupBtn")
+      ?.addEventListener("click", () => void organizerRunWizard(ORGANIZER_SCANNER_INBOX_PRESET));
+    return;
+  }
+
+  let signal;
+  try {
+    signal = await invoke("organizer_scanner_inbox_signal", { zoneId: scannerZone.id });
+  } catch (err) {
+    console.warn("organizer_scanner_inbox_signal unavailable:", err);
+    banner.innerHTML = "";
+    return;
+  }
+
+  const readyFiles = Number(signal?.ready_files || 0);
+  const sourceFolder = signal?.source_folder
+    ? `<code>${escapeHtml(signal.source_folder)}</code>`
+    : "the selected scan folder";
+  const isSelected = selectedZone?.id === scannerZone.id;
+
+  if (readyFiles > 0) {
+    const fileLabel = readyFiles === 1 ? "1 file" : `${readyFiles} files`;
+    banner.innerHTML = `
+      <section class="banner banner--warn">
+        <span><strong>Scanner Inbox:</strong> ${escapeHtml(fileLabel)} ready to file in ${sourceFolder}. Review the plan before approving — Ghost will not auto-execute.</span>
+        <div class="banner__actions">
+          ${isSelected ? "" : `<button class="btn btn--ghost btn--small" id="organizerScannerInboxReviewBtn" type="button">Review Zone</button>`}
+          <button class="btn btn--ghost btn--small" id="organizerScannerInboxScanBtn" type="button">Scan &amp; Preview</button>
+        </div>
+      </section>`;
+    document
+      .getElementById("organizerScannerInboxReviewBtn")
+      ?.addEventListener("click", () => void organizerSelectZone(scannerZone.id));
+    document
+      .getElementById("organizerScannerInboxScanBtn")
+      ?.addEventListener("click", () => void organizerSelectZone(scannerZone.id, { scan: true }));
+    return;
+  }
+
+  if (!isSelected) {
+    banner.innerHTML = "";
+    return;
+  }
+
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>Scanner Inbox:</strong> Drop scans into ${sourceFolder}, then use <strong>Scan &amp; Preview</strong>. Ghost only creates a plan here — nothing moves until you approve it.</span>
+    </section>`;
+}
+
 async function organizerRefreshZones() {
   try {
     organizerZones = await invoke("organizer_list_zones");
@@ -3604,6 +3817,7 @@ async function organizerRefreshRules() {
   if (!zone) {
     list.textContent = "Create a Zone, then add the folder you want to organize.";
     organizerUpdateButtons([]);
+    await organizerRefreshScannerInboxBanner();
     return;
   }
   let rules = [];
@@ -3645,6 +3859,7 @@ async function organizerRefreshRules() {
     );
   }
   organizerUpdateButtons(rules);
+  await organizerRefreshScannerInboxBanner();
 }
 
 // The user-facing trust vocabulary, mirrored from the policy engine's
@@ -3753,6 +3968,16 @@ async function organizerHandlePolicyPackFile(file) {
 // no cloud and no credentials. `mode` is "two_folder" (move OUT of a source
 // INTO a destination root) or "in_place" (organize one folder where it sits).
 const ORGANIZER_PRESETS = {
+  [ORGANIZER_SCANNER_INBOX_PRESET]: {
+    description:
+      "Point Ghost at a scan-to-folder inbox and review a filing plan before anything moves.",
+    mode: "two_folder",
+    renameDated: true,
+    sourcePrompt: "Full path of the folder your scanner or MFP drops PDFs/JPEGs into",
+    sourceKey: "downloads",
+    destPrompt: "Destination root for filed scans",
+    destKey: "documents",
+  },
   "Client filing": {
     description: "File invoices, receipts, and statements into dated client folders.",
     mode: "two_folder",
@@ -3794,15 +4019,20 @@ const TRUST_CHOICES = {
 // level, confirm the exact rules, then create the Zone and preview the plan.
 // Reuses the in-app dialog helpers; no new backend — it composes the existing
 // organizer_create_zone / organizer_add_folder_rule commands.
-async function organizerRunWizard() {
+async function organizerRunWizard(presetChoice = null) {
   if (!invoke) return notAvailable();
 
-  const presetName = await ghostPick(
-    "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
-    Object.keys(ORGANIZER_PRESETS),
-  );
+  const presetName =
+    presetChoice ||
+    (await ghostPick(
+      "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
+      Object.keys(ORGANIZER_PRESETS),
+    ));
   if (!presetName) return;
   const preset = ORGANIZER_PRESETS[presetName];
+  if (!preset) {
+    return toastError(`Unknown Organizer preset: ${presetName}`);
+  }
 
   // Prefill with real local folders. Backend also expands ~/… if needed.
   const sourceDefault = organizerPresetPath(preset.sourceKey);
@@ -4096,20 +4326,7 @@ async function organizerScan() {
   } finally {
     if (scanBtn) scanBtn.textContent = prevLabel || "Scan folder";
   }
-  organizerLastActionPlan = actionPlan || null;
-  if (actionPlan) organizerRenderActionPlan(actionPlan);
-  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
-  if (result) {
-    result.innerHTML = organizerHasReviewedPlan
-      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed. Nothing runs until you approve.</p>`
-      : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
-  }
-  organizerUpdateButtons(await safeRules(zone.id));
-  if (!organizerHasReviewedPlan) {
-    showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
-  } else {
-    showInsight("Preview ready. Nothing runs until you approve — review each step, then Confirm.");
-  }
+  await organizerShowActionPlanPreview(zone.id, actionPlan);
 }
 
 function organizerRenderAiSuggestion(result) {
@@ -4261,6 +4478,126 @@ function organizerRenderPlan(plan) {
     <p class="organizer-note">Preview only — approve below to apply. Ghost writes an undo journal before moving any file.</p>`;
 }
 
+function organizerRenderFolderLabelPreview(preview) {
+  if (!preview) return "";
+  const notes = (preview.notes || [])
+    .map((note) => {
+      const label = note.action === "text_exported" ? "Text exported" : "Preview confirmed";
+      const detail = note.detail ? ` — ${escapeHtml(note.detail)}` : "";
+      return `<li><strong>${escapeHtml(label)}</strong> · ${escapeHtml(note.at)}${detail}</li>`;
+    })
+    .join("");
+  const previewConfirmed = (preview.notes || []).some((note) => note.action === "preview_confirmed");
+  return `
+    <section class="organizer-label-card">
+      <div class="organizer-label-card__head">
+        <h3 class="organizer-subhead">Folder label preview</h3>
+        <span class="org-badge org-badge--confirm">Preview only</span>
+      </div>
+      <div class="organizer-label-meta">
+        <span><strong>Zone:</strong> ${escapeHtml(preview.zone_name)}</span>
+        <span><strong>Path:</strong> <code>${escapeHtml(preview.target_folder)}</code></span>
+        <span><strong>Period:</strong> ${escapeHtml(preview.period_label)}</span>
+      </div>
+      <pre class="organizer-label-text">${escapeHtml(preview.suggested_text)}</pre>
+      <p class="organizer-note">Stock Ghost does not print yet. Real DYMO / Brother QL / CUPS integration is follow-up. Paper has no undo path.</p>
+      <div class="btn-row">
+        ${
+          previewConfirmed
+            ? `<button class="btn btn--ghost btn--small" type="button" disabled title="This preview was already acknowledged for audit purposes">Preview confirmed</button>`
+            : `<button class="btn btn--ghost btn--small" id="organizerConfirmLabelPreviewBtn" type="button">Confirm preview</button>`
+        }
+        <button class="btn btn--ghost btn--small" id="organizerExportLabelTextBtn" type="button">Export label text</button>
+      </div>
+      ${notes ? `<ul class="organizer-history organizer-label-notes">${notes}</ul>` : ""}
+    </section>`;
+}
+
+async function organizerLoadFolderLabelPreview(executionId) {
+  if (!invoke || !executionId) return;
+  const slot = document.getElementById("organizerLabelPreview");
+  if (!slot) return;
+  slot.innerHTML = `<p class="organizer-muted">Loading label preview…</p>`;
+  let preview;
+  try {
+    preview = await invoke("organizer_preview_folder_label", { executionId });
+  } catch (err) {
+    slot.innerHTML = "";
+    return toastError("Label preview unavailable: " + formatInvokeError(err));
+  }
+  slot.innerHTML = organizerRenderFolderLabelPreview(preview);
+  document
+    .getElementById("organizerConfirmLabelPreviewBtn")
+    ?.addEventListener("click", () => organizerConfirmFolderLabelPreview(preview));
+  document
+    .getElementById("organizerExportLabelTextBtn")
+    ?.addEventListener("click", () => organizerExportFolderLabelText(preview));
+}
+
+async function organizerConfirmFolderLabelPreview(preview) {
+  const choice = await ghostApproveConfirm({
+    title: "Confirm folder label preview",
+    body: `Record that you reviewed the preview for "${preview.zone_name}"?`,
+    detail:
+      "This stores a post-run audit note only. Stock Ghost still does not print, and paper has no undo path.",
+    confirmLabel: "Confirm preview",
+    reviewLabel: "Back",
+    summaryHtml: `<pre class="organizer-label-text organizer-label-text--dialog">${escapeHtml(preview.suggested_text)}</pre>`,
+  });
+  if (choice !== "confirm") return;
+  try {
+    await invoke("organizer_record_folder_label_note", {
+      executionId: preview.execution_id,
+      action: "preview_confirmed",
+      detail: "preview-only acknowledged; paper undo n/a",
+    });
+    showNotification("Folder label preview confirmed.", "info");
+    await organizerLoadFolderLabelPreview(preview.execution_id);
+  } catch (err) {
+    toastError("Could not record label preview note: " + formatInvokeError(err));
+  }
+}
+
+async function organizerExportFolderLabelText(preview) {
+  if (!invoke) return notAvailable();
+  let exportPayload;
+  try {
+    exportPayload = await invoke("organizer_export_folder_label_text", { executionId: preview.execution_id });
+  } catch (err) {
+    return toastError("Label export unavailable: " + formatInvokeError(err));
+  }
+  const choice = await ghostApproveConfirm({
+    title: "Export label text",
+    body: `Save a preview-only .txt label for "${preview.zone_name}"?`,
+    detail:
+      "Ghost will record a post-run audit note and download a text draft. Stock Ghost still does not print, and paper has no undo path.",
+    confirmLabel: "Confirm & export",
+    reviewLabel: "Back",
+    summaryHtml: `<pre class="organizer-label-text organizer-label-text--dialog">${escapeHtml(exportPayload.text)}</pre>`,
+  });
+  if (choice !== "confirm") return;
+  try {
+    const blob = new Blob([exportPayload.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportPayload.file_name || `ghost-folder-label-${preview.execution_id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    await invoke("organizer_record_folder_label_note", {
+      executionId: preview.execution_id,
+      action: "text_exported",
+      detail: exportPayload.file_name,
+    });
+    showNotification("Folder label text exported.", "info");
+    await organizerLoadFolderLabelPreview(preview.execution_id);
+  } catch (err) {
+    toastError("Could not export label text: " + formatInvokeError(err));
+  }
+}
+
 async function organizerRun() {
   if (!invoke) return notAvailable();
   const zone = organizerSelectedZone();
@@ -4313,6 +4650,10 @@ async function organizerRun() {
 
   const result = document.getElementById("organizerResult");
   if (result) {
+    const labelPreviewCta =
+      (r.applied ?? 0) > 0
+        ? `<button class="btn btn--ghost btn--small" id="organizerPreviewLabelBtn" type="button" title="Preview a suggested folder label. Stock Ghost does not print yet.">Preview folder label</button>`
+        : "";
     result.innerHTML = `
       ${receiptHtml}
       <div class="organizer-summary organizer-summary--done">
@@ -4322,14 +4663,18 @@ async function organizerRun() {
       </div>
       <div class="btn-row">
         <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+        ${labelPreviewCta}
         <button class="btn btn--ghost btn--small" id="organizerExportCsvBtn" type="button">Export audit (CSV)</button>
         <button class="btn btn--ghost btn--small" id="organizerExportJsonBtn" type="button">Export audit (JSON)</button>
         <button class="btn btn--ghost btn--small" id="organizerExportSignedBtn" type="button" title="A compliance report with a cryptographic signature, verifiable offline">Export signed report</button>
       </div>
+      <div id="organizerLabelPreview"></div>
       <h3 class="organizer-subhead">Audit log</h3>
       <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
     const undoBtn = document.getElementById("organizerUndoLastBtn");
     if (undoBtn) undoBtn.addEventListener("click", () => organizerUndo(res.execution_id));
+    const previewLabelBtn = document.getElementById("organizerPreviewLabelBtn");
+    if (previewLabelBtn) previewLabelBtn.addEventListener("click", () => organizerLoadFolderLabelPreview(res.execution_id));
     const csvBtn = document.getElementById("organizerExportCsvBtn");
     if (csvBtn) csvBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "csv"));
     const jsonBtn = document.getElementById("organizerExportJsonBtn");
@@ -4340,6 +4685,7 @@ async function organizerRun() {
   organizerHasReviewedPlan = false;
   organizerLastActionPlan = null;
   organizerUpdateButtons(await safeRules(zone.id));
+  await organizerRefreshScannerInboxBanner();
   if (runBtn) runBtn.textContent = prevLabel || "Approve & Organize";
   showNotification(`Organized: ${r.applied ?? 0} change(s) applied.`, "info");
 }
@@ -5591,9 +5937,11 @@ function guardUpdateUploadStatus() {
   const el = document.getElementById("guardUploadStatus");
   if (!el) return;
   const parts = [];
-  if (guardCheckImageFile) parts.push(`Check: ${guardCheckImageFile.name}`);
-  if (guardIdImageFile) parts.push(`ID: ${guardIdImageFile.name}`);
-  el.textContent = parts.length ? parts.join(" · ") : "No uploads — using preset";
+  if (guardCheckImageFile) parts.push(`Check file: ${guardCheckImageFile.name}`);
+  if (guardIdImageFile) parts.push(`ID file: ${guardIdImageFile.name}`);
+  el.textContent = parts.length
+    ? `On-demand image — ${parts.join(" · ")}`
+    : "No on-demand image selected — using preset";
 }
 
 function guardFileToBytes(file) {
@@ -5993,17 +6341,17 @@ function guardDeskInit() {
     analysisResult.style.display = "none";
     autofillBtn.disabled = true;
 
-    // 2. Load scenario — real OCR when uploads exist, preset otherwise
+    // 2. Load scenario — real OCR when chosen files exist, preset otherwise
     let data;
     const useOcr = guardCheckImageFile || guardIdImageFile;
     if (useOcr) {
       try {
         data = await guardScanFromImages(guardCheckImageFile, guardIdImageFile);
-        showNotification("Local OCR scan complete", "info");
+        showNotification("On-demand image review complete", "info");
       } catch (err) {
         console.warn("OCR failed:", err);
         toastError(
-          "Could not read the uploaded image(s). Try a clearer photo or use a demo preset without uploads.",
+          "Could not read the chosen image file(s). Try a clearer scanner image or photo, or use a demo preset.",
         );
         guardScanInProgress = false;
         scanBtn.disabled = false;

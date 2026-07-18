@@ -108,6 +108,7 @@
 
                 <div id="organizerUnfinishedBanner" aria-live="polite"></div>
                 <div id="organizerFabricInboundBanner" aria-live="polite"></div>
+                <div id="organizerScannerInboxBanner" aria-live="polite"></div>
 
                 <div class="organizer-zone">
                   <label class="organizer-field">
@@ -310,12 +311,12 @@
                       <h2>Guard Desk</h2>
                       <span class="organizer-pipeline" aria-hidden="true" style="color:var(--success)">Scan → Verify → Approve → POS Bridge</span>
                     </div>
-                    <p class="panel__hint">Prototype desk workflow — not certified compliance. Select an AI automation preset, or upload check &amp; ID images for local OCR (macOS/Windows). Scan verifies payees, limits, and signature authenticity on-device; nothing leaves your machine unless you approve POS Bridge typing.</p>
+                    <p class="panel__hint">Prototype desk workflow — not certified compliance. Select a demo preset, or choose on-demand check and ID images from a scanner folder or file for local OCR (macOS/Windows). Ghost reviews extracted payee, date, amount, limit, and ID fields on-device; nothing leaves your machine unless you approve POS Bridge typing. No camera permission.</p>
                     
                     <div class="btn-row" style="margin-bottom:16px; align-items: center; gap: 12px; flex-wrap: wrap;">
-                      <button class="btn btn--primary" id="guardScanBtn" type="button">Scan documents</button>
-                      <button class="btn btn--ghost btn--small" id="guardUploadCheckBtn" type="button" title="Upload a check image for local OCR">Upload Check</button>
-                      <button class="btn btn--ghost btn--small" id="guardUploadIdBtn" type="button" title="Upload an ID image for local OCR">Upload ID</button>
+                      <button class="btn btn--primary" id="guardScanBtn" type="button">Run review</button>
+                      <button class="btn btn--ghost btn--small" id="guardUploadCheckBtn" type="button" title="Choose a check image from a scanner folder or file for local OCR">Choose Check Image</button>
+                      <button class="btn btn--ghost btn--small" id="guardUploadIdBtn" type="button" title="Choose an ID image from a scanner folder or file for local OCR">Choose ID Image</button>
                       <input type="file" id="guardCheckImageInput" accept="image/*" hidden />
                       <input type="file" id="guardIdImageInput" accept="image/*" hidden />
                       <span id="guardUploadStatus" style="font-size:0.75rem; color:var(--muted); min-width:120px;"></span>
@@ -384,7 +385,7 @@
                     <!-- Compliance Checklists and Analysis Results -->
                     <div id="guardAnalysisResult" class="panel" style="display:none; background:var(--bg); border:1px solid var(--border); margin-top:20px;">
                       <h3 style="margin-top:0; font-size:1rem; color:var(--text); display:flex; justify-content:space-between; align-items: center; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px;">
-                        <span>AI Compliance Verification</span>
+                        <span>On-device review</span>
                         <strong id="guardVerdict" style="padding:4px 10px; border-radius:6px; font-size:0.8rem; letter-spacing: 0.5px; border: 1px solid transparent;">VERIFYING...</strong>
                       </h3>
                       <ul id="guardRuleList" style="list-style:none; padding:0; margin:0; font-size:0.9rem; display:flex; flex-direction:column; gap:10px;">

@@ -35,6 +35,22 @@ struct FabricItemEventPayload {
     data: Option<serde_json::Value>,
 }
 
+pub(crate) fn normalize_source(source: Option<&str>) -> String {
+    match source.map(str::trim).filter(|s| !s.is_empty()) {
+        Some("fabric-pipeline") => "ops.pipeline".to_string(),
+        Some("eventstream-activator") => "hub.bridge".to_string(),
+        Some(value) => value.to_string(),
+        None => "hub.bridge".to_string(),
+    }
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value.and_then(|v| {
+        let trimmed = v.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
 /// Accept Ghost-native JSON, CloudEvents 1.0, or Fabric item-event envelopes.
 pub fn parse_inbound_body(body: &str) -> Result<ParsedInboundIntent, String> {
     let trimmed = body.trim();
@@ -46,11 +62,9 @@ pub fn parse_inbound_body(body: &str) -> Result<ParsedInboundIntent, String> {
         && !native.summary.trim().is_empty()
     {
         return Ok(ParsedInboundIntent {
-            zone_id: native.zone_id,
-            source: native
-                .source
-                .unwrap_or_else(|| "fabric-webhook".to_string()),
-            summary: native.summary,
+            zone_id: normalize_optional_string(native.zone_id),
+            source: normalize_source(native.source.as_deref()),
+            summary: native.summary.trim().to_string(),
         });
     }
 
@@ -74,7 +88,7 @@ pub fn parse_inbound_body(body: &str) -> Result<ParsedInboundIntent, String> {
 
 fn from_cloud_events(ce: CloudEventsPayload) -> ParsedInboundIntent {
     let event_type = ce.event_type.unwrap_or_else(|| "unknown.event".to_string());
-    let source = ce.source.unwrap_or_else(|| "cloudevents".to_string());
+    let source = normalize_source(ce.source.as_deref());
     let summary = if let Some(data) = ce.data {
         if let Some(s) = data.get("summary").and_then(|v| v.as_str()) {
             s.to_string()
@@ -91,7 +105,7 @@ fn from_cloud_events(ce: CloudEventsPayload) -> ParsedInboundIntent {
         )
     };
     ParsedInboundIntent {
-        zone_id: ce.subject,
+        zone_id: normalize_optional_string(ce.subject),
         source,
         summary,
     }
@@ -101,7 +115,7 @@ fn from_fabric_item_event(ev: FabricItemEventPayload) -> ParsedInboundIntent {
     let event_type = ev
         .event_type
         .unwrap_or_else(|| "Microsoft.Fabric.Event".to_string());
-    let source = ev.source.unwrap_or_else(|| "fabric-event".to_string());
+    let source = normalize_source(ev.source.as_deref());
     let summary = if let Some(data) = &ev.data {
         if let Some(s) = data.get("summary").and_then(|v| v.as_str()) {
             s.to_string()
@@ -118,7 +132,7 @@ fn from_fabric_item_event(ev: FabricItemEventPayload) -> ParsedInboundIntent {
         )
     };
     ParsedInboundIntent {
-        zone_id: ev.subject,
+        zone_id: normalize_optional_string(ev.subject),
         source,
         summary,
     }
@@ -130,11 +144,31 @@ mod tests {
 
     #[test]
     fn ghost_native_round_trip() {
-        let parsed =
-            parse_inbound_body(r#"{"zone_id":"z1","source":"pipeline","summary":"Run finished"}"#)
-                .unwrap();
+        let parsed = parse_inbound_body(
+            r#"{"zone_id":"z1","source":"ops.pipeline","summary":"Run finished"}"#,
+        )
+        .unwrap();
         assert_eq!(parsed.summary, "Run finished");
         assert_eq!(parsed.zone_id.as_deref(), Some("z1"));
+    }
+
+    #[test]
+    fn ghost_native_pos_close_round_trip() {
+        let parsed = parse_inbound_body(
+            r#"{"zone_id":"shift-zone","source":"pos.close","summary":"Shift closed — file today's receipts"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.source, "pos.close");
+        assert_eq!(parsed.zone_id.as_deref(), Some("shift-zone"));
+    }
+
+    #[test]
+    fn legacy_sources_normalize_to_shared_taxonomy() {
+        let parsed = parse_inbound_body(
+            r#"{"source":"fabric-pipeline","summary":"Nightly export pipeline completed"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.source, "ops.pipeline");
     }
 
     #[test]
@@ -161,6 +195,7 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let samples = [
             "docs/samples/fabric-eventstream/ghost-native.json",
+            "docs/samples/fabric-eventstream/pos-shift-close.json",
             "docs/samples/fabric-eventstream/cloudevents-pipeline-done.json",
             "docs/samples/fabric-eventstream/fabric-item-event.json",
             "docs/samples/fabric-eventstream/eventstream-row-bridge.json",

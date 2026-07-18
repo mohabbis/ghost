@@ -297,4 +297,4 @@ This section captures non-obvious caveats for running Ghost inside a Cursor Clou
 
 - **Frontend Node test must target the file, not the dir.** Run `node --test src/compression-review.test.mjs`. `node --test src/` fails with `MODULE_NOT_FOUND` because of how the sibling module is imported.
 
-- **Experimental surface is off by default.** Add `--features experimental` to build/run the AI/Power BI/MCP-relay code; CI does not exercise it.
+- **Experimental surface is off by default.** Add `--features experimental` to build/run the AI/Power BI/MCP-relay code. `tokenizers` is declared without the default `esaxx_fast` feature so the experimental local-model path does not compile `esaxx-rs` C++ (which fails on this VM when `/usr/bin/c++` is clang selecting GCC 14 without `libstdc++-14-dev`). If a future dep reintroduces a C++ build and you see `'cstdint' file not found`, either `export CXX=g++ CC=gcc` or `sudo apt-get install -y libstdc++-14-dev`. `rust.yml` has an experimental check/test/clippy leg; still run `--features experimental` locally when you touch that surface.
