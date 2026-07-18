@@ -64,6 +64,32 @@ fragments for template matching remain opt-in (see
 Occasional still-image utilities may still use Core Graphics helpers; new
 window/display capture work should target ScreenCaptureKit.
 
+## Hard non-goals
+
+These are architectural boundaries, not temporary gaps. Do not ship features that
+cross them, and keep the guardrail tests green:
+
+1. **No ambient / continuous ScreenCaptureKit observation.**  
+   `capture_stream_latest` is request-scoped only: short SCStream sample → latest
+   complete frame → stop. Hard caps in Rust and Swift are **2 seconds / 8 frames**
+   (`StreamCaptureOpts::MAX_*`). Defaults stay well below that (≤400 ms / ≤3
+   frames). There is no long-lived product observation session.
+
+2. **No silent/automatic template capture into Action Plans.**  
+   `UiTarget.template_png` attaches only when the raw click event already carries
+   an opt-in fragment. Recording that fragment requires
+   `PerformanceSettings::capture_element_templates` (default **off**). Compiling
+   addressable clicks must not invent templates.
+
+3. **No direct MCP capture / AX / OCR / template tools.**  
+   `ghost.status` lists `ghost.capture_still`, `ghost.capture_stream`, and related
+   names under `direct_tools_denied`. External clients preview and request
+   approval; they never call ScreenCaptureKit or vision ops outside an approved
+   Action Plan.
+
+Enforced in code by tests in `runtime/capture.rs`, `action_plan/compile.rs`,
+`config.rs`, and `mcp/handlers.rs`.
+
 ## Resolution order
 
 Every UI step resolves in this order:
@@ -420,21 +446,25 @@ Also present (interruptible mid-op helper budgets — partial):
 - Pure Rust budget math + timeout mapping are unit-tested on Linux; live Swift
   helper validation still requires macOS (rebuild `ghost-ax-helper` there).
 
-Not yet the architecture above:
+Not yet the architecture above (implementation gaps — distinct from
+[Hard non-goals](#hard-non-goals)):
 
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
 - hard preemption of in-flight AX attribute writes / ScreenCaptureKit encode (budget
   checks are cooperative only);
 - Input Monitoring / Notifications probe implementations;
-- automatic template capture into Action Plans (fragments must be supplied opt-in on
-  `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
 - capture path (still vs stream) recorded on the receipt;
 - automatic promotion of every click to Semantic* (coordinate-only and
   low-confidence targets correctly remain UiReplay).
 
-Until those land, marketing and README copy must stay within what the repo
-supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
-screen observation, do not claim universal step retries or verified UI settlement,
-do not market template match as proof of business effect, do not claim MCP
-clients can drive AX/OCR/capture without desktop approval, and do not claim every
-recorded click uses AX (weak descriptors still fall back to coordinate replay).
+Permanent non-goals (do not schedule as product work): ambient/continuous
+ScreenCaptureKit observation; silent template capture into Action Plans;
+direct MCP capture/AX/OCR/template tools. See [Hard non-goals](#hard-non-goals).
+
+Until the gaps above land, marketing and README copy must stay within what the
+repo supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as
+always-on screen observation, do not claim universal step retries or verified UI
+settlement, do not market template match as proof of business effect, do not
+claim MCP clients can drive AX/OCR/capture without desktop approval, and do not
+claim every recorded click uses AX (weak descriptors still fall back to
+coordinate replay).

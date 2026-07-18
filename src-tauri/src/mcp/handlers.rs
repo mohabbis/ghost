@@ -563,7 +563,21 @@ mod tests {
                 .contains("approved Action Plan")
         );
         let denied = macos["direct_tools_denied"].as_array().unwrap();
-        assert!(denied.iter().any(|t| t.as_str() == Some("ghost.ocr_click")));
+        // Hard non-goal: MCP must keep listing direct capture/AX/vision tools
+        // as denied — clients propose plans; they never call these ops directly.
+        for required in [
+            "ghost.focus_target",
+            "ghost.set_value",
+            "ghost.capture_still",
+            "ghost.capture_stream",
+            "ghost.ocr_click",
+            "ghost.template_match",
+        ] {
+            assert!(
+                denied.iter().any(|t| t.as_str() == Some(required)),
+                "ghost.status must list {required} in direct_tools_denied"
+            );
+        }
     }
 
     #[test]
