@@ -476,6 +476,31 @@ mod tests {
     }
 
     #[test]
+    fn preview_loads_ui_saved_workflow_object() {
+        // UI saves `{ name, events, metadata, ... }` via save_workflow_with_metadata.
+        // MCP preview must accept that shape (not only bare event arrays).
+        let engine = GhostEngine::new();
+        if engine.auth().is_configured() {
+            return;
+        }
+        let name = format!("mcp-object-{}", uuid::Uuid::new_v4());
+        let workflow = crate::core::events::Workflow {
+            name: name.clone(),
+            events: vec![InputEvent::Delay {
+                ms: 250,
+                timestamp: None,
+            }],
+            metadata: Default::default(),
+            reliability: None,
+        };
+        let path = engine.save_workflow_with_metadata(&workflow).unwrap();
+        let out = preview_routine(&name).expect("preview should load Workflow object");
+        assert_eq!(out["routine_name"], name);
+        assert_eq!(out["event_count"], 1);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn execute_approved_routine_without_token_is_denied() {
         let err = handle_tool(
             McpToolKind::ExecuteApprovedRoutine.name(),

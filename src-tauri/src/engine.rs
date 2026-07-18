@@ -597,9 +597,9 @@ impl GhostEngine {
         let file_path = workflow_file_path(&workflows_dir, name)?;
         // Transparently decrypts envelopes; pre-password plaintext loads as-is.
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
-        let events: Vec<InputEvent> = serde_json::from_str(&json)?;
-
-        Ok(events)
+        // Accept versioned / legacy Workflow objects / bare event arrays.
+        // UI-saved routines are objects; older MCP fixtures may be bare arrays.
+        crate::core::workflow_schema::deserialize_workflow_events(&json)
     }
 
     /// Delete a workflow from disk.
@@ -804,9 +804,7 @@ impl GhostEngine {
         let workflows_dir = data_dir.join("ghost").join("workflows");
         let file_path = workflow_file_path(&workflows_dir, name)?;
         let json = self.auth.reveal(&fs::read_to_string(&file_path)?)?;
-        let workflow: Workflow = serde_json::from_str(&json)?;
-
-        Ok(workflow)
+        crate::core::workflow_schema::deserialize_workflow_with_metadata(&json)
     }
 
     /// Replay a workflow with reliability features
