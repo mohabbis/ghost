@@ -209,6 +209,18 @@ fn verify_semantic_focus(step_id: &str, label: &str, target: &UiTarget) -> StepV
     }
 }
 
+/// True when observed field text matches the approved value.
+///
+/// OCR fallback observations (`ocr:…`) pass only when the approved value appears
+/// in the payload — a bare `ocr:` prefix alone does not count as a match.
+fn observed_matches_approved(observed: &str, value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() {
+        return observed.trim().is_empty();
+    }
+    observed.contains(value) || observed.trim() == value
+}
+
 fn verify_semantic_set_value(
     step_id: &str,
     label: &str,
@@ -218,45 +230,57 @@ fn verify_semantic_set_value(
     let expected = format!("value contains {value}");
     match semantic::verify_postcondition(target, Some(value)) {
         Ok(observed) => {
-            let ok = observed.contains(value)
-                || observed.trim() == value.trim()
-                || observed.contains("ocr:");
-            if ok {
+            if observed_matches_approved(&observed, value) {
                 StepVerification::verified(step_id, label, &expected, &observed)
             } else {
-                StepVerification {
-                    step_id: step_id.into(),
-                    label: label.into(),
-                    expected,
-                    observed,
-                    status: VerificationStatus::Failed,
-                    continue_execution: true,
-                    resolution_strategy: None,
-                    ax_quality: None,
-                    fingerprint: None,
-                    undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
-                    attempts: None,
-                    capture_path: None,
-                }
+                // Product promise: observed ≠ expected halts the run.
+                // ADR-0007 best-effort applies when we cannot observe — not a wrong value.
+                let mut v = StepVerification::failed(step_id, label, &expected, &observed);
+                v.undo_note = Some(StepEvidence::UI_UNDO_NOTE.into());
+                v
             }
         }
         Err(SemanticError::HelperUnavailable(_)) => {
             StepVerification::not_applicable(step_id, label, "semantic value set dispatched")
         }
-        Err(e) => StepVerification {
-            step_id: step_id.into(),
-            label: label.into(),
-            expected,
-            observed: e.to_string(),
-            status: VerificationStatus::Failed,
-            continue_execution: true,
-            resolution_strategy: None,
-            ax_quality: None,
-            fingerprint: None,
-            undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
-            attempts: None,
-            capture_path: None,
-        },
+        Err(e) => {
+            // Could not read the field — do not pretend the approved value landed.
+            let mut v = StepVerification::failed(step_id, label, &expected, &e.to_string());
+            v.undo_note = Some(StepEvidence::UI_UNDO_NOTE.into());
+            v
+        }
+    }
+}
+
+fn verify_semantic_expected_value(
+    step_id: &str,
+    label: &str,
+    target: &UiTarget,
+    expected_value: &Option<String>,
+) -> StepVerification {
+    let expected = expected_value
+        .clone()
+        .unwrap_or_else(|| format!("{} present", target.role));
+    match semantic::verify_postcondition(target, expected_value.as_deref()) {
+        Ok(observed) => {
+            if let Some(want) = expected_value.as_deref() {
+                if observed_matches_approved(&observed, want) {
+                    StepVerification::verified(step_id, label, &expected, &observed)
+                } else {
+                    let mut v = StepVerification::failed(step_id, label, &expected, &observed);
+                    v.undo_note = Some(StepEvidence::UI_UNDO_NOTE.into());
+                    v
+                }
+            } else {
+                StepVerification::verified(step_id, label, &expected, &observed)
+            }
+        }
+        Err(SemanticError::HelperUnavailable(_)) => StepVerification::not_applicable(
+            step_id,
+            label,
+            "semantic verify skipped (AX helper unavailable)",
+        ),
+        Err(e) => StepVerification::failed(step_id, label, &expected, &e.to_string()),
     }
 }
 
@@ -293,27 +317,7 @@ pub fn verify_after_kind(
         ActionKind::SemanticVerify {
             target,
             expected_value,
-        } => match semantic::verify_postcondition(target, expected_value.as_deref()) {
-            Ok(observed) => StepVerification::verified(
-                step_id,
-                label,
-                &expected_value
-                    .clone()
-                    .unwrap_or_else(|| format!("{} present", target.role)),
-                &observed,
-            ),
-            Err(SemanticError::HelperUnavailable(_)) => StepVerification::not_applicable(
-                step_id,
-                label,
-                "semantic verify skipped (AX helper unavailable)",
-            ),
-            Err(e) => StepVerification::failed(
-                step_id,
-                label,
-                "semantic element verified",
-                &e.to_string(),
-            ),
-        },
+        } => verify_semantic_expected_value(step_id, label, target, expected_value),
         ActionKind::TypeText { .. } | ActionKind::Shortcut { .. } => {
             StepVerification::not_applicable(step_id, label, "UI action dispatched")
         }
@@ -354,5 +358,30 @@ mod tests {
         let v = StepVerification::verify_path("s1", "check", &missing, true);
         assert_eq!(v.status, VerificationStatus::Failed);
         assert!(!v.continue_execution);
+    }
+
+    #[test]
+    fn observed_mismatch_does_not_soft_pass_on_ocr_prefix() {
+        assert!(!observed_matches_approved("ocr:wrong", "12,900"));
+        assert!(observed_matches_approved("ocr:12,900", "12,900"));
+        assert!(observed_matches_approved("12,900.00", "12,900"));
+        assert!(!observed_matches_approved("12,090", "12,900"));
+    }
+
+    #[test]
+    fn value_mismatch_verification_halts() {
+        let mut v = StepVerification::failed("s1", "Set amount", "value contains 12,900", "12,090");
+        v.undo_note = Some(StepEvidence::UI_UNDO_NOTE.into());
+        assert_eq!(v.status, VerificationStatus::Failed);
+        assert!(!v.continue_execution);
+    }
+
+    #[test]
+    fn semantic_verify_without_helper_stays_not_applicable() {
+        let target = UiTarget::new("TextEdit", "AXTextArea");
+        let v =
+            verify_semantic_expected_value("s1", "Verify amount", &target, &Some("12,900".into()));
+        assert_eq!(v.status, VerificationStatus::NotApplicable);
+        assert!(v.continue_execution);
     }
 }

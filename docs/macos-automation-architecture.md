@@ -366,8 +366,11 @@ visual matching before AX targeting and permissions are solid.
 5. ScreenCaptureKit still-frame and stream capture ✅ (still + bounded stream sample;
    not ambient continuous observation)
 6. Vision OCR fallback
-7. Verified execution with preconditions and postconditions ⚠️ (timeouts + risk-aware
-   retry policy on ActionStep wired; UI postconditions remain best-effort)
+7. Verified execution with preconditions and postconditions ✅ (timeouts + risk-aware
+   retry policy on ActionStep wired; when a SemanticSetValue / SemanticVerify
+   postcondition can be read and observed ≠ expected, the run halts with
+   `stopped_early` / `stop_reason` on the receipt — HelperUnavailable stays
+   NotApplicable continue per ADR-0007)
 8. Visual template matching only where OCR and AX fail ✅ (Action Plan semantic
    path; opt-in `template_png` only — not ambient capture; not business-effect proof)
 9. Evidence capture, audit records, and undo integration ✅ (receipt records
