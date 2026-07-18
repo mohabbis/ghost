@@ -202,9 +202,9 @@
           <p class="eyebrow">Interactive demo</p>
           <h2>Watch the trust model, live.</h2>
           <p class="section__sub">
-            In-browser simulations of the same desktop views — Record &amp; Replay for the flagship
-            data-entry workflow, plus the Organizer that keeps the outputs tidy.
-            Nothing here touches your files.
+            In-browser simulations of the desktop product — the flagship verify-on-replay transfer,
+            the Ghost&nbsp;2.0 Action Plan invoice run, and the Organizer that keeps outputs tidy.
+            Nothing here touches your files or opens network sockets.
           </p>
         </div>
 
@@ -213,12 +213,15 @@
             <button class="demo__tab is-active" role="tab" aria-selected="true" data-tab="replay" id="tab-replay">
               <svg class="i"><use href="#i-record"/></svg> Record &amp; Replay
             </button>
+            <button class="demo__tab" role="tab" aria-selected="false" data-tab="actionplan" id="tab-actionplan">
+              <svg class="i"><use href="#i-layers"/></svg> Action Plan
+            </button>
             <button class="demo__tab" role="tab" aria-selected="false" data-tab="organizer" id="tab-organizer">
               <svg class="i"><use href="#i-folder"/></svg> Organizer
             </button>
           </div>
 
-          <!-- Tab A: Organizer -->
+          <!-- Tab: Organizer -->
           <div class="demo__panel" role="tabpanel" data-panel="organizer" aria-labelledby="tab-organizer" hidden>
             <div class="demo__stage">
               <div class="demo__left">
@@ -240,7 +243,33 @@
             </div>
           </div>
 
-          <!-- Tab C: Record & Replay (flagship data-entry workflow) -->
+          <!-- Tab: Action Plan (Ghost 2.0 invoice → Finance demo) -->
+          <div class="demo__panel" role="tabpanel" data-panel="actionplan" aria-labelledby="tab-actionplan" hidden>
+            <div class="demo__ba">
+              <span class="demo__ba-item demo__ba-item--before"><svg class="i"><use href="#i-x"/></svg> Opaque macros: click coordinates, no review, no receipt</span>
+              <span class="demo__ba-item demo__ba-item--after"><svg class="i"><use href="#i-check-circle"/></svg> Action Plan: reviewable steps → approve → execute → verify → undo</span>
+            </div>
+            <div class="demo__stage">
+              <div class="demo__left">
+                <div class="demo__screentitle"><span class="dot"></span> <span id="ap-title">Zone · Downloads</span></div>
+                <ul class="planlist" id="ap-plan" aria-live="polite"></ul>
+              </div>
+              <div class="demo__right">
+                <div class="demo__screentitle" id="ap-receipthead">Receipt (awaiting approval)</div>
+                <ul class="planlist" id="ap-receipt" aria-live="polite"></ul>
+                <div class="audit" id="ap-audit" hidden>
+                  <div class="audit__title"><svg class="i"><use href="#i-receipt"/></svg> Execution notes</div>
+                  <ul id="ap-auditlist"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="demo__controls">
+              <button class="btn" id="ap-action" type="button">Build invoice plan</button>
+              <span class="demo__hint" id="ap-hint">Simulation of <code>action_plan_demo</code> — same approve → execute → verify shape as the desktop app.</span>
+            </div>
+          </div>
+
+          <!-- Tab: Record & Replay (flagship data-entry workflow) -->
           <div class="demo__panel is-active" role="tabpanel" data-panel="replay" aria-labelledby="tab-replay">
             <div class="demo__ba" aria-hidden="false">
               <span class="demo__ba-item demo__ba-item--before"><svg class="i"><use href="#i-x"/></svg> Without Ghost: 12,090 lands in the workbook and flows downstream</span>
