@@ -355,11 +355,17 @@ Already present:
 - Action Plan runtime with verify/receipt/undo;
 - native SwiftUI Organizer scaffold over the Rust bridge.
 
+Also present (partial item 7):
+
+- `app_running` precondition before semantic focus/set_value (skipped when helper missing);
+- `set_value` vision fallback (OCR-click label → type) when AX is insufficient and `title` is set;
+- semantic postconditions via `verify_postcondition` (AX verify, else OCR text presence);
+  UI failures are recorded honestly but do not hard-stop the plan (ADR-0007).
+
 Not yet the architecture above:
 
 - ScreenCaptureKit **stream** capture (continuous frames);
-- vision fallback for `set_value` / full postcondition-verified UI contract;
-- full `AutomationStep` runtime fields (preconditions / retry policy wired end to end);
+- full `AutomationStep` runtime fields (timeouts / retry policy wired end to end);
 - Input Monitoring / Notifications probe implementations;
 - template matching only after OCR+AX fail as a dedicated Routines strategy.
 
