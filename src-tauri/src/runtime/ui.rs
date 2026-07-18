@@ -7,8 +7,27 @@ use crate::runtime::evidence::StepEvidence;
 use crate::runtime::helper_budget::HelperBudget;
 use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use enigo::{Enigo, Key, Keyboard, Settings};
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
+/// `Enigo::new` can block indefinitely on Windows CI runners with no interactive
+/// input session (observed: `demo_workflow_serializes_and_runs_fs_steps` hung
+/// until the 45m job timeout). Bound init so headless/CI fails closed quickly.
+const ENIGO_INIT_TIMEOUT: Duration = Duration::from_secs(3);
+const OPEN_APP_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn enigo_or_err() -> Result<Enigo, String> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(Enigo::new(&Settings::default()));
+    });
+    match rx.recv_timeout(ENIGO_INIT_TIMEOUT) {
+        Ok(Ok(enigo)) => Ok(enigo),
+        Ok(Err(e)) => Err(format!("enigo init failed: {e}")),
+        Err(_) => Err("enigo init timed out — no interactive input session (headless CI?)".into()),
+    }
+}
 
 pub enum UiOutcome {
     Applied(Option<StepEvidence>),
@@ -74,14 +93,26 @@ fn semantic_focus(target: &UiTarget, budget: Option<HelperBudget>) -> UiOutcome 
 fn semantic_set_value(target: &UiTarget, value: &str, budget: Option<HelperBudget>) -> UiOutcome {
     match semantic::set_target_value_with_budget(target, value, budget) {
         Ok(evidence) => UiOutcome::Applied(Some(evidence)),
-        Err(SemanticError::HelperUnavailable(_)) => {
-            // Fall back to keyboard typing when the AX helper is not present.
-            match type_text(value) {
-                UiOutcome::Applied(Some(mut ev)) => {
-                    ev.detail = Some("typed via enigo; AX helper unavailable".into());
-                    UiOutcome::Applied(Some(ev))
+        Err(SemanticError::HelperUnavailable(msg)) => {
+            // Enigo fallback only makes sense on a real macOS GUI session where
+            // the AX helper binary is missing. Off macOS (Linux/Windows CI) it
+            // either types into nothing or hangs in Enigo::new — skip instead.
+            #[cfg(target_os = "macos")]
+            {
+                let _ = msg;
+                match type_text(value) {
+                    UiOutcome::Applied(Some(mut ev)) => {
+                        ev.detail = Some("typed via enigo; AX helper unavailable".into());
+                        UiOutcome::Applied(Some(ev))
+                    }
+                    other => other,
                 }
-                other => other,
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                UiOutcome::Skipped(format!(
+                    "semantic set_value skipped ({msg}); enigo fallback is macOS-only"
+                ))
             }
         }
         Err(SemanticError::Ambiguous(n)) => {
@@ -117,11 +148,24 @@ fn semantic_verify(target: &UiTarget, expected_value: Option<&str>) -> UiOutcome
 fn open_application(name: &str) -> UiOutcome {
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        if let Err(e) = open::that_detached(name) {
-            return UiOutcome::Failed(format!("open application failed: {e}"));
+        // ShellExecute / xdg-open can block when the name is a macOS-only app
+        // (e.g. demo "TextEdit") on Windows CI. Bound the launch call.
+        let name_owned = name.to_string();
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = tx.send(open::that_detached(&name_owned));
+        });
+        match rx.recv_timeout(OPEN_APP_TIMEOUT) {
+            Ok(Ok(())) => {
+                thread::sleep(Duration::from_millis(800));
+                UiOutcome::Applied(Some(StepEvidence::coordinates(format!("opened {name}"))))
+            }
+            Ok(Err(e)) => UiOutcome::Failed(format!("open application failed: {e}")),
+            Err(_) => UiOutcome::Failed(format!(
+                "open application timed out after {} ms ({name})",
+                OPEN_APP_TIMEOUT.as_millis()
+            )),
         }
-        thread::sleep(Duration::from_millis(800));
-        UiOutcome::Applied(Some(StepEvidence::coordinates(format!("opened {name}"))))
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
@@ -131,21 +175,20 @@ fn open_application(name: &str) -> UiOutcome {
 }
 
 fn type_text(text: &str) -> UiOutcome {
-    match Enigo::new(&Settings::default()) {
-        Ok(mut enigo) => {
-            if let Err(e) = enigo.text(text) {
-                return UiOutcome::Failed(format!("type text failed: {e}"));
-            }
-            UiOutcome::Applied(Some(StepEvidence::coordinates("typed via enigo")))
-        }
-        Err(e) => UiOutcome::Failed(format!("enigo init failed: {e}")),
+    let mut enigo = match enigo_or_err() {
+        Ok(e) => e,
+        Err(e) => return UiOutcome::Failed(e),
+    };
+    if let Err(e) = enigo.text(text) {
+        return UiOutcome::Failed(format!("type text failed: {e}"));
     }
+    UiOutcome::Applied(Some(StepEvidence::coordinates("typed via enigo")))
 }
 
 fn send_shortcut(combo: &str) -> UiOutcome {
-    let mut enigo = match Enigo::new(&Settings::default()) {
+    let mut enigo = match enigo_or_err() {
         Ok(e) => e,
-        Err(e) => return UiOutcome::Failed(format!("enigo init failed: {e}")),
+        Err(e) => return UiOutcome::Failed(e),
     };
     let parts: Vec<&str> = combo.split('+').map(|s| s.trim()).collect();
     let mut keys = Vec::new();
