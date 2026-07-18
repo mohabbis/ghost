@@ -228,7 +228,7 @@ fn run_http_listener_impl(
         }
     };
     eprintln!(
-        "Ghost HTTP listening on {scheme}://{addr} ({scope}) — POST /mcp, POST /fabric/webhook"
+        "Ghost HTTP listening on {scheme}://{addr} ({scope}) — POST /mcp, POST /fabric/webhook, POST /inbound/webhook"
     );
 
     while !stop.load(Ordering::SeqCst) {
@@ -311,7 +311,7 @@ fn handle_connection_io<S: Read + Write>(
         return write_response(stream, 200, &text);
     }
 
-    if request_line.starts_with("POST /fabric/webhook") {
+    if is_inbound_webhook_request(request_line) {
         if let Err(reason) = check_webhook_secret(&headers, options) {
             return write_response(stream, 401, &format!(r#"{{"error":"{reason}"}}"#));
         }
@@ -341,6 +341,11 @@ fn check_bearer(headers: &[&str], options: &HttpServerOptions) -> Result<(), &'s
     } else {
         Err("invalid bearer token")
     }
+}
+
+fn is_inbound_webhook_request(request_line: &str) -> bool {
+    request_line.starts_with("POST /fabric/webhook")
+        || request_line.starts_with("POST /inbound/webhook")
 }
 
 fn check_webhook_secret(headers: &[&str], options: &HttpServerOptions) -> Result<(), &'static str> {
@@ -441,5 +446,12 @@ mod tests {
         };
         let headers = ["Authorization: Bearer secret"];
         assert!(check_bearer(&headers, &opts).is_ok());
+    }
+
+    #[test]
+    fn inbound_webhook_alias_matches_both_paths() {
+        assert!(is_inbound_webhook_request("POST /fabric/webhook HTTP/1.1"));
+        assert!(is_inbound_webhook_request("POST /inbound/webhook HTTP/1.1"));
+        assert!(!is_inbound_webhook_request("POST /mcp HTTP/1.1"));
     }
 }

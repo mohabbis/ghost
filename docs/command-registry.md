@@ -185,7 +185,7 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `intelligence_discover_local` | experimental | ✓ | – | – | ~ | ✓ | – | low | Probes localhost Ollama/LM Studio ports only; returns discovered models. |
 | `organizer_intelligence_suggest` | experimental | ~ | – | – | ✓/local | ✓ | – | high | Scans Zone file metadata, calls the configured intelligence provider, returns suggestion-only output validated by `suggestion_is_safe`. Never executes. |
 
-### `commands/integrations.rs` — Power BI audit export (experimental, network-write)
+### `commands/integrations.rs` — Power BI/Fabric exports + inbound bridge intents (experimental)
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
@@ -201,11 +201,12 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `fabric_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview (same row shapes as Power BI). No network. |
 | `fabric_list_lakehouses` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists lakehouse items in a workspace; requires Fabric grant. |
 | `fabric_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Uploads JSON export files to a lakehouse `Files/ghost-export/` path via OneLake. Re-derives payload server-side; requires preview in UI first. |
-| `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound Fabric intents (no auto-execute). |
+| `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound bridge intents (for example `ops.pipeline`, `scanner.folder`, `pos.close`). No auto-execute. |
+| `fabric_convert_inbound_intent` | experimental | ✓ | – | – | – | – | – | medium | Re-plans server-side from the intent's `zone_id`, returns a read-only Organizer Action Plan preview, and only then marks the intent `Converted`. Never executes anything. |
 | `fabric_dismiss_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Dismisses an inbound intent without acting on it. |
-| `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound intent for Organizer review (webhook simulation). |
+| `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound bridge intent for Organizer review (webhook simulation / bridge test). |
 | `fabric_webhook_status` | experimental | ✓ | – | – | – | – | – | low | Reports whether a webhook secret is configured. |
-| `fabric_set_webhook_secret` | experimental | ✓ | – | – | – | – | – | medium | Generates/rotates the local `X-Ghost-Webhook-Secret` for `POST /fabric/webhook`. |
+| `fabric_set_webhook_secret` | experimental | ✓ | – | – | – | – | – | medium | Generates/rotates the local `X-Ghost-Webhook-Secret` for `POST /fabric/webhook` (optional alias: `POST /inbound/webhook`). |
 | `google_grant_status` | experimental | ✓ | – | – | – | – | – | low | Local Google Cloud grant metadata. |
 | `google_request_grant` | experimental | ✓ | – | – | ✓ | – | – | medium | OAuth consent for GCS export scope. |
 | `google_revoke_grant` | experimental | ✓ | – | – | – | – | – | low | Revokes local Google Cloud grant. |
@@ -262,7 +263,10 @@ plan can never reach the filesystem.
 | `organizer_check_unfinished_run` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns the newest execution that began but never finished (`finished = 0`), or `null` if the last run ended cleanly. The frontend calls this on Organizer view load to surface a recover-or-dismiss prompt. |
 | `organizer_dismiss_unfinished_run` | stable | ✓ | – | – | – | – | – | low | **local-mutate (DB only).** Marks an interrupted run finished without undoing it or touching the filesystem — the user has reviewed what it applied and chose to leave those changes in place. |
 | `organizer_undo` | stable | ✓ | – | – | – | – | – | medium | **local-mutate.** Replays a stored undo journal in reverse; never overwrites an occupied origin and never removes a non-empty folder. Works on unfinished (crash-interrupted) runs the same as finished ones — a successful undo also marks the run resolved. |
-| `organizer_export_audit` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns a past run's audit log as `json` or `csv` text (each row: action, outcome, the rule that fired, automated/user-approved provenance), with the run's tamper-evidence seal (`hash`/`prev_hash`) as export metadata. Writes nothing itself — the caller saves the returned text. |
+| `organizer_export_audit` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns a past run's audit log as `json` or `csv` text (each row: action, outcome, the rule that fired, automated/user-approved provenance), with the run's tamper-evidence seal (`hash`/`prev_hash`) as export metadata. When present, post-run folder-label confirmation notes are included as sidecar metadata. Writes nothing itself — the caller saves the returned text. |
+| `organizer_preview_folder_label` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Derives a preview-only folder label suggestion (Zone + executed destination path + run period) from one Organizer run's stored execution/audit metadata. Never prints and never writes a file. |
+| `organizer_export_folder_label_text` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns the preview-only folder-label text plus a suggested `.txt` filename so the caller can save/export it explicitly. Stock UI remains no-print; DYMO/Brother/CUPS follow-up is out of scope. |
+| `organizer_record_folder_label_note` | stable | ✓ | – | – | – | – | – | medium | **local-mutate (DB only).** Records that the user explicitly confirmed a folder-label preview/export after a run. This is sidecar audit metadata only; it never prints, never touches user files, and has no undo because paper/exported text is outside the Organizer journal. |
 | `organizer_time_to_value` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Returns local first-touch milestone timestamps (first zone/plan/run/undo) for the diagnostics view. Local-only: timestamps, no paths or content, no network. |
 | `organizer_verify_audit_chain` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Recomputes the execution hash chain and reports whether every sealed run still matches its seal and links to the previous run (`intact`, `sealed_count`, `unsealed_count`, `first_break`). Offline tamper-evidence check; no network. |
 | `organizer_export_policy_pack` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Exports a Zone and its folder rules as portable JSON for backup or another machine. DB read only. |
@@ -296,7 +300,7 @@ MCP headless execution (`mcp/execute.rs::execute_approved_plan`) uses the same `
 | `mcp_disable_pairing` | stable | ✓ | – | – | – | – | – | low | Clears pairing requirement. |
 | `mcp_list_pending_approvals` | stable | ✓ | – | – | – | – | – | low | Lists pending MCP approval requests waiting for desktop review (Organizer + routine; polled by the UI). |
 | `mcp_http_server_status` | experimental | ✓ | – | – | – | – | – | low | Reports MCP/Fabric HTTP listener state (bind, port, LAN exposure). |
-| `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener; LAN requires bearer token; optional in-process TLS PEM paths. |
+| `mcp_start_http_server` | experimental | ✓ | – | – | – | – | – | high | Starts combined `POST /mcp` + `POST /fabric/webhook` listener (optional alias: `POST /inbound/webhook`); LAN requires bearer token; optional in-process TLS PEM paths. |
 | `mcp_stop_http_server` | experimental | ✓ | – | – | – | – | – | low | Stops the HTTP listener started by `mcp_start_http_server`. |
 | `mcp_relay_status` | experimental | ✓ | – | – | – | – | – | low | Reports outbound cloud relay connection state. |
 | `mcp_start_relay` | experimental | ✓ | – | – | – | – | ✓ | high | Outbound HTTPS poll to user-hosted MCP relay (`docs/mcp-relay.md`). |
