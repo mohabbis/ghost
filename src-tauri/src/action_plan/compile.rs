@@ -35,17 +35,17 @@ pub fn from_organizer_plan_with_source(plan: &OrganizerPlan, source: PlanSource)
 fn organizer_action_to_step(index: usize, action: &PlanAction) -> ActionStep {
     let kind = capability_to_kind(&action.capability);
     let label = step_label(&kind, &action.capability);
-    ActionStep {
-        id: format!("fs-{index}"),
+    ActionStep::new(
+        format!("fs-{index}"),
         label,
         kind,
-        capability: action.capability.clone(),
-        decision: action.decision.clone(),
-        rule_path: action.rule_path.clone(),
-        confidence: action.confidence,
-        reason: action.reason.clone(),
-        source_identity: action.source_identity.clone(),
-    }
+        action.capability.clone(),
+        action.decision.clone(),
+    )
+    .with_rule_path(action.rule_path.clone())
+    .with_confidence(action.confidence)
+    .with_reason(action.reason.clone())
+    .with_source_identity(action.source_identity.clone())
 }
 
 pub fn from_compression_report(
@@ -179,17 +179,15 @@ fn compression_step_to_action(
         }
     };
     let evaluation = evaluate_with_attribution(&capability, &[]);
-    ActionStep {
-        id: format!("ui-{index}"),
+    ActionStep::new(
+        format!("ui-{index}"),
         label,
         kind,
         capability,
-        decision: evaluation.decision,
-        rule_path: evaluation.rule_path,
-        confidence: step.confidence(),
-        reason: String::new(),
-        source_identity: None,
-    }
+        evaluation.decision,
+    )
+    .with_rule_path(evaluation.rule_path)
+    .with_confidence(step.confidence())
 }
 
 fn event_slice(

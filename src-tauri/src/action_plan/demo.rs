@@ -208,17 +208,18 @@ fn push_fs_step(
     source_identity: Option<FileIdentity>,
 ) {
     let evaluation = evaluate_with_attribution(&capability, &[]);
-    steps.push(ActionStep {
-        id: format!("demo-{index}"),
-        label: label.into(),
-        kind,
-        capability,
-        decision: evaluation.decision,
-        rule_path: evaluation.rule_path,
-        confidence: 1.0,
-        reason: "demo workflow".into(),
-        source_identity,
-    });
+    steps.push(
+        ActionStep::new(
+            format!("demo-{index}"),
+            label,
+            kind,
+            capability,
+            evaluation.decision,
+        )
+        .with_rule_path(evaluation.rule_path)
+        .with_reason("demo workflow")
+        .with_source_identity(source_identity),
+    );
 }
 
 fn push_ui_step(
@@ -229,36 +230,36 @@ fn push_ui_step(
     label: &str,
 ) {
     let evaluation = evaluate_with_attribution(&capability, &[]);
-    steps.push(ActionStep {
-        id: format!("demo-{index}"),
-        label: label.into(),
-        kind,
-        capability,
-        decision: evaluation.decision,
-        rule_path: evaluation.rule_path,
-        confidence: 1.0,
-        reason: "demo workflow".into(),
-        source_identity: None,
-    });
+    steps.push(
+        ActionStep::new(
+            format!("demo-{index}"),
+            label,
+            kind,
+            capability,
+            evaluation.decision,
+        )
+        .with_rule_path(evaluation.rule_path)
+        .with_reason("demo workflow"),
+    );
 }
 
 fn push_verify_step(steps: &mut Vec<ActionStep>, index: usize, path: PathBuf, label: &str) {
     let capability = Capability::ReadFolder { path: path.clone() };
     let evaluation = evaluate_with_attribution(&capability, &[]);
-    steps.push(ActionStep {
-        id: format!("demo-{index}"),
-        label: label.into(),
-        kind: ActionKind::VerifyPath {
-            path: path.clone(),
-            should_exist: true,
-        },
-        capability,
-        decision: evaluation.decision,
-        rule_path: evaluation.rule_path,
-        confidence: 1.0,
-        reason: "post-move verification".into(),
-        source_identity: None,
-    });
+    steps.push(
+        ActionStep::new(
+            format!("demo-{index}"),
+            label,
+            ActionKind::VerifyPath {
+                path: path.clone(),
+                should_exist: true,
+            },
+            capability,
+            evaluation.decision,
+        )
+        .with_rule_path(evaluation.rule_path)
+        .with_reason("post-move verification"),
+    );
 }
 
 #[cfg(test)]

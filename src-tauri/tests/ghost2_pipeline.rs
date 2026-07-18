@@ -95,23 +95,22 @@ fn resource_drift_skips_stale_move() {
         "t".into(),
         "drift".into(),
         ghost_lib::action_plan::PlanSource::Demo,
-        vec![ghost_lib::action_plan::ActionStep {
-            id: "m1".into(),
-            label: "move".into(),
-            kind: ghost_lib::action_plan::ActionKind::MoveFile {
-                from: src.clone(),
-                to: dst.clone(),
-            },
-            capability: ghost_lib::policy::Capability::MoveFile {
-                from: src.clone(),
-                to: dst.clone(),
-            },
-            decision: ghost_lib::policy::PolicyDecision::Allow,
-            rule_path: None,
-            confidence: 1.0,
-            reason: String::new(),
-            source_identity: Some(identity),
-        }],
+        vec![
+            ghost_lib::action_plan::ActionStep::new(
+                "m1",
+                "move",
+                ghost_lib::action_plan::ActionKind::MoveFile {
+                    from: src.clone(),
+                    to: dst.clone(),
+                },
+                ghost_lib::policy::Capability::MoveFile {
+                    from: src.clone(),
+                    to: dst.clone(),
+                },
+                ghost_lib::policy::PolicyDecision::Allow,
+            )
+            .with_source_identity(Some(identity)),
+        ],
     );
     let rules = vec![full_rule(&tmp)];
     let result = execute_action_plan_with_progress(&plan, &rules, None, None, |_| {});

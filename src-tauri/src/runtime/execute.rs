@@ -4,15 +4,18 @@ use super::fs::{FsOutcome, apply_filesystem_step};
 use super::receipt::{ExecutionReceipt, build_receipt};
 use super::ui::{UiOutcome, dispatch_ui_step_with_reliability};
 use super::verify::{StepVerification, VerificationStatus, verify_after_kind};
-use crate::action_plan::types::ActionKind;
-use crate::action_plan::types::ActionPlan;
+use crate::action_plan::reliability::{
+    backoff_duration, effective_max_attempts, effective_retry_policy, effective_timeout_ms,
+};
+use crate::action_plan::types::{ActionKind, ActionPlan, ActionStep, StepCondition};
 use crate::audit::{ActionOutcome, Provenance, UndoJournal};
 use crate::core::events::ReliabilitySettings;
 use crate::engine::GhostEngine;
 use crate::organizer::executor::ExecutionReport;
 use crate::organizer::trash::{OsTrasher, Trasher};
 use crate::policy::{self, Capability, FolderRule, PolicyDecision};
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::runtime::semantic::{self, UiTarget};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeResult {
@@ -111,10 +114,8 @@ fn execute_action_plan_with_options(
             Provenance::UserApproved
         };
 
-        let outcome = dispatch_step(
-            &step.kind,
-            &step.capability,
-            step.source_identity.as_ref(),
+        let outcome = execute_step_with_reliability(
+            step,
             rules,
             engine,
             reliability,
@@ -196,6 +197,159 @@ enum DispatchOutcome {
     Failed(String),
 }
 
+/// Run declared preconditions, then dispatch with timeout + risk-aware retries.
+fn execute_step_with_reliability(
+    step: &ActionStep,
+    rules: &[FolderRule],
+    engine: Option<&GhostEngine>,
+    reliability: Option<&ReliabilitySettings>,
+    trasher: &dyn Trasher,
+    undo: &mut UndoJournal,
+) -> DispatchOutcome {
+    if let Err(reason) = check_preconditions(&step.preconditions) {
+        return DispatchOutcome::Failed(reason);
+    }
+
+    let retry = effective_retry_policy(&step.kind, &step.capability, step.retry_policy.as_ref());
+    let max_attempts = effective_max_attempts(&retry);
+    let timeout = effective_timeout_ms(&step.kind, step.timeout_ms).map(Duration::from_millis);
+    let started = Instant::now();
+
+    let mut attempt = 0u32;
+    let mut last_failure = String::from("step failed");
+    while attempt < max_attempts {
+        if let Some(limit) = timeout
+            && started.elapsed() >= limit
+        {
+            return DispatchOutcome::Failed(format!(
+                "step timed out after {} ms ({last_failure})",
+                limit.as_millis()
+            ));
+        }
+
+        let outcome = dispatch_step(
+            &step.kind,
+            &step.capability,
+            step.source_identity.as_ref(),
+            rules,
+            engine,
+            reliability,
+            trasher,
+            undo,
+        );
+        match outcome {
+            DispatchOutcome::Applied => {
+                if let Err(reason) = check_postconditions(&step.postconditions) {
+                    return DispatchOutcome::Failed(reason);
+                }
+                return DispatchOutcome::Applied;
+            }
+            DispatchOutcome::Skipped(reason) => return DispatchOutcome::Skipped(reason),
+            DispatchOutcome::Failed(error) => {
+                last_failure = error;
+                attempt += 1;
+                if attempt >= max_attempts {
+                    break;
+                }
+                if let Some(limit) = timeout {
+                    let remaining = limit.saturating_sub(started.elapsed());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    let sleep_for = backoff_duration(&retry, attempt - 1).min(remaining);
+                    std::thread::sleep(sleep_for);
+                } else {
+                    std::thread::sleep(backoff_duration(&retry, attempt - 1));
+                }
+            }
+        }
+    }
+
+    if let Some(limit) = timeout
+        && started.elapsed() >= limit
+    {
+        return DispatchOutcome::Failed(format!(
+            "step timed out after {} ms ({last_failure})",
+            limit.as_millis()
+        ));
+    }
+    if max_attempts > 1 {
+        DispatchOutcome::Failed(format!("{last_failure} (after {max_attempts} attempts)"))
+    } else {
+        DispatchOutcome::Failed(last_failure)
+    }
+}
+
+fn check_preconditions(conditions: &[StepCondition]) -> Result<(), String> {
+    for condition in conditions {
+        match condition {
+            StepCondition::AppRunning { app, bundle_id } => {
+                let target = UiTarget {
+                    app: app.clone(),
+                    role: String::new(),
+                    title: None,
+                    fingerprint: None,
+                    identifier: None,
+                    bundle_id: bundle_id.clone(),
+                    window_title: None,
+                };
+                semantic::ensure_app_running(&target).map_err(|e| e.to_string())?;
+            }
+            StepCondition::PathExists { path } => {
+                if !path.exists() {
+                    return Err(format!(
+                        "precondition failed: path missing {}",
+                        path.display()
+                    ));
+                }
+            }
+            StepCondition::PathAbsent { path } => {
+                if path.exists() {
+                    return Err(format!(
+                        "precondition failed: path already exists {}",
+                        path.display()
+                    ));
+                }
+            }
+            StepCondition::SemanticTarget {
+                target,
+                expected_value,
+            } => {
+                // Soft check only — UI observation is not business-effect proof.
+                let _ = semantic::verify_postcondition(target, expected_value.as_deref());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_postconditions(conditions: &[StepCondition]) -> Result<(), String> {
+    for condition in conditions {
+        match condition {
+            StepCondition::PathExists { path } => {
+                if !path.exists() {
+                    return Err(format!(
+                        "postcondition failed: path missing {}",
+                        path.display()
+                    ));
+                }
+            }
+            StepCondition::PathAbsent { path } => {
+                if path.exists() {
+                    return Err(format!(
+                        "postcondition failed: path still present {}",
+                        path.display()
+                    ));
+                }
+            }
+            StepCondition::AppRunning { .. } | StepCondition::SemanticTarget { .. } => {
+                // UI postconditions stay best-effort; hard FS checks above are authoritative.
+            }
+        }
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn dispatch_step(
     kind: &ActionKind,
@@ -253,17 +407,7 @@ mod tests {
     use crate::policy::PolicyDecision;
 
     fn fs_step(id: &str, label: &str, kind: ActionKind, cap: Capability) -> ActionStep {
-        ActionStep {
-            id: id.into(),
-            label: label.into(),
-            kind,
-            capability: cap,
-            decision: PolicyDecision::Allow,
-            rule_path: None,
-            confidence: 1.0,
-            reason: String::new(),
-            source_identity: None,
-        }
+        ActionStep::new(id, label, kind, cap, PolicyDecision::Allow)
     }
 
     #[test]
@@ -443,5 +587,73 @@ mod tests {
         assert_eq!(result.report.applied, 1);
         assert!(folder.is_dir());
         assert!(!result.receipt.steps.is_empty());
+    }
+
+    #[test]
+    fn old_action_step_json_deserializes_without_reliability_fields() {
+        let json = r#"{
+            "id": "s1",
+            "label": "wait",
+            "kind": { "kind": "wait", "ms": 10 },
+            "capability": { "kind": "os_wait" },
+            "decision": { "decision": "allow" }
+        }"#;
+        let step: ActionStep = serde_json::from_str(json).expect("old step JSON");
+        assert!(step.retry_policy.is_none());
+        assert!(step.timeout_ms.is_none());
+        assert!(step.preconditions.is_empty());
+        assert_eq!(
+            step.fallback_strategy,
+            crate::action_plan::FallbackStrategy::None
+        );
+    }
+
+    #[test]
+    fn verify_failure_can_retry_then_stop() {
+        use crate::action_plan::{RetryClass, RetryPolicy};
+        let tmp = tempdir();
+        let missing = tmp.path().join("nope.pdf");
+        let rules = vec![crate::policy::FolderRule {
+            path: tmp.path().to_path_buf(),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: true,
+            can_delete: false,
+            trust: crate::policy::TrustLevel::Automate,
+        }];
+        let mut step = fs_step(
+            "v1",
+            "verify missing",
+            ActionKind::VerifyPath {
+                path: missing.clone(),
+                should_exist: true,
+            },
+            Capability::ReadFolder { path: missing },
+        );
+        step.retry_policy = Some(RetryPolicy {
+            class: RetryClass::Allowed,
+            max_attempts: 2,
+            backoff_ms: 20,
+        });
+        step.timeout_ms = Some(5_000);
+        let plan = ActionPlan::new("t".into(), "test".into(), PlanSource::Demo, vec![step]);
+        let result = execute_action_plan_with_progress(&plan, &rules, None, None, |_| {});
+        assert!(result.stopped_early);
+        assert_eq!(result.report.failed, 1);
+        let err = result
+            .report
+            .audit
+            .events()
+            .iter()
+            .find_map(|e| match &e.outcome {
+                ActionOutcome::Failed { error } => Some(error.as_str()),
+                _ => None,
+            });
+        assert!(
+            err.is_some_and(|e| e.contains("after 2 attempts")),
+            "expected retry marker, got {err:?}"
+        );
     }
 }
