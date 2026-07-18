@@ -327,7 +327,8 @@ visual matching before AX targeting and permissions are solid.
 5. ScreenCaptureKit still-frame and stream capture ✅ (still + bounded stream sample;
    not ambient continuous observation)
 6. Vision OCR fallback
-7. Verified execution with preconditions and postconditions
+7. Verified execution with preconditions and postconditions ⚠️ (timeouts + risk-aware
+   retry policy on ActionStep wired; UI postconditions remain best-effort)
 8. Visual template matching only where OCR and AX fail
 9. Evidence capture, audit records, and undo integration
 10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass)
@@ -361,21 +362,34 @@ Already present:
 - Action Plan runtime with verify/receipt/undo;
 - native SwiftUI Organizer scaffold over the Rust bridge.
 
-Also present (partial item 7):
+Also present (item 7 — partial, honest):
 
-- `app_running` precondition before semantic focus/set_value (skipped when helper missing);
-- `set_value` vision fallback (OCR-click label → type) when AX is insufficient and `title` is set;
-- semantic postconditions via `verify_postcondition` (AX verify, else OCR text presence);
-  UI failures are recorded honestly but do not hard-stop the plan (ADR-0007).
+- `ActionStep` carries optional `timeout_ms`, `retry_policy`, `preconditions`,
+  `postconditions`, `fallback_strategy`, and `risk_level` (serde defaults keep old
+  plans loading); see `action_plan/reliability.rs`;
+- Action Plan runtime applies risk-aware retries + wall-clock timeout around
+  dispatch (`runtime/execute.rs`): Allowed / Cautious / Denied classes;
+  **delete, shortcuts, typed text, UI replay, network, and screen-capture never
+  auto-retry** even if a plan JSON asks;
+- `app_running` precondition before semantic focus/set_value (skipped when helper
+  missing); default preconditions on new semantic steps;
+- `set_value` vision fallback (OCR-click label → type) when AX is insufficient and
+  `title` is set;
+- semantic postconditions via `verify_postcondition` (AX verify, else OCR text
+  presence); UI failures are recorded honestly but do not hard-stop the plan
+  (ADR-0007). Path pre/postconditions can hard-fail a step.
 
 Not yet the architecture above:
 
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
-- full `AutomationStep` runtime fields (timeouts / retry policy wired end to end);
+- interruptible mid-op timeouts inside AX/SCK helper calls (runtime budget covers
+  dispatch + retries only);
 - Input Monitoring / Notifications probe implementations;
 - template matching only after OCR+AX fail as a dedicated Routines strategy;
-- evidence / audit fields for which capture strategy (still vs stream) served a UI step.
+- evidence / audit fields for which capture strategy (still vs stream) or retry
+  attempt count served a UI step.
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
-screen observation or as proof of business effect.
+screen observation, and do not claim universal step retries or verified UI
+settlement.

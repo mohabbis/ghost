@@ -2,12 +2,85 @@
 
 use crate::core::events::InputEvent;
 use crate::organizer::file_identity::FileIdentity;
-use crate::policy::{Capability, PolicyDecision};
+use crate::policy::{Capability, PolicyDecision, RiskLevel};
 use crate::runtime::semantic::UiTarget;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub const ACTION_PLAN_VERSION: u32 = 1;
+
+/// Whether the Action Plan runtime may auto-retry a failed step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryClass {
+    /// Bounded retries (lookup / focus / verify style).
+    Allowed,
+    /// At most one careful retry (reversible mutations).
+    Cautious,
+    /// Never auto-retry (destructive / externally consequential / typing).
+    #[default]
+    Denied,
+}
+
+/// Per-step retry policy. Missing on old plans → derived at execute time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    pub class: RetryClass,
+    /// Includes the first attempt. Clamped by class at execute time.
+    pub max_attempts: u32,
+    pub backoff_ms: u64,
+}
+
+impl RetryPolicy {
+    pub fn denied() -> Self {
+        Self {
+            class: RetryClass::Denied,
+            max_attempts: 1,
+            backoff_ms: 0,
+        }
+    }
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self::denied()
+    }
+}
+
+/// How a UI step may fall back when the preferred strategy fails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FallbackStrategy {
+    #[default]
+    None,
+    AxThenVisionThenCoordinates,
+    CoordinatesOnly,
+}
+
+/// Declared pre/post conditions on an [`ActionStep`].
+///
+/// UI semantic checks are best-effort observation, not business-effect proof
+/// (ADR-0007).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum StepCondition {
+    AppRunning {
+        app: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bundle_id: Option<String>,
+    },
+    PathExists {
+        path: PathBuf,
+    },
+    PathAbsent {
+        path: PathBuf,
+    },
+    SemanticTarget {
+        target: UiTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_value: Option<String>,
+    },
+}
 
 /// Where this plan originated — intent source, not execution engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +138,20 @@ pub struct ActionStep {
     pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_identity: Option<FileIdentity>,
+    /// Wall-clock budget for dispatch + retries (ms). `None` → derive at execute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// When `None`, execute derives from kind/capability (old plans).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_policy: Option<RetryPolicy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preconditions: Vec<StepCondition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub postconditions: Vec<StepCondition>,
+    #[serde(default)]
+    pub fallback_strategy: FallbackStrategy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_level: Option<RiskLevel>,
 }
 
 /// Executable payload for one step. Policy vocabulary lives on [`ActionStep::capability`].
