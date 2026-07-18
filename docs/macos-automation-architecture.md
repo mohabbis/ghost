@@ -369,7 +369,12 @@ Already present:
   Action Plan; `ghost.execute_approved_routine` / `ghost.execute_approved_plan`
   run the Action Plan runtime after a desktop-issued token). There are **no**
   direct MCP tools for AX focus/set_value, ScreenCaptureKit capture, OCR click,
-  or template match — `ghost.status` lists those names as denied.
+  or template match — `ghost.status` lists those names as denied;
+- recorded routine compile (`action_plan/compile.rs`) prefers `SemanticFocus` /
+  `SemanticSetValue` when the compressed target is semantically addressable
+  (app + role + identifier, or named target with confidence above the review
+  floor). Weak / right-click / redacted typing stays `UiReplay` / coordinate
+  `TypeText`. Opt-in `template_png` from the raw click event attaches when present.
 
 Also present (item 7 — partial, honest):
 
@@ -409,11 +414,12 @@ Not yet the architecture above:
 - automatic template capture into Action Plans (fragments must be supplied opt-in on
   `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
 - capture path (still vs stream) recorded on the receipt;
-- compiling recorded clicks into `SemanticFocus` by default (today many routine
-  clicks remain `UiReplay`; Semantic* steps use AX→OCR→template when present).
+- automatic promotion of every click to Semantic* (coordinate-only and
+  low-confidence targets correctly remain UiReplay).
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
 screen observation, do not claim universal step retries or verified UI settlement,
-do not market template match as proof of business effect, and do not claim MCP
-clients can drive AX/OCR/capture without desktop approval.
+do not market template match as proof of business effect, do not claim MCP
+clients can drive AX/OCR/capture without desktop approval, and do not claim every
+recorded click uses AX (weak descriptors still fall back to coordinate replay).

@@ -340,6 +340,7 @@ mod tests {
                     role: "AXTextField".into(),
                     app: "Login".into(),
                     identifier: None,
+                    window_title: None,
                 }),
                 text: None,
                 confidence: 1.0,
