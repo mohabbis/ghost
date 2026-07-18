@@ -395,6 +395,50 @@ fn production_csp_stays_locked_down() {
     );
 }
 
+/// Launch money shot: mismatch halt must stay visible in the execution receipt
+/// (`expected “…” · observed “…” → stop`) and Replay History must preview it.
+#[test]
+fn receipt_surfaces_mismatch_halt_money_shot() {
+    let receipt = read("../src/execution/receipt.js");
+    for marker in [
+        "ghost2-receipt__halt",
+        "ghost2-receipt__halt-tag",
+        "ghost2-receipt-step__halt-line",
+        "formatMismatchHaltLine",
+        "findFirstMismatchStep",
+        r"\u201c", // curly open quote used in money-shot copy
+        "\u{2192} stop", // → stop
+        "failed: \"Mismatch\"",
+        "Ghost halted the run",
+    ] {
+        assert!(
+            receipt.contains(marker),
+            "execution/receipt.js must surface mismatch-halt UI `{marker}`"
+        );
+    }
+
+    let css = read("../src/app.css");
+    for marker in [".ghost2-receipt__halt", ".ghost2-receipt-step__halt-line"] {
+        assert!(
+            css.contains(marker),
+            "src/app.css must style mismatch-halt UI `{marker}`"
+        );
+    }
+
+    let main = read("../src/main.js");
+    for marker in [
+        "findFirstMismatchStep",
+        "formatMismatchHaltLine",
+        "ghost2-receipt__halt",
+        "replay-receipt-halt",
+    ] {
+        assert!(
+            main.contains(marker),
+            "src/main.js Replay History / receipt modal must wire halt preview `{marker}`"
+        );
+    }
+}
+
 #[test]
 fn organizer_approve_uses_plan_risk_gate() {
     let js = read("../src/main.js");

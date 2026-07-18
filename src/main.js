@@ -8,7 +8,11 @@ import {
   planSummaryHtml,
   planApprovalGateHtml,
 } from "./execution/review.js";
-import { renderExecutionReceipt } from "./execution/receipt.js";
+import {
+  findFirstMismatchStep,
+  formatMismatchHaltLine,
+  renderExecutionReceipt,
+} from "./execution/receipt.js";
 
 const { invoke } = window.__TAURI__?.core || {};
 const { listen } = window.__TAURI__?.event || {};
@@ -947,7 +951,12 @@ async function replayWorkflow(options) {
       showExecutionReceiptModal("Routine replay", res);
     }
     if (res?.stopped_early) {
-      toastError(res.stop_reason || "Routine stopped early");
+      const mismatch = findFirstMismatchStep(res.receipt);
+      toastError(
+        mismatch
+          ? formatMismatchHaltLine(mismatch.label, mismatch.expected, mismatch.observed)
+          : res.stop_reason || "Routine stopped early",
+      );
     }
   } catch (error) {
     console.error("Failed to replay workflow:", error);
@@ -3264,9 +3273,13 @@ function showExecutionReceiptModal(title, res) {
   const content = modal?.querySelector(".modal-content");
   if (!content) return;
   const receiptHtml = res?.receipt ? renderExecutionReceipt(res.receipt) : "";
-  const stopped = res?.stopped_early
-    ? `<p class="organizer-muted">Stopped early${res.stop_reason ? `: ${escapeHtml(res.stop_reason)}` : ""}</p>`
-    : "";
+  // Halt copy lives in the receipt banner when expected/observed is available;
+  // only fall back to a muted line when the receipt couldn't render the money shot.
+  const mismatch = findFirstMismatchStep(res?.receipt);
+  const stopped =
+    res?.stopped_early && !mismatch && !receiptHtml.includes("ghost2-receipt__halt")
+      ? `<p class="organizer-muted">Stopped early${res.stop_reason ? `: ${escapeHtml(res.stop_reason)}` : ""}</p>`
+      : "";
   // Offer undo right where the user reads the receipt — replay → verify → undo
   // should be one loop, not a trip through History. The stable
   // undo_action_plan_execution command replays the run's undo journal in reverse.
@@ -4648,6 +4661,15 @@ async function showReplayHistory() {
             </li>`;
           }
           const summary = summarizePersistedReceipt(receipt);
+          const mismatch = findFirstMismatchStep(receipt);
+          const haltPreview = mismatch
+            ? `<div class="ghost2-receipt__halt replay-receipt-halt" role="status">
+                <span class="ghost2-receipt__halt-tag">halt</span>
+                <span class="ghost2-receipt__halt-copy">${escapeHtml(
+                  formatMismatchHaltLine(mismatch.label, mismatch.expected, mismatch.observed),
+                )}</span>
+              </div>`
+            : "";
           const chips = [
             summary.counts.verified
               ? `<span class="ghost2-verify-chip ghost2-verify-chip--verified">${summary.counts.verified} verified</span>`
@@ -4668,6 +4690,7 @@ async function showReplayHistory() {
             <div><strong>${escapeHtml(receipt.plan_title || "Recorded routine")}</strong>
               <span class="replay-receipt-status replay-receipt-status--${summary.className}">${summary.label}</span></div>
             <div class="replay-meta">${escapeHtml(fmtReceiptWhen(receipt, run.created_at))} · ${receipt.applied} applied · ${receipt.failed} failed${receipt.stopped_early ? " · stopped early" : ""}</div>
+            ${haltPreview}
             <div class="replay-receipt-chips">${chips}</div>
             <div><button class="btn btn--ghost btn--small" type="button" data-replay-receipt-exec="${escapeAttr(run.id)}">View receipt</button></div>
           </li>`;

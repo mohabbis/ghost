@@ -1979,6 +1979,34 @@ h3 .i,
 .ghost2-receipt__warn {
   color: var(--danger, #f87171);
 }
+/* Mismatch halt money shot — expected vs observed → stop (launch demo beat). */
+.ghost2-receipt__halt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 8px;
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.ghost2-receipt__halt-tag {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(248, 113, 113, 0.22);
+  color: #f87171;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ghost2-receipt__halt-copy {
+  font-weight: 600;
+}
 .ghost2-receipt-step {
   margin: 6px 0;
   font-size: 0.9rem;
@@ -1988,6 +2016,21 @@ h3 .i,
   display: block;
   font-size: 0.8rem;
   color: var(--text-muted, #9ca3af);
+}
+.ghost2-receipt-step__halt-line {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f87171;
+}
+.ghost2-receipt-step--failed {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(248, 113, 113, 0.06);
+}
+.replay-receipt-halt {
+  margin: 2px 0 0;
 }
 /* Per-step verification chips — the differentiator, kept legible at a glance. */
 .ghost2-verify-chip {
