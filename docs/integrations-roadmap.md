@@ -155,6 +155,15 @@ Ghost-initiated reads/exports (e.g. writing an audit export to a bucket the
 user already owns), and treat any inbound trigger as subject to full policy
 review before it can propose a mutation.
 
+## IoT (feature-led, not logo-led)
+
+Internet of Things work is planned as **Ghost features** (Scanner Inbox, batch
+landed nudges, shift-close packets) that use devices/hubs only as intent
+sources — never as silent actuators. Connectivity without a user job is out of
+scope. Shortlist, filter, and intent contract: `docs/iot-integrations.md`.
+Nothing there is shipped in the default product; the closest built signal path
+is the experimental Fabric inbound webhook (`docs/fabric-eventstream-webhook.md`).
+
 ## AI-assistant connectors (Claude, Cursor, Codex, ChatGPT)
 
 These are different in kind from Fabric/Google Cloud: they're coding/agent
