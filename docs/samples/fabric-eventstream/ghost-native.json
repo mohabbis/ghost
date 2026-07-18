@@ -1,5 +1,5 @@
 {
   "zone_id": "organizer-zone-uuid",
-  "source": "ops.pipeline",
+  "source": "fabric-pipeline",
   "summary": "Nightly export pipeline completed — review Organizer plan"
 }
