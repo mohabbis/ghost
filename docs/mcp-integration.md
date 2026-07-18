@@ -166,6 +166,8 @@ Start deliberately small and read-first.
 
 ### Phase 3b: saved routines (built — flagship vertical slice)
 
+Live demo script (Claude Desktop / Cursor, stock stdio only): [`docs/claude-ghost-demo.md`](./claude-ghost-demo.md).
+
 | Tool | Risk | Notes |
 |---|---|---|
 | `ghost.list_routines` | `safe-read` | Saved routine **names only** — no events, no typed text. |
@@ -174,6 +176,7 @@ Start deliberately small and read-first.
 | `ghost.get_approval_status` | `safe-read` | Same status tool; includes `kind: routine` and token when approved. |
 | `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime; returns receipt. |
 | `ghost.get_run` | `safe-read` | Run summary + receipt when present. |
+
 
 Desktop: Ghost polls pending approvals; for `kind: routine` it loads the routine, shows review, and `routine_issue_mcp_approval_token` issues the bound token (no auto-run).
 
