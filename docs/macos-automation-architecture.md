@@ -324,7 +324,8 @@ visual matching before AX targeting and permissions are solid.
 2. Reliable application and window targeting
 3. Permission coordinator and onboarding UI
 4. Semantic locator format shared with Rust
-5. ScreenCaptureKit still-frame and stream capture
+5. ScreenCaptureKit still-frame and stream capture ✅ (still + bounded stream sample;
+   not ambient continuous observation)
 6. Vision OCR fallback
 7. Verified execution with preconditions and postconditions
 8. Visual template matching only where OCR and AX fail
@@ -340,9 +341,14 @@ Already present:
   `identifier` matching, AXPress-first activate, and per-match `ax_quality`;
 - ScreenCaptureKit **still-frame** ops on the same helper (`capture_permission_status`,
   `capture_still`) — Screen Recording only; no Accessibility required;
-- Rust `runtime/capture.rs` + `runtime/vision_fallback.rs`: when AX resolve fails
-  or quality is insufficient **and** `UiTarget.title` is set, capture → OCR →
-  unique text match → coordinate click for `focus_target`;
+- ScreenCaptureKit **bounded stream** sample (`capture_stream_latest`): short-lived
+  SCStream (default ≤400 ms / ≤3 frames, hard-capped at 2 s / 8 frames), writes the
+  latest complete frame, then stops — request-scoped only, **not** ambient observation;
+- Rust `runtime/capture.rs`: `capture_still` / `capture_stream_latest` /
+  `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback;
+- Rust `runtime/vision_fallback.rs`: when AX resolve fails or quality is insufficient
+  **and** `UiTarget.title` is set, latest-frame capture → OCR → unique text match →
+  coordinate click for `focus_target`;
 - Rust shared locator + AX quality types (`runtime/locator.rs`) and extended
   `UiTarget` (`identifier`, `bundle_id`, `window_title`);
 - native `PermissionService` coordinator with per-permission why/degraded-mode
@@ -364,10 +370,12 @@ Also present (partial item 7):
 
 Not yet the architecture above:
 
-- ScreenCaptureKit **stream** capture (continuous frames);
+- long-lived / continuous stream sessions (product observation) — only bounded samples exist;
 - full `AutomationStep` runtime fields (timeouts / retry policy wired end to end);
 - Input Monitoring / Notifications probe implementations;
-- template matching only after OCR+AX fail as a dedicated Routines strategy.
+- template matching only after OCR+AX fail as a dedicated Routines strategy;
+- evidence / audit fields for which capture strategy (still vs stream) served a UI step.
 
 Until those land, marketing and README copy must stay within what the repo
-supports (`AGENTS.md` rule 10).
+supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
+screen observation or as proof of business effect.
