@@ -115,7 +115,7 @@ pub fn list_pending() -> Vec<FabricInboundIntent> {
             .filter(|i| i.status == InboundIntentStatus::Pending)
             .cloned()
             .collect();
-        intents.sort_by(|a, b| b.received_at.cmp(&a.received_at));
+        intents.sort_by_key(|b| std::cmp::Reverse(b.received_at));
         intents
     })
 }
