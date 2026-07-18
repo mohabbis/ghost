@@ -162,6 +162,12 @@ struct AxResponse {
     identifier: Option<String>,
     #[serde(default)]
     actionable: Option<bool>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -345,16 +351,97 @@ fn ensure_fresh(target: &UiTarget, resolved: &ResolvedTarget) -> Result<(), Sema
     Ok(())
 }
 
-pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
-    let resolved = resolve_target(target)?;
-    ensure_fresh(target, &resolved)?;
+fn activate_resolved(target: &UiTarget, resolved: &ResolvedTarget) -> Result<(), SemanticError> {
+    ensure_fresh(target, resolved)?;
     let mut req = target.to_ax_request("activate_element");
-    req.fingerprint = Some(resolved.fingerprint);
+    req.fingerprint = Some(resolved.fingerprint.clone());
     let resp = call_helper(&req)?;
     if resp.ok {
         Ok(())
     } else {
         Err(SemanticError::Failed(resp.detail))
+    }
+}
+
+fn search_text(target: &UiTarget) -> Option<&str> {
+    target
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+}
+
+fn vision_failure_kind(err: &SemanticError) -> crate::runtime::vision_fallback::VisionAxFailure {
+    use crate::runtime::vision_fallback::VisionAxFailure;
+    match err {
+        SemanticError::NotFound(_) => VisionAxFailure::NotFound,
+        SemanticError::InsufficientAx(_) => VisionAxFailure::InsufficientAx,
+        SemanticError::Ambiguous(_) => VisionAxFailure::Ambiguous,
+        SemanticError::HelperUnavailable(_) => VisionAxFailure::HelperUnavailable,
+        SemanticError::Failed(d) if d.contains("no matching") => VisionAxFailure::NotFound,
+        _ => VisionAxFailure::Other,
+    }
+}
+
+fn map_vision_err(err: crate::runtime::vision_fallback::VisionFallbackError) -> SemanticError {
+    use crate::runtime::capture::CaptureError;
+    use crate::runtime::vision_fallback::VisionFallbackError;
+    match err {
+        VisionFallbackError::Ambiguous(n) => SemanticError::Ambiguous(n),
+        VisionFallbackError::Capture(CaptureError::PermissionDenied(d)) => {
+            SemanticError::PermissionDenied(d)
+        }
+        other => SemanticError::Failed(other.to_string()),
+    }
+}
+
+fn try_vision_focus(target: &UiTarget) -> Result<(), SemanticError> {
+    let needle = search_text(target).ok_or_else(|| {
+        SemanticError::Failed("vision fallback needs target.title text to search".into())
+    })?;
+    crate::runtime::vision_fallback::focus_via_ocr(
+        needle,
+        target.bundle_id.as_deref(),
+        target.window_title.as_deref(),
+    )
+    .map(|_| ())
+    .map_err(map_vision_err)
+}
+
+pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
+    let has_text = search_text(target).is_some();
+    match resolve_target(target) {
+        Ok(resolved) => {
+            // Strong AX hit: activate semantically.
+            if !crate::runtime::vision_fallback::should_prefer_vision_after_resolve(
+                resolved.quality,
+                has_text,
+            ) {
+                return activate_resolved(target, &resolved);
+            }
+            // Weak but unique AX tree: try AX first, then OCR click.
+            match activate_resolved(target, &resolved) {
+                Ok(()) => Ok(()),
+                Err(ax_err)
+                    if crate::runtime::vision_fallback::should_attempt_vision_for_error(
+                        vision_failure_kind(&ax_err),
+                        has_text,
+                    ) =>
+                {
+                    try_vision_focus(target)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Err(ax_err)
+            if crate::runtime::vision_fallback::should_attempt_vision_for_error(
+                vision_failure_kind(&ax_err),
+                has_text,
+            ) =>
+        {
+            try_vision_focus(target)
+        }
+        Err(e) => Err(e),
     }
 }
 
