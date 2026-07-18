@@ -197,10 +197,15 @@ fn halt_fields_from_receipt(
     }
 }
 
-/// Redact typed-value verify strings (`value contains …`) for MCP clients.
+/// Redact typed-value verify strings for MCP clients.
+///
+/// Handles both the current `value matches …` wording and legacy
+/// `value contains …` receipts sealed before the boundary-aware matcher.
 fn redact_verification_text(s: &str) -> String {
-    if let Some(rest) = s.strip_prefix("value contains ") {
-        return format!("value contains (redacted, {} chars)", rest.chars().count());
+    for prefix in ["value matches ", "value contains "] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            return format!("{prefix}(redacted, {} chars)", rest.chars().count());
+        }
     }
     s.to_string()
 }
@@ -388,15 +393,24 @@ mod tests {
         let rows = compact_verifications(&[StepVerification::failed(
             "s1",
             "Type invoice amount",
-            "value contains 1234.56",
+            "value matches 1234.56",
             "999.00",
         )]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0]["label"], "Type text (redacted)");
-        assert_eq!(rows[0]["expected"], "value contains (redacted, 7 chars)");
+        assert_eq!(rows[0]["expected"], "value matches (redacted, 7 chars)");
         assert_eq!(rows[0]["observed"], "(redacted, 6 chars)");
         assert_eq!(rows[0]["status"], "failed");
         assert_eq!(rows[0]["step_id"], "s1");
+
+        // Legacy sealed receipts keep their old expected wording but still redact.
+        let legacy = compact_verifications(&[StepVerification::failed(
+            "s2",
+            "Confirm",
+            "value contains 12,900",
+            "12,090",
+        )]);
+        assert_eq!(legacy[0]["expected"], "value contains (redacted, 6 chars)");
     }
 
     #[test]

@@ -224,7 +224,7 @@ When a routine or Organizer plan stops early (dispatch failure or verification h
 }
 ```
 
-`ghost.get_run` returns the same `stopped_early` / `stop_reason` / `verifications` keys beside `execution` and `receipt`. Compact `verifications` redact typed-value strings (`value contains …`); path existence checks stay visible.
+`ghost.get_run` returns the same `stopped_early` / `stop_reason` / `verifications` keys beside `execution` and `receipt`. Compact `verifications` redact typed-value strings (`value matches …`, plus legacy `value contains …`); path existence checks stay visible.
 
 ## Plan result shape
 
