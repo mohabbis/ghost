@@ -100,6 +100,7 @@ macro_rules! run_with_commands {
                 // writing an audit log and undo journal for every run.
                 commands::organizer_list_zones,
                 commands::organizer_list_folder_rules,
+                commands::organizer_scanner_inbox_signal,
                 commands::organizer_default_paths,
                 commands::organizer_create_zone,
                 commands::organizer_add_folder_rule,

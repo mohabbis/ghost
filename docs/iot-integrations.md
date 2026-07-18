@@ -44,6 +44,11 @@ bookkeeper does not hunt folders or remember to run Organizer.
 v1 — Brother / Fujitsu / HP / Epson that drop PDF/JPEG into a directory are
 enough.
 
+**Current v1 scope:** Ghost ships a `Scanner Inbox` Organizer preset plus a
+local ready-to-file banner driven by folder listing. Users still click
+**Scan & Preview** manually; there is no background watcher, vendor SDK, or
+auto-move path.
+
 **Ghost modules:** Organizer Zones + planner/executor; Zone preset + docs;
 optional inbound-intent card.
 
@@ -128,7 +133,7 @@ ambient camera.
 
 | Priority | Feature | Ghost surface | Mechanism | Status |
 |---|---|---|---|---|
-| P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Design; Zone path works today without new commands |
+| P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Partial — `Scanner Inbox` preset + local ready-to-file banner; manual `Scan & Preview`, no watcher/vendor SDK |
 | P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Partial (Fabric intent queue, experimental) |
 | P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Not built; marketing must stay qualified |
 | P2 | F4 File-and-label | Post-run optional print | Label printer after Approve | Not built |

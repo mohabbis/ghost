@@ -3467,6 +3467,7 @@ let organizerSelectedZoneId = null;
 let organizerHasReviewedPlan = false;
 /** Last Action Plan from Scan & Preview — feeds the Aye-style approve moment. */
 let organizerLastActionPlan = null;
+const ORGANIZER_SCANNER_INBOX_PRESET = "Scanner Inbox";
 
 async function organizerInit() {
   await organizerPrefillPaths();
@@ -3567,6 +3568,100 @@ function organizerSelectedZone() {
   return organizerZones.find((z) => z.id === organizerSelectedZoneId) || null;
 }
 
+function organizerIsScannerInboxZone(zone) {
+  if (!zone) return false;
+  const name = String(zone.name || "").trim().toLowerCase();
+  const description = String(zone.description || "").toLowerCase();
+  return (
+    name === ORGANIZER_SCANNER_INBOX_PRESET.toLowerCase() ||
+    description.includes("scanner inbox") ||
+    description.includes("scan-to-folder")
+  );
+}
+
+function organizerScannerInboxZone() {
+  return organizerZones.find((zone) => organizerIsScannerInboxZone(zone)) || null;
+}
+
+async function organizerSelectZone(zoneId, { scan = false } = {}) {
+  if (!zoneId) return;
+  organizerSelectedZoneId = zoneId;
+  await organizerRefreshZones();
+  if (scan) await organizerScan();
+}
+
+async function organizerRefreshScannerInboxBanner() {
+  const banner = document.getElementById("organizerScannerInboxBanner");
+  if (!banner) return;
+  if (!invoke) {
+    banner.innerHTML = "";
+    return;
+  }
+
+  const selectedZone = organizerSelectedZone();
+  const scannerZone = organizerIsScannerInboxZone(selectedZone)
+    ? selectedZone
+    : organizerScannerInboxZone();
+
+  if (!scannerZone) {
+    banner.innerHTML = `
+      <section class="banner banner--warn">
+        <span><strong>Scanner Inbox:</strong> Point Ghost at the folder your scanner writes PDFs/JPEGs into. Ghost only prepares a reviewable plan here — it never auto-moves files from an IoT signal.</span>
+        <div class="banner__actions">
+          <button class="btn btn--ghost btn--small" id="organizerScannerInboxSetupBtn" type="button">Set up Scanner Inbox</button>
+        </div>
+      </section>`;
+    document
+      .getElementById("organizerScannerInboxSetupBtn")
+      ?.addEventListener("click", () => void organizerRunWizard(ORGANIZER_SCANNER_INBOX_PRESET));
+    return;
+  }
+
+  let signal;
+  try {
+    signal = await invoke("organizer_scanner_inbox_signal", { zoneId: scannerZone.id });
+  } catch (err) {
+    console.warn("organizer_scanner_inbox_signal unavailable:", err);
+    banner.innerHTML = "";
+    return;
+  }
+
+  const readyFiles = Number(signal?.ready_files || 0);
+  const sourceFolder = signal?.source_folder
+    ? `<code>${escapeHtml(signal.source_folder)}</code>`
+    : "the selected scan folder";
+  const isSelected = selectedZone?.id === scannerZone.id;
+
+  if (readyFiles > 0) {
+    const fileLabel = readyFiles === 1 ? "1 file" : `${readyFiles} files`;
+    banner.innerHTML = `
+      <section class="banner banner--warn">
+        <span><strong>Scanner Inbox:</strong> ${escapeHtml(fileLabel)} ready to file in ${sourceFolder}. Review the plan before approving — Ghost will not auto-execute.</span>
+        <div class="banner__actions">
+          ${isSelected ? "" : `<button class="btn btn--ghost btn--small" id="organizerScannerInboxReviewBtn" type="button">Review Zone</button>`}
+          <button class="btn btn--ghost btn--small" id="organizerScannerInboxScanBtn" type="button">Scan &amp; Preview</button>
+        </div>
+      </section>`;
+    document
+      .getElementById("organizerScannerInboxReviewBtn")
+      ?.addEventListener("click", () => void organizerSelectZone(scannerZone.id));
+    document
+      .getElementById("organizerScannerInboxScanBtn")
+      ?.addEventListener("click", () => void organizerSelectZone(scannerZone.id, { scan: true }));
+    return;
+  }
+
+  if (!isSelected) {
+    banner.innerHTML = "";
+    return;
+  }
+
+  banner.innerHTML = `
+    <section class="banner banner--warn">
+      <span><strong>Scanner Inbox:</strong> Drop scans into ${sourceFolder}, then use <strong>Scan &amp; Preview</strong>. Ghost only creates a plan here — nothing moves until you approve it.</span>
+    </section>`;
+}
+
 async function organizerRefreshZones() {
   try {
     organizerZones = await invoke("organizer_list_zones");
@@ -3604,6 +3699,7 @@ async function organizerRefreshRules() {
   if (!zone) {
     list.textContent = "Create a Zone, then add the folder you want to organize.";
     organizerUpdateButtons([]);
+    await organizerRefreshScannerInboxBanner();
     return;
   }
   let rules = [];
@@ -3645,6 +3741,7 @@ async function organizerRefreshRules() {
     );
   }
   organizerUpdateButtons(rules);
+  await organizerRefreshScannerInboxBanner();
 }
 
 // The user-facing trust vocabulary, mirrored from the policy engine's
@@ -3753,6 +3850,16 @@ async function organizerHandlePolicyPackFile(file) {
 // no cloud and no credentials. `mode` is "two_folder" (move OUT of a source
 // INTO a destination root) or "in_place" (organize one folder where it sits).
 const ORGANIZER_PRESETS = {
+  [ORGANIZER_SCANNER_INBOX_PRESET]: {
+    description:
+      "Point Ghost at a scan-to-folder inbox and review a filing plan before anything moves.",
+    mode: "two_folder",
+    renameDated: true,
+    sourcePrompt: "Full path of the folder your scanner or MFP drops PDFs/JPEGs into",
+    sourceKey: "downloads",
+    destPrompt: "Destination root for filed scans",
+    destKey: "documents",
+  },
   "Client filing": {
     description: "File invoices, receipts, and statements into dated client folders.",
     mode: "two_folder",
@@ -3794,15 +3901,20 @@ const TRUST_CHOICES = {
 // level, confirm the exact rules, then create the Zone and preview the plan.
 // Reuses the in-app dialog helpers; no new backend — it composes the existing
 // organizer_create_zone / organizer_add_folder_rule commands.
-async function organizerRunWizard() {
+async function organizerRunWizard(presetChoice = null) {
   if (!invoke) return notAvailable();
 
-  const presetName = await ghostPick(
-    "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
-    Object.keys(ORGANIZER_PRESETS),
-  );
+  const presetName =
+    presetChoice ||
+    (await ghostPick(
+      "What do you want to set up? (Ghost stays local — no cloud, no logins.)",
+      Object.keys(ORGANIZER_PRESETS),
+    ));
   if (!presetName) return;
   const preset = ORGANIZER_PRESETS[presetName];
+  if (!preset) {
+    return toastError(`Unknown Organizer preset: ${presetName}`);
+  }
 
   // Prefill with real local folders. Backend also expands ~/… if needed.
   const sourceDefault = organizerPresetPath(preset.sourceKey);
@@ -4340,6 +4452,7 @@ async function organizerRun() {
   organizerHasReviewedPlan = false;
   organizerLastActionPlan = null;
   organizerUpdateButtons(await safeRules(zone.id));
+  await organizerRefreshScannerInboxBanner();
   if (runBtn) runBtn.textContent = prevLabel || "Approve & Organize";
   showNotification(`Organized: ${r.applied ?? 0} change(s) applied.`, "info");
 }
