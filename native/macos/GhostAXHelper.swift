@@ -5,6 +5,8 @@
 // Protocol: one JSON request object on stdin → one JSON response object on stdout.
 // AX ops: permission_status, frontmost_app, resolve_target, list_matches,
 //         activate_element, set_value, verify_element, enumerate_children.
+// Precondition ops (no Accessibility required):
+//         app_running
 // Capture ops (Screen Recording; no Accessibility required):
 //         capture_permission_status, capture_still
 //
@@ -435,6 +437,21 @@ if req.op == "permission_status" {
         fail("accessibility denied")
     }
     exit(trusted ? 0 : 1)
+}
+
+// App liveness is NSWorkspace-only — no Accessibility / Screen Recording required.
+if req.op == "app_running" {
+    guard let appName = req.app, !appName.isEmpty else {
+        fail("app_running requires app")
+        exit(1)
+    }
+    if findApp(named: appName, bundleId: req.bundle_id) != nil {
+        ok("app running: \(appName)")
+        exit(0)
+    } else {
+        fail("app not running: \(appName)")
+        exit(1)
+    }
 }
 
 // Capture ops intentionally run without Accessibility — Screen Recording only.

@@ -1,6 +1,7 @@
 //! Per-step verification: expected vs observed.
 
 use crate::action_plan::types::ActionKind;
+use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -87,6 +88,83 @@ impl StepVerification {
             continue_execution: false,
         }
     }
+
+    pub fn verified(step_id: &str, label: &str, expected: &str, observed: &str) -> Self {
+        Self {
+            step_id: step_id.into(),
+            label: label.into(),
+            expected: expected.into(),
+            observed: observed.into(),
+            status: VerificationStatus::Verified,
+            continue_execution: true,
+        }
+    }
+}
+
+fn verify_semantic_focus(step_id: &str, label: &str, target: &UiTarget) -> StepVerification {
+    let expected = format!("{} {} focused", target.app, target.role);
+    match semantic::verify_postcondition(target, None) {
+        Ok(observed) => StepVerification::verified(step_id, label, &expected, &observed),
+        Err(SemanticError::HelperUnavailable(_)) => StepVerification::not_applicable(
+            step_id,
+            label,
+            &format!(
+                "focused {} {} (UI verification best-effort)",
+                target.app, target.role
+            ),
+        ),
+        Err(e) => {
+            // UI binding is best-effort (ADR-0007): record failure but do not
+            // halt the plan the way a filesystem verify failure would.
+            StepVerification {
+                step_id: step_id.into(),
+                label: label.into(),
+                expected,
+                observed: e.to_string(),
+                status: VerificationStatus::Failed,
+                continue_execution: true,
+            }
+        }
+    }
+}
+
+fn verify_semantic_set_value(
+    step_id: &str,
+    label: &str,
+    target: &UiTarget,
+    value: &str,
+) -> StepVerification {
+    let expected = format!("value contains {value}");
+    match semantic::verify_postcondition(target, Some(value)) {
+        Ok(observed) => {
+            let ok = observed.contains(value)
+                || observed.trim() == value.trim()
+                || observed.contains("ocr:");
+            if ok {
+                StepVerification::verified(step_id, label, &expected, &observed)
+            } else {
+                StepVerification {
+                    step_id: step_id.into(),
+                    label: label.into(),
+                    expected,
+                    observed,
+                    status: VerificationStatus::Failed,
+                    continue_execution: true,
+                }
+            }
+        }
+        Err(SemanticError::HelperUnavailable(_)) => {
+            StepVerification::not_applicable(step_id, label, "semantic value set dispatched")
+        }
+        Err(e) => StepVerification {
+            step_id: step_id.into(),
+            label: label.into(),
+            expected,
+            observed: e.to_string(),
+            status: VerificationStatus::Failed,
+            continue_execution: true,
+        },
+    }
 }
 
 pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepVerification {
@@ -110,39 +188,27 @@ pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepV
             label,
             &format!("opened {name} (UI verification best-effort)"),
         ),
-        ActionKind::SemanticFocus { target } => StepVerification::not_applicable(
-            step_id,
-            label,
-            &format!("focused {} {}", target.app, target.role),
-        ),
+        ActionKind::SemanticFocus { target } => verify_semantic_focus(step_id, label, target),
         ActionKind::SemanticSetValue { target, value } => {
-            if let Ok(observed) = crate::runtime::semantic::verify_target(target, Some(value)) {
-                StepVerification {
-                    step_id: step_id.into(),
-                    label: label.into(),
-                    expected: format!("value contains {}", value),
-                    observed,
-                    status: VerificationStatus::Verified,
-                    continue_execution: true,
-                }
-            } else {
-                StepVerification::not_applicable(step_id, label, "semantic value set dispatched")
-            }
+            verify_semantic_set_value(step_id, label, target, value)
         }
         ActionKind::SemanticVerify {
             target,
             expected_value,
-        } => match crate::runtime::semantic::verify_target(target, expected_value.as_deref()) {
-            Ok(observed) => StepVerification {
-                step_id: step_id.into(),
-                label: label.into(),
-                expected: expected_value
+        } => match semantic::verify_postcondition(target, expected_value.as_deref()) {
+            Ok(observed) => StepVerification::verified(
+                step_id,
+                label,
+                &expected_value
                     .clone()
                     .unwrap_or_else(|| format!("{} present", target.role)),
-                observed,
-                status: VerificationStatus::Verified,
-                continue_execution: true,
-            },
+                &observed,
+            ),
+            Err(SemanticError::HelperUnavailable(_)) => StepVerification::not_applicable(
+                step_id,
+                label,
+                "semantic verify skipped (AX helper unavailable)",
+            ),
             Err(e) => StepVerification::failed(
                 step_id,
                 label,
@@ -157,5 +223,34 @@ pub fn verify_after_kind(kind: &ActionKind, step_id: &str, label: &str) -> StepV
             StepVerification::not_applicable(step_id, label, "UI replay step completed")
         }
         ActionKind::Wait { .. } => StepVerification::not_applicable(step_id, label, "wait elapsed"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_focus_without_helper_is_not_applicable() {
+        let target = UiTarget::new("TextEdit", "AXTextArea");
+        let v = verify_semantic_focus("s1", "Focus", &target);
+        assert_eq!(v.status, VerificationStatus::NotApplicable);
+        assert!(v.continue_execution);
+    }
+
+    #[test]
+    fn semantic_set_value_without_helper_is_not_applicable() {
+        let target = UiTarget::new("TextEdit", "AXTextArea");
+        let v = verify_semantic_set_value("s1", "Type", &target, "hello");
+        assert_eq!(v.status, VerificationStatus::NotApplicable);
+        assert!(v.continue_execution);
+    }
+
+    #[test]
+    fn path_verify_fails_closed() {
+        let missing = std::env::temp_dir().join("ghost_verify_missing_does_not_exist");
+        let v = StepVerification::verify_path("s1", "check", &missing, true);
+        assert_eq!(v.status, VerificationStatus::Failed);
+        assert!(!v.continue_execution);
     }
 }

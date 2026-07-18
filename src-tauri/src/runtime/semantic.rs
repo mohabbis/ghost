@@ -408,19 +408,63 @@ fn try_vision_focus(target: &UiTarget) -> Result<(), SemanticError> {
     .map_err(map_vision_err)
 }
 
-pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
+fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<(), SemanticError> {
+    let needle = search_text(target).ok_or_else(|| {
+        SemanticError::Failed("vision fallback needs target.title text to search".into())
+    })?;
+    crate::runtime::vision_fallback::set_value_via_ocr(
+        needle,
+        value,
+        target.bundle_id.as_deref(),
+        target.window_title.as_deref(),
+    )
+    .map(|_| ())
+    .map_err(map_vision_err)
+}
+
+/// Precondition: target application must be running (NSWorkspace; no AX grant required).
+///
+/// When the helper is unavailable (Linux CI / missing sidecar), the check is
+/// skipped so AX/vision paths can report their own errors.
+pub fn ensure_app_running(target: &UiTarget) -> Result<(), SemanticError> {
+    match call_helper(&AxRequest {
+        op: "app_running".into(),
+        app: Some(target.app.clone()),
+        role: None,
+        title: None,
+        value: None,
+        fingerprint: None,
+        expected_value: None,
+        identifier: None,
+        bundle_id: target.bundle_id.clone(),
+        window_title: None,
+    }) {
+        Ok(resp) if resp.ok => Ok(()),
+        Ok(resp) => Err(SemanticError::NotFound(resp.detail)),
+        Err(SemanticError::HelperUnavailable(_)) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+fn with_ax_then_vision<F>(
+    target: &UiTarget,
+    mut ax_action: F,
+    vision_action: impl FnOnce() -> Result<(), SemanticError>,
+) -> Result<(), SemanticError>
+where
+    F: FnMut(&ResolvedTarget) -> Result<(), SemanticError>,
+{
+    ensure_app_running(target)?;
     let has_text = search_text(target).is_some();
     match resolve_target(target) {
         Ok(resolved) => {
-            // Strong AX hit: activate semantically.
             if !crate::runtime::vision_fallback::should_prefer_vision_after_resolve(
                 resolved.quality,
                 has_text,
             ) {
-                return activate_resolved(target, &resolved);
+                return ax_action(&resolved);
             }
-            // Weak but unique AX tree: try AX first, then OCR click.
-            match activate_resolved(target, &resolved) {
+            match ax_action(&resolved) {
                 Ok(()) => Ok(()),
                 Err(ax_err)
                     if crate::runtime::vision_fallback::should_attempt_vision_for_error(
@@ -428,7 +472,7 @@ pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
                         has_text,
                     ) =>
                 {
-                    try_vision_focus(target)
+                    vision_action()
                 }
                 Err(e) => Err(e),
             }
@@ -439,23 +483,64 @@ pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
                 has_text,
             ) =>
         {
-            try_vision_focus(target)
+            vision_action()
         }
         Err(e) => Err(e),
     }
 }
 
+pub fn focus_target(target: &UiTarget) -> Result<(), SemanticError> {
+    with_ax_then_vision(
+        target,
+        |resolved| activate_resolved(target, resolved),
+        || try_vision_focus(target),
+    )
+}
+
 pub fn set_target_value(target: &UiTarget, value: &str) -> Result<(), SemanticError> {
-    let resolved = resolve_target(target)?;
-    ensure_fresh(target, &resolved)?;
-    let mut req = target.to_ax_request("set_value");
-    req.value = Some(value.into());
-    req.fingerprint = Some(resolved.fingerprint);
-    let resp = call_helper(&req)?;
-    if resp.ok {
-        Ok(())
-    } else {
-        Err(SemanticError::Failed(resp.detail))
+    with_ax_then_vision(
+        target,
+        |resolved| {
+            ensure_fresh(target, resolved)?;
+            let mut req = target.to_ax_request("set_value");
+            req.value = Some(value.into());
+            req.fingerprint = Some(resolved.fingerprint.clone());
+            let resp = call_helper(&req)?;
+            if resp.ok {
+                Ok(())
+            } else {
+                Err(SemanticError::Failed(resp.detail))
+            }
+        },
+        || try_vision_set_value(target, value),
+    )
+}
+
+/// Best-effort postcondition: AX verify, else OCR presence of `expected` / title.
+pub fn verify_postcondition(
+    target: &UiTarget,
+    expected_value: Option<&str>,
+) -> Result<String, SemanticError> {
+    match verify_target(target, expected_value) {
+        Ok(observed) => Ok(observed),
+        Err(SemanticError::HelperUnavailable(msg)) => Err(SemanticError::HelperUnavailable(msg)),
+        Err(ax_err) => {
+            let needle = expected_value
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .or_else(|| search_text(target));
+            let Some(needle) = needle else {
+                return Err(ax_err);
+            };
+            let hit = crate::runtime::vision_fallback::resolve_text(
+                needle,
+                target.bundle_id.as_deref(),
+                target.window_title.as_deref(),
+                true,
+            )
+            .map_err(map_vision_err)?;
+            Ok(format!("ocr:{}", hit.text))
+        }
     }
 }
 

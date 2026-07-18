@@ -8,7 +8,7 @@ use crate::core::ocr::{self, OcrResult};
 use crate::core::vision;
 use crate::runtime::capture::{self, CaptureError};
 use crate::runtime::locator::AxQuality;
-use enigo::{Button, Coordinate, Direction, Enigo, Mouse, Settings};
+use enigo::{Button, Coordinate, Direction, Enigo, Keyboard, Mouse, Settings};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VisionFallbackError {
@@ -184,6 +184,29 @@ pub fn focus_via_ocr(
 ) -> Result<VisionHit, VisionFallbackError> {
     let hit = resolve_text(needle, bundle_id, window_title, true)?;
     click_screen_point(hit.screen_x, hit.screen_y)?;
+    Ok(hit)
+}
+
+/// Type into the focused field after a vision (or AX) focus.
+pub fn type_text(text: &str) -> Result<(), VisionFallbackError> {
+    let mut enigo =
+        Enigo::new(&Settings::default()).map_err(|e| VisionFallbackError::Click(e.to_string()))?;
+    enigo
+        .text(text)
+        .map_err(|e| VisionFallbackError::Click(format!("type text failed: {e}")))?;
+    Ok(())
+}
+
+/// OCR-click a labeled control, then type `value` (set_value vision fallback).
+pub fn set_value_via_ocr(
+    needle: &str,
+    value: &str,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+) -> Result<VisionHit, VisionFallbackError> {
+    let hit = focus_via_ocr(needle, bundle_id, window_title)?;
+    std::thread::sleep(std::time::Duration::from_millis(120));
+    type_text(value)?;
     Ok(hit)
 }
 

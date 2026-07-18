@@ -83,7 +83,11 @@ capture ops `path` / `width` / `height`.
 Capture ops (Screen Recording; Accessibility not required):
 `capture_permission_status`, `capture_still`.
 
+Precondition ops (no Accessibility required): `app_running`.
+
 Ambiguous matches are refused. Stale target fingerprints are rejected at execution time.
+`focus_target` / `set_target_value` check `app_running`, prefer AX, then OCR vision
+fallback when `title` is set. Postconditions use AX verify or OCR text presence.
 `list_matches` is the read-only exception: it enumerates every candidate element (fingerprint + value + quality) so an ambiguous target can be inspected and disambiguated before an action is approved — it mutates nothing.
 
 Targeting prefers exact bundle id / app name, then contains-fallback; `window_title`
