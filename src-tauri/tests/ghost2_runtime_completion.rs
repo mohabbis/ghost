@@ -84,12 +84,7 @@ fn demo_plan_includes_semantic_textedit_steps() {
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn semantic_helper_unavailable_skips_focus_on_headless() {
-    let target = UiTarget {
-        app: "TextEdit".into(),
-        role: "AXTextArea".into(),
-        title: None,
-        fingerprint: None,
-    };
+    let target = UiTarget::new("TextEdit", "AXTextArea");
     let err = ghost_lib::runtime::semantic::resolve_target(&target).unwrap_err();
     assert!(matches!(err, SemanticError::HelperUnavailable(_)));
 }

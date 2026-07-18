@@ -71,18 +71,38 @@ struct SettingsView: View {
             }
 
             Section("macOS permissions") {
-                LabeledContent(
-                    "Accessibility",
-                    value: permissions.accessibilityTrusted ? "Granted" : "Not granted"
-                )
-                Text("Organizer does not need Accessibility permission. It becomes relevant when native Routines and semantic UI targeting are added.")
+                Text("Ghost works partially when some permissions are denied. Organizer never requires Screen Recording or Input Monitoring.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                HStack {
-                    Button("Refresh", action: permissions.refresh)
-                    Button("Request Accessibility", action: permissions.requestAccessibility)
-                        .disabled(permissions.accessibilityTrusted)
+
+                ForEach(permissions.records) { record in
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent(record.permission.displayName, value: record.statusLabel)
+                        Text(record.permission.whyNeeded)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Without it: \(record.permission.degradedBehavior)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        if record.permission.requiresRestart && record.state != .granted {
+                            Text("macOS may require Quit & Reopen after granting.")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                        HStack {
+                            Button("Open Settings") {
+                                permissions.openSystemSettings(for: record.permission)
+                            }
+                            if record.permission == .accessibility {
+                                Button("Request Accessibility", action: permissions.requestAccessibility)
+                                    .disabled(record.isGranted)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
+
+                Button("Refresh all", action: permissions.refresh)
             }
 
             Section("Trust boundary") {

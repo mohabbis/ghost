@@ -107,12 +107,7 @@ pub fn build_invoice_demo(downloads: &Path, finance_root: &Path) -> Result<Actio
         "Open TextEdit",
     );
 
-    let document_target = UiTarget {
-        app: "TextEdit".into(),
-        role: "AXTextArea".into(),
-        title: None,
-        fingerprint: None,
-    };
+    let document_target = UiTarget::new("TextEdit", "AXTextArea");
 
     push_ui_step(
         &mut steps,
