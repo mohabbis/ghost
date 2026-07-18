@@ -76,7 +76,7 @@ server two ways (explicit `initialize` params win over the environment):
 The Settings view renders the paste-ready config below with the freshly
 generated code already filled in.
 
-Example macOS client configuration:
+Example macOS client configuration (replace `command` if your install path differs; the binary must accept `mcp serve`):
 
 ```json
 {

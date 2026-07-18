@@ -18,6 +18,7 @@ list_routines → preview_routine → request_routine_approval
 ## Prep
 
 1. Install Ghost v2.0.3; grant Accessibility (and Input Monitoring on macOS) if you will execute a routine.
+   Confirm the MCP binary exists at the path Settings copies (`/Applications/Ghost.app/Contents/MacOS/Ghost` on macOS). If that path is missing, point the client `command` at a local `ghost` build that supports `mcp serve` instead.
 2. Record and save one short, safe routine (e.g. open Notes / type a fixed line / save). Prefer something reversible and non-financial for the first demo.
 3. Open **Settings → Connect an AI assistant (MCP)**:
    - Enable a **pairing code** (recommended).
