@@ -43,6 +43,8 @@ struct AXRequest: Codable {
     let duration_ms: UInt32?
     /// Bounded stream: stop after this many complete frames (default 3, max 8).
     let max_frames: UInt32?
+    /// Wall-clock ms from request start; cooperative mid-op deadline (optional).
+    let budget_ms: UInt32?
 }
 
 struct AXResponse: Codable {
@@ -123,6 +125,43 @@ func ok(
         height: height,
         frames: frames
     ))
+}
+
+
+/// Cooperative wall-clock deadline derived from optional `budget_ms`.
+/// Checked between frames / before heavy AX walks; never kills mid-mutation.
+final class OpDeadline {
+    let deadline: Date?
+
+    init(budgetMs: UInt32?) {
+        if let ms = budgetMs, ms > 0 {
+            deadline = Date().addingTimeInterval(Double(ms) / 1000.0)
+        } else if let ms = budgetMs, ms == 0 {
+            deadline = Date.distantPast
+        } else {
+            deadline = nil
+        }
+    }
+
+    var isExpired: Bool {
+        guard let deadline else { return false }
+        return Date() >= deadline
+    }
+
+    /// Remaining seconds until deadline (nil = unlimited).
+    var remainingSeconds: Double? {
+        guard let deadline else { return nil }
+        return max(deadline.timeIntervalSinceNow, 0)
+    }
+
+    @discardableResult
+    func checkOrFail(_ label: String = "helper") -> Bool {
+        if isExpired {
+            fail("\(label): helper budget exceeded")
+            return false
+        }
+        return true
+    }
 }
 
 func axString(_ element: AXUIElement, _ attr: String) -> String? {
@@ -297,16 +336,27 @@ func makeMatch(_ element: AXUIElement) -> Match {
     )
 }
 
+enum CollectResult {
+    case matches([Match])
+    case timedOut
+}
+
 func collectMatches(
     root: AXUIElement,
     role: String,
     title: String?,
     identifier: String?,
-    maxDepth: Int
-) -> [Match] {
+    maxDepth: Int,
+    deadline: OpDeadline
+) -> CollectResult {
     var results: [Match] = []
-    func walk(_ element: AXUIElement, depth: Int) {
-        if depth > maxDepth { return }
+    var visits = 0
+    func walk(_ element: AXUIElement, depth: Int) -> Bool {
+        if deadline.isExpired { return false }
+        visits += 1
+        // Cooperative check every few nodes so deep trees stay interruptible.
+        if visits % 16 == 0, deadline.isExpired { return false }
+        if depth > maxDepth { return true }
         if roleMatches(element, role)
             && titleMatches(element, title)
             && identifierMatches(element, identifier)
@@ -314,25 +364,42 @@ func collectMatches(
             results.append(makeMatch(element))
         }
         for child in axChildren(element) {
-            walk(child, depth: depth + 1)
+            if !walk(child, depth: depth + 1) { return false }
         }
+        return true
     }
-    walk(root, depth: 0)
-    return results
+    if !walk(root, depth: 0) {
+        return .timedOut
+    }
+    return .matches(results)
 }
 
-func resolve(req: AXRequest) -> [Match] {
-    guard let appName = req.app, !appName.isEmpty else { return [] }
-    guard let role = req.role, !role.isEmpty else { return [] }
-    guard let appEl = findApp(named: appName, bundleId: req.bundle_id) else { return [] }
+func resolve(req: AXRequest) -> CollectResult {
+    guard let appName = req.app, !appName.isEmpty else { return .matches([]) }
+    guard let role = req.role, !role.isEmpty else { return .matches([]) }
+    let deadline = OpDeadline(budgetMs: req.budget_ms)
+    if deadline.isExpired { return .timedOut }
+    guard let appEl = findApp(named: appName, bundleId: req.bundle_id) else { return .matches([]) }
     let root = searchRoot(appElement: appEl, windowTitle: req.window_title)
     return collectMatches(
         root: root,
         role: role,
         title: req.title,
         identifier: req.identifier,
-        maxDepth: 8
+        maxDepth: 8,
+        deadline: deadline
     )
+}
+
+
+func resolveOrFail(_ req: AXRequest) -> [Match]? {
+    switch resolve(req: req) {
+    case .timedOut:
+        fail("helper budget exceeded", count: 0, ax_quality: 0, actionable: false)
+        return nil
+    case .matches(let matches):
+        return matches
+    }
 }
 
 func quality(for match: Match, matchCount: Int) -> UInt32 {
@@ -446,23 +513,29 @@ final class BoundedStreamCollector: NSObject, SCStreamOutput, SCStreamDelegate {
     private var latest: CGImage?
     private var frames: UInt32 = 0
     private let targetFrames: UInt32
+    private let deadline: OpDeadline
     private let completion = DispatchSemaphore(value: 0)
     private var signaled = false
 
-    init(targetFrames: UInt32) {
+    init(targetFrames: UInt32, deadline: OpDeadline = OpDeadline(budgetMs: nil)) {
         self.targetFrames = max(targetFrames, 1)
+        self.deadline = deadline
         super.init()
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen else { return }
+        if deadline.isExpired {
+            signalOnce()
+            return
+        }
         guard let image = cgImageFromSampleBuffer(sampleBuffer) else { return }
         lock.lock()
         latest = image
         frames += 1
         let reached = frames >= targetFrames
         lock.unlock()
-        if reached { signalOnce() }
+        if reached || deadline.isExpired { signalOnce() }
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -488,7 +561,16 @@ final class BoundedStreamCollector: NSObject, SCStreamOutput, SCStreamDelegate {
 /// ScreenCaptureKit still-frame capture (macOS 14+ SCScreenshotManager).
 /// Does not require Accessibility; requires Screen Recording.
 @available(macOS 14.0, *)
-func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) -> (ok: Bool, detail: String, width: UInt32?, height: UInt32?) {
+func captureStillFrame(
+    path: String,
+    bundleId: String?,
+    windowTitle: String?,
+    budgetMs: UInt32?
+) -> (ok: Bool, detail: String, width: UInt32?, height: UInt32?) {
+    let deadline = OpDeadline(budgetMs: budgetMs)
+    if deadline.isExpired {
+        return (false, "helper budget exceeded", nil, nil)
+    }
     let semaphore = DispatchSemaphore(value: 0)
     final class Box: @unchecked Sendable {
         var result: (Bool, String, UInt32?, UInt32?) = (false, "capture timed out", nil, nil)
@@ -496,20 +578,38 @@ func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) ->
     let box = Box()
     Task {
         do {
+            if deadline.isExpired {
+                box.result = (false, "helper budget exceeded", nil, nil)
+                semaphore.signal()
+                return
+            }
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            if deadline.isExpired {
+                box.result = (false, "helper budget exceeded", nil, nil)
+                semaphore.signal()
+                return
+            }
             switch makeCaptureFilter(content: content, bundleId: bundleId, windowTitle: windowTitle) {
             case .failure(let detail):
                 box.result = (false, detail, nil, nil)
             case .success(let (filter, config)):
-                let image = try await SCScreenshotManager.captureImage(
-                    contentFilter: filter,
-                    configuration: config
-                )
-                switch writePng(image: image, path: path) {
-                case .failure(let detail):
-                    box.result = (false, detail, nil, nil)
-                case .success(let (w, h)):
-                    box.result = (true, path, w, h)
+                if deadline.isExpired {
+                    box.result = (false, "helper budget exceeded", nil, nil)
+                } else {
+                    let image = try await SCScreenshotManager.captureImage(
+                        contentFilter: filter,
+                        configuration: config
+                    )
+                    if deadline.isExpired {
+                        box.result = (false, "helper budget exceeded", nil, nil)
+                    } else {
+                        switch writePng(image: image, path: path) {
+                        case .failure(let detail):
+                            box.result = (false, detail, nil, nil)
+                        case .success(let (w, h)):
+                            box.result = (true, path, w, h)
+                        }
+                    }
                 }
             }
         } catch {
@@ -517,7 +617,11 @@ func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) ->
         }
         semaphore.signal()
     }
-    _ = semaphore.wait(timeout: .now() + 20)
+    let waitSec = deadline.remainingSeconds.map { min(max($0, 0.05), 20.0) } ?? 20.0
+    _ = semaphore.wait(timeout: .now() + waitSec)
+    if !box.result.0, deadline.isExpired, box.result.1 == "capture timed out" {
+        return (false, "helper budget exceeded", nil, nil)
+    }
     return (box.result.0, box.result.1, box.result.2, box.result.3)
 }
 
@@ -529,9 +633,21 @@ func captureStreamLatestFrame(
     bundleId: String?,
     windowTitle: String?,
     durationMs: UInt32?,
-    maxFrames: UInt32?
+    maxFrames: UInt32?,
+    budgetMs: UInt32?
 ) -> (ok: Bool, detail: String, width: UInt32?, height: UInt32?, frames: UInt32?) {
-    let duration = min(max(durationMs ?? 400, 50), 2000)
+    let deadline = OpDeadline(budgetMs: budgetMs)
+    if deadline.isExpired {
+        return (false, "helper budget exceeded", nil, nil, nil)
+    }
+    // Hard caps unchanged (≤2s / 8 frames); budget can only shorten duration.
+    var duration = min(max(durationMs ?? 400, 50), 2000)
+    if let remainingMs = deadline.remainingSeconds.map({ UInt32(max($0 * 1000.0, 0)) }) {
+        duration = min(duration, max(remainingMs, 0))
+        if duration < 50 {
+            return (false, "helper budget exceeded", nil, nil, nil)
+        }
+    }
     let frameTarget = min(max(maxFrames ?? 3, 1), 8)
     let semaphore = DispatchSemaphore(value: 0)
     final class Box: @unchecked Sendable {
@@ -540,7 +656,17 @@ func captureStreamLatestFrame(
     let box = Box()
     Task {
         do {
+            if deadline.isExpired {
+                box.result = (false, "helper budget exceeded", nil, nil, nil)
+                semaphore.signal()
+                return
+            }
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            if deadline.isExpired {
+                box.result = (false, "helper budget exceeded", nil, nil, nil)
+                semaphore.signal()
+                return
+            }
             let built = makeCaptureFilter(content: content, bundleId: bundleId, windowTitle: windowTitle)
             switch built {
             case .failure(let detail):
@@ -550,13 +676,23 @@ func captureStreamLatestFrame(
             case .success(let (filter, config)):
                 // ~10 fps is enough for a short OCR freshening sample.
                 config.minimumFrameInterval = CMTime(value: 1, timescale: 10)
-                let collector = BoundedStreamCollector(targetFrames: frameTarget)
+                let collector = BoundedStreamCollector(targetFrames: frameTarget, deadline: deadline)
                 let stream = SCStream(filter: filter, configuration: config, delegate: collector)
                 try stream.addStreamOutput(collector, type: .screen, sampleHandlerQueue: DispatchQueue(label: "ghost.sck.stream"))
                 try await stream.startCapture()
-                let timeoutSec = Double(duration) / 1000.0
+                let timeoutSec: Double
+                if let rem = deadline.remainingSeconds {
+                    timeoutSec = min(Double(duration) / 1000.0, rem)
+                } else {
+                    timeoutSec = Double(duration) / 1000.0
+                }
                 let (image, frames) = collector.wait(timeoutSeconds: timeoutSec)
                 try await stream.stopCapture()
+                if deadline.isExpired, image == nil {
+                    box.result = (false, "helper budget exceeded", nil, nil, frames)
+                    semaphore.signal()
+                    return
+                }
                 guard let image else {
                     box.result = (false, "stream produced no complete frames", nil, nil, frames)
                     semaphore.signal()
@@ -575,7 +711,12 @@ func captureStreamLatestFrame(
         semaphore.signal()
     }
     // Outer wait slightly above the stream duration so stopCapture can finish.
-    let outerTimeout = (Double(duration) / 1000.0) + 5.0
+    let outerTimeout: Double
+    if let rem = deadline.remainingSeconds {
+        outerTimeout = min((Double(duration) / 1000.0) + 5.0, rem + 0.5)
+    } else {
+        outerTimeout = (Double(duration) / 1000.0) + 5.0
+    }
     _ = semaphore.wait(timeout: .now() + outerTimeout)
     return (box.result.0, box.result.1, box.result.2, box.result.3, box.result.4)
 }
@@ -632,7 +773,8 @@ if req.op == "capture_still" {
         let result = captureStillFrame(
             path: path,
             bundleId: req.bundle_id,
-            windowTitle: req.window_title
+            windowTitle: req.window_title,
+            budgetMs: req.budget_ms
         )
         if result.ok {
             ok(
@@ -664,7 +806,8 @@ if req.op == "capture_stream_latest" {
             bundleId: req.bundle_id,
             windowTitle: req.window_title,
             durationMs: req.duration_ms,
-            maxFrames: req.max_frames
+            maxFrames: req.max_frames,
+            budgetMs: req.budget_ms
         )
         if result.ok {
             let n = result.frames ?? 0
@@ -700,10 +843,12 @@ case "frontmost_app":
     ok(detail)
 
 case "resolve_target":
-    let matches = resolve(req: req)
-    if matches.isEmpty {
+    switch resolve(req: req) {
+    case .timedOut:
+        fail("helper budget exceeded", count: 0, ax_quality: 0, actionable: false)
+    case .matches(let matches) where matches.isEmpty:
         fail("no matching element", count: 0, ax_quality: 0, actionable: false)
-    } else if matches.count > 1 {
+    case .matches(let matches) where matches.count > 1:
         let best = matches[0]
         fail(
             "ambiguous semantic target (\(matches.count) matches)",
@@ -713,7 +858,7 @@ case "resolve_target":
             identifier: best.identifier.isEmpty ? nil : best.identifier,
             actionable: best.actionable
         )
-    } else {
+    case .matches(let matches):
         let m = matches[0]
         let q = quality(for: m, matchCount: 1)
         ok(
@@ -727,12 +872,14 @@ case "resolve_target":
     }
 
 case "activate_element":
-    let matches = resolve(req: req)
-    if matches.isEmpty {
+    switch resolve(req: req) {
+    case .timedOut:
+        fail("helper budget exceeded", count: 0, ax_quality: 0, actionable: false)
+    case .matches(let matches) where matches.isEmpty:
         fail("no matching element", count: 0, ax_quality: 0, actionable: false)
-    } else if matches.count > 1 {
+    case .matches(let matches) where matches.count > 1:
         fail("ambiguous activate (\(matches.count) matches)", count: UInt32(matches.count))
-    } else {
+    case .matches(let matches):
         let m = matches[0]
         let q = quality(for: m, matchCount: 1)
         if let fp = req.fingerprint, fp != m.fp {
@@ -767,12 +914,14 @@ case "set_value":
         fail("set_value requires value")
         break
     }
-    let matches = resolve(req: req)
-    if matches.isEmpty {
+    switch resolve(req: req) {
+    case .timedOut:
+        fail("helper budget exceeded", count: 0, ax_quality: 0, actionable: false)
+    case .matches(let matches) where matches.isEmpty:
         fail("no matching element", count: 0, ax_quality: 0, actionable: false)
-    } else if matches.count > 1 {
+    case .matches(let matches) where matches.count > 1:
         fail("ambiguous set_value (\(matches.count) matches)", count: UInt32(matches.count))
-    } else {
+    case .matches(let matches):
         let m = matches[0]
         let q = quality(for: m, matchCount: 1)
         if let fp = req.fingerprint, fp != m.fp {
@@ -804,7 +953,7 @@ case "set_value":
     }
 
 case "verify_element":
-    let matches = resolve(req: req)
+    guard let matches = resolveOrFail(req) else { break }
     if matches.isEmpty {
         fail("verify: element not found", count: 0, ax_quality: 0, actionable: false)
     } else if matches.count > 1 {
@@ -852,7 +1001,7 @@ case "list_matches":
     // app/role/title/identifier query, with each candidate's fingerprint,
     // quality score, and value. Unlike resolve_target this never refuses on
     // ambiguity — it is the Inspect step used before approving an action.
-    let matches = resolve(req: req)
+    guard let matches = resolveOrFail(req) else { break }
     if matches.isEmpty {
         fail("no matching element", count: 0, ax_quality: 0, actionable: false)
     } else {

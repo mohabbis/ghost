@@ -4,6 +4,7 @@ pub mod capture;
 pub mod evidence;
 pub mod execute;
 pub mod fs;
+pub mod helper_budget;
 pub mod locator;
 pub mod persist;
 pub mod receipt;
@@ -21,6 +22,7 @@ pub use evidence::{StepEvidence, UiResolutionStrategy};
 pub use execute::{
     RuntimeResult, execute_action_plan_with_progress, execute_action_plan_with_reliability,
 };
+pub use helper_budget::{HelperBudget, is_helper_budget_timeout};
 pub use locator::{AxConstraint, AxQuality, Locator, score_ax_candidate};
 pub use persist::{PersistedRunOutcome, run_persisted_action_plan};
 pub use receipt::{ExecutionReceipt, ReceiptStep, build_receipt};

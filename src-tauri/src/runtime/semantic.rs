@@ -1,6 +1,7 @@
 //! macOS Accessibility semantic UI operations via optional GhostAXHelper.
 
 use crate::runtime::evidence::StepEvidence;
+use crate::runtime::helper_budget::{self, HelperBudget};
 use crate::runtime::locator::{self, AxQuality, Locator};
 
 use serde::{Deserialize, Serialize};
@@ -83,6 +84,10 @@ impl UiTarget {
     }
 
     fn to_ax_request(&self, op: &str) -> AxRequest {
+        self.to_ax_request_with_budget(op, None)
+    }
+
+    fn to_ax_request_with_budget(&self, op: &str, budget: Option<HelperBudget>) -> AxRequest {
         AxRequest {
             op: op.into(),
             app: Some(self.app.clone()),
@@ -94,6 +99,7 @@ impl UiTarget {
             identifier: self.identifier.clone(),
             bundle_id: self.bundle_id.clone(),
             window_title: self.window_title.clone(),
+            budget_ms: budget.map(|b| b.budget_ms),
         }
     }
 }
@@ -112,6 +118,8 @@ pub enum SemanticError {
     /// Reserved for when vision fallback is wired; resolve currently reports
     /// quality on [`ResolvedTarget`] instead of hard-failing.
     InsufficientAx(AxQuality),
+    /// Cooperative mid-op budget exhausted inside the helper (or before spawn).
+    TimedOut(String),
     Failed(String),
 }
 
@@ -130,6 +138,7 @@ impl std::fmt::Display for SemanticError {
                 "insufficient accessibility hierarchy (score {}, unique={}, actionable={})",
                 q.score, q.unique, q.actionable
             ),
+            Self::TimedOut(d) => write!(f, "semantic timed out: {d}"),
             Self::Failed(d) => write!(f, "{d}"),
         }
     }
@@ -156,6 +165,9 @@ struct AxRequest {
     bundle_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     window_title: Option<String>,
+    /// Wall-clock ms from helper request start; cooperative mid-op deadline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    budget_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -223,6 +235,28 @@ fn helper_path() -> Option<PathBuf> {
     helper_candidates().into_iter().find(|c| c.is_file())
 }
 
+fn ensure_budget(budget: Option<HelperBudget>) -> Result<(), SemanticError> {
+    if let Some(b) = budget
+        && b.is_exhausted()
+    {
+        return Err(SemanticError::TimedOut(
+            helper_budget::HELPER_BUDGET_EXCEEDED.into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn map_helper_response(resp: AxResponse) -> Result<AxResponse, SemanticError> {
+    if !resp.ok && helper_budget::is_helper_budget_timeout(&resp.detail) {
+        return Err(SemanticError::TimedOut(resp.detail));
+    }
+    if !resp.ok && resp.detail.contains("accessibility denied") {
+        return Err(SemanticError::PermissionDenied(resp.detail));
+    }
+    Ok(resp)
+}
+
 fn call_helper(req: &AxRequest) -> Result<AxResponse, SemanticError> {
     #[cfg(not(target_os = "macos"))]
     {
@@ -269,10 +303,7 @@ fn call_helper(req: &AxRequest) -> Result<AxResponse, SemanticError> {
 
         let resp: AxResponse =
             serde_json::from_str(line.trim()).map_err(|e| SemanticError::Failed(e.to_string()))?;
-        if !resp.ok && resp.detail.contains("accessibility denied") {
-            return Err(SemanticError::PermissionDenied(resp.detail));
-        }
-        Ok(resp)
+        map_helper_response(resp)
     }
 }
 
@@ -314,12 +345,21 @@ pub fn permission_status() -> Result<bool, SemanticError> {
         identifier: None,
         bundle_id: None,
         window_title: None,
+        budget_ms: None,
     })?;
     Ok(resp.ok)
 }
 
 pub fn resolve_target(target: &UiTarget) -> Result<ResolvedTarget, SemanticError> {
-    let resp = call_helper(&target.to_ax_request("resolve_target"))?;
+    resolve_target_with_budget(target, None)
+}
+
+pub fn resolve_target_with_budget(
+    target: &UiTarget,
+    budget: Option<HelperBudget>,
+) -> Result<ResolvedTarget, SemanticError> {
+    ensure_budget(budget)?;
+    let resp = call_helper(&target.to_ax_request_with_budget("resolve_target", budget))?;
     let quality = quality_from_response(&resp, target);
 
     if let Some(count) = resp.match_count {
@@ -364,13 +404,20 @@ fn ensure_fresh(target: &UiTarget, resolved: &ResolvedTarget) -> Result<(), Sema
     Ok(())
 }
 
-fn activate_resolved(target: &UiTarget, resolved: &ResolvedTarget) -> Result<(), SemanticError> {
+fn activate_resolved(
+    target: &UiTarget,
+    resolved: &ResolvedTarget,
+    budget: Option<HelperBudget>,
+) -> Result<(), SemanticError> {
     ensure_fresh(target, resolved)?;
-    let mut req = target.to_ax_request("activate_element");
+    ensure_budget(budget)?;
+    let mut req = target.to_ax_request_with_budget("activate_element", budget);
     req.fingerprint = Some(resolved.fingerprint.clone());
     let resp = call_helper(&req)?;
     if resp.ok {
         Ok(())
+    } else if helper_budget::is_helper_budget_timeout(&resp.detail) {
+        Err(SemanticError::TimedOut(resp.detail))
     } else {
         Err(SemanticError::Failed(resp.detail))
     }
@@ -404,18 +451,53 @@ fn map_vision_err(err: crate::runtime::vision_fallback::VisionFallbackError) -> 
         VisionFallbackError::Capture(CaptureError::PermissionDenied(d)) => {
             SemanticError::PermissionDenied(d)
         }
+        VisionFallbackError::Capture(CaptureError::TimedOut(d)) => SemanticError::TimedOut(d),
         other => SemanticError::Failed(other.to_string()),
     }
 }
 
-fn try_vision_focus(target: &UiTarget) -> Result<StepEvidence, SemanticError> {
+fn try_vision_focus(
+    target: &UiTarget,
+    budget: Option<HelperBudget>,
+) -> Result<StepEvidence, SemanticError> {
     // Order: OCR (needs title) → template (needs opt-in template_png) → fail.
     let mut last = None;
     if let Some(needle) = search_text(target) {
-        match crate::runtime::vision_fallback::focus_via_ocr(
+        match crate::runtime::vision_fallback::focus_via_ocr_with_budget(
             needle,
             target.bundle_id.as_deref(),
             target.window_title.as_deref(),
+            budget,
+        ) {
+            Ok(hit) => {
+                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
+            }
+            Err(e) => last = Some(e),
+        }
+    }
+    if let Some(png) = target.template_png.as_deref() {
+        let hit = crate::runtime::vision_fallback::focus_via_template_with_budget(png, budget)
+            .map_err(map_vision_err)?;
+        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
+    }
+    Err(map_vision_err(last.unwrap_or(
+        crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
+    )))
+}
+
+fn try_vision_set_value(
+    target: &UiTarget,
+    value: &str,
+    budget: Option<HelperBudget>,
+) -> Result<StepEvidence, SemanticError> {
+    let mut last = None;
+    if let Some(needle) = search_text(target) {
+        match crate::runtime::vision_fallback::set_value_via_ocr_with_budget(
+            needle,
+            value,
+            target.bundle_id.as_deref(),
+            target.window_title.as_deref(),
+            budget,
         ) {
             Ok(hit) => {
                 return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
@@ -425,32 +507,8 @@ fn try_vision_focus(target: &UiTarget) -> Result<StepEvidence, SemanticError> {
     }
     if let Some(png) = target.template_png.as_deref() {
         let hit =
-            crate::runtime::vision_fallback::focus_via_template(png).map_err(map_vision_err)?;
-        return Ok(StepEvidence::template(hit.fingerprint, hit.text));
-    }
-    Err(map_vision_err(last.unwrap_or(
-        crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
-    )))
-}
-
-fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<StepEvidence, SemanticError> {
-    let mut last = None;
-    if let Some(needle) = search_text(target) {
-        match crate::runtime::vision_fallback::set_value_via_ocr(
-            needle,
-            value,
-            target.bundle_id.as_deref(),
-            target.window_title.as_deref(),
-        ) {
-            Ok(hit) => {
-                return Ok(StepEvidence::ocr(hit.fingerprint, hit.text));
-            }
-            Err(e) => last = Some(e),
-        }
-    }
-    if let Some(png) = target.template_png.as_deref() {
-        let hit = crate::runtime::vision_fallback::set_value_via_template(png, value)
-            .map_err(map_vision_err)?;
+            crate::runtime::vision_fallback::set_value_via_template_with_budget(png, value, budget)
+                .map_err(map_vision_err)?;
         return Ok(StepEvidence::template(hit.fingerprint, hit.text));
     }
     Err(map_vision_err(last.unwrap_or(
@@ -474,6 +532,7 @@ pub fn ensure_app_running(target: &UiTarget) -> Result<(), SemanticError> {
         identifier: None,
         bundle_id: target.bundle_id.clone(),
         window_title: None,
+        budget_ms: None,
     }) {
         Ok(resp) if resp.ok => Ok(()),
         Ok(resp) => Err(SemanticError::NotFound(resp.detail)),
@@ -484,6 +543,7 @@ pub fn ensure_app_running(target: &UiTarget) -> Result<(), SemanticError> {
 
 fn with_ax_then_vision<F>(
     target: &UiTarget,
+    budget: Option<HelperBudget>,
     mut ax_action: F,
     vision_action: impl FnOnce() -> Result<StepEvidence, SemanticError>,
 ) -> Result<StepEvidence, SemanticError>
@@ -493,7 +553,7 @@ where
     ensure_app_running(target)?;
     let has_text = search_text(target).is_some();
     let has_template = target.template_png.as_ref().is_some_and(|p| !p.is_empty());
-    match resolve_target(target) {
+    match resolve_target_with_budget(target, budget) {
         Ok(resolved) => {
             if !crate::runtime::vision_fallback::should_prefer_vision_after_resolve(
                 resolved.quality,
@@ -531,26 +591,46 @@ where
 
 /// Focus a target; returns compact resolution evidence (no screenshot retention).
 pub fn focus_target(target: &UiTarget) -> Result<StepEvidence, SemanticError> {
+    focus_target_with_budget(target, None)
+}
+
+/// Like [`focus_target`], passing a cooperative mid-op helper budget.
+pub fn focus_target_with_budget(
+    target: &UiTarget,
+    budget: Option<HelperBudget>,
+) -> Result<StepEvidence, SemanticError> {
     with_ax_then_vision(
         target,
+        budget,
         |resolved| {
-            activate_resolved(target, resolved)?;
+            activate_resolved(target, resolved, budget)?;
             Ok(StepEvidence::ax(
                 resolved.quality.score,
                 resolved.fingerprint.clone(),
             ))
         },
-        || try_vision_focus(target),
+        || try_vision_focus(target, budget),
     )
 }
 
 /// Set a value on a target; returns compact resolution evidence (no screenshot retention).
 pub fn set_target_value(target: &UiTarget, value: &str) -> Result<StepEvidence, SemanticError> {
+    set_target_value_with_budget(target, value, None)
+}
+
+/// Like [`set_target_value`], passing a cooperative mid-op helper budget.
+pub fn set_target_value_with_budget(
+    target: &UiTarget,
+    value: &str,
+    budget: Option<HelperBudget>,
+) -> Result<StepEvidence, SemanticError> {
     with_ax_then_vision(
         target,
+        budget,
         |resolved| {
             ensure_fresh(target, resolved)?;
-            let mut req = target.to_ax_request("set_value");
+            ensure_budget(budget)?;
+            let mut req = target.to_ax_request_with_budget("set_value", budget);
             req.value = Some(value.into());
             req.fingerprint = Some(resolved.fingerprint.clone());
             let resp = call_helper(&req)?;
@@ -559,11 +639,13 @@ pub fn set_target_value(target: &UiTarget, value: &str) -> Result<StepEvidence, 
                     resolved.quality.score,
                     resolved.fingerprint.clone(),
                 ))
+            } else if helper_budget::is_helper_budget_timeout(&resp.detail) {
+                Err(SemanticError::TimedOut(resp.detail))
             } else {
                 Err(SemanticError::Failed(resp.detail))
             }
         },
-        || try_vision_set_value(target, value),
+        || try_vision_set_value(target, value, budget),
     )
 }
 
@@ -625,6 +707,24 @@ mod tests {
         let weak = locator::score_ax_candidate(Some("AXButton"), None, None, false, 2);
         let insuff = SemanticError::InsufficientAx(weak);
         assert!(insuff.to_string().contains("insufficient"));
+        let timed = SemanticError::TimedOut(helper_budget::HELPER_BUDGET_EXCEEDED.into());
+        assert!(timed.to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn ax_request_serializes_budget_ms() {
+        let target = UiTarget::new("TextEdit", "AXTextArea");
+        let req = target.to_ax_request_with_budget("resolve_target", Some(HelperBudget::new(900)));
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("budget_ms"));
+        assert!(json.contains("900"));
+    }
+
+    #[test]
+    fn exhausted_budget_fails_before_helper() {
+        let target = UiTarget::new("TextEdit", "AXTextArea");
+        let err = resolve_target_with_budget(&target, Some(HelperBudget::new(0))).unwrap_err();
+        assert!(matches!(err, SemanticError::TimedOut(_)));
     }
 
     #[test]

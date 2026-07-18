@@ -405,11 +405,26 @@ Also present (item 9 — honest):
   best-effort, ADR-0007);
 - Receipts never retain screenshot bytes.
 
+Also present (interruptible mid-op helper budgets — partial):
+
+- Optional `budget_ms` on GhostAXHelper request JSON (wall-clock from helper request
+  start) for long ops: `resolve_target`, `activate_element`, `set_value`,
+  `capture_still`, `capture_stream_latest`;
+- Swift helper checks the deadline between AX tree visits and between stream frames /
+  before heavy ScreenCaptureKit work, returning `helper budget exceeded` instead of
+  hanging (cooperative — does not kill mid-mutation);
+- Action Plan runtime passes the remaining ActionStep `timeout_ms` into semantic /
+  capture helper calls (`runtime/helper_budget.rs`, `execute.rs` → `ui.rs` →
+  `semantic` / `capture`); stream duration is additionally clamped to the budget
+  while hard caps stay ≤2s / 8 frames;
+- Pure Rust budget math + timeout mapping are unit-tested on Linux; live Swift
+  helper validation still requires macOS (rebuild `ghost-ax-helper` there).
+
 Not yet the architecture above:
 
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
-- interruptible mid-op timeouts inside AX/SCK helper calls (runtime budget covers
-  dispatch + retries only);
+- hard preemption of in-flight AX attribute writes / ScreenCaptureKit encode (budget
+  checks are cooperative only);
 - Input Monitoring / Notifications probe implementations;
 - automatic template capture into Action Plans (fragments must be supplied opt-in on
   `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);

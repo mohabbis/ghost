@@ -4,6 +4,7 @@ use crate::action_plan::types::ActionKind;
 use crate::core::events::{InputEvent, ReliabilitySettings};
 use crate::engine::GhostEngine;
 use crate::runtime::evidence::StepEvidence;
+use crate::runtime::helper_budget::HelperBudget;
 use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use enigo::{Enigo, Key, Keyboard, Settings};
 use std::thread;
@@ -24,10 +25,21 @@ pub fn dispatch_ui_step_with_reliability(
     engine: Option<&GhostEngine>,
     reliability: Option<&ReliabilitySettings>,
 ) -> UiOutcome {
+    dispatch_ui_step_with_budget(kind, engine, reliability, None)
+}
+
+/// Like [`dispatch_ui_step_with_reliability`], plumbing a remaining step budget
+/// into AX / ScreenCaptureKit helper calls for cooperative mid-op timeouts.
+pub fn dispatch_ui_step_with_budget(
+    kind: &ActionKind,
+    engine: Option<&GhostEngine>,
+    reliability: Option<&ReliabilitySettings>,
+    budget: Option<HelperBudget>,
+) -> UiOutcome {
     match kind {
         ActionKind::OpenApplication { name } => open_application(name),
-        ActionKind::SemanticFocus { target } => semantic_focus(target),
-        ActionKind::SemanticSetValue { target, value } => semantic_set_value(target, value),
+        ActionKind::SemanticFocus { target } => semantic_focus(target, budget),
+        ActionKind::SemanticSetValue { target, value } => semantic_set_value(target, value, budget),
         ActionKind::SemanticVerify {
             target,
             expected_value,
@@ -45,8 +57,8 @@ pub fn dispatch_ui_step_with_reliability(
     }
 }
 
-fn semantic_focus(target: &UiTarget) -> UiOutcome {
-    match semantic::focus_target(target) {
+fn semantic_focus(target: &UiTarget, budget: Option<HelperBudget>) -> UiOutcome {
+    match semantic::focus_target_with_budget(target, budget) {
         Ok(evidence) => UiOutcome::Applied(Some(evidence)),
         Err(SemanticError::HelperUnavailable(msg)) => UiOutcome::Skipped(msg),
         Err(SemanticError::Ambiguous(n)) => {
@@ -59,8 +71,8 @@ fn semantic_focus(target: &UiTarget) -> UiOutcome {
     }
 }
 
-fn semantic_set_value(target: &UiTarget, value: &str) -> UiOutcome {
-    match semantic::set_target_value(target, value) {
+fn semantic_set_value(target: &UiTarget, value: &str, budget: Option<HelperBudget>) -> UiOutcome {
+    match semantic::set_target_value_with_budget(target, value, budget) {
         Ok(evidence) => UiOutcome::Applied(Some(evidence)),
         Err(SemanticError::HelperUnavailable(_)) => {
             // Fall back to keyboard typing when the AX helper is not present.
