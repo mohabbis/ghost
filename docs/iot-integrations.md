@@ -44,6 +44,11 @@ bookkeeper does not hunt folders or remember to run Organizer.
 v1 — Brother / Fujitsu / HP / Epson that drop PDF/JPEG into a directory are
 enough.
 
+**Current v1 scope:** Ghost ships a `Scanner Inbox` Organizer preset plus a
+local ready-to-file banner driven by folder listing. Users still click
+**Scan & Preview** manually; there is no background watcher, vendor SDK, or
+auto-move path.
+
 **Ghost modules:** Organizer Zones + planner/executor; Zone preset + docs;
 optional inbound-intent card.
 
@@ -85,9 +90,11 @@ optional checklist routine) so closeout is not tribal knowledge.
 
 - Trigger: POS *close / settlement* webhook via a bridge (not Ghost inside the
   POS).
-- Intent: “Shift closed — file today’s receipts.”
-- Opens Organizer plan for the day’s drop Zone; optional routine checklist
-  preview.
+- Intent card: “Shift closed — file today’s receipts.”
+- Actions: **Create plan** (when `zone_id` is known) or **Select Zone**; opening
+  the plan marks the intent `Converted` but still mutates nothing.
+- The shipped slice opens Organizer’s read-only plan preview only. Optional
+  checklist routine preview stays follow-up work.
 
 **Explicit non-goal:** Ghost must not type into the POS from a cloud event.
 Guard Desk / POS Bridge remains a **prototype desk workflow — not certified
@@ -95,6 +102,19 @@ compliance** (`docs/audiences.md`, product audits).
 
 **Delta vs F1:** time-bound “today’s batch” + closeout checklist, not every
 scan.
+
+**Bridge payload (same shared webhook as F2):**
+
+```json
+{
+  "source": "pos.close",
+  "summary": "Shift closed — file today's receipts",
+  "zone_id": "optional-ghost-zone-uuid"
+}
+```
+
+See `docs/fabric-eventstream-webhook.md` and
+`docs/samples/fabric-eventstream/pos-shift-close.json`.
 
 ### F4 — File-and-label (P2)
 
@@ -106,6 +126,10 @@ and digital filing match.
 - Post-run optional step: preview label text (path, period, client) → Approve
   print → DYMO / Brother QL / CUPS.
 - Audit note: “label printed for run X.” Paper is not undoable — say so in UI.
+- Current minimal slice: stock Ghost may preview/export label **text only**
+  (Zone + destination path + run period) after a successful Organizer run and
+  record a post-run note when the user confirms the preview/export. Real
+  printer I/O remains follow-up.
 
 **Ship only if** F1/F2 are habitual; otherwise it is a peripheral toy.
 
@@ -117,10 +141,14 @@ move; gate experimental.
 **Job:** User presents a check or ID image; Ghost OCR/parses into a review
 packet; user decides next steps.
 
-**User-visible behavior:** Existing on-device OCR + ID parse
-(`run_ocr_on_image`, `parse_id_document`) and Guard Desk UI. IoT angle =
-tethered imager as an **explicit user gesture** to supply bytes — never
-ambient camera.
+**User-visible behavior:**
+
+- In Guard Desk, the user clicks to choose a check image and/or ID image from a
+  scanner drop folder or any other file path.
+- Ghost feeds those chosen bytes into the existing local OCR + ID parse
+  commands (`run_ocr_on_image`, `parse_id_document`) and shows a review packet.
+- No ambient camera, no camera permission, no background watch, no automatic
+  typing.
 
 **Do not** market as KYC/AML/sanctions or compliance certification.
 
@@ -128,11 +156,11 @@ ambient camera.
 
 | Priority | Feature | Ghost surface | Mechanism | Status |
 |---|---|---|---|---|
-| P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Design; Zone path works today without new commands |
-| P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Partial (Fabric intent queue, experimental) |
-| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Not built; marketing must stay qualified |
-| P2 | F4 File-and-label | Post-run optional print | Label printer after Approve | Not built |
-| P2 | F5 Check/ID assist | Guard Desk | User-supplied image OCR | Partial core OCR; desk workflow prototype |
+| P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Partial — `Scanner Inbox` preset + local ready-to-file banner; manual `Scan & Preview`, no watcher/vendor SDK |
+| P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Built in experimental: pending-intent list + Dismiss + Create plan (`Converted`), no auto-execute |
+| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Partial (this merge): experimental intent card + Create plan/Select Zone; no routine preview, no POS control |
+| P2 | F4 File-and-label | Post-run optional print | Label preview/export text after Approve; real printer follow-up | Partial (preview/export text only; no DYMO/Brother/CUPS yet) |
+| P2 | F5 Check/ID assist | Guard Desk | User-chosen image OCR | Partial core OCR; desk workflow prototype |
 
 ## Intent contract (when a feature needs a signal)
 
@@ -175,7 +203,8 @@ Rules:
 1. **F1** — document + Zone preset “Scanner Inbox”; optional new-files intent
    card (folder watch before any scanner SDK).
 2. **F2** — harden inbound intent UX (multi-intent list, Create plan =
-   `Converted`); keep `/fabric/webhook`; generic alias only when needed.
+   `Converted`); keep `/fabric/webhook`; optional `/inbound/webhook` alias
+   documented for generic bridges.
 3. **F3** — POS close → same intent queue; no POS key injection.
 4. **F4 / F5** — only with clear habit and honest labeling.
 

@@ -71,6 +71,28 @@ fn default_true() -> bool {
     true
 }
 
+/// A post-run note about the optional file-and-label follow-up.
+///
+/// These notes are intentionally stored *alongside* the sealed Organizer
+/// execution rather than inside the sealed audit blob: they happen after the
+/// filesystem run completed and therefore must not rewrite the original
+/// execution ledger retroactively.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelAuditAction {
+    PreviewConfirmed,
+    TextExported,
+}
+
+/// A durable post-run note attached to one execution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelAuditNote {
+    pub action: LabelAuditAction,
+    pub at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 /// A fully-loaded past execution, including the records needed to undo it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredExecution {
@@ -96,6 +118,11 @@ pub struct StoredExecution {
     /// Persisted Ghost 2.0 execution receipt when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt: Option<crate::runtime::ExecutionReceipt>,
+    /// Post-run label-preview/export notes. These are sidecar metadata added
+    /// after the filesystem run completed, so they are deliberately excluded
+    /// from the execution's tamper-evident seal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub label_notes: Vec<LabelAuditNote>,
 }
 
 /// The outcome of verifying the execution hash chain: whether every sealed run
@@ -137,6 +164,8 @@ struct ExecutionRow {
     finished: bool,
     #[serde(default)]
     receipt_json: String,
+    #[serde(default)]
+    label_notes_json: String,
 }
 
 fn stored_from_row(row: ExecutionRow) -> anyhow::Result<StoredExecution> {
@@ -158,7 +187,16 @@ fn stored_from_row(row: ExecutionRow) -> anyhow::Result<StoredExecution> {
         prev_hash: row.prev_hash,
         finished: row.finished,
         receipt,
+        label_notes: label_notes_from_json(&row.label_notes_json)?,
     })
+}
+
+fn label_notes_from_json(json: &str) -> anyhow::Result<Vec<LabelAuditNote>> {
+    if json.trim().is_empty() {
+        Ok(Vec::new())
+    } else {
+        Ok(serde_json::from_str(json)?)
+    }
 }
 
 /// Compute the SHA-256 seal (hex) for one execution row: a hash over the
@@ -315,6 +353,7 @@ pub fn save_execution(db: &Db, zone_id: &str, report: &ExecutionReport) -> anyho
         prev_hash,
         finished: true,
         receipt_json: String::new(),
+        label_notes_json: "[]".to_string(),
     };
     insert_row(&write_txn, &row)?;
     write_txn.commit()?;
@@ -343,6 +382,7 @@ pub fn begin_execution(db: &Db, zone_id: &str) -> anyhow::Result<String> {
         prev_hash: String::new(),
         finished: false,
         receipt_json: String::new(),
+        label_notes_json: "[]".to_string(),
     };
     let write_txn = db.db.begin_write()?;
     insert_row(&write_txn, &row)?;
@@ -397,7 +437,9 @@ pub fn finish_execution(
 
     let write_txn = db.db.begin_write()?;
     let seq = seq_for_id(&write_txn, id)?;
-    let created_at = read_row(&write_txn, seq)?.created_at;
+    let existing = read_row(&write_txn, seq)?;
+    let created_at = existing.created_at;
+    let label_notes_json = existing.label_notes_json;
     let prev_hash = last_hash(&write_txn, Some(id))?;
     let hash = execution_row_hash(
         &prev_hash,
@@ -423,10 +465,39 @@ pub fn finish_execution(
         prev_hash,
         finished: true,
         receipt_json,
+        label_notes_json,
     };
     write_row(&write_txn, seq, &row)?;
     write_txn.commit()?;
     Ok(())
+}
+
+/// Append a durable post-run label note to an execution.
+///
+/// These notes record the user's explicit confirmation of the preview-only
+/// file-and-label follow-up (for example, acknowledging the preview or
+/// exporting the suggested text). Because they are created after the run
+/// finished, they are stored as sidecar metadata rather than retroactively
+/// changing the sealed audit/undo blobs.
+pub fn append_label_note(
+    db: &Db,
+    id: &str,
+    action: LabelAuditAction,
+    detail: Option<String>,
+) -> anyhow::Result<LabelAuditNote> {
+    let note = LabelAuditNote {
+        action,
+        at: now_ts(),
+        detail,
+    };
+    let write_txn = db.db.begin_write()?;
+    update_row(&write_txn, id, |row| {
+        let mut notes = label_notes_from_json(&row.label_notes_json).unwrap_or_default();
+        notes.push(note.clone());
+        row.label_notes_json = serde_json::to_string(&notes).unwrap_or_else(|_| "[]".to_string());
+    })?;
+    write_txn.commit()?;
+    Ok(note)
 }
 
 /// Mark an execution finished without changing its content — for a run the
@@ -754,6 +825,7 @@ pub(crate) fn import_execution_raw(
         prev_hash: prev_hash.to_string(),
         finished,
         receipt_json: String::new(),
+        label_notes_json: "[]".to_string(),
     };
     insert_row(write_txn, &row)?;
     Ok(())
@@ -850,6 +922,29 @@ mod tests {
         assert!(loaded.finished);
         assert!(list[0].finished);
         assert!(find_unfinished_execution(&db).unwrap().is_none());
+    }
+
+    #[test]
+    fn append_label_note_round_trips_sidecar_metadata() {
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![full_rule(tmp.path())];
+        let plan = plan_with_rules("z", &rules);
+        let report = execute_plan(&plan, &rules);
+
+        let db = open_in_memory().unwrap();
+        let id = save_execution(&db, "z", &report).unwrap();
+        let note = append_label_note(
+            &db,
+            &id,
+            LabelAuditAction::TextExported,
+            Some("ghost-folder-label-z.txt".into()),
+        )
+        .unwrap();
+
+        let loaded = get_execution(&db, &id).unwrap().unwrap();
+        assert_eq!(loaded.label_notes, vec![note]);
+        assert!(verify_chain(&db).unwrap().intact);
     }
 
     #[test]
@@ -1130,6 +1225,7 @@ mod tests {
                 prev_hash: String::new(),
                 finished: true,
                 receipt_json: String::new(),
+                label_notes_json: "[]".to_string(),
             },
         );
 
@@ -1185,6 +1281,7 @@ mod tests {
                 prev_hash: String::new(),
                 finished: true,
                 receipt_json: String::new(),
+                label_notes_json: "[]".to_string(),
             },
         );
 
@@ -1243,6 +1340,7 @@ mod tests {
                 prev_hash: String::new(),
                 finished: true,
                 receipt_json: String::new(),
+                label_notes_json: "[]".to_string(),
             },
         );
 

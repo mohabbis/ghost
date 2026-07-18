@@ -1,7 +1,8 @@
 //! Inbound Fabric intent queue — surfaces external signals without auto-executing.
 //!
 //! Inbound triggers must never bypass desktop approval. This module only records
-//! intents for the user to review in Organizer.
+//! intents for the user to review in Organizer, whether the bridge source is
+//! Fabric, a batch pipeline, or a POS closeout event.
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,15 @@ struct Store {
 }
 
 static STORE: Mutex<Option<Store>> = Mutex::new(None);
+
+fn normalize_source(source: &str) -> String {
+    match source.trim() {
+        "fabric-pipeline" => "ops.pipeline".to_string(),
+        "eventstream-activator" => "hub.bridge".to_string(),
+        value if !value.is_empty() => value.to_string(),
+        _ => "hub.bridge".to_string(),
+    }
+}
 
 fn store_path() -> PathBuf {
     dirs::data_dir()
@@ -83,8 +93,8 @@ pub fn record_intent(zone_id: Option<String>, source: &str, summary: &str) -> Fa
     let intent = FabricInboundIntent {
         intent_id: uuid::Uuid::new_v4().to_string(),
         zone_id,
-        source: source.to_string(),
-        summary: summary.to_string(),
+        source: normalize_source(source),
+        summary: summary.trim().to_string(),
         status: InboundIntentStatus::Pending,
         received_at: now,
         expires_at: now + Duration::hours(24),
@@ -99,12 +109,24 @@ pub fn record_intent(zone_id: Option<String>, source: &str, summary: &str) -> Fa
 
 pub fn list_pending() -> Vec<FabricInboundIntent> {
     with_store(|store| {
-        store
+        let mut intents: Vec<_> = store
             .intents
             .values()
             .filter(|i| i.status == InboundIntentStatus::Pending)
             .cloned()
-            .collect()
+            .collect();
+        intents.sort_by_key(|b| std::cmp::Reverse(b.received_at));
+        intents
+    })
+}
+
+pub fn get_intent(intent_id: &str) -> Result<FabricInboundIntent, String> {
+    with_store(|store| {
+        store
+            .intents
+            .get(intent_id)
+            .cloned()
+            .ok_or_else(|| format!("Unknown inbound intent '{intent_id}'"))
     })
 }
 
@@ -119,14 +141,52 @@ pub fn dismiss_intent(intent_id: &str) -> Result<(), String> {
     })
 }
 
+pub fn convert_intent(intent_id: &str) -> Result<FabricInboundIntent, String> {
+    with_store(|store| {
+        let intent = store
+            .intents
+            .get_mut(intent_id)
+            .ok_or_else(|| format!("Unknown inbound intent '{intent_id}'"))?;
+        if intent.status != InboundIntentStatus::Pending {
+            return Err(format!(
+                "Inbound intent '{intent_id}' is not pending (current status: {:?})",
+                intent.status
+            ));
+        }
+        intent.status = InboundIntentStatus::Converted;
+        Ok(intent.clone())
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn reset_store_for_tests() {
+    let mut guard = STORE.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = Some(Store::default());
+    let _ = fs::remove_file(store_path());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn record_and_list_round_trip() {
-        let intent = record_intent(Some("zone-1".into()), "fabric", "Pipeline completed");
+        reset_store_for_tests();
+        let intent = record_intent(Some("zone-1".into()), "ops.pipeline", "Pipeline completed");
         let pending = list_pending();
         assert!(pending.iter().any(|i| i.intent_id == intent.intent_id));
+        reset_store_for_tests();
+    }
+
+    #[test]
+    fn convert_marks_intent_and_hides_it_from_pending() {
+        reset_store_for_tests();
+        let intent = record_intent(Some("zone-1".into()), "pos.close", "Shift closed");
+        let converted = convert_intent(&intent.intent_id).expect("convert intent");
+        assert_eq!(converted.status, InboundIntentStatus::Converted);
+        assert!(list_pending().is_empty());
+        let stored = get_intent(&intent.intent_id).expect("stored intent");
+        assert_eq!(stored.status, InboundIntentStatus::Converted);
+        reset_store_for_tests();
     }
 }
