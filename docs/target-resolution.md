@@ -4,6 +4,11 @@ How a replayed click finds its element, and how changes to that logic are
 validated. Code: `src-tauri/src/core/replay_support.rs`; benchmark:
 `src-tauri/tests/resolution_benchmark.rs`.
 
+This documents the **current** Tauri replay resolution chain. The intended macOS
+subsystem direction (AX quality scoring, ScreenCaptureKit + Vision fallback,
+shared semantic locators) is in
+[`macos-automation-architecture.md`](macos-automation-architecture.md).
+
 ## Locator data captured per click
 
 `ElementInfo` stores, per recorded click (all optional beyond role/name/app):

@@ -270,7 +270,7 @@ This file captures accepted architectural decisions after the adversarial freeze
 
 **Future Reconsideration:** Extract agents only if cross-machine remote execute is required — conflicts with local authority ADR-0001 unless control plane stays local.
 
-**Grounding:** [`platform/`](src-tauri/src/platform/), [`engine.rs`](src-tauri/src/engine.rs).
+**Grounding:** [`platform/`](src-tauri/src/platform/), [`engine.rs`](src-tauri/src/engine.rs), [`macos-automation-architecture.md`](macos-automation-architecture.md) (Swift adapters stay untrusted OS drivers; Rust keeps policy/approval).
 
 ---
 

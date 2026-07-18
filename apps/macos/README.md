@@ -3,6 +3,12 @@
 This directory contains the platform-native SwiftUI shell for Ghost. It does not
 replace or fork the trusted Rust implementation.
 
+Swift owns native macOS integration (permissions, AX/ScreenCaptureKit/Vision
+adapters as they land). Rust keeps plans, policy, approval, execution, audit,
+undo, storage, and MCP. See
+[`docs/macos-automation-architecture.md`](../../docs/macos-automation-architecture.md)
+and [`docs/native-macos-preview.md`](../../docs/native-macos-preview.md).
+
 ```text
 SwiftUI / AppKit adapters
           |

@@ -80,7 +80,7 @@ macOS, Windows, and headless backends capture and replay input. They do not eval
 
 Filesystem hashes and path identity can support strong local verification. UI automation, browsers, email, and SaaS APIs produce observed signals at best. Ghost records outcomes honestly; it does not label screenshot-confirmed clicks as settlement, compliance, or economic truth.
 
-*Grounding:* ADR-0007, ADR-0021, [`target-resolution.md`](target-resolution.md).
+*Grounding:* ADR-0007, ADR-0021, [`target-resolution.md`](target-resolution.md), [`macos-automation-architecture.md`](macos-automation-architecture.md).
 
 ---
 

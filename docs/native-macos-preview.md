@@ -2,6 +2,10 @@
 
 Status: implementation scaffold for the Ghost 2.0 Organizer vertical slice.
 
+For the longer-term macOS operating layer (AX → Vision → coordinates, ScreenCaptureKit,
+permission coordinator, Swift/Rust ownership), see
+[`macos-automation-architecture.md`](macos-automation-architecture.md).
+
 ## Responsibility boundary
 
 | Layer | Owns | Must not own |
