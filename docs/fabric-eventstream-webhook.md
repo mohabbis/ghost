@@ -1,6 +1,6 @@
 # Fabric Eventstream → Ghost Webhook Bridge
 
-Ghost accepts inbound **intents only** at `POST /fabric/webhook` on the MCP HTTP server. Nothing auto-executes — intents surface in Organizer for scan, review, and approval.
+Ghost accepts inbound **intents only** at `POST /fabric/webhook` on the MCP HTTP server. Nothing auto-executes — intents surface in Organizer for scan, review, and approval. The same endpoint can carry Fabric events, batch-landed nudges, or a POS close/settlement bridge payload.
 
 ## Important: Eventstream has no native HTTP push
 
@@ -46,10 +46,24 @@ Ghost accepts three JSON shapes (see samples in `docs/samples/fabric-eventstream
 ```json
 {
   "zone_id": "organizer-zone-uuid",
-  "source": "fabric-pipeline",
+  "source": "ops.pipeline",
   "summary": "Nightly export pipeline completed — review Organizer plan"
 }
 ```
+
+### POS close / settlement bridge
+
+`docs/samples/fabric-eventstream/pos-shift-close.json`
+
+```json
+{
+  "zone_id": "register-close-zone",
+  "source": "pos.close",
+  "summary": "Shift closed — file today's receipts"
+}
+```
+
+This is still an **inbound intent only**. Ghost may open today's Organizer Zone plan after a desktop user clicks **Create plan**; it must never type into the POS or replay OS input from the webhook itself.
 
 ### CloudEvents 1.0 (Event Grid / Logic Apps)
 
@@ -98,7 +112,7 @@ When an Eventstream operator selects fields, a bridge (Azure Function) can map a
 ```json
 {
   "zone_id": null,
-  "source": "eventstream-activator",
+  "source": "hub.bridge",
   "summary": "Avg temperature 82.4 exceeded threshold in 5m window (device-7)"
 }
 ```
@@ -118,6 +132,17 @@ See [Activator trigger Power Automate flows](https://learn.microsoft.com/en-us/f
 
 Microsoft documents CloudEvents → Eventstream via a decoder function when Eventstream cannot ingest CloudEvents directly ([example](https://github.com/sandervandevelde/WagoEventDecoderFunctionApp)). Use the same function (or a second HTTP action) to **also** POST a Ghost-native payload to `/fabric/webhook`.
 
+### POS close bridge (Square / Toast / custom middleware)
+
+Do **not** add a POS SDK to Ghost for this slice. Let your existing bridge layer
+(Node service, webhook relay, Zapier/Make, Azure Function, etc.) translate the
+POS close/settlement event into Ghost-native JSON with `source: "pos.close"` and
+an optional `zone_id`.
+
+That bridge may tell Ghost "shift closed"; Ghost still requires a local user to
+create the Organizer plan and approve any file mutations. No POS key injection,
+no silent OS control, and no certification claim.
+
 ### Eventstream HTTP source (preview)
 
 Fabric is adding an [HTTP connector](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/overview) for **ingestion into** Eventstream. That direction is the opposite of Ghost inbound — use it when Ghost exports audit data **to** Fabric, not for Eventstream → Ghost.
@@ -129,7 +154,7 @@ SECRET="<from Settings → Generate webhook secret>"
 curl -sS -X POST "http://127.0.0.1:8787/fabric/webhook" \
   -H "Content-Type: application/json" \
   -H "X-Ghost-Webhook-Secret: $SECRET" \
-  --data @docs/samples/fabric-eventstream/ghost-native.json
+  --data @docs/samples/fabric-eventstream/pos-shift-close.json
 ```
 
 ## Related docs

@@ -318,7 +318,7 @@ pub fn organizer_plan(
 /// The actual logic behind [`organizer_plan`], taking an already-open
 /// connection so it is testable against an in-memory database instead of the
 /// real OS data directory (`open_default` has no test seam of its own).
-fn organizer_plan_with_conn(conn: &Db, zone_id: &str) -> Result<OrganizerPlan, String> {
+pub(crate) fn organizer_plan_with_conn(conn: &Db, zone_id: &str) -> Result<OrganizerPlan, String> {
     if get_zone(conn, zone_id)
         .map_err(|e| e.to_string())?
         .is_none()

@@ -201,9 +201,10 @@ Legend — what the command touches: **Files** = local filesystem · **OS** = OS
 | `fabric_export_preview` | experimental | ✓ | – | – | – | – | – | low | Read-only audit export preview (same row shapes as Power BI). No network. |
 | `fabric_list_lakehouses` | experimental | ✓ | – | – | ✓ | ✓ | – | medium | Lists lakehouse items in a workspace; requires Fabric grant. |
 | `fabric_push_audit_export` | experimental | ✓ | – | – | ✓ | ✓ | – | high | Uploads JSON export files to a lakehouse `Files/ghost-export/` path via OneLake. Re-derives payload server-side; requires preview in UI first. |
-| `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound Fabric intents (no auto-execute). |
+| `fabric_list_inbound_intents` | experimental | ✓ | – | – | – | – | – | low | Lists pending inbound bridge intents (for example `ops.pipeline`, `scanner.folder`, `pos.close`). No auto-execute. |
+| `fabric_convert_inbound_intent` | experimental | ✓ | – | – | – | – | – | medium | Re-plans server-side from the intent's `zone_id`, returns a read-only Organizer Action Plan preview, and only then marks the intent `Converted`. Never executes anything. |
 | `fabric_dismiss_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Dismisses an inbound intent without acting on it. |
-| `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound intent for Organizer review (webhook simulation). |
+| `fabric_record_inbound_intent` | experimental | ✓ | – | – | – | – | – | low | Records an inbound bridge intent for Organizer review (webhook simulation / bridge test). |
 | `fabric_webhook_status` | experimental | ✓ | – | – | – | – | – | low | Reports whether a webhook secret is configured. |
 | `fabric_set_webhook_secret` | experimental | ✓ | – | – | – | – | – | medium | Generates/rotates the local `X-Ghost-Webhook-Secret` for `POST /fabric/webhook`. |
 | `google_grant_status` | experimental | ✓ | – | – | – | – | – | low | Local Google Cloud grant metadata. |

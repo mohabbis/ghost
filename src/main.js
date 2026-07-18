@@ -3476,6 +3476,75 @@ async function organizerInit() {
   await organizerCheckFabricInbound();
 }
 
+function organizerInboundIntentSourceLabel(source) {
+  switch ((source || "").trim()) {
+    case "pos.close":
+      return "Shift-close intent";
+    case "ops.pipeline":
+      return "Batch landed intent";
+    case "scanner.folder":
+      return "Scanner inbox intent";
+    case "hub.bridge":
+      return "Bridge intent";
+    default:
+      return "Inbound intent";
+  }
+}
+
+function organizerInboundIntentCopy(intent) {
+  const source = (intent?.source || "").trim();
+  if (source === "pos.close") {
+    return {
+      heading: "Shift-close intent",
+      message: `${intent.summary} — create today's Organizer plan or pick a Zone first. Ghost never types into the POS from a webhook.`,
+      primaryLabel: intent.zone_id ? "Create plan" : "Select Zone",
+      showSelectZone: !!intent.zone_id,
+      selectLabel: "Select Zone",
+      dismissNotice: "Shift-close intent dismissed.",
+      convertedNotice: "Shift-close intent converted into today's Organizer plan. Review before approving.",
+      prototypeNote:
+        "Guard Desk / POS Bridge stays a prototype desk workflow — not certified compliance.",
+    };
+  }
+
+  return {
+    heading: organizerInboundIntentSourceLabel(source),
+    message: `${intent.summary} — create the Organizer plan, review it, then approve if it looks right. Ghost will not auto-execute.`,
+    primaryLabel: intent.zone_id ? "Create plan" : "Select Zone",
+    showSelectZone: false,
+    selectLabel: "Select Zone",
+    dismissNotice: "Inbound intent dismissed.",
+    convertedNotice: "Inbound intent converted into an Organizer plan. Review before approving.",
+    prototypeNote: "",
+  };
+}
+
+async function organizerSelectInboundZone(zoneId) {
+  if (zoneId) {
+    organizerSelectedZoneId = zoneId;
+    await organizerRefreshZones();
+  }
+  document.getElementById("organizerZoneSelect")?.focus();
+}
+
+async function organizerShowActionPlanPreview(zoneId, actionPlan) {
+  organizerLastActionPlan = actionPlan || null;
+  if (actionPlan) organizerRenderActionPlan(actionPlan);
+  organizerHasReviewedPlan = actionPlanHasApplyableSteps(actionPlan);
+  const result = document.getElementById("organizerResult");
+  if (result) {
+    result.innerHTML = organizerHasReviewedPlan
+      ? `<p class="organizer-muted">Semantic plan ready — nothing has been changed. Nothing runs until you approve.</p>`
+      : `<p class="organizer-muted">No applyable steps in this plan.</p>`;
+  }
+  organizerUpdateButtons(await safeRules(zoneId));
+  if (!organizerHasReviewedPlan) {
+    showInsight("Nothing to apply in this plan — add folder rules or pick a folder with matching files.");
+  } else {
+    showInsight("Preview ready. Nothing runs until you approve — review each step, then Confirm.");
+  }
+}
+
 async function organizerCheckFabricInbound() {
   const banner = document.getElementById("organizerFabricInboundBanner");
   if (!banner || !invoke || !experimentalEnabled) {
@@ -3494,25 +3563,41 @@ async function organizerCheckFabricInbound() {
     return;
   }
   const first = pending[0];
+  const card = organizerInboundIntentCopy(first);
   banner.innerHTML = `
     <section class="banner banner--warn">
-      <span><strong>Fabric inbound intent:</strong> ${escapeHtml(first.summary)} — review and scan before approving. Ghost will not auto-execute.</span>
+      <span><strong>${escapeHtml(card.heading)}:</strong> ${escapeHtml(card.message)}</span>
+      ${card.prototypeNote ? `<div class="organizer-muted" style="margin-top:4px;">${escapeHtml(card.prototypeNote)}</div>` : ""}
       <div class="banner__actions">
-        <button class="btn btn--ghost btn--small" id="organizerFabricInboundReviewBtn" type="button">Review Zone</button>
+        <button class="btn btn--ghost btn--small" id="organizerFabricInboundPrimaryBtn" type="button">${escapeHtml(card.primaryLabel)}</button>
+        ${card.showSelectZone ? `<button class="btn btn--ghost btn--small" id="organizerFabricInboundSelectBtn" type="button">${escapeHtml(card.selectLabel)}</button>` : ""}
         <button class="btn btn--ghost btn--small" id="organizerFabricInboundDismissBtn" type="button">Dismiss</button>
       </div>
     </section>`;
-  document.getElementById("organizerFabricInboundReviewBtn")?.addEventListener("click", async () => {
-    if (first.zone_id) {
-      organizerSelectedZoneId = first.zone_id;
-      await organizerRefreshZones();
+  document.getElementById("organizerFabricInboundPrimaryBtn")?.addEventListener("click", async () => {
+    if (!first.zone_id) {
+      await organizerSelectInboundZone(null);
+      showNotification("Select the Zone you want, then run Scan & Preview. Inbound intents never auto-run.", "info");
+      return;
     }
-    showNotification("Scan and review the plan — inbound Fabric signals never auto-run.");
+    try {
+      const converted = await invoke("fabric_convert_inbound_intent", { intentId: first.intent_id });
+      await organizerSelectInboundZone(converted.intent.zone_id);
+      await organizerShowActionPlanPreview(converted.intent.zone_id, converted.action_plan);
+      showNotification(card.convertedNotice, "info");
+    } catch (err) {
+      toastError("Could not create a plan from the inbound intent: " + formatInvokeError(err));
+    }
+    await organizerCheckFabricInbound();
+  });
+  document.getElementById("organizerFabricInboundSelectBtn")?.addEventListener("click", async () => {
+    await organizerSelectInboundZone(first.zone_id);
+    showNotification("Zone selected. Create the plan when ready — inbound intents never auto-run.", "info");
   });
   document.getElementById("organizerFabricInboundDismissBtn")?.addEventListener("click", async () => {
     try {
       await invoke("fabric_dismiss_inbound_intent", { intentId: first.intent_id });
-      showNotification("Inbound Fabric intent dismissed.");
+      showNotification(card.dismissNotice);
     } catch (err) {
       toastError("Could not dismiss: " + formatInvokeError(err));
     }

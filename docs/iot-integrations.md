@@ -85,9 +85,11 @@ optional checklist routine) so closeout is not tribal knowledge.
 
 - Trigger: POS *close / settlement* webhook via a bridge (not Ghost inside the
   POS).
-- Intent: “Shift closed — file today’s receipts.”
-- Opens Organizer plan for the day’s drop Zone; optional routine checklist
-  preview.
+- Intent card: “Shift closed — file today’s receipts.”
+- Actions: **Create plan** (when `zone_id` is known) or **Select Zone**; opening
+  the plan marks the intent `Converted` but still mutates nothing.
+- The shipped slice opens Organizer’s read-only plan preview only. Optional
+  checklist routine preview stays follow-up work.
 
 **Explicit non-goal:** Ghost must not type into the POS from a cloud event.
 Guard Desk / POS Bridge remains a **prototype desk workflow — not certified
@@ -95,6 +97,19 @@ compliance** (`docs/audiences.md`, product audits).
 
 **Delta vs F1:** time-bound “today’s batch” + closeout checklist, not every
 scan.
+
+**Bridge payload (same shared webhook as F2):**
+
+```json
+{
+  "source": "pos.close",
+  "summary": "Shift closed — file today's receipts",
+  "zone_id": "optional-ghost-zone-uuid"
+}
+```
+
+See `docs/fabric-eventstream-webhook.md` and
+`docs/samples/fabric-eventstream/pos-shift-close.json`.
 
 ### F4 — File-and-label (P2)
 
@@ -130,7 +145,7 @@ ambient camera.
 |---|---|---|---|---|
 | P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Design; Zone path works today without new commands |
 | P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Partial (Fabric intent queue, experimental) |
-| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Not built; marketing must stay qualified |
+| P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Partial (experimental intent card + Create plan/Select Zone; no routine preview, no POS control) |
 | P2 | F4 File-and-label | Post-run optional print | Label printer after Approve | Not built |
 | P2 | F5 Check/ID assist | Guard Desk | User-supplied image OCR | Partial core OCR; desk workflow prototype |
 
