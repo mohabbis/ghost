@@ -13,7 +13,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "GhostNative",
-            path: "Ghost"
+            path: "Ghost",
+            // IOKit for IOHIDCheckAccess (Input Monitoring probe in PermissionService).
+            linkerSettings: [
+                .linkedFramework("IOKit")
+            ]
         )
     ]
 )

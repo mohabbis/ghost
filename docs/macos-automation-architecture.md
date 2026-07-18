@@ -341,6 +341,19 @@ work partially without every permission:
 Organizer (folder Zones → plan → approve → execute → undo) must remain usable
 without Input Monitoring or Screen Recording.
 
+### Probe behavior (`PermissionService`)
+
+| Permission | Probe | Prompting |
+|---|---|---|
+| Accessibility | `AXIsProcessTrusted()` | Settings “Request Accessibility” only (`AXIsProcessTrustedWithOptions`) |
+| Screen Recording | `CGPreflightScreenCaptureAccess()` | Open Settings only |
+| Input Monitoring | `IOHIDCheckAccess(ListenEvent)` + `CGPreflightListenEventAccess()`; IOKit Unknown → `unknown` unless CG grants | Settings “Request Input Monitoring” only (`CGRequestListenEventAccess`) |
+| Notifications | `UNUserNotificationCenter.notificationSettings()`; `notDetermined` → `unknown` | Open Settings only — `refresh()` never calls `requestAuthorization` |
+| Automation | Always `unknown` (TCC is per AE target) | Open Settings only |
+
+`recordingAvailable` requires Accessibility **and** Input Monitoring `.granted`.
+Unknown/denied keeps recording gated off. Never request camera or microphone.
+
 ## Build order
 
 Build the macOS automation subsystem in this order. Do not skip ahead to MCP or
@@ -384,8 +397,13 @@ Already present:
 - Rust shared locator + AX quality types (`runtime/locator.rs`) and extended
   `UiTarget` (`identifier`, `bundle_id`, `window_title`, optional `template_png`);
 - native `PermissionService` coordinator with per-permission why/degraded-mode
-  metadata (Accessibility + Screen Recording probed; Input Monitoring /
-  Notifications / Automation still honest `unknown` until probes land);
+  metadata and read-only probes: Accessibility (`AXIsProcessTrusted`), Screen
+  Recording (`CGPreflightScreenCaptureAccess`), Input Monitoring
+  (`IOHIDCheckAccess` + `CGPreflightListenEventAccess`; IOKit Unknown stays
+  `unknown` unless CG preflight grants), Notifications
+  (`UNUserNotificationCenter` authorization status — `notDetermined` → `unknown`,
+  never prompted from `refresh()`); Automation stays honest `unknown` (TCC is
+  per Apple Event target, no process-wide definitive probe);
 - Rust macOS platform backend (CGEventTap + AX inspection);
 - descriptor-first resolution chain with template and coordinate fallbacks;
 - on-device OCR for **user-supplied** images (`run_ocr_on_image`) and for
@@ -456,7 +474,7 @@ Not yet the architecture above (implementation gaps — distinct from
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
 - hard preemption of in-flight AX attribute writes / ScreenCaptureKit encode (budget
   checks are cooperative only);
-- Input Monitoring / Notifications probe implementations;
+- Automation process-wide probe (per-target TCC only; Settings still deep-links);
 - automatic promotion of every click to Semantic* (coordinate-only and
   low-confidence targets correctly remain UiReplay).
 
