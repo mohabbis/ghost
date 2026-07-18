@@ -468,6 +468,24 @@ strong { font-weight: 650; }
 .demo__controls { display: flex; align-items: center; gap: 16px; margin-top: 18px; flex-wrap: wrap; }
 .demo__hint { color: var(--faint); font-size: 13px; }
 .demo__hint.is-warn { color: var(--amber); }
+.demo__hint code {
+  font-family: var(--mono); font-size: 12px; padding: 1px 6px;
+  border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/* Resolution evidence chips on Action Plan demo rows */
+.evidence-chip {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--violet-wash); color: var(--violet-bright);
+  border: 1px solid var(--violet-line); white-space: nowrap;
+}
+.planlist li.is-done .evidence-chip {
+  background: var(--green-wash); color: var(--green); border-color: rgba(73, 211, 160, 0.35);
+}
 
 /* ───────────────────────── Niche cards ───────────────────────── */
 .niche-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
@@ -720,7 +738,7 @@ body[data-platform="windows"] #dl-mac { background: rgba(255, 255, 255, 0.06); c
   .trust-strip { padding: 16px 16px; gap: 10px; }
   .trust-strip span { width: 100%; justify-content: center; white-space: normal; flex-wrap: wrap; text-align: center; }
   .demo__tabs { flex-wrap: wrap; }
-  .demo__tab { flex: 1 1 calc(50% - 4px); justify-content: center; }
+  .demo__tab { flex: 1 1 calc(33.33% - 4px); justify-content: center; min-width: 9.5rem; }
 }
 
 /* ───────────────────────── Reduced motion ───────────────────────── */

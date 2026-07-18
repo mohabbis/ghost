@@ -332,6 +332,223 @@ function organizerDemo() {
 }
 
 /* ============================================================
+   Demo B — Ghost 2.0 Action Plan (invoice → Finance)
+   Faithful simulation of docs/GHOST_2_DEMO.md — not a live IPC call.
+   ============================================================ */
+function actionPlanDemo() {
+  const planEl = $("#ap-plan");
+  const receiptEl = $("#ap-receipt");
+  const auditBox = $("#ap-audit");
+  const auditEl = $("#ap-auditlist");
+  const btn = $("#ap-action");
+  const hint = $("#ap-hint");
+  const title = $("#ap-title");
+  const receiptHead = $("#ap-receipthead");
+  if (!btn) return;
+
+  // Mirrors action_plan_demo semantic steps: FS mutations + AX set_value log.
+  // UI steps carry resolution_strategy evidence; undo notes stay honest.
+  const STEPS = [
+    {
+      tag: "＋ folder",
+      cls: "tag--new",
+      strong: "Finance/Invoices",
+      desc: "create",
+      expected: "folder exists",
+      observed: "created",
+      strategy: null,
+      undo: "journal entry written",
+    },
+    {
+      tag: "✎ rename",
+      cls: "tag--rename",
+      strong: "invoice_jan.pdf",
+      desc: "→ 2026-01-15_invoice_jan.pdf",
+      expected: "dated name",
+      observed: "renamed",
+      strategy: null,
+      undo: "journal entry written",
+    },
+    {
+      tag: "→ move",
+      cls: "tag--move",
+      strong: "2026-01-15_invoice_jan.pdf",
+      desc: "→ Finance/Invoices",
+      expected: "file at destination",
+      observed: "moved",
+      strategy: null,
+      undo: "journal entry written",
+    },
+    {
+      tag: "↗ open",
+      cls: "tag--new",
+      strong: "TextEdit",
+      desc: "launch app",
+      expected: "app running",
+      observed: "running",
+      strategy: null,
+      undo: "n/a: UI open is not reversible via the undo journal",
+    },
+    {
+      tag: "◎ focus",
+      cls: "tag--rename",
+      strong: "AXTextArea",
+      desc: "document body",
+      expected: "focused",
+      observed: "focused",
+      strategy: "ax",
+      undo: "n/a: UI click/type is not reversible via the undo journal",
+    },
+    {
+      tag: "⌨ set",
+      cls: "tag--move",
+      strong: "log line",
+      desc: "semantic set_value (not coordinate typing)",
+      expected: "Filed invoice_jan.pdf",
+      observed: "Filed invoice_jan.pdf",
+      strategy: "ax",
+      undo: "n/a: UI click/type is not reversible via the undo journal",
+    },
+    {
+      tag: "⌘ save",
+      cls: "tag--rename",
+      strong: "Cmd+S",
+      desc: "shortcut",
+      expected: "document saved",
+      observed: "saved",
+      strategy: null,
+      undo: "n/a: UI shortcut is not reversible via the undo journal",
+    },
+    {
+      tag: "✓ verify",
+      cls: "tag--new",
+      strong: "path check",
+      desc: "Finance/Invoices/… exists",
+      expected: "path present",
+      observed: "present",
+      strategy: null,
+      undo: null,
+    },
+  ];
+
+  let state = "idle";
+
+  function planRow(s) {
+    const strategy = s.strategy
+      ? `<span class="evidence-chip" title="UI resolution strategy">via ${s.strategy}</span>`
+      : "";
+    return el(
+      "li",
+      null,
+      `<span class="tag ${s.cls}">${s.tag}</span> <span class="p-strong">${s.strong}</span> <span class="p-desc">${s.desc}</span>${strategy}`,
+    );
+  }
+
+  function receiptRow(s) {
+    const strategy = s.strategy
+      ? `<span class="evidence-chip">via ${s.strategy}</span>`
+      : "";
+    return el(
+      "li",
+      "is-done",
+      `<span class="tag tag--new">verified</span> <span class="p-strong">${s.strong}</span> <span class="p-desc">expected “${s.expected}” · observed “${s.observed}”</span>${strategy}`,
+    );
+  }
+
+  function auditRow(html) {
+    return el("li", null, html);
+  }
+
+  function reset() {
+    planEl.innerHTML = "";
+    receiptEl.innerHTML = "";
+    auditEl.innerHTML = "";
+    auditBox.hidden = true;
+    title.textContent = "Zone · Downloads";
+    receiptHead.textContent = "Receipt (awaiting approval)";
+    hint.className = "demo__hint";
+    hint.innerHTML =
+      "Simulation of <code>action_plan_demo</code> — same approve → execute → verify shape as the desktop app.";
+    btn.textContent = "Build invoice plan";
+    btn.disabled = false;
+    state = "idle";
+  }
+
+  async function buildPlan() {
+    btn.disabled = true;
+    hint.textContent = "Compiling a reviewable Action Plan — nothing executes yet.";
+    title.textContent = "Action Plan · invoice → Finance";
+    await sequence(
+      STEPS.map((s) => () => planEl.appendChild(planRow(s))),
+      220,
+    );
+    hint.className = "demo__hint is-warn";
+    hint.textContent = "Deny-by-default. You approve the exact plan before Ghost runs a step.";
+    btn.textContent = "Approve & execute";
+    btn.disabled = false;
+    state = "planned";
+  }
+
+  async function execute() {
+    btn.disabled = true;
+    hint.className = "demo__hint";
+    hint.textContent = "Executing approved plan — verifying each step…";
+    auditBox.hidden = false;
+    receiptHead.textContent = "Execution receipt";
+    const planRows = $$("li", planEl);
+    await sequence(
+      STEPS.map((s, i) => () => {
+        planRows[i]?.classList.add("is-done");
+        receiptEl.appendChild(receiptRow(s));
+        if (s.undo) {
+          auditEl.appendChild(
+            auditRow(`✓ <b>${s.strong}</b> · undo: ${s.undo}`),
+          );
+        } else {
+          auditEl.appendChild(auditRow(`✓ <b>${s.strong}</b> · verify-only`));
+        }
+      }),
+      340,
+    );
+    hint.textContent =
+      "Receipt sealed — FS steps reversible; UI steps recorded with honest undo notes. Per-step verify, not full source reconciliation.";
+    btn.textContent = "↩︎ Undo FS steps";
+    btn.disabled = false;
+    state = "done";
+  }
+
+  async function undo() {
+    btn.disabled = true;
+    hint.textContent = "Replaying the undo journal for filesystem steps…";
+    await sequence(
+      [
+        () => auditEl.appendChild(auditRow("↩ Reverted move of invoice")),
+        () => auditEl.appendChild(auditRow("↩ Reverted rename")),
+        () => auditEl.appendChild(auditRow("↩ Removed Finance/Invoices (if empty)")),
+        () =>
+          auditEl.appendChild(
+            auditRow("· UI TextEdit steps left as-is (not journal-reversible)"),
+          ),
+      ],
+      320,
+    );
+    hint.textContent = "Filesystem restored. UI log note remains — Ghost does not pretend clicks undo.";
+    btn.textContent = "Run plan again";
+    btn.disabled = false;
+    state = "undone";
+  }
+
+  btn.addEventListener("click", () => {
+    if (state === "idle") buildPlan();
+    else if (state === "planned") execute();
+    else if (state === "done") undo();
+    else if (state === "undone") reset();
+  });
+
+  reset();
+}
+
+/* ============================================================
    Demo C — Record → Review → Replay → Verify → Undo
    ============================================================ */
 function replayDemo() {
@@ -510,5 +727,6 @@ window.addEventListener("DOMContentLoaded", () => {
   setupTabs();
   setupScrollSpy();
   organizerDemo();
+  actionPlanDemo();
   replayDemo();
 });

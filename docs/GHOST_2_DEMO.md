@@ -8,6 +8,10 @@ Capture → Review → Approve → Execute → Verify → Recover
 
 ## Invoice → Finance workflow (5-minute demo)
 
+The public marketing site (`public/`) mirrors this flow as an in-browser
+**Action Plan** demo tab (simulation only — no IPC, no filesystem). Use the
+desktop path below for a real Mac validation.
+
 ### Setup
 
 1. Create a Zone pointing at your **Downloads** folder (read + create + move).
