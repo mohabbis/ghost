@@ -487,9 +487,10 @@
           <p class="eyebrow">Connect your AI</p>
           <h2>Use Ghost safely from the AI tools you already work with.</h2>
           <p class="section__sub">
-            Claude Desktop and Cursor can propose Organizer plans and saved routines over local stdio —
-            Ghost verifies and executes only what you approve, on your machine. The AI proposes; you approve;
-            deterministic code acts. ChatGPT needs a remote HTTP/connector path that is still experimental,
+            Claude Desktop and Cursor can drive a saved-routine demo over local stdio:
+            <strong>list → preview → approve in Ghost → execute → receipt</strong>.
+            The AI proposes; you approve; deterministic code acts on your machine.
+            ChatGPT needs a remote HTTP/connector path that is still experimental,
             so it is not supported on the stock local build.
           </p>
         </div>
@@ -497,7 +498,7 @@
           <li>
             <span class="pipeline__n">1</span>
             <h3>Install Ghost</h3>
-            <p>Download for macOS or Windows below. No account, no cloud setup.</p>
+            <p>Download for macOS or Windows below. No account, no cloud setup. Save one short routine first if you want the full list→receipt demo.</p>
           </li>
           <li>
             <span class="pipeline__n">2</span>
@@ -514,13 +515,13 @@
           </li>
           <li>
             <span class="pipeline__n">3</span>
-            <h3>Pair, then approve in Ghost</h3>
-            <p>Generate a pairing code in Settings so only your client can connect. Every proposed plan still waits for your approval in Ghost before anything runs.</p>
+            <h3>Pair, then walk the routine flow</h3>
+            <p>Enable a pairing code in Settings. From the client: <code>list_routines</code> → <code>preview_routine</code> → <code>request_routine_approval</code>. Approve in Ghost, then <code>execute_approved_routine</code> and read the receipt — nothing runs until you approve locally.</p>
           </li>
         </ol>
         <p class="connect-note">
           Local stdio only (Claude Desktop / Cursor). No listening socket, no relay, no uploads on the stock build.
-          ChatGPT is not supported on stock local stdio today.
+          ChatGPT is not supported on stock local stdio today. Step-by-step: <code>docs/claude-ghost-demo.md</code> in the repo.
         </p>
       </section>
 

@@ -1956,7 +1956,7 @@ async function openSettings() {
     }
 
     <h4 style="color: #0e8f78; margin: 12px 0 4px;">Connect an AI assistant (MCP)</h4>
-    <p class="panel__hint" style="margin: 4px 0 8px;">Let Claude Desktop or Cursor propose Organizer plans over local stdio. The assistant can only <em>propose</em> — nothing runs until you approve it in Ghost, same as always. ChatGPT / remote connectors require a future verified transport and are not supported on the stock build.</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;">Let Claude Desktop or Cursor propose Organizer plans and saved routines over local stdio. Demo flow for routines: <em>list → preview → approve here → execute → receipt</em>. The assistant can only <em>propose</em> — nothing runs until you approve it in Ghost. ChatGPT / remote connectors require a future verified transport and are not supported on the stock build.</p>
     <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 1 — Get a pairing code.</strong> ${mcpPairingStatus.enabled ? `Pairing is on (${escapeAttr(mcpPairingStatus.code_hint || "active")}). The full code is shown once when generated — rotate it if you've lost it.` : "Pairing is off, so Claude Desktop or Cursor can connect without a code. Recommended: enable it."}</p>
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-enable-pairing>${mcpPairingStatus.enabled ? "Rotate pairing code" : "Enable pairing code"}</button>
@@ -1968,7 +1968,8 @@ async function openSettings() {
     <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
       <button class="btn btn--ghost btn--small" type="button" data-mcp-copy-config>Copy config</button>
     </div>
-    <p class="panel__hint" style="margin: 8px 0 8px;"><strong>Step 3 — Approve in Ghost.</strong> Claude Desktop / Cursor can list and preview saved routines, then request approval. Review the exact steps here (or an Organizer plan), approve locally — nothing runs until you do. Tokens are single-use, ~5 minutes, bound to the exact plan hash. ChatGPT is not supported on stock local stdio (needs remote HTTP/connector, still experimental).</p>
+    <p class="panel__hint" style="margin: 8px 0 4px;"><strong>Step 3 — Routine demo (Claude Desktop / Cursor).</strong> Ask the client to: (1) <code>ghost.list_routines</code>, (2) <code>ghost.preview_routine</code>, (3) <code>ghost.request_routine_approval</code>. A pending approval appears here — review the exact steps, then approve. Tokens are single-use, ~5 minutes, bound to the exact plan hash.</p>
+    <p class="panel__hint" style="margin: 4px 0 8px;"><strong>Step 4 — Execute → receipt.</strong> Only after you approve may the client call <code>ghost.execute_approved_routine</code>, then <code>ghost.get_run</code> for the sealed receipt. Organizer plans use the same approve-then-execute shape. ChatGPT is not supported on stock local stdio (needs remote HTTP/connector, still experimental). Walkthrough: <code>docs/claude-ghost-demo.md</code>.</p>
     ${
       experimentalEnabled
         ? `<p class="panel__hint" style="margin: 8px 0 4px;">HTTP server: ${mcpHttpStatus.running ? `${mcpHttpStatus.tls_enabled ? "https" : "http"}://${escapeAttr(mcpHttpStatus.bind_host)}:${escapeAttr(mcpHttpStatus.port)}${mcpHttpStatus.lan_exposed ? " (LAN)" : ""}` : "stopped"}</p>
