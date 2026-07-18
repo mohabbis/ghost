@@ -77,6 +77,8 @@ Expect:
 1. `ghost.execute_approved_routine` — validates the one-shot token + exact hash; runs the Action Plan runtime (`os-control`).
 2. `ghost.get_run` — run summary + **execution receipt** when present (verify / recover path).
 
+**Halt fields (MCP):** both execute and `get_run` expose top-level `stopped_early`, `stop_reason`, and a compact `verifications` array (`step_id`, `label`, `expected`, `observed`, `status`) so Claude/Cursor can narrate a verify mismatch without parsing the full receipt. Typed-value payloads in those rows are redacted (same posture as `preview_routine`).
+
 **Show:** sealed receipt in Ghost (and/or the tool payload). Mention undo/recover is still available through Ghost’s normal surfaces — the client does not get a silent delete path.
 
 ---

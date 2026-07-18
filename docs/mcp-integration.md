@@ -174,8 +174,8 @@ Live demo script (Claude Desktop / Cursor, stock stdio only): [`docs/claude-ghos
 | `ghost.preview_routine` | `safe-read` / `sensitive-read` (metadata) | Redacted compressed steps + **compiled Action Plan** (timeouts, retry class, fallback strategy, Semantic* targets without template PNG / set_value text) + policy; typed text and raw UI events always omitted. |
 | `ghost.request_routine_approval` | `safe-read` | Creates a pending local approval bound to exact routine plan hash. |
 | `ghost.get_approval_status` | `safe-read` | Same status tool; includes `kind: routine` and token when approved. |
-| `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime (AX→OCR→template for Semantic* steps); returns receipt + `macos_ui` path note. |
-| `ghost.get_run` | `safe-read` | Run summary + receipt when present. |
+| `ghost.execute_approved_routine` | `os-control` | Validates one-shot token + exact hash; runs canonical Action Plan runtime (AX→OCR→template for Semantic* steps); returns `stopped_early`, `stop_reason`, compact redacted `verifications`, plus receipt + `macos_ui` path note. |
+| `ghost.get_run` | `safe-read` | Run summary + the same halt fields (`stopped_early` / `stop_reason` / `verifications`) + receipt when present. |
 
 ### macOS semantic / vision ops (honest)
 
@@ -200,6 +200,31 @@ Clients may not:
 Desktop: Ghost polls pending approvals; for `kind: routine` it loads the routine, shows review, and `routine_issue_mcp_approval_token` issues the bound token (no auto-run).
 
 Do not add a broad `ghost_run` tool. Do not add direct vision/AX mutate tools.
+
+## Execute / get_run halt shape
+
+When a routine or Organizer plan stops early (dispatch failure or verification halt), MCP clients should read the top-level fields — not only the nested receipt:
+
+```json
+{
+  "execution_id": "…",
+  "status": "failed",
+  "stopped_early": true,
+  "stop_reason": "verification halted on Confirm total: expected (redacted) · observed (redacted)",
+  "verifications": [
+    {
+      "step_id": "s2",
+      "label": "Confirm total",
+      "expected": "path/to/file exists",
+      "observed": "path/to/file absent",
+      "status": "failed"
+    }
+  ],
+  "receipt": { "stopped_early": true, "stop_reason": "…", "steps": [] }
+}
+```
+
+`ghost.get_run` returns the same `stopped_early` / `stop_reason` / `verifications` keys beside `execution` and `receipt`. Compact `verifications` redact typed-value strings (`value contains …`); path existence checks stay visible.
 
 ## Plan result shape
 
