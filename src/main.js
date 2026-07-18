@@ -1628,7 +1628,7 @@ function openAbout() {
       <ul class="about-list">
         <li><strong>Organize</strong> — pick a folder, preview every move and rename, approve, then undo if needed. Never deletes or overwrites silently.</li>
         <li><strong>Plan Filing</strong> — preview how software automation artifacts, finance reports, or student coursework would be sorted by type and period (from file names only), and estimate the time it saves.</li>
-        <li><strong>Guard Desk</strong> — read a check or ID image with on-device OCR and run compliance checks locally; nothing is uploaded.</li>
+        <li><strong>Guard Desk</strong> — choose an on-demand check or ID image from a scanner folder or file, run on-device OCR locally, and review the extracted fields; prototype, not certified compliance.</li>
         <li><strong>Record &amp; Replay</strong> — capture a task once, review each step, and replay only the steps you approved.</li>
       </ul>
     </div>
@@ -5591,9 +5591,11 @@ function guardUpdateUploadStatus() {
   const el = document.getElementById("guardUploadStatus");
   if (!el) return;
   const parts = [];
-  if (guardCheckImageFile) parts.push(`Check: ${guardCheckImageFile.name}`);
-  if (guardIdImageFile) parts.push(`ID: ${guardIdImageFile.name}`);
-  el.textContent = parts.length ? parts.join(" · ") : "No uploads — using preset";
+  if (guardCheckImageFile) parts.push(`Check file: ${guardCheckImageFile.name}`);
+  if (guardIdImageFile) parts.push(`ID file: ${guardIdImageFile.name}`);
+  el.textContent = parts.length
+    ? `On-demand image — ${parts.join(" · ")}`
+    : "No on-demand image selected — using preset";
 }
 
 function guardFileToBytes(file) {
@@ -5993,17 +5995,17 @@ function guardDeskInit() {
     analysisResult.style.display = "none";
     autofillBtn.disabled = true;
 
-    // 2. Load scenario — real OCR when uploads exist, preset otherwise
+    // 2. Load scenario — real OCR when chosen files exist, preset otherwise
     let data;
     const useOcr = guardCheckImageFile || guardIdImageFile;
     if (useOcr) {
       try {
         data = await guardScanFromImages(guardCheckImageFile, guardIdImageFile);
-        showNotification("Local OCR scan complete", "info");
+        showNotification("On-demand image review complete", "info");
       } catch (err) {
         console.warn("OCR failed:", err);
         toastError(
-          "Could not read the uploaded image(s). Try a clearer photo or use a demo preset without uploads.",
+          "Could not read the chosen image file(s). Try a clearer scanner image or photo, or use a demo preset.",
         );
         guardScanInProgress = false;
         scanBtn.disabled = false;

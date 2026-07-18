@@ -117,10 +117,14 @@ move; gate experimental.
 **Job:** User presents a check or ID image; Ghost OCR/parses into a review
 packet; user decides next steps.
 
-**User-visible behavior:** Existing on-device OCR + ID parse
-(`run_ocr_on_image`, `parse_id_document`) and Guard Desk UI. IoT angle =
-tethered imager as an **explicit user gesture** to supply bytes — never
-ambient camera.
+**User-visible behavior:**
+
+- In Guard Desk, the user clicks to choose a check image and/or ID image from a
+  scanner drop folder or any other file path.
+- Ghost feeds those chosen bytes into the existing local OCR + ID parse
+  commands (`run_ocr_on_image`, `parse_id_document`) and shows a review packet.
+- No ambient camera, no camera permission, no background watch, no automatic
+  typing.
 
 **Do not** market as KYC/AML/sanctions or compliance certification.
 
@@ -132,7 +136,7 @@ ambient camera.
 | P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Partial (Fabric intent queue, experimental) |
 | P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Not built; marketing must stay qualified |
 | P2 | F4 File-and-label | Post-run optional print | Label printer after Approve | Not built |
-| P2 | F5 Check/ID assist | Guard Desk | User-supplied image OCR | Partial core OCR; desk workflow prototype |
+| P2 | F5 Check/ID assist | Guard Desk | User-chosen image OCR | Partial core OCR; desk workflow prototype |
 
 ## Intent contract (when a feature needs a signal)
 
