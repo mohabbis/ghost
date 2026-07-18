@@ -1,20 +1,25 @@
 #!/usr/bin/env swift
-// GhostAXHelper — macOS Accessibility semantic automation helper (Ghost 2.0).
+// GhostAXHelper — macOS Accessibility + ScreenCaptureKit helper (Ghost 2.0).
 // Build: make ax-helper  (or bash scripts/build-ghost-ax-helper.sh)
 // Bundled via Tauri externalBin as Ghost.app/Contents/MacOS/ghost-ax-helper
 // Protocol: one JSON request object on stdin → one JSON response object on stdout.
-// Ops: permission_status, frontmost_app, resolve_target, list_matches,
-//      activate_element, set_value, verify_element, enumerate_children.
+// AX ops: permission_status, frontmost_app, resolve_target, list_matches,
+//         activate_element, set_value, verify_element, enumerate_children.
+// Capture ops (Screen Recording; no Accessibility required):
+//         capture_permission_status, capture_still
 //
 // Targeting order (see docs/macos-automation-architecture.md):
 //   exact bundle id → exact app name → contains fallback
 //   optional window_title narrows the search root
 //   identifier (when set) is required
 //   AXPress preferred over coordinate-style raise/focus
+//   AX → Vision/OCR → coordinates (capture_still feeds OCR fallback)
 
 import Foundation
 import AppKit
 import ApplicationServices
+import ScreenCaptureKit
+import CoreGraphics
 
 struct AXRequest: Codable {
     let op: String
@@ -27,6 +32,8 @@ struct AXRequest: Codable {
     let identifier: String?
     let bundle_id: String?
     let window_title: String?
+    /// Destination PNG path for `capture_still`.
+    let path: String?
 }
 
 struct AXResponse: Codable {
@@ -38,6 +45,9 @@ struct AXResponse: Codable {
     let ax_quality: UInt32?
     let identifier: String?
     let actionable: Bool?
+    let path: String?
+    let width: UInt32?
+    let height: UInt32?
 }
 
 func respond(_ resp: AXResponse) {
@@ -53,7 +63,10 @@ func fail(
     value: String? = nil,
     ax_quality: UInt32? = nil,
     identifier: String? = nil,
-    actionable: Bool? = nil
+    actionable: Bool? = nil,
+    path: String? = nil,
+    width: UInt32? = nil,
+    height: UInt32? = nil
 ) {
     respond(AXResponse(
         ok: false,
@@ -63,7 +76,10 @@ func fail(
         value: value,
         ax_quality: ax_quality,
         identifier: identifier,
-        actionable: actionable
+        actionable: actionable,
+        path: path,
+        width: width,
+        height: height
     ))
 }
 
@@ -74,7 +90,10 @@ func ok(
     value: String? = nil,
     ax_quality: UInt32? = nil,
     identifier: String? = nil,
-    actionable: Bool? = nil
+    actionable: Bool? = nil,
+    path: String? = nil,
+    width: UInt32? = nil,
+    height: UInt32? = nil
 ) {
     respond(AXResponse(
         ok: true,
@@ -84,7 +103,10 @@ func ok(
         value: value,
         ax_quality: ax_quality,
         identifier: identifier,
-        actionable: actionable
+        actionable: actionable,
+        path: path,
+        width: width,
+        height: height
     ))
 }
 
@@ -327,6 +349,77 @@ func readValue(_ match: Match) -> String? {
     axString(match.element, kAXValueAttribute)
 }
 
+/// ScreenCaptureKit still-frame capture (macOS 14+ SCScreenshotManager).
+/// Does not require Accessibility; requires Screen Recording.
+@available(macOS 14.0, *)
+func captureStillFrame(path: String, bundleId: String?, windowTitle: String?) -> (ok: Bool, detail: String, width: UInt32?, height: UInt32?) {
+    let semaphore = DispatchSemaphore(value: 0)
+    final class Box: @unchecked Sendable {
+        var result: (Bool, String, UInt32?, UInt32?) = (false, "capture timed out", nil, nil)
+    }
+    let box = Box()
+    Task {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let filter: SCContentFilter
+            let config = SCStreamConfiguration()
+
+            if let bundleId, !bundleId.isEmpty {
+                let apps = content.applications.filter { $0.bundleIdentifier == bundleId }
+                var windows = content.windows.filter { window in
+                    guard let owner = window.owningApplication else { return false }
+                    return apps.contains(where: { $0.processID == owner.processID })
+                }
+                if let windowTitle, !windowTitle.isEmpty {
+                    let lower = windowTitle.lowercased()
+                    windows = windows.filter { ($0.title ?? "").lowercased().contains(lower) }
+                }
+                if let window = windows.first {
+                    filter = SCContentFilter(desktopIndependentWindow: window)
+                    let scale = Int(window.frame.width)
+                    config.width = max(scale, 1)
+                    config.height = max(Int(window.frame.height), 1)
+                } else if let app = apps.first, let display = content.displays.first {
+                    filter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
+                    config.width = display.width
+                    config.height = display.height
+                } else {
+                    box.result = (false, "no matching window/app for ScreenCaptureKit capture", nil, nil)
+                    semaphore.signal()
+                    return
+                }
+            } else if let display = content.displays.first {
+                filter = SCContentFilter(display: display, excludingWindows: [])
+                config.width = display.width
+                config.height = display.height
+            } else {
+                box.result = (false, "no display available for ScreenCaptureKit capture", nil, nil)
+                semaphore.signal()
+                return
+            }
+
+            config.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: config
+            )
+            let rep = NSBitmapImageRep(cgImage: image)
+            guard let png = rep.representation(using: .png, properties: [:]) else {
+                box.result = (false, "failed to encode PNG", nil, nil)
+                semaphore.signal()
+                return
+            }
+            try png.write(to: URL(fileURLWithPath: path))
+            box.result = (true, path, UInt32(image.width), UInt32(image.height))
+        } catch {
+            box.result = (false, "ScreenCaptureKit capture failed: \(error.localizedDescription)", nil, nil)
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 20)
+    return (box.result.0, box.result.1, box.result.2, box.result.3)
+}
+
 guard let line = readLine(strippingNewline: true),
       let input = line.data(using: .utf8),
       let req = try? JSONDecoder().decode(AXRequest.self, from: input) else {
@@ -342,6 +435,46 @@ if req.op == "permission_status" {
         fail("accessibility denied")
     }
     exit(trusted ? 0 : 1)
+}
+
+// Capture ops intentionally run without Accessibility — Screen Recording only.
+if req.op == "capture_permission_status" {
+    let granted = CGPreflightScreenCaptureAccess()
+    if granted {
+        ok("screen recording granted")
+    } else {
+        fail("screen recording denied")
+    }
+    exit(granted ? 0 : 1)
+}
+
+if req.op == "capture_still" {
+    guard let path = req.path, !path.isEmpty else {
+        fail("capture_still requires path")
+        exit(1)
+    }
+    if #available(macOS 14.0, *) {
+        let result = captureStillFrame(
+            path: path,
+            bundleId: req.bundle_id,
+            windowTitle: req.window_title
+        )
+        if result.ok {
+            ok(
+                "captured still frame",
+                path: path,
+                width: result.width,
+                height: result.height
+            )
+            exit(0)
+        } else {
+            fail(result.detail, path: path)
+            exit(1)
+        }
+    } else {
+        fail("capture_still requires macOS 14+")
+        exit(1)
+    }
 }
 
 if !AXIsProcessTrusted() {

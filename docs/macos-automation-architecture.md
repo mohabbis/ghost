@@ -338,25 +338,30 @@ Already present:
 - AX helper ops (`resolve_target`, `list_matches`, `activate_element`, `set_value`, …)
   with exact bundle-id / app-name targeting, optional `window_title` search root,
   `identifier` matching, AXPress-first activate, and per-match `ax_quality`;
+- ScreenCaptureKit **still-frame** ops on the same helper (`capture_permission_status`,
+  `capture_still`) — Screen Recording only; no Accessibility required;
+- Rust `runtime/capture.rs` + `runtime/vision_fallback.rs`: when AX resolve fails
+  or quality is insufficient **and** `UiTarget.title` is set, capture → OCR →
+  unique text match → coordinate click for `focus_target`;
 - Rust shared locator + AX quality types (`runtime/locator.rs`) and extended
-  `UiTarget` (`identifier`, `bundle_id`, `window_title`); quality is reported on
-  resolve — vision fallback is not yet driven by the score;
+  `UiTarget` (`identifier`, `bundle_id`, `window_title`);
 - native `PermissionService` coordinator with per-permission why/degraded-mode
   metadata (Accessibility + Screen Recording probed; Input Monitoring /
   Notifications / Automation still honest `unknown` until probes land);
 - Rust macOS platform backend (CGEventTap + AX inspection);
 - descriptor-first resolution chain with template and coordinate fallbacks;
-- on-device OCR for **user-supplied** images (`run_ocr_on_image`);
+- on-device OCR for **user-supplied** images (`run_ocr_on_image`) and for
+  vision-fallback frames;
 - Action Plan runtime with verify/receipt/undo;
 - native SwiftUI Organizer scaffold over the Rust bridge.
 
 Not yet the architecture above:
 
-- ScreenCaptureKit-backed capture path as the default visual layer;
-- AX quality scoring that **automatically** switches to vision fallback;
+- ScreenCaptureKit **stream** capture (continuous frames);
+- vision fallback for `set_value` / full postcondition-verified UI contract;
 - full `AutomationStep` runtime fields (preconditions / retry policy wired end to end);
 - Input Monitoring / Notifications probe implementations;
-- postcondition-verified UI steps as a universal Routines contract.
+- template matching only after OCR+AX fail as a dedicated Routines strategy.
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10).

@@ -5,6 +5,9 @@ Tauri `externalBin` expects architecture-specific binaries here when bundling on
 - `ghost-ax-helper-aarch64-apple-darwin`
 - `ghost-ax-helper-x86_64-apple-darwin`
 
+The helper covers Accessibility ops and ScreenCaptureKit still-frame capture
+(`capture_still`). Build requires macOS 14+ SDK (`MIN_MACOS=14.0`).
+
 Build on macOS:
 
 ```bash
