@@ -9,7 +9,8 @@
 //! ```
 //!
 //! Risk classes (see `docs/command-registry.md`):
-//! - `organizer_list_zones`, `organizer_plan`, `organizer_list_executions` —
+//! - `organizer_list_zones`, `organizer_plan`, `organizer_list_executions`,
+//!   `organizer_scanner_inbox_signal` —
 //!   **safe-read**: they touch the local DB and read directory metadata, and
 //!   mutate nothing on disk.
 //! - `organizer_create_zone`, `organizer_add_folder_rule` — **local-mutate**
@@ -145,6 +146,27 @@ pub fn organizer_default_paths() -> OrganizerPathDefaults {
     }
 }
 
+/// A thin, local-only readiness signal for scan-to-folder workflows.
+///
+/// This powers the Scanner Inbox Organizer affordance: Ghost counts files in the
+/// Zone's readable source folder(s) and surfaces that as a review prompt. It
+/// never watches the folder in the background, never touches vendor SDKs, and
+/// never mutates the filesystem.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrganizerScannerInboxSignal {
+    pub zone_id: String,
+    pub ready_files: usize,
+    pub source_folder: Option<String>,
+}
+
+fn organizer_signal_source_folder(rules: &[FolderRule]) -> Option<String> {
+    rules
+        .iter()
+        .find(|rule| rule.can_read && !rule.can_create)
+        .or_else(|| rules.iter().find(|rule| rule.can_read))
+        .map(|rule| rule.path.to_string_lossy().into_owned())
+}
+
 fn path_exists_dir(path: &Path) -> bool {
     path.is_dir()
 }
@@ -177,6 +199,32 @@ pub fn organizer_list_zones() -> Result<Vec<Zone>, String> {
 pub fn organizer_list_folder_rules(zone_id: String) -> Result<Vec<FolderRule>, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
     list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())
+}
+
+/// Return a thin "files ready to file" signal for a Zone's readable source
+/// folders.
+///
+/// Risk class: safe-read. Touches: files (DB + local directory metadata only).
+/// No OS input, screenshots, network, secrets, or mutation. This is for
+/// "review-ready" UI only; execution still requires an explicit plan preview and
+/// approval.
+#[tauri::command]
+pub fn organizer_scanner_inbox_signal(
+    zone_id: String,
+) -> Result<OrganizerScannerInboxSignal, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    get_zone(&conn, &zone_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no zone with id {zone_id}"))?;
+    let rules = list_folder_rules(&conn, &zone_id).map_err(|e| e.to_string())?;
+    let ready_files = crate::organizer::planner::scan_zone_files(&conn, &zone_id)
+        .map(|files| files.len())
+        .map_err(|e| e.to_string())?;
+    Ok(OrganizerScannerInboxSignal {
+        zone_id,
+        ready_files,
+        source_folder: organizer_signal_source_folder(&rules),
+    })
 }
 
 /// Create a new Zone. New Zones default to `Ask` — the user still approves each
@@ -878,5 +926,55 @@ mod tests {
         assert_eq!(deserialized.name, "Test Zone");
         assert_eq!(deserialized.rules.len(), 1);
         assert_eq!(deserialized.rules[0].path, PathBuf::from("/test/path"));
+    }
+
+    #[test]
+    fn scanner_inbox_signal_prefers_non_creating_source_folder() {
+        let rules = vec![
+            FolderRule {
+                path: PathBuf::from("/tmp/dest"),
+                can_read: true,
+                can_create: true,
+                can_rename: true,
+                can_move: true,
+                can_copy: false,
+                can_delete: false,
+                trust: TrustLevel::AskFirst,
+            },
+            FolderRule {
+                path: PathBuf::from("/tmp/source"),
+                can_read: true,
+                can_create: false,
+                can_rename: false,
+                can_move: true,
+                can_copy: false,
+                can_delete: false,
+                trust: TrustLevel::AskFirst,
+            },
+        ];
+
+        assert_eq!(
+            organizer_signal_source_folder(&rules).as_deref(),
+            Some("/tmp/source")
+        );
+    }
+
+    #[test]
+    fn scanner_inbox_signal_falls_back_to_first_readable_folder() {
+        let rules = vec![FolderRule {
+            path: PathBuf::from("/tmp/inbox"),
+            can_read: true,
+            can_create: true,
+            can_rename: true,
+            can_move: true,
+            can_copy: false,
+            can_delete: false,
+            trust: TrustLevel::AskFirst,
+        }];
+
+        assert_eq!(
+            organizer_signal_source_folder(&rules).as_deref(),
+            Some("/tmp/inbox")
+        );
     }
 }
