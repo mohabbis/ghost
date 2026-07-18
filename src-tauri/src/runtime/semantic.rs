@@ -33,6 +33,12 @@ pub struct UiTarget {
     /// Containing window title used to narrow the AX search root.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_title: Option<String>,
+    /// Opt-in PNG crop for template-after-OCR fallback (`core/template_match`).
+    /// Absent by default — never ambient capture; only used when the plan
+    /// explicitly carries a fragment (same opt-in spirit as
+    /// `PerformanceSettings::capture_element_templates` for replay).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_png: Option<Box<[u8]>>,
 }
 
 impl UiTarget {
@@ -45,7 +51,13 @@ impl UiTarget {
             identifier: None,
             bundle_id: None,
             window_title: None,
+            template_png: None,
         }
+    }
+
+    pub fn with_template_png(mut self, png: impl Into<Box<[u8]>>) -> Self {
+        self.template_png = Some(png.into());
+        self
     }
 
     /// Project this target into the shared [`Locator`] format.
@@ -396,30 +408,49 @@ fn map_vision_err(err: crate::runtime::vision_fallback::VisionFallbackError) -> 
 }
 
 fn try_vision_focus(target: &UiTarget) -> Result<(), SemanticError> {
-    let needle = search_text(target).ok_or_else(|| {
-        SemanticError::Failed("vision fallback needs target.title text to search".into())
-    })?;
-    crate::runtime::vision_fallback::focus_via_ocr(
-        needle,
-        target.bundle_id.as_deref(),
-        target.window_title.as_deref(),
-    )
-    .map(|_| ())
-    .map_err(map_vision_err)
+    // Order: OCR (needs title) → template (needs opt-in template_png) → fail.
+    let mut last = None;
+    if let Some(needle) = search_text(target) {
+        match crate::runtime::vision_fallback::focus_via_ocr(
+            needle,
+            target.bundle_id.as_deref(),
+            target.window_title.as_deref(),
+        ) {
+            Ok(_) => return Ok(()),
+            Err(e) => last = Some(e),
+        }
+    }
+    if let Some(png) = target.template_png.as_deref() {
+        return crate::runtime::vision_fallback::focus_via_template(png)
+            .map(|_| ())
+            .map_err(map_vision_err);
+    }
+    Err(map_vision_err(last.unwrap_or(
+        crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
+    )))
 }
 
 fn try_vision_set_value(target: &UiTarget, value: &str) -> Result<(), SemanticError> {
-    let needle = search_text(target).ok_or_else(|| {
-        SemanticError::Failed("vision fallback needs target.title text to search".into())
-    })?;
-    crate::runtime::vision_fallback::set_value_via_ocr(
-        needle,
-        value,
-        target.bundle_id.as_deref(),
-        target.window_title.as_deref(),
-    )
-    .map(|_| ())
-    .map_err(map_vision_err)
+    let mut last = None;
+    if let Some(needle) = search_text(target) {
+        match crate::runtime::vision_fallback::set_value_via_ocr(
+            needle,
+            value,
+            target.bundle_id.as_deref(),
+            target.window_title.as_deref(),
+        ) {
+            Ok(_) => return Ok(()),
+            Err(e) => last = Some(e),
+        }
+    }
+    if let Some(png) = target.template_png.as_deref() {
+        return crate::runtime::vision_fallback::set_value_via_template(png, value)
+            .map(|_| ())
+            .map_err(map_vision_err);
+    }
+    Err(map_vision_err(last.unwrap_or(
+        crate::runtime::vision_fallback::VisionFallbackError::NoSearchText,
+    )))
 }
 
 /// Precondition: target application must be running (NSWorkspace; no AX grant required).
@@ -456,11 +487,13 @@ where
 {
     ensure_app_running(target)?;
     let has_text = search_text(target).is_some();
+    let has_template = target.template_png.as_ref().is_some_and(|p| !p.is_empty());
     match resolve_target(target) {
         Ok(resolved) => {
             if !crate::runtime::vision_fallback::should_prefer_vision_after_resolve(
                 resolved.quality,
                 has_text,
+                has_template,
             ) {
                 return ax_action(&resolved);
             }
@@ -470,6 +503,7 @@ where
                     if crate::runtime::vision_fallback::should_attempt_vision_for_error(
                         vision_failure_kind(&ax_err),
                         has_text,
+                        has_template,
                     ) =>
                 {
                     vision_action()
@@ -481,6 +515,7 @@ where
             if crate::runtime::vision_fallback::should_attempt_vision_for_error(
                 vision_failure_kind(&ax_err),
                 has_text,
+                has_template,
             ) =>
         {
             vision_action()

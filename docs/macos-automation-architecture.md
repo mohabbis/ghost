@@ -329,7 +329,8 @@ visual matching before AX targeting and permissions are solid.
 6. Vision OCR fallback
 7. Verified execution with preconditions and postconditions ⚠️ (timeouts + risk-aware
    retry policy on ActionStep wired; UI postconditions remain best-effort)
-8. Visual template matching only where OCR and AX fail
+8. Visual template matching only where OCR and AX fail ✅ (Action Plan semantic
+   path; opt-in `template_png` only — not ambient capture; not business-effect proof)
 9. Evidence capture, audit records, and undo integration
 10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass)
 
@@ -347,11 +348,12 @@ Already present:
   latest complete frame, then stops — request-scoped only, **not** ambient observation;
 - Rust `runtime/capture.rs`: `capture_still` / `capture_stream_latest` /
   `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback;
-- Rust `runtime/vision_fallback.rs`: when AX resolve fails or quality is insufficient
-  **and** `UiTarget.title` is set, latest-frame capture → OCR → unique text match →
-  coordinate click for `focus_target`;
+- Rust `runtime/vision_fallback.rs`: when AX resolve fails or quality is insufficient,
+  latest-frame capture → OCR (needs `UiTarget.title`) → opt-in template match
+  (`UiTarget.template_png` + `core/template_match`) → coordinate click for
+  `focus_target` / `set_target_value`;
 - Rust shared locator + AX quality types (`runtime/locator.rs`) and extended
-  `UiTarget` (`identifier`, `bundle_id`, `window_title`);
+  `UiTarget` (`identifier`, `bundle_id`, `window_title`, optional `template_png`);
 - native `PermissionService` coordinator with per-permission why/degraded-mode
   metadata (Accessibility + Screen Recording probed; Input Monitoring /
   Notifications / Automation still honest `unknown` until probes land);
@@ -385,11 +387,12 @@ Not yet the architecture above:
 - interruptible mid-op timeouts inside AX/SCK helper calls (runtime budget covers
   dispatch + retries only);
 - Input Monitoring / Notifications probe implementations;
-- template matching only after OCR+AX fail as a dedicated Routines strategy;
-- evidence / audit fields for which capture strategy (still vs stream) or retry
-  attempt count served a UI step.
+- automatic template capture into Action Plans (fragments must be supplied opt-in on
+  `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
+- evidence / audit fields for which strategy (ax / ocr / template / coordinates),
+  capture path (still vs stream), or retry attempt count served a UI step.
 
 Until those land, marketing and README copy must stay within what the repo
 supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
-screen observation, and do not claim universal step retries or verified UI
-settlement.
+screen observation, do not claim universal step retries or verified UI settlement,
+and do not market template match as proof of business effect.

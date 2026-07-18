@@ -25,5 +25,6 @@ pub use receipt::{ExecutionReceipt, ReceiptStep, build_receipt};
 pub use semantic::{ResolvedTarget, SemanticError, UiTarget};
 pub use verify::{StepVerification, VerificationStatus};
 pub use vision_fallback::{
-    VisionAxFailure, VisionHit, match_ocr_text, should_attempt_vision_for_error,
+    VisionAxFailure, VisionHit, match_ocr_text, match_template_in_png,
+    should_attempt_vision_for_error, should_prefer_vision_after_resolve,
 };
