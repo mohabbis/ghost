@@ -54,8 +54,12 @@ impl McpToolKind {
             McpToolKind::ValidatePlan => "Re-run policy checks on a Zone plan",
             McpToolKind::RequestApproval => "Request desktop approval (opens Ghost UI)",
             McpToolKind::GetApprovalStatus => "Check approval status for a pending plan",
-            McpToolKind::ExecuteApprovedPlan => "Execute a plan approved in Ghost desktop UI",
-            McpToolKind::GetRun => "Get run summary and audit metadata",
+            McpToolKind::ExecuteApprovedPlan => {
+                "Execute a plan approved in Ghost desktop UI; returns stopped_early / stop_reason / verifications + receipt"
+            }
+            McpToolKind::GetRun => {
+                "Get run summary, halt fields (stopped_early / stop_reason / verifications), and receipt"
+            }
             McpToolKind::UndoRun => "Undo an eligible completed run",
             McpToolKind::ListRoutines => {
                 "List saved routine names only (no recorded input or typed text)"
@@ -67,7 +71,7 @@ impl McpToolKind {
                 "Request local Ghost review for an exact saved routine"
             }
             McpToolKind::ExecuteApprovedRoutine => {
-                "Execute an unchanged routine approved in Ghost via Action Plan runtime (AX→OCR→template for Semantic* steps); returns receipt — requires plan-hash token"
+                "Execute an unchanged routine approved in Ghost via Action Plan runtime; returns stopped_early / stop_reason / redacted verifications + receipt — requires plan-hash token"
             }
         }
     }
