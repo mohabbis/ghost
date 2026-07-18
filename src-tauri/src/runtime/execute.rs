@@ -284,15 +284,8 @@ fn check_preconditions(conditions: &[StepCondition]) -> Result<(), String> {
     for condition in conditions {
         match condition {
             StepCondition::AppRunning { app, bundle_id } => {
-                let target = UiTarget {
-                    app: app.clone(),
-                    role: String::new(),
-                    title: None,
-                    fingerprint: None,
-                    identifier: None,
-                    bundle_id: bundle_id.clone(),
-                    window_title: None,
-                };
+                let mut target = UiTarget::new(app.clone(), "");
+                target.bundle_id = bundle_id.clone();
                 semantic::ensure_app_running(&target).map_err(|e| e.to_string())?;
             }
             StepCondition::PathExists { path } => {
