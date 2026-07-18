@@ -15,6 +15,7 @@ use crate::core::ocr::{self, OcrResult};
 use crate::core::template_match::{self, DEFAULT_MIN_SCORE};
 use crate::core::vision;
 use crate::runtime::capture::{self, CaptureError};
+use crate::runtime::helper_budget::HelperBudget;
 use crate::runtime::locator::AxQuality;
 use enigo::{Button, Coordinate, Direction, Enigo, Keyboard, Mouse, Settings};
 use image::GenericImageView;
@@ -178,13 +179,29 @@ pub fn resolve_text(
     window_title: Option<&str>,
     fuzzy: bool,
 ) -> Result<VisionHit, VisionFallbackError> {
+    resolve_text_with_budget(needle, bundle_id, window_title, fuzzy, None)
+}
+
+/// Like [`resolve_text`], passing a cooperative mid-op capture budget.
+pub fn resolve_text_with_budget(
+    needle: &str,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    fuzzy: bool,
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
     let needle = needle.trim();
     if needle.is_empty() {
         return Err(VisionFallbackError::NoSearchText);
     }
 
-    let bytes = capture::capture_latest_frame_bytes(bundle_id, window_title)
-        .map_err(VisionFallbackError::Capture)?;
+    let bytes = capture::capture_latest_frame_bytes_with_budget(
+        bundle_id,
+        window_title,
+        capture::StreamCaptureOpts::default(),
+        budget,
+    )
+    .map_err(VisionFallbackError::Capture)?;
 
     let results = ocr::run_ocr(&bytes).map_err(|e| VisionFallbackError::Ocr(e.to_string()))?;
     let hit = match_ocr_text(&results, needle, fuzzy)?;
@@ -206,6 +223,14 @@ pub fn resolve_text(
 ///
 /// Not business-effect proof (ADR-0007) — pixel similarity only.
 pub fn resolve_via_template(template_png: &[u8]) -> Result<VisionHit, VisionFallbackError> {
+    resolve_via_template_with_budget(template_png, None)
+}
+
+/// Like [`resolve_via_template`], passing a cooperative mid-op capture budget.
+pub fn resolve_via_template_with_budget(
+    template_png: &[u8],
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
     if template_png.is_empty() {
         return Err(VisionFallbackError::NoTemplate);
     }
@@ -213,8 +238,13 @@ pub fn resolve_via_template(template_png: &[u8]) -> Result<VisionHit, VisionFall
         .map_err(|e| VisionFallbackError::Template(e.to_string()))?;
 
     // Full display: template coords must be screen-absolute for enigo clicks.
-    let bytes =
-        capture::capture_latest_frame_bytes(None, None).map_err(VisionFallbackError::Capture)?;
+    let bytes = capture::capture_latest_frame_bytes_with_budget(
+        None,
+        None,
+        capture::StreamCaptureOpts::default(),
+        budget,
+    )
+    .map_err(VisionFallbackError::Capture)?;
     let haystack = image::load_from_memory(&bytes)
         .map_err(|e| VisionFallbackError::Template(e.to_string()))?;
 
@@ -284,14 +314,32 @@ pub fn focus_via_ocr(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
 ) -> Result<VisionHit, VisionFallbackError> {
-    let hit = resolve_text(needle, bundle_id, window_title, true)?;
+    focus_via_ocr_with_budget(needle, bundle_id, window_title, None)
+}
+
+/// Like [`focus_via_ocr`] with a cooperative mid-op capture budget.
+pub fn focus_via_ocr_with_budget(
+    needle: &str,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
+    let hit = resolve_text_with_budget(needle, bundle_id, window_title, true, budget)?;
     click_screen_point(hit.screen_x, hit.screen_y)?;
     Ok(hit)
 }
 
 /// Resolve via opt-in template match and click the match center.
 pub fn focus_via_template(template_png: &[u8]) -> Result<VisionHit, VisionFallbackError> {
-    let hit = resolve_via_template(template_png)?;
+    focus_via_template_with_budget(template_png, None)
+}
+
+/// Like [`focus_via_template`] with a cooperative mid-op capture budget.
+pub fn focus_via_template_with_budget(
+    template_png: &[u8],
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
+    let hit = resolve_via_template_with_budget(template_png, budget)?;
     click_screen_point(hit.screen_x, hit.screen_y)?;
     Ok(hit)
 }
@@ -313,7 +361,18 @@ pub fn set_value_via_ocr(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
 ) -> Result<VisionHit, VisionFallbackError> {
-    let hit = focus_via_ocr(needle, bundle_id, window_title)?;
+    set_value_via_ocr_with_budget(needle, value, bundle_id, window_title, None)
+}
+
+/// Like [`set_value_via_ocr`] with a cooperative mid-op capture budget.
+pub fn set_value_via_ocr_with_budget(
+    needle: &str,
+    value: &str,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
+    let hit = focus_via_ocr_with_budget(needle, bundle_id, window_title, budget)?;
     std::thread::sleep(std::time::Duration::from_millis(120));
     type_text(value)?;
     Ok(hit)
@@ -324,7 +383,16 @@ pub fn set_value_via_template(
     template_png: &[u8],
     value: &str,
 ) -> Result<VisionHit, VisionFallbackError> {
-    let hit = focus_via_template(template_png)?;
+    set_value_via_template_with_budget(template_png, value, None)
+}
+
+/// Like [`set_value_via_template`] with a cooperative mid-op capture budget.
+pub fn set_value_via_template_with_budget(
+    template_png: &[u8],
+    value: &str,
+    budget: Option<HelperBudget>,
+) -> Result<VisionHit, VisionFallbackError> {
+    let hit = focus_via_template_with_budget(template_png, budget)?;
     std::thread::sleep(std::time::Duration::from_millis(120));
     type_text(value)?;
     Ok(hit)

@@ -2,8 +2,9 @@
 
 use super::evidence::StepEvidence;
 use super::fs::{FsOutcome, apply_filesystem_step};
+use super::helper_budget::HelperBudget;
 use super::receipt::{ExecutionReceipt, build_receipt};
-use super::ui::{UiOutcome, dispatch_ui_step_with_reliability};
+use super::ui::{UiOutcome, dispatch_ui_step_with_budget};
 use super::verify::{StepVerification, VerificationStatus, verify_after_kind};
 use crate::action_plan::reliability::{
     backoff_duration, effective_max_attempts, effective_retry_policy, effective_timeout_ms,
@@ -231,6 +232,7 @@ fn execute_step_with_reliability(
             ));
         }
 
+        let budget = HelperBudget::from_step_timeout(started, timeout);
         let outcome = dispatch_step(
             &step.kind,
             &step.capability,
@@ -240,6 +242,7 @@ fn execute_step_with_reliability(
             reliability,
             trasher,
             undo,
+            budget,
         );
         match outcome {
             DispatchOutcome::Applied(evidence) => {
@@ -367,6 +370,7 @@ fn dispatch_step(
     reliability: Option<&ReliabilitySettings>,
     trasher: &dyn Trasher,
     undo: &mut UndoJournal,
+    budget: Option<HelperBudget>,
 ) -> DispatchOutcome {
     match kind {
         ActionKind::CreateFolder { .. }
@@ -388,7 +392,7 @@ fn dispatch_step(
                 DispatchOutcome::Failed(format!("verification failed for {}", path.display()))
             }
         }
-        _ => match dispatch_ui_step_with_reliability(kind, engine, reliability) {
+        _ => match dispatch_ui_step_with_budget(kind, engine, reliability, budget) {
             UiOutcome::Applied(ev) => DispatchOutcome::Applied(ev),
             UiOutcome::Skipped(r) => DispatchOutcome::Skipped(r),
             UiOutcome::Failed(e) => DispatchOutcome::Failed(e),

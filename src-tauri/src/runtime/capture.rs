@@ -7,6 +7,11 @@
 //! (`capture_stream_latest`) is an opt-in reliability upgrade that samples a
 //! short SCStream and returns the latest complete frame — never ambient
 //! observation.
+//!
+//! Optional `budget_ms` on helper requests lets ActionStep timeouts interrupt
+//! mid-op cooperatively inside GhostAXHelper (see `helper_budget`).
+
+use crate::runtime::helper_budget::{self, HelperBudget};
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -20,6 +25,8 @@ use std::process::{Command, Stdio};
 pub enum CaptureError {
     PermissionDenied(String),
     HelperUnavailable(String),
+    /// Cooperative mid-op budget exhausted inside the helper (or before spawn).
+    TimedOut(String),
     Failed(String),
 }
 
@@ -28,6 +35,7 @@ impl std::fmt::Display for CaptureError {
         match self {
             Self::PermissionDenied(d) => write!(f, "screen recording denied: {d}"),
             Self::HelperUnavailable(d) => write!(f, "capture helper unavailable: {d}"),
+            Self::TimedOut(d) => write!(f, "capture timed out: {d}"),
             Self::Failed(d) => write!(f, "{d}"),
         }
     }
@@ -67,6 +75,19 @@ impl StreamCaptureOpts {
             max_frames: self.max_frames.clamp(1, Self::MAX_FRAMES),
         }
     }
+
+    /// Shorten duration to a helper budget (budget can only shrink; hard caps stay).
+    pub fn clamp_to_budget(self, budget: HelperBudget) -> Result<Self, CaptureError> {
+        let mut opts = self.clamped();
+        let duration = budget.clamp_duration_ms(opts.duration_ms);
+        if duration < Self::MIN_DURATION_MS {
+            return Err(CaptureError::TimedOut(
+                helper_budget::HELPER_BUDGET_EXCEEDED.into(),
+            ));
+        }
+        opts.duration_ms = duration;
+        Ok(opts)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +103,9 @@ struct CaptureRequest {
     duration_ms: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_frames: Option<u32>,
+    /// Wall-clock ms from helper request start; cooperative mid-op deadline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    budget_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,6 +163,32 @@ fn helper_path() -> Option<PathBuf> {
     helper_candidates().into_iter().find(|c| c.is_file())
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn map_helper_response(resp: CaptureResponse) -> Result<CaptureResponse, CaptureError> {
+    if !resp.ok && helper_budget::is_helper_budget_timeout(&resp.detail) {
+        return Err(CaptureError::TimedOut(resp.detail));
+    }
+    if !resp.ok
+        && (resp.detail.contains("screen recording denied")
+            || resp.detail.contains("ScreenCaptureKit")
+                && resp.detail.to_lowercase().contains("denied"))
+    {
+        return Err(CaptureError::PermissionDenied(resp.detail));
+    }
+    Ok(resp)
+}
+
+fn ensure_budget(budget: Option<HelperBudget>) -> Result<(), CaptureError> {
+    if let Some(b) = budget
+        && b.is_exhausted()
+    {
+        return Err(CaptureError::TimedOut(
+            helper_budget::HELPER_BUDGET_EXCEEDED.into(),
+        ));
+    }
+    Ok(())
+}
+
 fn call_helper(req: &CaptureRequest) -> Result<CaptureResponse, CaptureError> {
     #[cfg(not(target_os = "macos"))]
     {
@@ -185,14 +235,7 @@ fn call_helper(req: &CaptureRequest) -> Result<CaptureResponse, CaptureError> {
 
         let resp: CaptureResponse =
             serde_json::from_str(line.trim()).map_err(|e| CaptureError::Failed(e.to_string()))?;
-        if !resp.ok
-            && (resp.detail.contains("screen recording denied")
-                || resp.detail.contains("ScreenCaptureKit")
-                    && resp.detail.to_lowercase().contains("denied"))
-        {
-            return Err(CaptureError::PermissionDenied(resp.detail));
-        }
-        Ok(resp)
+        map_helper_response(resp)
     }
 }
 
@@ -202,6 +245,9 @@ fn frame_from_response(
     op: &str,
 ) -> Result<StillFrame, CaptureError> {
     if !resp.ok {
+        if helper_budget::is_helper_budget_timeout(&resp.detail) {
+            return Err(CaptureError::TimedOut(resp.detail));
+        }
         return Err(CaptureError::Failed(resp.detail));
     }
     let path = resp
@@ -231,6 +277,7 @@ pub fn capture_permission_granted() -> Result<bool, CaptureError> {
         window_title: None,
         duration_ms: None,
         max_frames: None,
+        budget_ms: None,
     })?;
     Ok(resp.ok)
 }
@@ -244,6 +291,17 @@ pub fn capture_still(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
 ) -> Result<StillFrame, CaptureError> {
+    capture_still_with_budget(dest_png, bundle_id, window_title, None)
+}
+
+/// Like [`capture_still`], with an optional cooperative mid-op budget.
+pub fn capture_still_with_budget(
+    dest_png: &Path,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    budget: Option<HelperBudget>,
+) -> Result<StillFrame, CaptureError> {
+    ensure_budget(budget)?;
     let resp = call_helper(&CaptureRequest {
         op: "capture_still".into(),
         path: Some(dest_png.to_string_lossy().into_owned()),
@@ -251,6 +309,7 @@ pub fn capture_still(
         window_title: window_title.map(str::to_string),
         duration_ms: None,
         max_frames: None,
+        budget_ms: budget.map(|b| b.budget_ms),
     })?;
     frame_from_response(resp, dest_png, "capture_still")
 }
@@ -259,13 +318,30 @@ pub fn capture_still(
 ///
 /// Opt-in reliability path for OCR: short-lived, hard-capped, request-scoped.
 /// Prefer [`capture_still`] when a single snapshot is enough.
+///
+/// Hard caps remain ≤2s / 8 frames; a helper budget can only shorten `duration_ms`.
 pub fn capture_stream_latest(
     dest_png: &Path,
     bundle_id: Option<&str>,
     window_title: Option<&str>,
     opts: StreamCaptureOpts,
 ) -> Result<StillFrame, CaptureError> {
-    let opts = opts.clamped();
+    capture_stream_latest_with_budget(dest_png, bundle_id, window_title, opts, None)
+}
+
+/// Like [`capture_stream_latest`], clamping stream duration to `budget` when set.
+pub fn capture_stream_latest_with_budget(
+    dest_png: &Path,
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    opts: StreamCaptureOpts,
+    budget: Option<HelperBudget>,
+) -> Result<StillFrame, CaptureError> {
+    ensure_budget(budget)?;
+    let opts = match budget {
+        Some(b) => opts.clamp_to_budget(b)?,
+        None => opts.clamped(),
+    };
     let resp = call_helper(&CaptureRequest {
         op: "capture_stream_latest".into(),
         path: Some(dest_png.to_string_lossy().into_owned()),
@@ -273,6 +349,7 @@ pub fn capture_stream_latest(
         window_title: window_title.map(str::to_string),
         duration_ms: Some(opts.duration_ms),
         max_frames: Some(opts.max_frames),
+        budget_ms: budget.map(|b| b.budget_ms),
     })?;
     frame_from_response(resp, dest_png, "capture_stream_latest")
 }
@@ -282,14 +359,24 @@ pub fn capture_still_bytes(
     bundle_id: Option<&str>,
     window_title: Option<&str>,
 ) -> Result<Vec<u8>, CaptureError> {
+    capture_still_bytes_with_budget(bundle_id, window_title, None)
+}
+
+/// Like [`capture_still_bytes`] with a cooperative mid-op budget.
+pub fn capture_still_bytes_with_budget(
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    budget: Option<HelperBudget>,
+) -> Result<Vec<u8>, CaptureError> {
     let dest = std::env::temp_dir().join(format!("ghost_sck_{}.png", uuid::Uuid::new_v4()));
-    match capture_still(&dest, bundle_id, window_title) {
+    match capture_still_with_budget(&dest, bundle_id, window_title, budget) {
         Ok(frame) => {
             let bytes =
                 std::fs::read(&frame.path).map_err(|e| CaptureError::Failed(e.to_string()))?;
             let _ = std::fs::remove_file(&frame.path);
             Ok(bytes)
         }
+        Err(CaptureError::TimedOut(d)) => Err(CaptureError::TimedOut(d)),
         Err(CaptureError::HelperUnavailable(_)) | Err(CaptureError::PermissionDenied(_)) => {
             crate::core::vision::capture_screenshot()
                 .map_err(|e| CaptureError::Failed(e.to_string()))
@@ -321,24 +408,32 @@ pub fn capture_latest_frame_bytes_with_opts(
     window_title: Option<&str>,
     opts: StreamCaptureOpts,
 ) -> Result<Vec<u8>, CaptureError> {
+    capture_latest_frame_bytes_with_budget(bundle_id, window_title, opts, None)
+}
+
+/// Same as [`capture_latest_frame_bytes_with_opts`] with a cooperative mid-op budget.
+pub fn capture_latest_frame_bytes_with_budget(
+    bundle_id: Option<&str>,
+    window_title: Option<&str>,
+    opts: StreamCaptureOpts,
+    budget: Option<HelperBudget>,
+) -> Result<Vec<u8>, CaptureError> {
     let dest = std::env::temp_dir().join(format!("ghost_sck_stream_{}.png", uuid::Uuid::new_v4()));
-    match capture_stream_latest(&dest, bundle_id, window_title, opts) {
+    match capture_stream_latest_with_budget(&dest, bundle_id, window_title, opts, budget) {
         Ok(frame) => {
             let bytes =
                 std::fs::read(&frame.path).map_err(|e| CaptureError::Failed(e.to_string()))?;
             let _ = std::fs::remove_file(&frame.path);
             Ok(bytes)
         }
+        Err(CaptureError::TimedOut(d)) => Err(CaptureError::TimedOut(d)),
         Err(CaptureError::HelperUnavailable(_)) | Err(CaptureError::PermissionDenied(_)) => {
             // No stream path — degrade to still / legacy without inventing capture.
-            capture_still_bytes(bundle_id, window_title)
+            capture_still_bytes_with_budget(bundle_id, window_title, budget)
         }
         Err(_) => {
             // Stream helper present but sample failed — still-frame once, then legacy.
-            match capture_still_bytes(bundle_id, window_title) {
-                Ok(bytes) => Ok(bytes),
-                Err(still_err) => Err(still_err),
-            }
+            capture_still_bytes_with_budget(bundle_id, window_title, budget)
         }
     }
 }
@@ -402,11 +497,61 @@ mod tests {
             window_title: None,
             duration_ms: Some(400),
             max_frames: Some(3),
+            budget_ms: Some(1_200),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("capture_stream_latest"));
         assert!(json.contains("duration_ms"));
         assert!(json.contains("max_frames"));
+        assert!(json.contains("budget_ms"));
         assert!(!json.contains("window_title"));
+    }
+
+    #[test]
+    fn stream_budget_shortens_but_respects_hard_caps() {
+        let opts = StreamCaptureOpts {
+            duration_ms: 50_000,
+            max_frames: 99,
+        };
+        let clamped = opts.clamp_to_budget(HelperBudget::new(300)).unwrap();
+        assert_eq!(clamped.duration_ms, 300);
+        assert_eq!(clamped.max_frames, StreamCaptureOpts::MAX_FRAMES);
+        assert!(clamped.duration_ms <= StreamCaptureOpts::MAX_DURATION_MS);
+    }
+
+    #[test]
+    fn exhausted_budget_fails_before_helper() {
+        let dest = std::env::temp_dir().join("ghost_budget_exhausted.png");
+        let err =
+            capture_still_with_budget(&dest, None, None, Some(HelperBudget::new(0))).unwrap_err();
+        assert!(matches!(err, CaptureError::TimedOut(_)));
+    }
+
+    #[test]
+    fn stream_budget_below_min_fails_closed() {
+        let dest = std::env::temp_dir().join("ghost_budget_tiny.png");
+        let err = capture_stream_latest_with_budget(
+            &dest,
+            None,
+            None,
+            StreamCaptureOpts::default(),
+            Some(HelperBudget::new(10)),
+        )
+        .unwrap_err();
+        assert!(matches!(err, CaptureError::TimedOut(_)));
+    }
+
+    #[test]
+    fn map_helper_timeout_detail() {
+        let resp = CaptureResponse {
+            ok: false,
+            detail: helper_budget::HELPER_BUDGET_EXCEEDED.into(),
+            path: None,
+            width: None,
+            height: None,
+            frames: None,
+        };
+        let err = map_helper_response(resp).unwrap_err();
+        assert!(matches!(err, CaptureError::TimedOut(_)));
     }
 }
