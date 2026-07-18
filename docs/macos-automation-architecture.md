@@ -64,6 +64,32 @@ fragments for template matching remain opt-in (see
 Occasional still-image utilities may still use Core Graphics helpers; new
 window/display capture work should target ScreenCaptureKit.
 
+## Hard non-goals
+
+These are architectural boundaries, not temporary gaps. Do not ship features that
+cross them, and keep the guardrail tests green:
+
+1. **No ambient / continuous ScreenCaptureKit observation.**  
+   `capture_stream_latest` is request-scoped only: short SCStream sample → latest
+   complete frame → stop. Hard caps in Rust and Swift are **2 seconds / 8 frames**
+   (`StreamCaptureOpts::MAX_*`). Defaults stay well below that (≤400 ms / ≤3
+   frames). There is no long-lived product observation session.
+
+2. **No silent/automatic template capture into Action Plans.**  
+   `UiTarget.template_png` attaches only when the raw click event already carries
+   an opt-in fragment. Recording that fragment requires
+   `PerformanceSettings::capture_element_templates` (default **off**). Compiling
+   addressable clicks must not invent templates.
+
+3. **No direct MCP capture / AX / OCR / template tools.**  
+   `ghost.status` lists `ghost.capture_still`, `ghost.capture_stream`, and related
+   names under `direct_tools_denied`. External clients preview and request
+   approval; they never call ScreenCaptureKit or vision ops outside an approved
+   Action Plan.
+
+Enforced in code by tests in `runtime/capture.rs`, `action_plan/compile.rs`,
+`config.rs`, and `mcp/handlers.rs`.
+
 ## Resolution order
 
 Every UI step resolves in this order:
@@ -332,7 +358,8 @@ visual matching before AX targeting and permissions are solid.
 8. Visual template matching only where OCR and AX fail ✅ (Action Plan semantic
    path; opt-in `template_png` only — not ambient capture; not business-effect proof)
 9. Evidence capture, audit records, and undo integration ✅ (receipt records
-   ax/ocr/template/coordinates + ax_quality + honest UI undo_note; no screenshot retention)
+   ax/ocr/template/coordinates + ax_quality + capture_path when vision used +
+   honest UI undo_note; no screenshot retention)
 10. MCP exposure of already-trusted plans (pairing + approval queue; no bypass) ✅
 
 ## Honest status (do not overclaim)
@@ -348,7 +375,8 @@ Already present:
   SCStream (default ≤400 ms / ≤3 frames, hard-capped at 2 s / 8 frames), writes the
   latest complete frame, then stops — request-scoped only, **not** ambient observation;
 - Rust `runtime/capture.rs`: `capture_still` / `capture_stream_latest` /
-  `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback;
+  `capture_latest_frame_bytes` (stream → still → legacy) for OCR fallback,
+  returning which `CapturePath` succeeded so receipts can record it;
 - Rust `runtime/vision_fallback.rs`: when AX resolve fails or quality is insufficient,
   latest-frame capture → OCR (needs `UiTarget.title`) → opt-in template match
   (`UiTarget.template_png` + `core/template_match`) → coordinate click for
@@ -396,14 +424,16 @@ Also present (item 7 — partial, honest):
 Also present (item 9 — honest):
 
 - Action Plan receipts carry `resolution_strategy` (`ax` / `ocr` / `template` /
-  `coordinates`), optional `ax_quality`, `fingerprint`, `attempts`, and
-  `undo_note` on each step (`runtime/evidence.rs` → `StepVerification` /
-  `ReceiptStep`);
+  `coordinates`), optional `ax_quality`, `fingerprint`, `attempts`,
+  `capture_path` (`still` / `stream` / `legacy` when OCR/template used a
+  request-scoped frame), and `undo_note` on each step (`runtime/evidence.rs` →
+  `StepVerification` / `ReceiptStep`);
 - UI steps record `undo_note: n/a: UI click/type is not reversible via the undo
   journal`; FS mutations note that an undo journal entry was written;
 - Postcondition results remain on `verification.status` / `observed` (UI is
   best-effort, ADR-0007);
-- Receipts never retain screenshot bytes.
+- Receipts never retain screenshot bytes; `capture_path` is metadata only
+  (serde-defaulted so older receipts still load; AX-only steps omit it).
 
 Also present (interruptible mid-op helper budgets — partial):
 
@@ -420,21 +450,24 @@ Also present (interruptible mid-op helper budgets — partial):
 - Pure Rust budget math + timeout mapping are unit-tested on Linux; live Swift
   helper validation still requires macOS (rebuild `ghost-ax-helper` there).
 
-Not yet the architecture above:
+Not yet the architecture above (implementation gaps — distinct from
+[Hard non-goals](#hard-non-goals)):
 
 - long-lived / continuous stream sessions (product observation) — only bounded samples exist;
 - hard preemption of in-flight AX attribute writes / ScreenCaptureKit encode (budget
   checks are cooperative only);
 - Input Monitoring / Notifications probe implementations;
-- automatic template capture into Action Plans (fragments must be supplied opt-in on
-  `UiTarget.template_png`; replay still uses `PerformanceSettings::capture_element_templates`);
-- capture path (still vs stream) recorded on the receipt;
 - automatic promotion of every click to Semantic* (coordinate-only and
   low-confidence targets correctly remain UiReplay).
 
-Until those land, marketing and README copy must stay within what the repo
-supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as always-on
-screen observation, do not claim universal step retries or verified UI settlement,
-do not market template match as proof of business effect, do not claim MCP
-clients can drive AX/OCR/capture without desktop approval, and do not claim every
-recorded click uses AX (weak descriptors still fall back to coordinate replay).
+Permanent non-goals (do not schedule as product work): ambient/continuous
+ScreenCaptureKit observation; silent template capture into Action Plans;
+direct MCP capture/AX/OCR/template tools. See [Hard non-goals](#hard-non-goals).
+
+Until the gaps above land, marketing and README copy must stay within what the
+repo supports (`AGENTS.md` rule 10). Do not market bounded stream sampling as
+always-on screen observation, do not claim universal step retries or verified UI
+settlement, do not market template match as proof of business effect, do not
+claim MCP clients can drive AX/OCR/capture without desktop approval, and do not
+claim every recorded click uses AX (weak descriptors still fall back to
+coordinate replay).

@@ -14,7 +14,7 @@ pub mod verify;
 pub mod vision_fallback;
 
 pub use capture::{
-    CaptureError, StillFrame, StreamCaptureOpts, capture_latest_frame_bytes,
+    CaptureError, CapturePath, StillFrame, StreamCaptureOpts, capture_latest_frame_bytes,
     capture_latest_frame_bytes_with_opts, capture_still, capture_still_bytes,
     capture_stream_latest,
 };

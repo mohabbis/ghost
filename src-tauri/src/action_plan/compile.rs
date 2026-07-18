@@ -396,10 +396,56 @@ mod tests {
             assert_eq!(target.title.as_deref(), Some("Revenue"));
             assert_eq!(target.identifier.as_deref(), Some("cell-B7"));
             assert_eq!(target.window_title.as_deref(), Some("Q3 close"));
+            // Hard non-goal: no silent template capture into Action Plans.
+            assert!(
+                target.template_png.is_none(),
+                "SemanticFocus must not invent template_png when events lack templates"
+            );
             assert_eq!(
                 plan.steps[0].fallback_strategy,
                 crate::action_plan::FallbackStrategy::AxThenVisionThenCoordinates
             );
+        }
+    }
+
+    /// Compiling addressable clicks must not attach `template_png` unless the
+    /// raw events already carry an opt-in fragment (capture_element_templates).
+    #[test]
+    fn semantic_focus_omits_template_png_when_events_lack_templates() {
+        let events = vec![InputEvent::MouseClick {
+            x: 10,
+            y: 20,
+            button: 0,
+            element: Some(ElementInfo {
+                role: "AXTextField".into(),
+                name: "Revenue".into(),
+                app: "Numbers".into(),
+                identifier: Some("cell-B7".into()),
+                window_title: Some("Q3 close".into()),
+                template_png: None,
+                ..Default::default()
+            }),
+            timestamp: None,
+            retry_count: None,
+            semantic_tag: None,
+            self_heal: None,
+        }];
+        let steps = vec![CompressedStep::Click(ClickStep {
+            button: ClickButton::Left,
+            target: Some(addressable_target()),
+            fallback_coords: Some((10, 20)),
+            confidence: 0.95,
+            raw_event_count: 1,
+        })];
+        let plan = from_compression_report(&report(steps, vec![(0, 1)]), &events, None);
+        match &plan.steps[0].kind {
+            ActionKind::SemanticFocus { target } => {
+                assert!(
+                    target.template_png.is_none(),
+                    "must not auto-attach template_png from template-less events"
+                );
+            }
+            other => panic!("expected SemanticFocus, got {other:?}"),
         }
     }
 

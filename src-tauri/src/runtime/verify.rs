@@ -1,6 +1,7 @@
 //! Per-step verification: expected vs observed.
 
 use crate::action_plan::types::ActionKind;
+use crate::runtime::capture::CapturePath;
 use crate::runtime::evidence::{StepEvidence, UiResolutionStrategy};
 use crate::runtime::semantic::{self, SemanticError, UiTarget};
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,9 @@ pub struct StepVerification {
     pub undo_note: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempts: Option<u32>,
+    /// Which capture tier fed OCR/template (absent for AX-only / old receipts).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture_path: Option<CapturePath>,
 }
 
 impl StepVerification {
@@ -67,6 +71,7 @@ impl StepVerification {
             fingerprint: None,
             undo_note: None,
             attempts: None,
+            capture_path: None,
         }
     }
 
@@ -87,6 +92,7 @@ impl StepVerification {
             fingerprint: None,
             undo_note: None,
             attempts: None,
+            capture_path: None,
         }
     }
 
@@ -103,6 +109,7 @@ impl StepVerification {
             fingerprint: None,
             undo_note: None,
             attempts: None,
+            capture_path: None,
         }
     }
 
@@ -119,6 +126,7 @@ impl StepVerification {
             fingerprint: None,
             undo_note: None,
             attempts: None,
+            capture_path: None,
         }
     }
 
@@ -135,6 +143,7 @@ impl StepVerification {
             fingerprint: None,
             undo_note: None,
             attempts: None,
+            capture_path: None,
         }
     }
 
@@ -154,6 +163,9 @@ impl StepVerification {
         }
         if self.attempts.is_none() {
             self.attempts = evidence.attempts;
+        }
+        if self.capture_path.is_none() {
+            self.capture_path = evidence.capture_path;
         }
         if let Some(detail) = evidence.detail
             && self.observed.is_empty()
@@ -191,6 +203,7 @@ fn verify_semantic_focus(step_id: &str, label: &str, target: &UiTarget) -> StepV
                 fingerprint: None,
                 undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
                 attempts: None,
+                capture_path: None,
             }
         }
     }
@@ -223,6 +236,7 @@ fn verify_semantic_set_value(
                     fingerprint: None,
                     undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
                     attempts: None,
+                    capture_path: None,
                 }
             }
         }
@@ -241,6 +255,7 @@ fn verify_semantic_set_value(
             fingerprint: None,
             undo_note: Some(StepEvidence::UI_UNDO_NOTE.into()),
             attempts: None,
+            capture_path: None,
         },
     }
 }

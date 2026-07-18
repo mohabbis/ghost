@@ -14,7 +14,7 @@
 use crate::core::ocr::{self, OcrResult};
 use crate::core::template_match::{self, DEFAULT_MIN_SCORE};
 use crate::core::vision;
-use crate::runtime::capture::{self, CaptureError};
+use crate::runtime::capture::{self, CaptureError, CapturePath};
 use crate::runtime::helper_budget::HelperBudget;
 use crate::runtime::locator::AxQuality;
 use enigo::{Button, Coordinate, Direction, Enigo, Keyboard, Mouse, Settings};
@@ -170,6 +170,9 @@ pub struct VisionHit {
     pub screen_x: i32,
     pub screen_y: i32,
     pub fingerprint: String,
+    /// Which capture tier produced the frame used for this hit (`None` when
+    /// matching against caller-supplied PNG bytes with no live capture).
+    pub capture_path: Option<CapturePath>,
 }
 
 /// Capture (bounded stream latest → still → legacy) + OCR + unique text match.
@@ -195,7 +198,7 @@ pub fn resolve_text_with_budget(
         return Err(VisionFallbackError::NoSearchText);
     }
 
-    let bytes = capture::capture_latest_frame_bytes_with_budget(
+    let (bytes, path) = capture::capture_latest_frame_bytes_with_budget(
         bundle_id,
         window_title,
         capture::StreamCaptureOpts::default(),
@@ -212,6 +215,7 @@ pub fn resolve_text_with_budget(
         screen_x,
         screen_y,
         fingerprint: vision_fingerprint(hit, screen_x, screen_y),
+        capture_path: Some(path),
     })
 }
 
@@ -238,7 +242,7 @@ pub fn resolve_via_template_with_budget(
         .map_err(|e| VisionFallbackError::Template(e.to_string()))?;
 
     // Full display: template coords must be screen-absolute for enigo clicks.
-    let bytes = capture::capture_latest_frame_bytes_with_budget(
+    let (bytes, path) = capture::capture_latest_frame_bytes_with_budget(
         None,
         None,
         capture::StreamCaptureOpts::default(),
@@ -263,6 +267,7 @@ pub fn resolve_via_template_with_budget(
         screen_x,
         screen_y,
         fingerprint: template_fingerprint(m.score, screen_x, screen_y),
+        capture_path: Some(path),
     })
 }
 
@@ -293,6 +298,7 @@ pub fn match_template_in_png(
         screen_x,
         screen_y,
         fingerprint: template_fingerprint(m.score, screen_x, screen_y),
+        capture_path: None,
     })
 }
 
@@ -528,6 +534,8 @@ mod tests {
         assert!((hit.screen_x - 92).abs() <= 12, "x={}", hit.screen_x);
         assert!((hit.screen_y - 60).abs() <= 12, "y={}", hit.screen_y);
         assert!(hit.fingerprint.starts_with("template|"));
+        // Pure in-memory match — no live capture, so no capture_path.
+        assert_eq!(hit.capture_path, None);
     }
 
     #[test]

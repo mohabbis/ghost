@@ -553,6 +553,21 @@ mod tests {
         assert!(config.validate().is_ok());
     }
 
+    /// Hard non-goal: no silent/automatic template capture into recordings or
+    /// Action Plans. Opt-in only via `capture_element_templates`.
+    #[test]
+    fn capture_element_templates_defaults_off() {
+        let config = GhostConfig::default();
+        assert!(
+            !config.performance.capture_element_templates,
+            "template capture must stay opt-in (off by default)"
+        );
+        // Missing field in older configs must also deserialize as off.
+        let json = r#"{"profiling_enabled":false,"event_buffer_size":1,"thread_pool_size":1,"cache_enabled":false,"cache_size_mb":1}"#;
+        let perf: PerformanceSettings = serde_json::from_str(json).unwrap();
+        assert!(!perf.capture_element_templates);
+    }
+
     #[test]
     fn test_invalid_speed() {
         let mut config = GhostConfig::default();
