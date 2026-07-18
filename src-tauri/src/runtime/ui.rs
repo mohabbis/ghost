@@ -13,19 +13,30 @@ use std::time::Duration;
 
 /// `Enigo::new` can block indefinitely on Windows CI runners with no interactive
 /// input session (observed: `demo_workflow_serializes_and_runs_fs_steps` hung
-/// until the 45m job timeout). Bound init so headless/CI fails closed quickly.
+/// until the 45m job timeout). Bound init on Windows only — macOS `Enigo` is
+/// `!Send` (holds `CGEventSource`), so a timeout thread cannot compile there.
+#[cfg(windows)]
 const ENIGO_INIT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPEN_APP_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn enigo_or_err() -> Result<Enigo, String> {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(Enigo::new(&Settings::default()));
-    });
-    match rx.recv_timeout(ENIGO_INIT_TIMEOUT) {
-        Ok(Ok(enigo)) => Ok(enigo),
-        Ok(Err(e)) => Err(format!("enigo init failed: {e}")),
-        Err(_) => Err("enigo init timed out — no interactive input session (headless CI?)".into()),
+    #[cfg(windows)]
+    {
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = tx.send(Enigo::new(&Settings::default()));
+        });
+        return match rx.recv_timeout(ENIGO_INIT_TIMEOUT) {
+            Ok(Ok(enigo)) => Ok(enigo),
+            Ok(Err(e)) => Err(format!("enigo init failed: {e}")),
+            Err(_) => {
+                Err("enigo init timed out — no interactive input session (headless CI?)".into())
+            }
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        Enigo::new(&Settings::default()).map_err(|e| format!("enigo init failed: {e}"))
     }
 }
 
