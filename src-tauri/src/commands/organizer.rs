@@ -9,11 +9,14 @@
 //! ```
 //!
 //! Risk classes (see `docs/command-registry.md`):
-//! - `organizer_list_zones`, `organizer_plan`, `organizer_list_executions` —
+//! - `organizer_list_zones`, `organizer_plan`, `organizer_list_executions`,
+//!   `organizer_preview_folder_label`, `organizer_export_folder_label_text` —
 //!   **safe-read**: they touch the local DB and read directory metadata, and
 //!   mutate nothing on disk.
 //! - `organizer_create_zone`, `organizer_add_folder_rule` — **local-mutate**
 //!   (DB only): they record user-approved boundaries.
+//! - `organizer_record_folder_label_note` — **local-mutate** (DB only): it
+//!   records explicit post-run label-preview/export acknowledgements.
 //! - `organizer_execute`, `organizer_undo` — **local-mutate** (filesystem):
 //!   they move/rename files inside an approved Zone, write an audit log and undo
 //!   journal, and can roll a past run back.
@@ -33,7 +36,8 @@ use crate::organizer::undo::UndoReport;
 use crate::policy::{DefaultDecision, FolderRule, TrustLevel, Zone};
 use crate::storage::Db;
 use crate::storage::executions::{
-    ChainVerification, ExecutionSummary, find_unfinished_execution, get_execution, list_executions,
+    ChainVerification, ExecutionSummary, LabelAuditAction, LabelAuditNote, StoredExecution,
+    append_label_note, find_unfinished_execution, get_execution, list_executions,
     mark_execution_finished, verify_chain,
 };
 use crate::storage::milestones::{Milestone, list_milestones, record_milestone};
@@ -42,8 +46,10 @@ use crate::storage::zones::{
     add_folder_rule, create_zone, create_zone_with_rules, get_zone, list_folder_rules, list_zones,
     set_rule_trust,
 };
+use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::path::{Component, Path, PathBuf};
 use tauri::State;
 
 /// Expand a user-entered folder path so Organizer rules aren't dead on arrival.
@@ -157,6 +163,177 @@ pub struct ExecutionResult {
     pub execution_id: String,
     /// Counts, audit log, and undo journal for the run.
     pub report: ExecutionReport,
+}
+
+/// A preview-only folder label suggestion for the optional file-and-label flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderLabelPreview {
+    pub execution_id: String,
+    pub zone_id: String,
+    pub zone_name: String,
+    pub target_folder: String,
+    pub period_label: String,
+    pub suggested_text: String,
+    pub export_file_name: String,
+    pub preview_only: bool,
+    pub notes: Vec<LabelAuditNote>,
+}
+
+/// The text payload the frontend may save as a `.txt` label draft.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderLabelExport {
+    pub file_name: String,
+    pub text: String,
+}
+
+fn label_action_phrase(action: &LabelAuditAction) -> &'static str {
+    match action {
+        LabelAuditAction::PreviewConfirmed => "label preview confirmed",
+        LabelAuditAction::TextExported => "label text exported",
+    }
+}
+
+fn format_label_notes_markdown(notes: &[LabelAuditNote]) -> String {
+    if notes.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n\n## Post-run folder label notes\n\n");
+    for note in notes {
+        out.push_str("- `");
+        out.push_str(&note.at);
+        out.push_str("` — ");
+        out.push_str(label_action_phrase(&note.action));
+        if let Some(detail) = &note.detail
+            && !detail.trim().is_empty()
+        {
+            out.push_str(" (");
+            out.push_str(detail.trim());
+            out.push(')');
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn slug_fragment(raw: &str, fallback: &str) -> String {
+    let mut slug = String::with_capacity(raw.len());
+    let mut last_dash = false;
+    for ch in raw.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            last_dash = false;
+        } else if !last_dash {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        fallback.to_string()
+    } else {
+        slug.to_string()
+    }
+}
+
+fn label_path_tail(path: &Path) -> String {
+    let parts: Vec<String> = path
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    match parts.as_slice() {
+        [] => path.display().to_string(),
+        [only] => only.clone(),
+        _ => format!(
+            "{}/{}",
+            parts[parts.len().saturating_sub(2)],
+            parts[parts.len().saturating_sub(1)]
+        ),
+    }
+}
+
+fn period_label_for_execution(created_at: &str) -> String {
+    created_at
+        .parse::<i64>()
+        .ok()
+        .and_then(|ts| Utc.timestamp_opt(ts, 0).single())
+        .map(|dt| dt.format("%b %Y").to_string())
+        .unwrap_or_else(|| "Run period unavailable".to_string())
+}
+
+fn dominant_target_folder(stored: &StoredExecution) -> Option<PathBuf> {
+    let mut counts: BTreeMap<String, (usize, PathBuf)> = BTreeMap::new();
+    for event in stored.audit.events() {
+        if !matches!(event.outcome, crate::audit::ActionOutcome::Applied) {
+            continue;
+        }
+        let candidate = match &event.capability {
+            crate::policy::Capability::CreateFolder { path } => Some(path.clone()),
+            crate::policy::Capability::MoveFile { to, .. }
+            | crate::policy::Capability::RenameFile { to, .. }
+            | crate::policy::Capability::CopyFile { to, .. } => to.parent().map(PathBuf::from),
+            _ => None,
+        };
+        let Some(path) = candidate else {
+            continue;
+        };
+        let key = path.to_string_lossy().into_owned();
+        counts
+            .entry(key)
+            .and_modify(|(count, _)| *count += 1)
+            .or_insert((1, path));
+    }
+    counts
+        .into_values()
+        .max_by(|(count_a, path_a), (count_b, path_b)| {
+            count_a
+                .cmp(count_b)
+                .then_with(|| {
+                    path_a
+                        .components()
+                        .count()
+                        .cmp(&path_b.components().count())
+                })
+                .then_with(|| path_a.cmp(path_b))
+        })
+        .map(|(_, path)| path)
+}
+
+fn folder_label_preview_with_conn(
+    conn: &Db,
+    execution_id: &str,
+) -> Result<FolderLabelPreview, String> {
+    let stored = get_execution(conn, execution_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("no execution with id {execution_id}"))?;
+    let zone_name = get_zone(conn, &stored.zone_id)
+        .map_err(|e| e.to_string())?
+        .map(|z| z.name)
+        .unwrap_or_else(|| stored.zone_id.clone());
+    let folder = dominant_target_folder(&stored)
+        .ok_or_else(|| "no applied Organizer destination found for this run".to_string())?;
+    let folder_tail = label_path_tail(&folder);
+    let period_label = period_label_for_execution(&stored.created_at);
+    let suggested_text = format!("{zone_name}\n{folder_tail}\n{period_label}");
+    let export_file_name = format!(
+        "ghost-folder-label-{}-{}-{}.txt",
+        slug_fragment(&zone_name, "zone"),
+        slug_fragment(&period_label, "period"),
+        execution_id.chars().take(8).collect::<String>()
+    );
+    Ok(FolderLabelPreview {
+        execution_id: stored.id,
+        zone_id: stored.zone_id,
+        zone_name,
+        target_folder: folder.display().to_string(),
+        period_label,
+        suggested_text,
+        export_file_name,
+        preview_only: true,
+        notes: stored.label_notes,
+    })
 }
 
 /// List every Zone the user has approved.
@@ -521,6 +698,7 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
                 "hash": stored.hash,
                 "prev_hash": stored.prev_hash,
                 "audit": stored.audit.masked(),
+                "label_notes": stored.label_notes,
             });
             serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
         }
@@ -535,22 +713,32 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
                 "# hash={},prev_hash={}\n",
                 stored.hash, stored.prev_hash
             ));
+            if !stored.label_notes.is_empty() {
+                let notes =
+                    serde_json::to_string(&stored.label_notes).map_err(|e| e.to_string())?;
+                out.push_str(&format!("# label_notes={notes}\n"));
+            }
             out.push_str(&stored.audit.to_csv());
             Ok(out)
         }
-        "compliance" => Ok(stored.audit.to_compliance_report(
-            &stored.id,
-            &stored.created_at,
-            &stored.hash,
-            &stored.prev_hash,
-        )),
-        "signed" => {
-            let report = stored.audit.to_compliance_report(
+        "compliance" => Ok({
+            let mut report = stored.audit.to_compliance_report(
                 &stored.id,
                 &stored.created_at,
                 &stored.hash,
                 &stored.prev_hash,
             );
+            report.push_str(&format_label_notes_markdown(&stored.label_notes));
+            report
+        }),
+        "signed" => {
+            let mut report = stored.audit.to_compliance_report(
+                &stored.id,
+                &stored.created_at,
+                &stored.hash,
+                &stored.prev_hash,
+            );
+            report.push_str(&format_label_notes_markdown(&stored.label_notes));
             let signature = generate_compliance_signature(&report);
             let mut out = report;
             out.push_str("\n---\n# Cryptographic Verification Signature\nSignature: ");
@@ -562,6 +750,45 @@ pub fn organizer_export_audit(execution_id: String, format: String) -> Result<St
             "unsupported export format: {other} (use json, csv, compliance, or signed)"
         )),
     }
+}
+
+/// Build a preview-only post-run folder label suggestion from one Organizer execution.
+///
+/// Risk class: safe-read (DB read + executed destination metadata only). Never prints.
+#[tauri::command]
+pub fn organizer_preview_folder_label(execution_id: String) -> Result<FolderLabelPreview, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    folder_label_preview_with_conn(&conn, &execution_id)
+}
+
+/// Return the text payload the frontend can save as a `.txt` label draft.
+///
+/// Risk class: safe-read. Returns text only; the caller chooses whether to save it.
+#[tauri::command]
+pub fn organizer_export_folder_label_text(
+    execution_id: String,
+) -> Result<FolderLabelExport, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    let preview = folder_label_preview_with_conn(&conn, &execution_id)?;
+    Ok(FolderLabelExport {
+        file_name: preview.export_file_name,
+        text: preview.suggested_text,
+    })
+}
+
+/// Record the user's explicit confirmation of the preview-only file-and-label
+/// follow-up. This never prints and never mutates user files.
+///
+/// Risk class: local-mutate (DB only). Undo is n/a because paper or exported text
+/// is outside the Organizer undo journal.
+#[tauri::command]
+pub fn organizer_record_folder_label_note(
+    execution_id: String,
+    action: LabelAuditAction,
+    detail: Option<String>,
+) -> Result<LabelAuditNote, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    append_label_note(&conn, &execution_id, action, detail).map_err(|e| e.to_string())
 }
 
 fn get_compliance_signing_secret() -> Vec<u8> {
@@ -827,6 +1054,37 @@ mod execute_undo_tests {
             "file must stay exactly where it was"
         );
         assert!(!tmp.path().join("Documents").exists());
+    }
+
+    #[test]
+    fn folder_label_preview_uses_applied_destination_and_persisted_notes() {
+        let tmp = tempdir();
+        tmp.file("notes.txt", b"hello");
+        let conn = open_in_memory().unwrap();
+        let zone = create_zone(&conn, "Label Zone", None, DefaultDecision::Ask, false).unwrap();
+        add_folder_rule(
+            &conn,
+            &zone.id,
+            &full_rule(tmp.path(), TrustLevel::AskFirst),
+        )
+        .unwrap();
+
+        let result = organizer_execute_with_conn(&conn, &zone.id, None, None).unwrap();
+        let note = append_label_note(
+            &conn,
+            &result.execution_id,
+            LabelAuditAction::PreviewConfirmed,
+            Some("preview-only acknowledged".into()),
+        )
+        .unwrap();
+
+        let preview = folder_label_preview_with_conn(&conn, &result.execution_id).unwrap();
+        assert_eq!(preview.zone_name, "Label Zone");
+        assert!(preview.target_folder.ends_with("/Documents"));
+        assert!(preview.suggested_text.contains("Label Zone"));
+        assert!(preview.suggested_text.contains(&preview.period_label));
+        assert_eq!(preview.notes, vec![note]);
+        assert!(preview.export_file_name.ends_with(".txt"));
     }
 }
 

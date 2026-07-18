@@ -4261,6 +4261,126 @@ function organizerRenderPlan(plan) {
     <p class="organizer-note">Preview only — approve below to apply. Ghost writes an undo journal before moving any file.</p>`;
 }
 
+function organizerRenderFolderLabelPreview(preview) {
+  if (!preview) return "";
+  const notes = (preview.notes || [])
+    .map((note) => {
+      const label = note.action === "text_exported" ? "Text exported" : "Preview confirmed";
+      const detail = note.detail ? ` — ${escapeHtml(note.detail)}` : "";
+      return `<li><strong>${escapeHtml(label)}</strong> · ${escapeHtml(note.at)}${detail}</li>`;
+    })
+    .join("");
+  const previewConfirmed = (preview.notes || []).some((note) => note.action === "preview_confirmed");
+  return `
+    <section class="organizer-label-card">
+      <div class="organizer-label-card__head">
+        <h3 class="organizer-subhead">Folder label preview</h3>
+        <span class="org-badge org-badge--confirm">Preview only</span>
+      </div>
+      <div class="organizer-label-meta">
+        <span><strong>Zone:</strong> ${escapeHtml(preview.zone_name)}</span>
+        <span><strong>Path:</strong> <code>${escapeHtml(preview.target_folder)}</code></span>
+        <span><strong>Period:</strong> ${escapeHtml(preview.period_label)}</span>
+      </div>
+      <pre class="organizer-label-text">${escapeHtml(preview.suggested_text)}</pre>
+      <p class="organizer-note">Stock Ghost does not print yet. Real DYMO / Brother QL / CUPS integration is follow-up. Paper has no undo path.</p>
+      <div class="btn-row">
+        ${
+          previewConfirmed
+            ? `<button class="btn btn--ghost btn--small" type="button" disabled title="This preview was already acknowledged for audit purposes">Preview confirmed</button>`
+            : `<button class="btn btn--ghost btn--small" id="organizerConfirmLabelPreviewBtn" type="button">Confirm preview</button>`
+        }
+        <button class="btn btn--ghost btn--small" id="organizerExportLabelTextBtn" type="button">Export label text</button>
+      </div>
+      ${notes ? `<ul class="organizer-history organizer-label-notes">${notes}</ul>` : ""}
+    </section>`;
+}
+
+async function organizerLoadFolderLabelPreview(executionId) {
+  if (!invoke || !executionId) return;
+  const slot = document.getElementById("organizerLabelPreview");
+  if (!slot) return;
+  slot.innerHTML = `<p class="organizer-muted">Loading label preview…</p>`;
+  let preview;
+  try {
+    preview = await invoke("organizer_preview_folder_label", { executionId });
+  } catch (err) {
+    slot.innerHTML = "";
+    return toastError("Label preview unavailable: " + formatInvokeError(err));
+  }
+  slot.innerHTML = organizerRenderFolderLabelPreview(preview);
+  document
+    .getElementById("organizerConfirmLabelPreviewBtn")
+    ?.addEventListener("click", () => organizerConfirmFolderLabelPreview(preview));
+  document
+    .getElementById("organizerExportLabelTextBtn")
+    ?.addEventListener("click", () => organizerExportFolderLabelText(preview));
+}
+
+async function organizerConfirmFolderLabelPreview(preview) {
+  const choice = await ghostApproveConfirm({
+    title: "Confirm folder label preview",
+    body: `Record that you reviewed the preview for "${preview.zone_name}"?`,
+    detail:
+      "This stores a post-run audit note only. Stock Ghost still does not print, and paper has no undo path.",
+    confirmLabel: "Confirm preview",
+    reviewLabel: "Back",
+    summaryHtml: `<pre class="organizer-label-text organizer-label-text--dialog">${escapeHtml(preview.suggested_text)}</pre>`,
+  });
+  if (choice !== "confirm") return;
+  try {
+    await invoke("organizer_record_folder_label_note", {
+      executionId: preview.execution_id,
+      action: "preview_confirmed",
+      detail: "preview-only acknowledged; paper undo n/a",
+    });
+    showNotification("Folder label preview confirmed.", "info");
+    await organizerLoadFolderLabelPreview(preview.execution_id);
+  } catch (err) {
+    toastError("Could not record label preview note: " + formatInvokeError(err));
+  }
+}
+
+async function organizerExportFolderLabelText(preview) {
+  if (!invoke) return notAvailable();
+  let exportPayload;
+  try {
+    exportPayload = await invoke("organizer_export_folder_label_text", { executionId: preview.execution_id });
+  } catch (err) {
+    return toastError("Label export unavailable: " + formatInvokeError(err));
+  }
+  const choice = await ghostApproveConfirm({
+    title: "Export label text",
+    body: `Save a preview-only .txt label for "${preview.zone_name}"?`,
+    detail:
+      "Ghost will record a post-run audit note and download a text draft. Stock Ghost still does not print, and paper has no undo path.",
+    confirmLabel: "Confirm & export",
+    reviewLabel: "Back",
+    summaryHtml: `<pre class="organizer-label-text organizer-label-text--dialog">${escapeHtml(exportPayload.text)}</pre>`,
+  });
+  if (choice !== "confirm") return;
+  try {
+    const blob = new Blob([exportPayload.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportPayload.file_name || `ghost-folder-label-${preview.execution_id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    await invoke("organizer_record_folder_label_note", {
+      executionId: preview.execution_id,
+      action: "text_exported",
+      detail: exportPayload.file_name,
+    });
+    showNotification("Folder label text exported.", "info");
+    await organizerLoadFolderLabelPreview(preview.execution_id);
+  } catch (err) {
+    toastError("Could not export label text: " + formatInvokeError(err));
+  }
+}
+
 async function organizerRun() {
   if (!invoke) return notAvailable();
   const zone = organizerSelectedZone();
@@ -4313,6 +4433,10 @@ async function organizerRun() {
 
   const result = document.getElementById("organizerResult");
   if (result) {
+    const labelPreviewCta =
+      (r.applied ?? 0) > 0
+        ? `<button class="btn btn--ghost btn--small" id="organizerPreviewLabelBtn" type="button" title="Preview a suggested folder label. Stock Ghost does not print yet.">Preview folder label</button>`
+        : "";
     result.innerHTML = `
       ${receiptHtml}
       <div class="organizer-summary organizer-summary--done">
@@ -4322,14 +4446,18 @@ async function organizerRun() {
       </div>
       <div class="btn-row">
         <button class="btn btn--ghost btn--small" id="organizerUndoLastBtn" type="button" data-exec-id="${escapeAttr(res.execution_id)}">Undo this run</button>
+        ${labelPreviewCta}
         <button class="btn btn--ghost btn--small" id="organizerExportCsvBtn" type="button">Export audit (CSV)</button>
         <button class="btn btn--ghost btn--small" id="organizerExportJsonBtn" type="button">Export audit (JSON)</button>
         <button class="btn btn--ghost btn--small" id="organizerExportSignedBtn" type="button" title="A compliance report with a cryptographic signature, verifiable offline">Export signed report</button>
       </div>
+      <div id="organizerLabelPreview"></div>
       <h3 class="organizer-subhead">Audit log</h3>
       <ul class="organizer-audit">${auditRows || "<li>No actions recorded.</li>"}</ul>`;
     const undoBtn = document.getElementById("organizerUndoLastBtn");
     if (undoBtn) undoBtn.addEventListener("click", () => organizerUndo(res.execution_id));
+    const previewLabelBtn = document.getElementById("organizerPreviewLabelBtn");
+    if (previewLabelBtn) previewLabelBtn.addEventListener("click", () => organizerLoadFolderLabelPreview(res.execution_id));
     const csvBtn = document.getElementById("organizerExportCsvBtn");
     if (csvBtn) csvBtn.addEventListener("click", () => organizerExportAudit(res.execution_id, "csv"));
     const jsonBtn = document.getElementById("organizerExportJsonBtn");

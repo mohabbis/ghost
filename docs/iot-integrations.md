@@ -106,6 +106,10 @@ and digital filing match.
 - Post-run optional step: preview label text (path, period, client) → Approve
   print → DYMO / Brother QL / CUPS.
 - Audit note: “label printed for run X.” Paper is not undoable — say so in UI.
+- Current minimal slice: stock Ghost may preview/export label **text only**
+  (Zone + destination path + run period) after a successful Organizer run and
+  record a post-run note when the user confirms the preview/export. Real
+  printer I/O remains follow-up.
 
 **Ship only if** F1/F2 are habitual; otherwise it is a peripheral toy.
 
@@ -131,7 +135,7 @@ ambient camera.
 | P0 | F1 Scanner Inbox | Organizer | Scan-folder Zone preset + new-files → plan | Design; Zone path works today without new commands |
 | P0 | F2 Batch landed | Inbound intent → plan | Fabric/ops webhook bridge | Partial (Fabric intent queue, experimental) |
 | P1 | F3 Shift close packet | Intent → Zone/routine preview | POS close webhook → bridge | Not built; marketing must stay qualified |
-| P2 | F4 File-and-label | Post-run optional print | Label printer after Approve | Not built |
+| P2 | F4 File-and-label | Post-run optional print | Label preview/export text after Approve; real printer follow-up | Partial (preview/export text only; no DYMO/Brother/CUPS yet) |
 | P2 | F5 Check/ID assist | Guard Desk | User-supplied image OCR | Partial core OCR; desk workflow prototype |
 
 ## Intent contract (when a feature needs a signal)
