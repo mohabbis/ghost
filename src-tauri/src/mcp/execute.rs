@@ -414,6 +414,42 @@ mod tests {
     }
 
     #[test]
+    fn compact_verifications_redact_semantic_verify_values_not_presence_or_paths() {
+        // A `SemanticVerify` against a concrete value carries the shared
+        // `value matches …` wording, so its expected AND its live observed
+        // value are redacted for MCP clients — not just `SemanticSetValue`.
+        let value_verify = compact_verifications(&[StepVerification::failed(
+            "s1",
+            "Verify amount",
+            "value matches 12,900",
+            "12,900,000",
+        )]);
+        assert_eq!(
+            value_verify[0]["expected"],
+            "value matches (redacted, 6 chars)"
+        );
+        assert_eq!(value_verify[0]["observed"], "(redacted, 10 chars)");
+
+        // A bare presence check and a path-existence check are not field
+        // values and stay visible, per the documented contract.
+        let presence = compact_verifications(&[StepVerification::verified(
+            "s2",
+            "Field present",
+            "AXTextField present",
+            "AXTextField present",
+        )]);
+        assert_eq!(presence[0]["expected"], "AXTextField present");
+        let path = compact_verifications(&[StepVerification::failed(
+            "s3",
+            "Moved",
+            "/dest/report.pdf exists",
+            "/dest/report.pdf absent",
+        )]);
+        assert_eq!(path[0]["expected"], "/dest/report.pdf exists");
+        assert_eq!(path[0]["observed"], "/dest/report.pdf absent");
+    }
+
+    #[test]
     fn halt_fields_surface_stop_reason_and_verifications_from_receipt() {
         use crate::organizer::executor::ExecutionReport;
         use crate::runtime::build_receipt;
