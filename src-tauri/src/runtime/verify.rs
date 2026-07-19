@@ -236,13 +236,8 @@ fn payload_matches_approved(payload: &str, want: &str) -> bool {
             break;
         };
         let abs = start + rel;
-        let before_ok = abs == 0
-            || !payload
-                .as_bytes()
-                .get(abs - 1)
-                .is_some_and(u8::is_ascii_digit);
         let after = &payload[abs + want.len()..];
-        if before_ok && after_matches_approved_suffix(after) {
+        if boundary_before_ok(payload, abs) && after_matches_approved_suffix(after) {
             return true;
         }
         // Advance one Unicode scalar so we never slice mid-codepoint.
@@ -255,7 +250,33 @@ fn payload_matches_approved(payload: &str, want: &str) -> bool {
     false
 }
 
+/// True when the match's left edge is a safe number boundary.
+///
+/// A preceding ASCII digit means the match is the low-order tail of a bigger
+/// number (`112,900` vs approved `12,900`). A preceding group separator (`,`
+/// or `.`) that itself follows a digit is the same trap one grouping over
+/// (`12,900` vs approved `900`), so reject that too. ASCII bytes never collide
+/// with a multi-byte UTF-8 continuation, so byte indexing here is codepoint-safe.
+fn boundary_before_ok(payload: &str, abs: usize) -> bool {
+    if abs == 0 {
+        return true;
+    }
+    let bytes = payload.as_bytes();
+    let prev = bytes[abs - 1];
+    if prev.is_ascii_digit() {
+        return false;
+    }
+    if (prev == b',' || prev == b'.') && abs >= 2 && bytes[abs - 2].is_ascii_digit() {
+        return false;
+    }
+    true
+}
+
 /// Accept end-of-string, non-digit OCR noise, or a trailing `.0+` fraction.
+///
+/// A group separator (`,` or `.`) immediately followed by another digit means
+/// the observed number continues to the right (`12,900,000` vs approved
+/// `12,900`), so that is a mismatch, not trailing noise.
 fn after_matches_approved_suffix(after: &str) -> bool {
     if after.is_empty() {
         return true;
@@ -268,7 +289,12 @@ fn after_matches_approved_suffix(after: &str) -> bool {
         let rem = &rest[zero_len..];
         return rem.is_empty() || rem.chars().next().is_some_and(|c| !c.is_ascii_digit());
     }
-    after.chars().next().is_some_and(|c| !c.is_ascii_digit())
+    let mut chars = after.chars();
+    let first = chars.next().expect("non-empty after");
+    if first == ',' && chars.next().is_some_and(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    !first.is_ascii_digit()
 }
 
 fn verify_semantic_set_value(
@@ -428,6 +454,22 @@ mod tests {
         // Non-digit boundaries / OCR noise around the exact amount still pass.
         assert!(observed_matches_approved("Amount: 12,900 USD", "12,900"));
         assert!(observed_matches_approved("ocr:12,900.00", "12,900"));
+    }
+
+    #[test]
+    fn observed_match_rejects_group_separator_false_positives() {
+        // Approved amount is the low-order group of a bigger observed number:
+        // a preceding thousands separator must not read as a safe boundary.
+        assert!(!observed_matches_approved("12,900", "900"));
+        assert!(!observed_matches_approved("1,900", "900"));
+        assert!(!observed_matches_approved("12.900", "900"));
+        assert!(!observed_matches_approved("ocr:12,900", "900"));
+        // Approved amount is the high-order group of a bigger observed number:
+        // a trailing separator+digit means the number continues to the right.
+        assert!(!observed_matches_approved("12,900,000", "12,900"));
+        assert!(!observed_matches_approved("12,900", "12"));
+        // Punctuation (comma then space) around the exact amount still passes.
+        assert!(observed_matches_approved("Paid 12,900, thanks", "12,900"));
     }
 
     #[test]
