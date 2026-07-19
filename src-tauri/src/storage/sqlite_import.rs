@@ -24,22 +24,35 @@ pub fn migrate(legacy_path: &Path, new_path: &Path) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Build the new database at a temporary path and only move it into place
+    // after the import has fully committed. `open_default` treats the mere
+    // presence of `new_path` as "migration already done", so creating redb
+    // directly at `new_path` would let a crash mid-import leave an empty
+    // database there that permanently blocks re-migration and strands the
+    // legacy data — the one outcome this module exists to prevent. A stale
+    // temp file from a previously-interrupted attempt is discarded first.
+    let importing_path = new_path.with_extension("db.importing");
+    let _ = std::fs::remove_file(&importing_path);
+
     let sqlite = SqliteConnection::open(legacy_path)?;
     // Bring any old install up to the last SQLite schema so field shapes are
     // predictable, regardless of how long ago the user last opened Ghost.
     migrations::migrate(&sqlite)?;
 
-    let redb = Database::create(new_path)?;
-    let write_txn = redb.begin_write()?;
-    zones::init(&write_txn)?;
-    milestones::init(&write_txn)?;
-    executions::init(&write_txn)?;
+    {
+        let redb = Database::create(&importing_path)?;
+        let write_txn = redb.begin_write()?;
+        zones::init(&write_txn)?;
+        milestones::init(&write_txn)?;
+        executions::init(&write_txn)?;
 
-    import_zones(&sqlite, &write_txn)?;
-    import_milestones(&sqlite, &write_txn)?;
-    import_executions(&sqlite, &write_txn)?;
+        import_zones(&sqlite, &write_txn)?;
+        import_milestones(&sqlite, &write_txn)?;
+        import_executions(&sqlite, &write_txn)?;
 
-    write_txn.commit()?;
+        write_txn.commit()?;
+    } // drop `redb` so its file handle is released before the rename below
+    // (Windows cannot rename a file that still has an open handle).
 
     // Close the legacy connection before touching the file it points at.
     // SQLite holds an OS-level lock on the database file for as long as the
@@ -48,8 +61,13 @@ pub fn migrate(legacy_path: &Path, new_path: &Path) -> anyhow::Result<()> {
     // real Windows upgrade.
     drop(sqlite);
 
+    // Atomically publish the fully-committed database. `new_path` comes into
+    // existence only here, so an import interrupted above always re-runs
+    // cleanly from the still-present legacy file on the next launch.
+    std::fs::rename(&importing_path, new_path)?;
+
     let backup_path = legacy_path.with_extension("db.migrated");
-    // Best-effort: if the rename fails (e.g. permissions), the redb database
+    // Best-effort: if this rename fails (e.g. permissions), the redb database
     // is already fully populated and usable — leaving the old file in place
     // is a harmless, if untidy, outcome, never a data-loss one.
     let _ = std::fs::rename(legacy_path, backup_path);
@@ -300,5 +318,40 @@ mod tests {
         let (legacy, new_path) = scratch_paths();
         migrate(&legacy, &new_path).unwrap();
         assert!(!new_path.exists());
+    }
+
+    #[test]
+    fn migration_publishes_atomically_and_cleans_a_stale_temp() {
+        let (legacy, new_path) = scratch_paths();
+        {
+            let conn = SqliteConnection::open(&legacy).unwrap();
+            migrations::migrate(&conn).unwrap();
+            conn.execute(
+                "INSERT INTO zones (id, name, description, default_decision, rename_dated, \
+                 created_at, updated_at) VALUES ('z1', 'School', NULL, 'ask', 0, '1', '1')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Leftover partial from a previously-interrupted migration attempt: it
+        // must be discarded, not opened or left to collide with the fresh build.
+        let importing = new_path.with_extension("db.importing");
+        std::fs::write(&importing, b"garbage from a crashed prior attempt").unwrap();
+
+        migrate(&legacy, &new_path).unwrap();
+
+        // The destination exists only after a committed import, and no temp
+        // file is left behind.
+        assert!(new_path.exists(), "committed db must be published");
+        assert!(!importing.exists(), "temp import file must be cleaned up");
+        assert!(legacy.with_extension("db.migrated").exists());
+
+        let db = open_result(&new_path);
+        assert_eq!(zones::get_zone(&db, "z1").unwrap().unwrap().name, "School");
+
+        drop(db);
+        let _ = std::fs::remove_file(&new_path);
+        let _ = std::fs::remove_file(legacy.with_extension("db.migrated"));
     }
 }
