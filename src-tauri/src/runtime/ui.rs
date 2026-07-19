@@ -26,13 +26,13 @@ fn enigo_or_err() -> Result<Enigo, String> {
         thread::spawn(move || {
             let _ = tx.send(Enigo::new(&Settings::default()));
         });
-        return match rx.recv_timeout(ENIGO_INIT_TIMEOUT) {
+        match rx.recv_timeout(ENIGO_INIT_TIMEOUT) {
             Ok(Ok(enigo)) => Ok(enigo),
             Ok(Err(e)) => Err(format!("enigo init failed: {e}")),
             Err(_) => {
                 Err("enigo init timed out — no interactive input session (headless CI?)".into())
             }
-        };
+        }
     }
     #[cfg(not(windows))]
     {
