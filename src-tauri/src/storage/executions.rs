@@ -636,7 +636,19 @@ pub fn verify_chain(db: &Db) -> anyhow::Result<ChainVerification> {
 
     for row in &rows {
         if row.hash.is_empty() {
-            // Pre-V5, unsealed row: it can't be part of the verifiable chain.
+            // An empty seal is benign only for a row that was never part of the
+            // chain: a pre-V5 legacy row or an interrupted run resolved via
+            // `mark_execution_finished`, both of which also carry an empty
+            // `prev_hash`. An empty seal with a *non-empty* `prev_hash` is a row
+            // that was sealed and linked into the chain and then had its seal
+            // cleared or corrupted — flag it rather than silently healing over
+            // the missing hash.
+            if !row.prev_hash.is_empty() && first_break.is_none() {
+                first_break = Some(ChainBreak {
+                    execution_id: row.id.clone(),
+                    reason: "run's tamper-evidence seal was cleared or corrupted".to_string(),
+                });
+            }
             unsealed_count += 1;
             continue;
         }
@@ -1192,6 +1204,28 @@ mod tests {
         );
         assert_eq!(v.sealed_count, 2);
         assert_eq!(v.unsealed_count, 1);
+    }
+
+    #[test]
+    fn clearing_a_linked_run_seal_is_still_detected() {
+        let tmp = Scratch::new();
+        tmp.file("report.pdf", b"a");
+        let rules = vec![full_rule(tmp.path())];
+        let report = execute_plan(&plan_with_rules("z", &rules), &rules);
+
+        let db = open_in_memory().unwrap();
+        save_execution(&db, "z", &report).unwrap(); // genesis (prev_hash = "")
+        let second = save_execution(&db, "z", &report).unwrap(); // links to genesis
+
+        // Wiping a *linked* run's seal (empty hash but non-empty prev_hash) must
+        // not be able to hide behind the benign-unsealed skip.
+        tamper(&db, &second, |row| row.hash = String::new());
+
+        let v = verify_chain(&db).unwrap();
+        assert!(!v.intact, "a cleared linked-run seal must be detectable");
+        let brk = v.first_break.expect("a break must be reported");
+        assert_eq!(brk.execution_id, second);
+        assert!(brk.reason.contains("cleared or corrupted"));
     }
 
     #[test]
