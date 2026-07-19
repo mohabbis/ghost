@@ -148,9 +148,25 @@ fn execute_response_json(execution_id: String, identity: Value, runtime: &Runtim
             "completed"
         }),
     );
-    obj.insert("receipt".into(), json!(runtime.receipt));
+    obj.insert(
+        "receipt".into(),
+        json!(redact_receipt_for_mcp(&runtime.receipt)),
+    );
     obj.insert("macos_ui".into(), approved_execution_macos_ui_note());
     out
+}
+
+/// Redact a verification's `expected`/`observed` pair. When `expected` is a
+/// redacted typed value, `observed` is the field's live contents, so it is
+/// blanked to a length rather than shown.
+fn redact_expected_observed(expected: &str, observed: &str) -> (String, String) {
+    let expected = redact_verification_text(expected);
+    let observed = if expected.contains("(redacted") {
+        format!("(redacted, {} chars)", observed.chars().count())
+    } else {
+        redact_verification_text(observed)
+    };
+    (expected, observed)
 }
 
 /// Compact, redacted per-step verification rows for MCP clients.
@@ -158,12 +174,7 @@ fn compact_verifications(verifications: &[StepVerification]) -> Vec<Value> {
     verifications
         .iter()
         .map(|v| {
-            let expected = redact_verification_text(&v.expected);
-            let observed = if expected.contains("(redacted") {
-                format!("(redacted, {} chars)", v.observed.chars().count())
-            } else {
-                redact_verification_text(&v.observed)
-            };
+            let (expected, observed) = redact_expected_observed(&v.expected, &v.observed);
             json!({
                 "step_id": v.step_id,
                 "label": redact_verification_label(&v.label),
@@ -173,6 +184,26 @@ fn compact_verifications(verifications: &[StepVerification]) -> Vec<Value> {
             })
         })
         .collect()
+}
+
+/// Project a receipt for MCP clients with the same redaction the compact
+/// verification rows use. The full receipt is embedded in `execute`/`get_run`
+/// responses, so without this its `steps[].verification` and `stop_reason`
+/// would leak the exact typed/observed field values the compact rows hide.
+/// The locally sealed receipt in storage is untouched — only this outbound
+/// copy is redacted.
+fn redact_receipt_for_mcp(receipt: &ExecutionReceipt) -> ExecutionReceipt {
+    let mut redacted = receipt.clone();
+    redacted.stop_reason = redact_stop_reason(receipt.stop_reason.as_deref());
+    for step in &mut redacted.steps {
+        step.label = redact_verification_label(&step.label);
+        let (expected, observed) =
+            redact_expected_observed(&step.verification.expected, &step.verification.observed);
+        step.verification.label = redact_verification_label(&step.verification.label);
+        step.verification.expected = expected;
+        step.verification.observed = observed;
+    }
+    redacted
 }
 
 fn compact_verifications_from_receipt(receipt: &ExecutionReceipt) -> Vec<Value> {
@@ -262,7 +293,7 @@ fn run_summary_json(stored: &StoredExecution) -> Value {
     json!({
         "execution": summary,
         "audit_event_count": stored.audit.events().len(),
-        "receipt": stored.receipt,
+        "receipt": stored.receipt.as_ref().map(redact_receipt_for_mcp),
         "stopped_early": stopped_early,
         "stop_reason": stop_reason,
         "verifications": verifications,
@@ -483,6 +514,52 @@ mod tests {
         assert_eq!(verifications[0]["expected"], "path/to/file exists");
         assert_eq!(verifications[0]["observed"], "path/to/file absent");
         assert_eq!(verifications[0]["status"], "failed");
+    }
+
+    #[test]
+    fn redact_receipt_for_mcp_hides_field_values_in_the_embedded_receipt() {
+        use crate::organizer::executor::ExecutionReport;
+        use crate::runtime::build_receipt;
+        // A value verification (typed field contents) plus a path check.
+        let value =
+            StepVerification::failed("s1", "Type amount", "value matches 12,900", "12,900,000");
+        let path = StepVerification::failed("s2", "Moved", "/dest/x exists", "/dest/x absent");
+        let receipt = build_receipt(
+            "plan-1",
+            "demo",
+            Some("exec-1".into()),
+            &ExecutionReport::default(),
+            &[value, path],
+            "1",
+            "2",
+            true,
+            Some(
+                "verification halted on Type amount: expected «12,900» · observed «12,900,000»"
+                    .into(),
+            ),
+        );
+
+        let redacted = redact_receipt_for_mcp(&receipt);
+        // The embedded receipt no longer carries the raw field values …
+        assert_eq!(
+            redacted.steps[0].verification.expected,
+            "value matches (redacted, 6 chars)"
+        );
+        assert_eq!(
+            redacted.steps[0].verification.observed,
+            "(redacted, 10 chars)"
+        );
+        assert_eq!(redacted.steps[0].label, "Type text (redacted)");
+        assert_eq!(
+            redacted.stop_reason.as_deref(),
+            Some("verification halted on Type amount: expected (redacted) · observed (redacted)")
+        );
+        // … while path-existence checks stay visible.
+        assert_eq!(redacted.steps[1].verification.expected, "/dest/x exists");
+        assert_eq!(redacted.steps[1].verification.observed, "/dest/x absent");
+
+        // The source receipt is untouched (local seal stays authoritative).
+        assert_eq!(receipt.steps[0].verification.observed, "12,900,000");
     }
 
     #[test]
