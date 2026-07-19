@@ -248,20 +248,45 @@ fn redact_verification_label(label: &str) -> String {
     label.to_string()
 }
 
-/// Strip embedded «expected» / «observed» payloads from runtime stop reasons.
+/// Strip embedded «expected» / «observed» payloads and the failed step's label
+/// from runtime stop reasons before they reach an MCP client.
+///
+/// The reason prefix names the failed step, and typed steps are labeled
+/// `Type {text}` (`compile_type_text`), so the label alone can carry the
+/// approved value — redact it the same way step labels are redacted elsewhere,
+/// in addition to the `«…»` value spans.
 fn redact_stop_reason(reason: Option<&str>) -> Option<String> {
     let reason = reason?;
+    let mut out = if let Some(rest) = reason.strip_prefix("verification halted on ") {
+        // "verification halted on {label}: expected «…» · observed «…»"
+        match rest.find(": expected «") {
+            Some(cut) => format!(
+                "verification halted on {}{}",
+                redact_verification_label(&rest[..cut]),
+                &rest[cut..]
+            ),
+            None => reason.to_string(),
+        }
+    } else if let Some(rest) = reason.strip_prefix("step ") {
+        // "step {label} failed"
+        match rest.rfind(" failed") {
+            Some(cut) => format!("step {} failed", redact_verification_label(&rest[..cut])),
+            None => reason.to_string(),
+        }
+    } else {
+        reason.to_string()
+    };
+
     if let (Some(start), Some(mid), Some(end)) = (
-        reason.find("expected «"),
-        reason.find("» · observed «"),
-        reason.rfind('»'),
+        out.find("expected «"),
+        out.find("» · observed «"),
+        out.rfind('»'),
     ) && mid > start
         && end > mid
     {
-        let prefix = &reason[..start];
-        return Some(format!("{prefix}expected (redacted) · observed (redacted)"));
+        out = format!("{}expected (redacted) · observed (redacted)", &out[..start]);
     }
-    Some(reason.to_string())
+    Some(out)
 }
 
 pub fn get_run_summary(execution_id: &str) -> Result<Value, String> {
@@ -552,7 +577,9 @@ mod tests {
         assert_eq!(redacted.steps[0].label, "Type text (redacted)");
         assert_eq!(
             redacted.stop_reason.as_deref(),
-            Some("verification halted on Type amount: expected (redacted) · observed (redacted)")
+            Some(
+                "verification halted on Type text (redacted): expected (redacted) · observed (redacted)"
+            )
         );
         // … while path-existence checks stay visible.
         assert_eq!(redacted.steps[1].verification.expected, "/dest/x exists");
@@ -560,6 +587,30 @@ mod tests {
 
         // The source receipt is untouched (local seal stays authoritative).
         assert_eq!(receipt.steps[0].verification.observed, "12,900,000");
+    }
+
+    #[test]
+    fn redact_stop_reason_hides_typed_value_in_the_step_label() {
+        // A `Type {value}` label carries the approved value in the reason
+        // prefix; both composed shapes must redact it, not only the spans.
+        assert_eq!(
+            redact_stop_reason(Some(
+                "verification halted on Type 1234.56: expected «1234.56» · observed «0.00»"
+            ))
+            .as_deref(),
+            Some(
+                "verification halted on Type text (redacted): expected (redacted) · observed (redacted)"
+            )
+        );
+        assert_eq!(
+            redact_stop_reason(Some("step Type 1234.56 failed")).as_deref(),
+            Some("step Type text (redacted) failed")
+        );
+        // Non-typed labels (not a field value) stay visible.
+        assert_eq!(
+            redact_stop_reason(Some("step Move invoice failed")).as_deref(),
+            Some("step Move invoice failed")
+        );
     }
 
     #[test]
