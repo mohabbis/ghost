@@ -639,6 +639,7 @@ mod tests {
 
     #[test]
     fn fabric_convert_inbound_intent_marks_intent_converted_and_returns_action_plan() {
+        let _guard = crate::integrations::microsoft::fabric::triggers::test_store_guard();
         crate::integrations::microsoft::fabric::triggers::reset_store_for_tests();
         let temp = scratch_dir("fabric_inbound");
         let source = temp.join("source");

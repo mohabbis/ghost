@@ -165,12 +165,26 @@ pub(crate) fn reset_store_for_tests() {
     let _ = fs::remove_file(store_path());
 }
 
+/// Serialize every test that touches the process-global [`STORE`] and its
+/// shared on-disk file. Cargo runs tests in parallel threads within one
+/// process, so without this a sibling's `reset_store_for_tests` can wipe an
+/// intent between another test's `record_intent` and `convert_intent`,
+/// panicking with "Unknown inbound intent". Every store-touching test — here
+/// and the experimental one in `commands::integrations` — must hold this for
+/// its whole body. Poison is tolerated: a panicking test only fails itself.
+#[cfg(test)]
+pub(crate) fn test_store_guard() -> std::sync::MutexGuard<'static, ()> {
+    static TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    TEST_GUARD.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn record_and_list_round_trip() {
+        let _guard = test_store_guard();
         reset_store_for_tests();
         let intent = record_intent(Some("zone-1".into()), "ops.pipeline", "Pipeline completed");
         let pending = list_pending();
@@ -180,6 +194,7 @@ mod tests {
 
     #[test]
     fn convert_marks_intent_and_hides_it_from_pending() {
+        let _guard = test_store_guard();
         reset_store_for_tests();
         let intent = record_intent(Some("zone-1".into()), "pos.close", "Shift closed");
         let converted = convert_intent(&intent.intent_id).expect("convert intent");

@@ -1128,7 +1128,14 @@ mod execute_undo_tests {
 
         let preview = folder_label_preview_with_conn(&conn, &result.execution_id).unwrap();
         assert_eq!(preview.zone_name, "Label Zone");
-        assert!(preview.target_folder.ends_with("/Documents"));
+        // Compare the final path component, not a hardcoded separator, so the
+        // assertion holds on Windows (`\Documents`) as well as Unix.
+        assert_eq!(
+            std::path::Path::new(&preview.target_folder)
+                .file_name()
+                .and_then(|s| s.to_str()),
+            Some("Documents")
+        );
         assert!(preview.suggested_text.contains("Label Zone"));
         assert!(preview.suggested_text.contains(&preview.period_label));
         assert_eq!(preview.notes, vec![note]);
