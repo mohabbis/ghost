@@ -334,9 +334,16 @@ fn verify_semantic_expected_value(
     target: &UiTarget,
     expected_value: &Option<String>,
 ) -> StepVerification {
-    let expected = expected_value
-        .clone()
-        .unwrap_or_else(|| format!("{} present", target.role));
+    // Mirror `verify_semantic_set_value`'s `value matches …` wording for a
+    // concrete expected value. Beyond consistency, that shared prefix is what
+    // the MCP boundary keys on to redact typed field values (`mcp::execute`),
+    // so a `SemanticVerify` amount is not leaked to external clients the way a
+    // `SemanticSetValue` amount already isn't. A bare presence check (no
+    // expected value) stays a visible, non-sensitive `<role> present`.
+    let expected = match expected_value.as_deref() {
+        Some(want) => format!("value matches {want}"),
+        None => format!("{} present", target.role),
+    };
     match semantic::verify_postcondition(target, expected_value.as_deref()) {
         Ok(observed) => {
             if let Some(want) = expected_value.as_deref() {
