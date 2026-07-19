@@ -8,7 +8,7 @@
 use super::pii;
 use crate::policy::Capability;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// What happened when the executor handled one capability.
@@ -107,7 +107,7 @@ impl AuditLog {
             let rule = event
                 .rule_path
                 .as_ref()
-                .map(|p| p.display().to_string())
+                .map(|p| pii::mask(&p.display().to_string()))
                 .unwrap_or_default();
             let provenance = match event.provenance {
                 Some(Provenance::Automated) => "automated",
@@ -210,7 +210,7 @@ impl AuditLog {
             let rule = event
                 .rule_path
                 .as_ref()
-                .map(|p| p.display().to_string())
+                .map(|p| pii::mask(&p.display().to_string()))
                 .unwrap_or_else(|| "N/A".to_string());
             let auth = match event.provenance {
                 Some(Provenance::Automated) => "Automated",
@@ -247,7 +247,7 @@ impl AuditLog {
                 .map(|e| AuditEvent {
                     capability: mask_capability(&e.capability),
                     outcome: mask_outcome(&e.outcome),
-                    rule_path: e.rule_path.clone(),
+                    rule_path: e.rule_path.as_deref().map(mask_path_buf),
                     provenance: e.provenance,
                     at: e.at.clone(),
                 })
@@ -314,12 +314,19 @@ fn describe_capability(cap: &Capability) -> (&'static str, String, String) {
     (kind, pii::mask(&path), pii::mask(&target))
 }
 
+/// Mask PII-shaped substrings in a path, preserving its `PathBuf` shape.
+/// Shared by capability masking and rule-path masking so the "Rule" column of
+/// an export is redacted the same way the action's own paths are.
+fn mask_path_buf(p: &Path) -> PathBuf {
+    PathBuf::from(pii::mask(&p.display().to_string()))
+}
+
 /// A redacted clone of a capability: same shape, PII-shaped substrings in its
 /// path(s) masked. Used by [`AuditLog::masked`] for the JSON export, kept
 /// distinct from [`describe_capability`] because it must preserve the typed
 /// `Capability` shape rather than flatten it to display strings.
 fn mask_capability(cap: &Capability) -> Capability {
-    let mp = |p: &PathBuf| PathBuf::from(pii::mask(&p.display().to_string()));
+    let mp = mask_path_buf;
     match cap {
         Capability::ReadFolder { path } => Capability::ReadFolder { path: mp(path) },
         Capability::CreateFolder { path } => Capability::CreateFolder { path: mp(path) },
@@ -552,7 +559,9 @@ mod tests {
     #[test]
     fn pii_is_redacted_in_every_export_but_not_in_the_stored_log() {
         let mut log = AuditLog::new();
-        log.record(
+        // The firing rule's own path can also carry PII (a client folder named
+        // after an SSN), so it must be masked alongside the action paths.
+        log.record_attributed(
             Capability::RenameFile {
                 from: PathBuf::from("/z/138-45-9821_w2.pdf"),
                 to: PathBuf::from("/z/Tax/138-45-9821_w2.pdf"),
@@ -560,18 +569,17 @@ mod tests {
             ActionOutcome::Skipped {
                 reason: "contact jane.doe@example.com to resolve".into(),
             },
+            Some(PathBuf::from("/z/Clients/271-53-6094")),
+            Some(Provenance::UserApproved),
         );
 
-        assert!(!log.to_csv().contains("138-45-9821"));
-        assert!(!log.to_csv().contains("jane.doe@example.com"));
-
-        let report = log.to_compliance_report("id", "1700000000", "h", "p");
-        assert!(!report.contains("138-45-9821"));
-        assert!(!report.contains("jane.doe@example.com"));
-
-        let masked_json = serde_json::to_string(&log.masked()).unwrap();
-        assert!(!masked_json.contains("138-45-9821"));
-        assert!(!masked_json.contains("jane.doe@example.com"));
+        for probe in ["138-45-9821", "jane.doe@example.com", "271-53-6094"] {
+            assert!(!log.to_csv().contains(probe), "csv leaked {probe}");
+            let report = log.to_compliance_report("id", "1700000000", "h", "p");
+            assert!(!report.contains(probe), "compliance report leaked {probe}");
+            let masked_json = serde_json::to_string(&log.masked()).unwrap();
+            assert!(!masked_json.contains(probe), "json leaked {probe}");
+        }
 
         // The stored log itself — what's persisted, hash-chained, and used
         // for undo — must keep the real path so those systems still work.
@@ -581,6 +589,10 @@ mod tests {
                 from: PathBuf::from("/z/138-45-9821_w2.pdf"),
                 to: PathBuf::from("/z/Tax/138-45-9821_w2.pdf"),
             }
+        );
+        assert_eq!(
+            log.events()[0].rule_path.as_deref(),
+            Some(std::path::Path::new("/z/Clients/271-53-6094"))
         );
     }
 }
