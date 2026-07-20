@@ -14,6 +14,15 @@ use crate::storage::{executions, migrations, milestones, zones};
 use redb::{Database, WriteTransaction};
 use rusqlite::Connection as SqliteConnection;
 use std::path::Path;
+use std::sync::Mutex;
+
+/// Serializes the one-time migration. `open_default` calls `migrate` whenever
+/// the redb file is absent, and Tauri commands run on a thread pool, so several
+/// first-launch calls can enter `migrate` at once (the UI fires multiple
+/// commands on load). Without this they would share the fixed `*.db.importing`
+/// path and could delete or publish each other's in-progress database. Poison
+/// is tolerated: a panicking migration only fails that attempt.
+static MIGRATION_LOCK: Mutex<()> = Mutex::new(());
 
 /// Import `legacy_path` (a SQLite database) into a freshly created redb
 /// database at `new_path`, then rename the legacy file so it is never
@@ -21,6 +30,15 @@ use std::path::Path;
 /// `new_path`) if `legacy_path` does not exist.
 pub fn migrate(legacy_path: &Path, new_path: &Path) -> anyhow::Result<()> {
     if !legacy_path.exists() {
+        return Ok(());
+    }
+
+    let _guard = MIGRATION_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // Re-check under the lock: a racing caller may have finished the migration
+    // (publishing `new_path` and renaming the legacy file away) while we waited.
+    // Proceeding would rebuild over the already-published database from a legacy
+    // file that no longer exists.
+    if new_path.exists() {
         return Ok(());
     }
 
@@ -318,6 +336,49 @@ mod tests {
         let (legacy, new_path) = scratch_paths();
         migrate(&legacy, &new_path).unwrap();
         assert!(!new_path.exists());
+    }
+
+    #[test]
+    fn migrate_is_a_noop_when_the_destination_already_exists() {
+        // Models the loser of a first-launch race: it entered `migrate` while
+        // the legacy file still existed, but by the time it holds the lock a
+        // sibling has already published `new_path`. It must not rebuild over
+        // that database (the legacy source may already be renamed away).
+        let (legacy, new_path) = scratch_paths();
+        {
+            let conn = SqliteConnection::open(&legacy).unwrap();
+            migrations::migrate(&conn).unwrap();
+            conn.execute(
+                "INSERT INTO zones (id, name, description, default_decision, rename_dated, \
+                 created_at, updated_at) VALUES ('winner', 'Winner', NULL, 'ask', 0, '1', '1')",
+                [],
+            )
+            .unwrap();
+        }
+        // Pretend a sibling already migrated: an existing, populated redb.
+        {
+            let db = Database::create(&new_path).unwrap();
+            let wtx = db.begin_write().unwrap();
+            zones::init(&wtx).unwrap();
+            zones::import_zone_raw(&wtx, "already", "Already", None, "ask", false).unwrap();
+            wtx.commit().unwrap();
+        }
+
+        migrate(&legacy, &new_path).unwrap();
+
+        // The pre-existing database is left intact — not rebuilt from `legacy`.
+        let db = open_result(&new_path);
+        assert!(zones::get_zone(&db, "already").unwrap().is_some());
+        assert!(
+            zones::get_zone(&db, "winner").unwrap().is_none(),
+            "migrate must not overwrite an already-published database"
+        );
+        // The legacy file is untouched (not renamed) since we bailed early.
+        assert!(legacy.exists());
+
+        drop(db);
+        let _ = std::fs::remove_file(&new_path);
+        let _ = std::fs::remove_file(&legacy);
     }
 
     #[test]
