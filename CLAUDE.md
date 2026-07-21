@@ -20,28 +20,32 @@ Default behavior:
 
 ## Product identity
 
-Ghost is a local-first desktop **automation** product for macOS and Windows,
-positioned for **finance and operations teams**.
+Ghost is not a general automation platform or an "OS." It is one product solving
+one problem for one customer at one price. Check every downstream decision — code,
+copy, roadmap — against this before proceeding.
 
-Canonical positioning:
+**What Ghost is:** a Tauri 2 / Rust macOS desktop app. Local-first — nothing leaves
+the machine. AI-gated — it handles variation in input, not rigid
+if-this-then-that macros. Currently developer-preview stage.
 
-> Ghost automates the repetitive data entry finance teams do by hand — replaying it
-> on your machine and verifying every value against what you approved, so a bad
-> transfer is caught at the keystroke instead of in the close.
+**The one problem:** ops/admin staff at small finance, accounting, or boutique
+advisory firms lose 2+ hours a day manually moving client data between email,
+PDFs, and their CRM or portfolio system — because cloud automation tools (Zapier,
+Make, etc.) are banned outright by client confidentiality policy.
 
-The public-facing product is one vertical (financial services) and one flagship
-workflow (record → replay → **verify** → undo for cross-sheet/data-transfer entry).
-The differentiator is **verification** — Ghost checks its own work before it asks
-you to sign off — not merely "approve before it acts," which is now table stakes.
-Organizer (safe file filing) remains a supporting capability that keeps the outputs
-tidy; it is no longer the headline wedge. Every other subsystem (broad Routines,
-Guard Desk/POS Bridge, Power BI/Fabric, MCP, Atlas, experimental AI, identity
-sign-in) stays **off the default/public surface** — see `docs/audiences.md`.
+**The one customer:** the ops lead at a 10–50 person wealth management or
+accounting firm who has been explicitly told "we cannot put client data through a
+cloud tool." Not "SMBs." Not "professionals." That specific person, with that
+specific constraint.
 
-Honest-scope guardrail (rule 10): today's verification is *per-step* (the value you
-approved actually landed in the field). Full **source-vs-destination reconciliation**
-(comparing each transferred figure against its source of truth) is roadmap, not
-shipped — market it as "next," never as a current capability.
+**The one price:** $79/month per seat. Flat. No tiers, no "contact sales," no
+enterprise pricing page. Priced to be expensable without a manager's signoff, and
+high enough to cover LLM spend.
+
+**The pitch:**
+
+> Ghost automates client-data workflows without the data ever leaving the machine —
+> the thing cloud automation tools are structurally disqualified from doing.
 
 Do not frame Ghost as:
 
@@ -49,15 +53,30 @@ Do not frame Ghost as:
 - a chatbot;
 - an RPA clone;
 - a macro recorder only;
-- an app that silently takes over the user's computer.
+- an app that silently takes over the user's computer;
+- "workflow automation," an "operating system," or any other category-level label;
+- a platform for multi-provider LLM routing — that's plumbing, not the pitch. The
+  customer doesn't care which model runs underneath.
+
+Kill list — do not do these:
+
+- do not build or ship features aimed at consumers/general users. This is not a
+  prosumer tool right now;
+- do not build settings, toggles, or configs for hypothetical use cases nobody has
+  asked for;
+- do not start enterprise-motion work (SSO, compliance questionnaires, "contact
+  sales") — parked for ~18 months out, not now.
+
+**Ship filter for this quarter:** before building or writing anything, ask "Does
+this make the ops lead's day shorter, specifically around moving client data
+between email/PDFs and their CRM?" If no, it doesn't ship this quarter — full stop,
+no exceptions for "cool to have."
 
 The product value is trustworthy execution:
 
 ```text
 Record -> Inspect -> Approve -> Replay -> Audit -> Undo
 ```
-
-Ghost supports account sign-in (Microsoft/Google) and is meant to eventually connect with the tech stacks users already run — Microsoft Fabric/Power BI, Google Cloud, and AI-assistant connectors (Claude, Cursor, Codex, ChatGPT). Stack connectivity is a competitive advantage; it does not replace the trust pipeline above. See `docs/integrations-roadmap.md`.
 
 ## Current wedge
 
