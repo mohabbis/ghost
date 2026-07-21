@@ -24,9 +24,13 @@ Ghost is not a general automation platform or an "OS." It is one product solving
 one problem for one customer at one price. Check every downstream decision — code,
 copy, roadmap — against this before proceeding.
 
-**What Ghost is:** a Tauri 2 / Rust macOS desktop app. Local-first — nothing leaves
-the machine. AI-gated — it handles variation in input, not rigid
-if-this-then-that macros. Currently developer-preview stage.
+**What Ghost is:** a Tauri 2 / Rust desktop app for macOS and Windows. Local-first —
+no data leaves the machine except through explicit, scoped, opt-in integrations the
+user approves (account sign-in, stack connectors — see `docs/integrations-roadmap.md`
+and Privacy boundaries below). AI-assisted, suggestion-only — it interprets
+variation in input beyond rigid if-this-then-that macros, but per the Engineering
+rules below, AI only proposes; deterministic code executes only approved plans.
+Currently developer-preview stage.
 
 **The one problem:** ops/admin staff at small finance, accounting, or boutique
 advisory firms lose 2+ hours a day manually moving client data between email,
@@ -67,10 +71,14 @@ Kill list — do not do these:
 - do not start enterprise-motion work (SSO, compliance questionnaires, "contact
   sales") — parked for ~18 months out, not now.
 
-**Ship filter for this quarter:** before building or writing anything, ask "Does
-this make the ops lead's day shorter, specifically around moving client data
-between email/PDFs and their CRM?" If no, it doesn't ship this quarter — full stop,
-no exceptions for "cool to have."
+**Ship filter for this quarter:** before building or writing anything customer-facing
+or feature-shaped, ask "Does this make the ops lead's day shorter, specifically
+around moving client data between email/PDFs and their CRM?" If no, it doesn't ship
+this quarter — full stop, no exceptions for "cool to have." This filter does not
+apply to foundational trust-pipeline work already in the build order (CI, command
+classification, policy primitives, Zones, Ghost Organizer preview/execute/audit/undo,
+replay/release hardening — see Current wedge and Target product layers below); that
+work stays in scope regardless of whether it's specifically email/PDF-to-CRM shaped.
 
 The product value is trustworthy execution:
 
