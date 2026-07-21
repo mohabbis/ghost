@@ -6,12 +6,18 @@
 [![Windows](https://img.shields.io/badge/Windows-10/11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/tag/v2.0.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Automate the busywork. Catch the errors.** Local-first desktop automation for financial-services teams.
+> **Ghost automates client-data workflows without the data ever leaving the machine** — the thing
+> cloud automation tools are structurally disqualified from doing.
 
-Finance and ops still move numbers between spreadsheets and systems by hand. One transposed digit
-can hide until the close. Ghost records that transfer once, then **replays it on your Mac or PC and
-verifies every value against the one you approved**. A mismatch halts the run. Every change is
-audited, receipted, and reversible.
+Ops and admin staff at small finance, accounting, and advisory firms lose hours a day moving
+client data between email, PDFs, and their CRM or portfolio system by hand — because cloud
+automation tools like Zapier and Make are banned outright by client-confidentiality policy. Ghost
+records that transfer once, then **replays it on your Mac or PC and verifies every value against
+the one you approved**. A mismatch halts the run. Every change is audited, receipted, and
+reversible.
+
+**Who it's for:** the ops lead at a 10–50 person wealth-management or accounting firm who's been
+told "we cannot put client data through a cloud tool."
 
 Ghost is **not** a generic AI agent, a context layer, or an RPA clone. AI may propose; deterministic
 code executes only the plan you approved — on your machine — and checks its own work before you
@@ -87,6 +93,10 @@ No raw secret capture. No cloud-first storage — workflow and organizer data st
 at rest. Keyboard and pointer are captured **only** while you explicitly record or an approved
 replay runs.
 
+## Pricing
+
+$79/month per seat. Flat — no tiers, no "contact sales."
+
 ## Download
 
 Published release: **[v2.0.3](https://github.com/mohabbis/ghost/releases/tag/v2.0.3)**
@@ -131,6 +141,8 @@ See `AGENTS.md` / `CLAUDE.md` for the full validation matrix and product contrac
 - Not an RPA clone or blind macro recorder — you inspect, approve, and verify.
 - Not cloud-first — workflows and files stay on your machine by default.
 - Not a silent computer takeover — capture and replay are explicit and interruptible.
+- Not "workflow automation" or an "operating system" — one product, one workflow.
+- Not a multi-provider LLM routing platform — which model runs underneath isn't the point.
 
 Ghost may propose anything; it only does what you approve, inside a boundary you control.
 
