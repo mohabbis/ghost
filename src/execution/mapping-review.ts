@@ -340,7 +340,8 @@ function getFilteredMappings(): FieldMapping[] {
 
   // Apply status filter
   if (filterSelect?.value && filterSelect.value !== "all") {
-    filtered = filtered.filter((m) => m.status === filterSelect.value);
+    const statusFilter = filterSelect.value;
+    filtered = filtered.filter((m) => m.status === statusFilter);
   }
 
   return filtered;
@@ -393,7 +394,7 @@ function handleValidateMappings(): void {
   });
 
   currentState.validationErrors = errors;
-  currentState.isDirty = errors.length > 0;
+  currentState.isDirty = Object.keys(errors).length > 0;
 
   renderMappingTable();
   renderSourceFields();
@@ -561,14 +562,15 @@ function showStatusMessage(message: string, type: "info" | "success" | "error" |
     warning: "status--warning",
   };
 
-  statusMessage.className = `status-message ${typeClasses[type]}`;
-  statusMessage.textContent = message;
-  statusMessage.style.display = "block";
+  const messageEl = statusMessage;
+  messageEl.className = `status-message ${typeClasses[type]}`;
+  messageEl.textContent = message;
+  messageEl.style.display = "block";
 
   // Auto-hide after 5 seconds for non-error messages
   if (type !== "error") {
     setTimeout(() => {
-      statusMessage.style.display = "none";
+      messageEl.style.display = "none";
     }, 5000);
   }
 }
