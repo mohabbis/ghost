@@ -31,7 +31,7 @@ Connect-only ideas fail this filter and are listed under [Rejected](#rejected).
 ### F1 — Scanner Inbox (P0)
 
 **Job:** Paper becomes files and a reviewable filing plan is waiting — the
-bookkeeper does not hunt folders or remember to run Organizer.
+ops lead does not hunt folders or remember to run Organizer.
 
 **User-visible behavior:**
 

@@ -1,5 +1,14 @@
 # Ghost Product Roadmap
 
+> **Note on staleness:** this roadmap's technical framing (Record/Replay/Debug/
+> Observer/Prompt "modes," Phase 1–5 engine work) predates the Ghost 2.0 unified
+> Action Plan runtime and Organizer already shipping as the wedge — see
+> `CLAUDE.md`'s "Architecture direction" and `docs/GHOST_2_DEMO.md` for current
+> state. The "Monetization path" section below has been updated to the current
+> flat $79/seat pricing (see `CLAUDE.md`, `docs/business-model.md`); the rest of
+> this document is left as historical technical-planning reference and has not
+> been re-verified against the current build.
+
 Ghost should become a practical desktop automation assistant, not a vague AI mascot. The strongest version of the product is simple: watch repetitive desktop work, turn it into safe reusable workflows, and help users run those workflows with confidence.
 
 This roadmap keeps the ambition high while avoiding fake magic. The app should feel intelligent because it is reliable, transparent, and useful, not because the copy says “AI” twelve times and hopes nobody checks.
@@ -115,22 +124,22 @@ Required principles:
 
 Privacy should be part of the brand, not buried below a footer link nobody reads because apparently that is how software earns trust now.
 
-## Monetization path: first paid features
+## Monetization path: highest-leverage features
 
-The moat and tiered model live in `docs/business-model.md`; the business
-lives in the **Team/Business** tier, sold on control, compliance, and support —
-never on cloud lock-in. These are the first two paid features, both built on the
+The moat and pricing model live in `docs/business-model.md`: Ghost is
+**$79/month per seat, flat** — every seat gets the same product, there is no
+separate paid tier to unlock. These are the two features most worth building
+next because they deepen the moat and the switching cost, both built on the
 already-shipped Organizer trust pipeline (rule-attributed, exportable audit
 landed in #96). Both stay **local-first**: policy packs and compliance exports
 are files the user owns, distributed however the firm likes — no cloud required.
 
-Neither crosses a privacy boundary in this doc or `CLAUDE.md`; each ships as a
-labeled/gated capability whose *tier* (not whose safety) is what's paid.
+Neither crosses a privacy boundary in this doc or `CLAUDE.md`.
 
-### 6. Audit as a compliance artifact (first paid hook)
+### 6. Audit as a compliance artifact
 
-Turn the local audit log from a debug view into a record a bookkeeper or auditor
-can rely on and hand to a third party.
+Turn the local audit log from a debug view into a record the ops lead or an
+auditor can rely on and hand to a third party.
 
 - **Retention controls** — keep-last-N-runs / keep-N-days, user-configurable.
   **Shipped**: `config.audit` bounds (default keep-all) enforced by
@@ -150,14 +159,16 @@ can rely on and hand to a third party.
   can verify it wasn't altered. *Remaining §6 work* (the hash chain is the
   substrate it builds on).
 
-Why it's the first hook: the wedge persona (bookkeepers, practice admins) already
-thinks in "what moved, and can I show it" — this is a feature they understand and
-pay for, and it can't be pirated the way a binary can.
+Why it matters: the wedge persona (the ops lead at a small wealth-management or
+accounting firm) already thinks in "what moved, and can I show it" — this is a
+feature they understand and value, included at every seat, not gated behind a
+separate tier.
 
-### 7. Team policy templates (the per-seat entry point)
+### 7. Shared policy templates (the multi-seat expansion path)
 
-The first thing a bookkeeping *firm* pays per-seat for: define a boundary once,
-distribute it to the team, and keep it from being silently weakened.
+What makes the second, third, and fourth seat at the same firm an easy yes once
+the first ops lead trusts Ghost: define a boundary once, distribute it, and keep
+it from being silently weakened.
 
 - **Policy packs** — exportable/importable Zone + folder-rule + trust bundles
   (composes the existing `organizer_create_zone` / `organizer_add_folder_rule`
@@ -167,17 +178,18 @@ distribute it to the team, and keep it from being silently weakened.
   engine already enforces trust server-side, so this is distribution + a lock
   flag, not a new trust mechanism).
 - **Shared playbook library** — an internal, curated set of packs; the seed of
-  the later public marketplace, team-first.
+  the later public marketplace.
 
-Distribution is local-first (a file over a shared drive or MDM); a Team tier can
-*offer* an optional E2E-encrypted sync/relay add-on, but never require it.
+Distribution is local-first (a file over a shared drive); an optional
+E2E-encrypted sync/relay add-on may come later, but is never required.
 
 ### Sequencing (from `docs/business-model.md`)
 
 Deepen switching cost (routines/Zones as the user's IP) → **§6 audit as
-compliance artifact** → **§7 Team policy templates** → marketplace → only then
-publish pricing, and only with a real time-to-value number from the local
-`organizer_time_to_value` instrumentation.
+compliance artifact** → **§7 shared policy templates** → marketplace, once the
+wedge has real referenceable users. Pricing ($79/seat, flat) is already
+published — the remaining work is proving time-to-value with real
+instrumentation (`organizer_time_to_value`), not gating pricing on it.
 
 ## Product modes
 

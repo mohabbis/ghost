@@ -1,5 +1,12 @@
 # Ghost YC-Style Audit and Next Steps
 
+> **Status:** this is a point-in-time audit. Its ICP exploration (below) has
+> since been resolved — Ghost's positioning is now the ops lead at a 10–50
+> person wealth-management or accounting firm barred from cloud automation by
+> client-confidentiality policy, at $79/seat flat (see `CLAUDE.md`, "Product
+> identity"). Historical findings are left as-is rather than rewritten; treat
+> the "recommended beachhead options" and ICP sections as superseded.
+
 ## One-line thesis
 
 Ghost should not try to be a general autonomous desktop agent yet. The wedge is: **a local-first recorder/replayer that makes one painful, repetitive desktop workflow reliable enough that a non-technical user trusts it weekly.**

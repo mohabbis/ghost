@@ -7,9 +7,10 @@ moat and how Ghost makes money as a local-first app, see
 
 ## Beachhead persona
 
-**Bookkeepers, practice admins, and finance-adjacent solo professionals** who
-file client documents every week — invoices, receipts, and statements pulled
-from portals into a mess of Downloads folders.
+**The ops lead at a 10–50 person wealth-management or accounting firm** who
+files client documents every week — invoices, receipts, and statements pulled
+from portals into a mess of Downloads folders — and has been explicitly told
+"we cannot put client data through a cloud tool."
 
 Why this persona:
 
@@ -21,8 +22,9 @@ Why this persona:
   classification, dated renaming, the client-filing preset, and the guided-setup
   wizard (`organizerRunWizard` in `src/main.js`).
 
-Do **not** broaden to "everyone with a messy Downloads folder" in messaging yet.
-The general case is the demo; the bookkeeper is the buyer.
+Do **not** broaden to "everyone with a messy Downloads folder," "SMBs," or
+"professionals" in messaging. The general case is the demo; the ops lead barred
+from cloud tools is the buyer.
 
 ## Positioning
 
@@ -67,10 +69,11 @@ Measure first, then publish (per `CLAUDE.md`: no promises the app can't support)
 
 ## Channels
 
-- Bookkeeper / accounting-tech communities (e.g. r/Bookkeeping, r/smallbusiness,
-  practice-management forums, accounting-software subreddits).
-- Accounting-tech newsletters and creators.
-- Product Hunt launch, framed around the trust model + the bookkeeper niche.
+- Wealth-management and accounting-firm operations communities (practice-
+  management forums, RIA/CPA-firm ops groups, accounting-tech newsletters and
+  creators) — not general small-business or bookkeeping subreddits.
+- Product Hunt launch, framed around the trust model + the client-confidentiality
+  angle (cloud tools structurally disqualified; Ghost isn't).
 - The marketing site's existing `#client-filing` section and client-filing demo
   tab are the on-site conversion surface; keep them in sync with shipped product.
 

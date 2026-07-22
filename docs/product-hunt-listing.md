@@ -22,7 +22,7 @@ Ghost
 Optional subtitle under the name (PH “tagline” field is separate):
 
 ```text
-Desktop automation for financial-services teams
+Client-data automation that never leaves your machine
 ```
 
 ---
@@ -52,9 +52,9 @@ Do **not** use agent / RPA / “autonomous” framing in the tagline.
 Paste-ready:
 
 ```text
-Ghost is local-first desktop automation for finance and ops teams.
+Ghost automates client-data workflows for the ops lead at a small wealth-management or accounting firm — without the data ever leaving the machine.
 
-Finance still moves numbers between spreadsheets by hand. One transposed digit can hide until the close. Ghost records that transfer once, then replays it on your Mac or PC — and verifies every value against what you approved. A mismatch halts the run before the wrong number lands.
+Cloud automation tools like Zapier and Make are banned outright by client-confidentiality policy. Ghost is the thing they're structurally disqualified from doing: it records a client-data transfer once, then replays it on your Mac or PC — and verifies every value against what you approved. A mismatch halts the run before the wrong number lands.
 
 Trust pipeline, not a silent agent:
 Record → Inspect → Approve → Replay → Verify → Audit → Undo
@@ -67,7 +67,7 @@ What you get today (technical preview v2.0.3):
 • Audited, reversible runs
 • Ghost Organizer for safe local file filing (supporting capability)
 
-No account required. Workflows stay on your machine by default.
+No account required. Client data stays on your machine by default. $79/month per seat, flat.
 
 Honest scope: today Ghost verifies per step (the approved value landed in the field). Full source-vs-destination reconciliation is roadmap — not claimed for this launch.
 ```
@@ -75,7 +75,7 @@ Honest scope: today Ghost verifies per step (the approved value landed in the fi
 Shorter variant (~PH character comfort):
 
 ```text
-Local-first desktop automation for finance teams. Record a repetitive spreadsheet or data-transfer once, approve the plan, then replay it on your Mac or PC. Ghost verifies each value against what you approved and halts on a mismatch — so a transposed digit stops at the keystroke, not in the close. Audited and reversible. Technical preview v2.0.3. No account required.
+Client-data automation for the ops lead at a small wealth-management or accounting firm — barred from cloud tools by confidentiality policy, so Ghost runs entirely on your Mac or PC. Record a data transfer once, approve the plan, then replay it. Ghost verifies each value against what you approved and halts on a mismatch. Audited and reversible. $79/seat, flat. Technical preview v2.0.3. No account required.
 
 Not an autonomous agent, cloud RPA, or silent computer takeover. Approve-before-act is table stakes; catching the error is the wedge.
 ```
@@ -100,9 +100,9 @@ PH topic picks (choose up to what the form allows; prefer exact matches when ava
 Suggested freeform / keyword tags:
 
 ```text
-desktop automation, local-first, finance ops, spreadsheet automation,
-data entry, verification, audit trail, undo, macOS, windows,
-technical preview, bookkeeping, trust pipeline
+desktop automation, local-first, client data automation, wealth management,
+accounting firm, data entry, verification, audit trail, undo, macOS, windows,
+technical preview, trust pipeline
 ```
 
 Avoid: “AI agent”, “RPA replacement”, “SOC 2”, “compliance certified”,
@@ -118,7 +118,7 @@ line only if you later ship a signed EXE.
 ```text
 Hey Product Hunt 👋
 
-I’m the maker of Ghost — local-first desktop automation for finance and ops teams who still re-key numbers between spreadsheets.
+I’m the maker of Ghost — local-first automation for the ops lead at a small wealth-management or accounting firm who's been told "we cannot put client data through a cloud tool."
 
 The pitch in one line: you typed 12,900; the sheet says 12,090. Ghost catches it at the keystroke.
 

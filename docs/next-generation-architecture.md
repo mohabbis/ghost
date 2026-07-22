@@ -4,7 +4,7 @@
 
 Ghost's long-term architecture is the trusted execution layer between AI reasoning systems and a user's local digital workspace. AI systems reason, Ghost verifies, the user approves, and deterministic code executes.
 
-Ghost is not another AI assistant. Ghost is the operating system for safe AI actions: a vendor-neutral execution engine where every filesystem operation is planned, reviewed, approved, audited, and reversible.
+Ghost is not another AI assistant. It is a vendor-neutral execution engine where every filesystem operation is planned, reviewed, approved, audited, and reversible — never a category-level "operating system" claim; see `CLAUDE.md`'s "Product identity" and kill list.
 
 ## Product mission
 

@@ -11,7 +11,7 @@ Ghost is a **local-first, deterministic, auditable desktop automation engine** f
 - NOT a cloud-first service.
 - NOT a macro recorder that replays blind coordinates.
 - NOT Zapier/Make (which handle cloud APIs well, not local desktop workflows).
-- NOT enterprise RPA (which is expensive and overbuilt for SMBs).
+- NOT enterprise RPA (which is expensive and overbuilt for a small firm's ops lead).
 
 Ghost is for **deterministic, auditable, user-approved desktop automation**.
 
@@ -139,7 +139,8 @@ If added (Phase 3+, gated):
 Why not:
 - User approval is the product.
 - Scheduled/background execution without review is a trust violation.
-- SMBs (the target wedge) want control, not automation "magic."
+- The ops lead at a small wealth-management or accounting firm wants control, not
+  automation "magic."
 
 If added (very future, heavily gated):
 - Require explicit policy authoring and review.
@@ -243,7 +244,7 @@ When added (Phase 1 after MVP is proven):
 
 Ghost Organizer is boring on purpose. Why?
 
-1. **High frequency** — Bookkeepers do this every week.
+1. **High frequency** — the ops lead does this every week.
 2. **Sensitive** — Financial files demand audit and undo.
 3. **Clear UX** — Folder previews are familiar.
 4. **Measurable ROI** — 2–3 hours/week saved is easy to quantify.
