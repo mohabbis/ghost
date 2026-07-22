@@ -6,59 +6,55 @@
 [![Windows](https://img.shields.io/badge/Windows-10/11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/tag/v2.0.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Ghost automates client-data workflows without the data ever leaving the machine** — the thing
-> cloud automation tools are structurally disqualified from doing.
+> **Ghost safely organizes messy local folders without the data ever leaving the machine.**
+> It scans a folder you choose, proposes an exact move/rename plan, waits for approval,
+> executes deterministically, writes an audit log, and can undo the run.
 
-Ops and admin staff at small finance, accounting, and advisory firms lose hours a day moving
-client data between email, PDFs, and their CRM or portfolio system by hand — because cloud
-automation tools like Zapier and Make are banned outright by client-confidentiality policy. Ghost
-records that transfer once, then **replays it on your Mac or PC and verifies every value against
-the one you approved**. A mismatch halts the run. Every change is audited, receipted, and
-reversible.
+Ghost starts with a job almost every operator understands: making sense of messy Downloads,
+client folders, month-end exports, PDFs, screenshots, and handoff packets without risking a
+silent delete or overwrite. The product wedge is **Ghost Organizer** because it proves the
+trust pipeline in minutes before asking users to trust broader desktop replay.
 
-**Who it's for:** the ops lead at a 10–50 person wealth-management or accounting firm who's been
-told "we cannot put client data through a cloud tool."
+**Who it's for first:** people accountable for recurring operational files — small-business
+operators, finance/accounting/admin staff, consultants handling client deliverables, and founders
+whose local folders have become the system of record.
 
-Ghost is **not** a generic AI agent, a context layer, or an RPA clone. AI may propose; deterministic
-code executes only the plan you approved — on your machine — and checks its own work before you
-sign off.
+Ghost is **not** a generic AI agent, a context layer, or an RPA clone. AI may suggest categories
+or filenames; deterministic code executes only the plan you approved — on your machine — and
+writes undo data before mutation.
 
 ---
 
 ## The wedge
 
 ```text
-Record → Inspect → Approve → Replay → Verify → Receipt → Undo
+Select folder → Scan → Propose plan → Review → Approve → Move/Rename → Audit → Undo
 ```
 
-- **Record** — capture the re-keying or copy-across you do every period (visible capture only).
-- **Inspect** — raw input compresses into readable steps ("set B7 · Revenue → 48,210.00"), not
-  opaque coordinates. Typed text is redacted by default; secrets are dropped.
-- **Approve** — deny-by-default. Every step, and the value it will write, needs your consent.
-- **Replay** — deterministic code runs the approved plan (semantic UI resolution preferred;
-  coordinates are fallback only).
-- **Verify** — *per-step*: confirm the approved value actually landed; observed ≠ expected halts
-  the run.
-- **Receipt** — the whole run seals into an on-device execution receipt.
-- **Undo** — undo data is written before reversible changes, so one click puts things back.
+- **Select folder** — the user chooses the source folder; no background file watching.
+- **Scan** — Ghost reads local file metadata inside the approved boundary.
+- **Propose plan** — deterministic planner suggests folders, moves, and dated renames.
+- **Review** — every before/after path is visible, with conflicts and low-confidence items called out.
+- **Approve** — nothing mutates until the final plan is explicitly approved.
+- **Move/Rename** — executor re-checks policy and boundaries before applying changes.
+- **Audit** — the run is saved into a local audit chain.
+- **Undo** — reversible operations write undo data before execution.
 
-**Honest scope:** verification today is per-step (the value you approved landed in the field).
-Full **source-vs-destination reconciliation** is roadmap — not shipped.
+See [docs/product-direction.md](docs/product-direction.md) for the Organizer-first product decision.
 
 ## What Ghost does today
 
-### Record → approve → replay → verify (flagship)
+### Organizer (flagship)
 
-Record a data-entry routine once. Ghost compresses it into semantic steps you review and approve,
-then replays them — preferring semantic UI resolution (macOS Accessibility `set_value`,
-window-relative targeting, pixel template match) with coordinates as last resort. Each step is
-verified as it runs, the run is interruptible, a receipt is sealed, and undo data is written first.
+Point Ghost at a folder or Zone. It scans read-only, proposes moves and dated renames, detects
+conflicts, and **never overwrites or deletes silently**. Approve → execute → audit chain →
+one-click undo. This is the product wedge to improve first.
 
-### Organizer (supporting)
+### Record → approve → replay → verify (trust-core capability)
 
-Point Ghost at a folder. It scans read-only, proposes moves and dated renames, detects conflicts,
-and **never overwrites or deletes silently**. Approve → execute → audit chain → one-click undo.
-Supporting capability for tidy outputs — not the headline product.
+Record/replay remains part of Ghost's long-term trust core, but it should not be the default
+product promise until reliability, verification, receipts, and undo paths are stronger across real
+macOS and Windows workflows.
 
 ### Trust pipeline
 

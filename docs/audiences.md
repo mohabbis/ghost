@@ -1,42 +1,50 @@
 # Ghost — Audiences
 
-Ghost has one buyer and one flagship workflow. Everything on the public surface
-reinforces the same story; capability that serves a different persona stays off
-the front page until the wedge has real, referenceable users.
+Ghost's current product wedge is **Ghost Organizer**. The first buyer is anyone
+accountable for recurring operational files who needs a safe cleanup plan, not a
+silent autonomous agent.
 
-**Primary buyer:** the ops lead at a 10–50 person wealth-management or accounting
-firm who has been explicitly told "we cannot put client data through a cloud
-tool." Not "SMBs." Not "professionals." That specific person, with that specific
-constraint.
+**Primary buyer:** small-business operators and finance/accounting/admin staff
+who repeatedly handle client folders, Downloads, month-end exports, PDFs,
+screenshots, and handoff packets.
 
-**Price:** $79/month per seat. Flat — no tiers, no "contact sales."
+**Price hypothesis:** $79/month per seat. Keep it flat while validating
+willingness to pay; do not add tiers or “contact sales” until there are
+reference users and a support motion.
 
-**Flagship workflow:** *client data stuck in email/PDFs → automated, verified
-transfer into the CRM or portfolio system → human reviews the exceptions.* Ghost
-records the re-keying/copy-across you do every period, replays it, verifies every
-value against what you approved, and halts on any mismatch so a bad figure never
-flows downstream — entirely on the machine, because cloud automation tools
-(Zapier, Make, etc.) are structurally disqualified by client-confidentiality
-policy.
+**Flagship workflow:** *messy local folder → reviewed cleanup plan → approved
+move/rename → audit trail → undo.* Ghost scans only the selected folder/Zone,
+previews every action, flags conflicts, never silently deletes or overwrites,
+and writes undo data before mutation.
 
-Its value is the **trust pipeline** — record → review → approve → replay →
-verify → undo — applied to the one class of work where a single wrong number is
-expensive, a clean audit trail is not optional, and the data cannot leave the
-building.
+Its value is the **trust pipeline** — select → scan → propose → review →
+approve → execute → audit → undo — applied to local files where a bad move or
+overwrite is costly and users need confidence before trusting broader automation.
 
 ## Who Ghost is for
 
+### The operator with recurring messy folders
+
+- **Job to be done:** clean up Downloads, client folders, export folders,
+  month-end packets, screenshots, PDFs, and handoff directories without losing
+  track of what moved.
+- **Serving features:** Organizer Zones; scan/preview; deterministic filing
+  profiles; conflict and low-confidence detection; audited execution; one-click
+  undo.
+- **Top concern:** Ghost must not silently delete, overwrite, upload, or move
+  files outside the approved boundary. The user needs a readable plan and proof
+  of what changed.
+
 ### The ops lead at a small wealth-management or accounting firm
 
-- **Job to be done:** moving client data between email, PDFs, and the firm's
-  CRM/portfolio system — month-end re-keying, bank/statement exports and
-  workbooks, recurring reconciliations and report prep.
-- **Serving features:** Record → replay with per-step verification (the value you
-  approved actually landed); the tamper-evident audit chain and undo journal; the
-  `Finance` filing profile + period foldering for the documents produced.
-- **Top concern:** client data is barred from cloud tools by firm policy, so it
-  never leaves the machine; a human approves every change; a wrong value is
-  caught before it ships; there is a durable, reversible audit trail.
+- **Job to be done:** keep client documents, statements, exports, and
+  workpapers filed into predictable folders before or after month-end data-entry
+  routines.
+- **Serving features:** the `Finance` filing profile + period foldering,
+  Organizer audit chain, undo journal, and later record/replay for verified
+  re-keying once the broader automation surface is ready.
+- **Top concern:** client data stays local; a human approves every change;
+  mistakes can be audited and reversed.
 
 ## Cross-audience guarantees
 
@@ -46,8 +54,8 @@ Every user gets the same non-negotiables:
   build; regulated data never leaves the machine;
 - assist-not-autonomy: AI may *suggest*; the deterministic core executes only what
   the user approved;
-- verify before commit: each step confirms the approved value landed; a mismatch
-  halts the run;
+- review before commit: each file move/rename is previewed, conflicts are
+  flagged, and execution is denied unless policy passes;
 - no silent delete, no silent overwrite; audit written, undo available for
   reversible operations.
 
@@ -56,10 +64,8 @@ Every user gets the same non-negotiables:
 - A fully autonomous agent that acts without review — Ghost is human-in-the-loop.
 - Cloud-first / multi-user collaboration — Ghost is local-first.
 - Background observation of email, browser, or screen — Ghost does not do it.
-- General-purpose file cleanup for every persona (students, household, legal,
-  freelancers, developers). Ghost *can* file those documents safely — the
-  Organizer trust pipeline is audience-neutral — but that is a supporting
-  capability, not who we position for or build features around.
+- Broad desktop control as the first promise. Record/replay remains a trust-core
+  capability, but Organizer is the first product wedge.
 - "Workflow automation" or an "operating system" — one product, one workflow, not
   a category-level platform.
 - A multi-provider LLM routing platform — which model runs underneath isn't the
