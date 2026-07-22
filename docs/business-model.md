@@ -26,9 +26,9 @@ below.
    "agentic employees", and the general autonomous-agent wave) are structurally
    committed to running in the cloud and holding the user's credentials. They
    **cannot** offer "your data and logins never leave your machine" without
-   becoming a different company. Every buyer who *cannot* send data to a vendor
-   cloud — regulated finance/legal/health, government, EU/GDPR-bound, and
-   privacy-conscious SMBs — is ours by construction, not by feature parity. This
+   becoming a different company. The ops lead at a small wealth-management or
+   accounting firm who has been explicitly told "we cannot put client data
+   through a cloud tool" is ours by construction, not by feature parity. This
    is architecture the incumbent can't copy, which is the only kind of moat that
    survives a better-funded competitor.
 
@@ -46,7 +46,7 @@ below.
      wizard, presets, and Ghost Routines matter beyond UX: they are
      switching-cost factories.)
    - **Audit history as a compliance record** they can't recreate elsewhere.
-   - **Weekly-habit integration** for the bookkeeper wedge.
+   - **Weekly-habit integration** for the ops-lead wedge.
 
 4. **A routine/template marketplace = a network effect bolted onto a local
    app.** The app runs locally; the *sharing layer* is networked. Community and
@@ -54,13 +54,16 @@ below.
    Raycast Store / VS Code extensions / Alfred workflows pattern. This is how
    local-first earns a network effect without cloud lock-in.
 
-5. **Vertical depth.** Being the *best* at the bookkeeper filing job (deep
-   classification, the exact presets, compliance-grade audit export) beats a
-   horizontal cloud agent on that niche's real pains. Depth is a moat via focus.
+5. **Vertical depth.** Being the *best* at the client-filing job for a small
+   wealth-management or accounting firm (deep classification, the exact
+   presets, compliance-grade audit export) beats a horizontal cloud agent on
+   that niche's real pains. Depth is a moat via focus.
 
 ## Proof it's not hopeless — local-first that monetizes
 
-These are the comps to reason from, not cloud-SaaS playbooks:
+These are comps for the *thesis* (local-first can be a sustainable business),
+not a pricing template — Ghost deliberately does not copy their tiering (see
+below):
 
 - **Obsidian** (closest analog): free for personal use, paid **Commercial
   license** for business use, paid **Sync** (E2E-encrypted — you sell the relay,
@@ -73,23 +76,23 @@ These are the comps to reason from, not cloud-SaaS playbooks:
   lock-in.
 - **Tailscale / Syncthing**: local-first with freemium + team monetization.
 
-## The model — tiered, land on the wedge, monetize the firm
+## The model — one price, land on the wedge, expand seat-by-seat
 
-| Tier | Who | Price shape | What unlocks | Why they pay |
-|---|---|---|---|---|
-| **Free / Personal** | Individuals tidying their own machine | $0 | Organizer core: scan → plan → approve → move/rename → audit → undo | Adoption + trust; the top of funnel and the credibility engine |
-| **Pro** | Prosumers, solo bookkeepers | subscription (Raycast/Obsidian band) | Unlimited Zones/routines, all presets, audit export + longer retention, priority builds, E2E sync across *your own* devices (paid relay, data stays encrypted) | Save real weekly hours; keep a portable compliance record |
-| **Team / Business** | Bookkeeping firms, practices, MSPs — **the revenue engine** | per-seat | Shared/managed policy templates, org-wide trust rules, team playbook library, exportable audit across the team, SSO, MDM/enterprise deployment, signed builds, support/SLA | Businesses pay for **control, compliance, and support** — not for cloud. This is where local-first monetizes best |
-| **Add-ons** | Any tier | usage/one-off | Verified marketplace premium templates (rev-share with authors), enterprise onboarding | Marketplace network effect + author ecosystem |
+Ghost is **$79/month per seat, flat** — no tiers, no "contact sales," no
+enterprise pricing page (see `CLAUDE.md` "Product identity"). Priced to be
+expensable by the ops lead without a manager's signoff, and high enough to
+cover LLM spend.
 
-Complementary licensing option (Obsidian-proven, low friction): **free for
-personal use, paid commercial-use license** — cleaner than metering for a
-prosumer desktop tool.
+| Who | What they get | Why they pay |
+|---|---|---|
+| The ops lead at a 10–50 person wealth-management or accounting firm | The full trust pipeline: Organizer core, Zones/routines, all filing presets, exportable/tamper-evident audit, undo | Client data barred from cloud tools by firm policy; this is the only automation option that's structurally allowed |
+| Additional seats at the same firm | Same product, same price per seat | Land with one ops lead (see `gtm-organizer.md`), expand seat-by-seat into the firm as trust compounds |
 
-Sequencing: **Free individual → Pro → Team.** Land with bookkeepers (see
-`gtm-organizer.md`), then expand seat-by-seat into the firm. Do **not** try to
-monetize the individual heavily; monetize control and compliance at the team
-level.
+There is no free tier, no usage metering, and no separate "Team" SKU — every
+seat gets the same product at the same price. Firm-wide rollout is a matter of
+adding seats, not upgrading a tier. This keeps the pitch honest to the kill
+list in `CLAUDE.md`: no enterprise motion (SSO, compliance questionnaires,
+"contact sales") until real pull justifies it, not before.
 
 ## What we do NOT do (protect the moat)
 
@@ -107,8 +110,8 @@ level.
 |---|---|
 | OS vendors build it in (Shortcuts, Power Automate, Recall) | Cross-app depth, trust brand, and verticals the OS won't serve; be the reviewable/audited layer they aren't |
 | Cloud agents add an "on-prem / local" mode | Architecture-deep counter-positioning + an earned trust brand aren't a checkbox; our whole stack is deny-by-default and reviewable, theirs is retrofitted |
-| Low willingness to pay for a consumer utility | Revenue is B2B/Team where paying for control + compliance + support is normal; Free/Personal is funnel, not the business |
-| Piracy of the binary | Team/compliance value (SSO, managed policy, support, audit retention) can't be pirated; that's where the money is |
+| Low willingness to pay for a consumer utility | Revenue is per-seat at firms where paying for control + compliance is normal; there is no free tier funneling low-intent individuals |
+| Piracy of the binary | Compliance value (audit retention, tamper-evidence, exportable reports) can't be pirated; that's where the value is, not a locked-away SSO tier |
 
 ## Near-term, revenue-relevant build order
 
@@ -116,14 +119,19 @@ level.
    user's accumulating IP (export/import, naming, reuse). Every configured Zone
    should raise the cost of leaving.
 2. **Make the audit log a compliance artifact**: retention, tamper-evidence, and
-   a clean exportable report — the paid Team/compliance hook. (Rule-attributed
-   export already shipped in #96; build retention + report formatting on top.)
-3. **Prototype the Team layer**: shared policy/playbook templates and org-wide
-   trust rules — the first thing a bookkeeping *firm* pays per-seat for.
+   a clean exportable report — every seat gets this, it is not a locked tier.
+   (Rule-attributed export already shipped in #96; build retention + report
+   formatting on top.)
+3. **Prototype shared policy templates**: shared policy/playbook templates and
+   org-wide trust rules — what makes a second, third, and fourth seat at the
+   same firm an easy yes once the first ops lead trusts Ghost.
 4. **Stand up a routine/template marketplace** (even read-only/community first)
-   to seed the network effect and author ecosystem.
-5. **Only then** publish pricing, and only with the time-to-value number earned
-   from local instrumentation (`organizer_time_to_value`) — not before.
+   to seed the network effect and author ecosystem — later, once the wedge has
+   real referenceable users, not a near-term dependency for revenue.
 
-The first two paid features (audit-as-compliance-artifact, Team policy templates)
-are scoped as concrete work in `docs/PRODUCT_ROADMAP.md` §6–§7.
+Pricing ($79/seat, flat) is already published — see `CLAUDE.md`. The remaining
+work here is proving time-to-value with real instrumentation
+(`organizer_time_to_value`), not gating pricing on it.
+
+The first paid-relevant feature (audit-as-compliance-artifact) is scoped as
+concrete work in `docs/PRODUCT_ROADMAP.md` §6.

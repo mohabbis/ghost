@@ -208,7 +208,7 @@ Every error includes context:
 
 ### CSV Export
 
-For spreadsheet analysis by bookkeepers and admins:
+For spreadsheet analysis by the ops lead or an admin:
 
 **Filename**: `ghost-audit-YYYY-MM-DD.csv`
 

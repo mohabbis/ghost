@@ -335,7 +335,7 @@ Each audit entry includes:
 This creates a tamper-evident chain. If any entry is modified, the hashes break, and the tampering is obvious.
 
 **Export formats**:
-- **CSV** (for bookkeepers and admins):
+- **CSV** (for the ops lead or an admin):
   - Timestamp, Workflow, Operations summary, Success, Duration, Undo available
 - **JSON** (for technical users):
   - Full audit entry with all fields

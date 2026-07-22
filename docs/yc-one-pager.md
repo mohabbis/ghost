@@ -5,7 +5,7 @@
 
 ## Problem
 
-Finance and ops teams still move numbers between spreadsheets and systems by hand. A mistyped or mis-pasted figure is expensive — and it usually surfaces in the close, after it has already flowed downstream. Macro recorders replay blindly. Cloud RPA and “AI agents” often ask for approval of a plan but do not verify that the approved value actually landed.
+Ops/admin staff at small finance, accounting, or boutique advisory firms lose 2+ hours a day manually moving client data between email, PDFs, and their CRM or portfolio system — because cloud automation tools (Zapier, Make, etc.) are banned outright by client-confidentiality policy. A mistyped or mis-pasted figure is expensive — and it usually surfaces in the close, after it has already flowed downstream. Macro recorders replay blindly. Cloud RPA and “AI agents” often ask for approval of a plan but do not verify that the approved value actually landed — and they're structurally disqualified from this buyer anyway.
 
 ## Solution
 
@@ -21,11 +21,12 @@ Differentiator: “Approve before it acts” is table stakes. Ghost’s wedge is
 
 ## Wedge
 
-**Vertical:** financial-services / finance-ops teams.  
-**Flagship workflow:** cross-sheet / cross-system data entry with verification.  
+**Customer:** the ops lead at a 10–50 person wealth-management or accounting firm who has been explicitly told "we cannot put client data through a cloud tool." Not "SMBs." Not "professionals."  
+**Price:** $79/month per seat, flat — no tiers, no "contact sales."  
+**Flagship workflow:** moving client data between email, PDFs, and the CRM/portfolio system, with per-step verification.  
 **Supporting capability:** Ghost Organizer (scan → plan → approve → move/rename → audit → undo) — keeps outputs tidy; not the headline.
 
-Not positioning as: generic autonomous agent, chatbot, RPA clone, or silent computer takeover.
+Not positioning as: generic autonomous agent, chatbot, RPA clone, silent computer takeover, "workflow automation," an "operating system," or a multi-provider LLM routing platform.
 
 ## Why now
 
@@ -55,4 +56,4 @@ Intent → Plan → Policy check → User approval → Execution → Audit log �
 
 ## Ask
 
-Dogfood with finance teams who live in spreadsheets weekly; measure whether a verified transfer (especially a halted mismatch) builds trust in one session. Demo script: `docs/launch-demo-script.md`.
+Dogfood with ops leads at small wealth-management and accounting firms who move client data weekly; measure whether a verified transfer (especially a halted mismatch) builds trust in one session. Demo script: `docs/launch-demo-script.md`.

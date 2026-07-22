@@ -4,7 +4,7 @@
 
 Recruit 10 beta users by end of Month 4 (private beta), with 3 converting to paid pilots.
 
-**Target profile**: Bookkeepers, practice admins, office managers (individuals or small teams).
+**Target profile**: the ops lead at a 10–50 person wealth-management or accounting firm who's been told "we cannot put client data through a cloud tool."
 
 ---
 
@@ -15,10 +15,10 @@ Recruit 10 beta users by end of Month 4 (private beta), with 3 converting to pai
 #### 1. Direct Outreach (Best ROI)
 
 **Target list** (20 cold outreach attempts):
-- Local accounting practices (5-person firms)
-- Bookkeeping consultants on LinkedIn
-- Practice manager networks
-- Small business owner communities (Facebook, Reddit)
+- Small wealth-management and accounting firms (10–50 person practices)
+- Ops leads / practice managers at RIA and CPA firms on LinkedIn
+- Practice-management networks for firms with client-confidentiality policies
+- Compliance-conscious firm communities (not general small-business forums)
 
 **Template**:
 ```
@@ -29,8 +29,9 @@ Hi [Name],
 I'm building Ghost, a tool that lets you organize files safely—
 with a preview before anything changes, and an undo button if needed.
 
-It's built for bookkeepers and admins who spend hours each week
-renaming PDFs and moving files around.
+It's built for the ops lead at small wealth-management and accounting firms
+who spend hours each week moving client data because their firm's
+confidentiality policy bans cloud automation tools.
 
 We're looking for 10 beta testers. Interested in trying it for free?
 No commitment. You can cancel anytime.
@@ -44,7 +45,7 @@ Let me know?
 
 #### 2. LinkedIn Cold Outreach (5-10 connections)
 
-Search: "bookkeeper", "practice manager", "office manager" + small business
+Search: "operations manager", "practice manager" + "wealth management" or "accounting firm"
 
 Message:
 ```
@@ -64,33 +65,34 @@ No pressure if not, but I'd love to get your feedback.
 
 #### 3. Communities & Forums (Passive, but good quality)
 
-- **Reddit**: r/Bookkeeping, r/Accounting, r/smallbusiness
-  - Post: "Built a tool for organizing files safely. Recruiting 10 beta testers."
+- **Reddit**: r/Bookkeeping, r/Accounting (compliance-adjacent, not general small-business)
+  - Post: "Built a tool for organizing client files safely, without a cloud tool. Recruiting 10 beta testers."
   - Be honest about limitations ("This is MVP; features are limited.")
-  
-- **Slack Communities**: SmallBizCrew, Founders, Indie Hackers
+
+- **Practice-management communities**: RIA/CPA-firm ops networks, accounting-tech Slack/Discord groups
   - Introduce Ghost
   - Link to landing page
   - Monitor for genuine interest
 
-- **Facebook Groups**: Bookkeepers, Small Business Owners, Admin/Operations
+- **LinkedIn / professional groups**: wealth-management and accounting-firm operations
   - Share testimonial clips (later, after first users)
   - "Looking for beta testers"
 
 #### 4. Email Warm Intros (Through network)
 
 Ask your network for warm intros to:
-- Bookkeepers they know
-- Small business owners who complain about file chaos
-- Accountants managing teams
+- Ops leads at small wealth-management or accounting firms
+- Firm owners who complain about client-data handling under confidentiality policy
+- Practice managers at firms managing teams
 
 Warm intro script:
 ```
 Hi [Mutual Friend],
 
 I'm introducing you to [Name]. They're building Ghost, a tool for
-organizing files safely. It's for bookkeepers and admins who are
-tired of spending Fridays renaming PDFs.
+moving client data safely without a cloud tool. It's for ops leads at
+small wealth-management and accounting firms who are barred from
+Zapier/Make by client-confidentiality policy.
 
 Would you be up for trying the beta?
 
@@ -122,7 +124,7 @@ Would you be up for trying the beta?
 - **Direct access** to founder for support
 - **Early access** to new features
 - **Credit in launch**: "Thank you to our beta testers: [names]"
-- **Lifetime discount** (30% off Pro) for early believers
+- **Lifetime discount** (30% off the $79/seat price) for early believers
 
 ---
 
@@ -161,7 +163,7 @@ Any bugs or suggestions?
 - How are you using Ghost?
 - What's your biggest pain point with file organization?
 - What would make Ghost valuable enough to pay for?
-- Would you pay $12/month? $25/month? $50/month?
+- Would $79/month per seat be a fair price for this?
 - Who else should I talk to?
 ```
 
@@ -213,8 +215,8 @@ Solution:
   [Video Demo] (60 seconds)
 
 Social Proof:
-  "Ghost saved me 2 hours every Friday." — Sarah, Bookkeeper
-  "Finally, automation I trust." — Mike, Practice Admin
+  "Ghost saved me 2 hours every Friday." — Sarah, Ops Lead
+  "Finally, automation I trust with client data." — Mike, Practice Admin
   "No more nervous about organizing client files." — Jen, Office Manager
   
   [Join Beta] [10+ signed up]
@@ -232,7 +234,7 @@ FAQ:
   - Is my data safe? (Local-first, no cloud)
   - Can Ghost delete files? (Blocked by default)
   - What if something goes wrong? (One-click undo)
-  - How much does it cost? (Free beta, Pro tier coming)
+  - How much does it cost? (Free during beta; $79/month per seat, flat, at launch)
 
 CTA:
   Ready to try Ghost?
@@ -293,13 +295,11 @@ From beta users, identify 3-5 candidates:
 
 We're running a paid pilot program for early believers:
 
-$12/month per seat (billed yearly: $99/year)
-or $49/month per team
+$79/month per seat, flat — no tiers, same price whether it's one seat or the
+whole firm
 
 Includes:
-- Unlimited workflows
-- Advanced rules
-- Priority support
+- Everything: unlimited workflows, all rules, priority support
 - 100% money-back guarantee first month
 
 Want to participate? We'd love to have you as a launch customer."
@@ -333,14 +333,15 @@ When applying to YC, Ghost should have:
 ✅ **Traction**: 10 beta users, 5 active, 3 paid pilots
 ✅ **Evidence**: Time saved, NPS, testimonials
 ✅ **Founder-market fit**: You're building something you'd pay for
-✅ **Market**: $5-10B RPA/automation TAM, targeting SMB wedge
+✅ **Market**: $5-10B RPA/automation TAM, targeting small wealth-management and accounting firms barred from cloud automation
 ✅ **Moat**: Deterministic compression + policy engine + undo
 
 ### Demo Script (2 min)
 
 1. **Problem** (20 sec):
-   "Bookkeepers spend 2–3 hours every week organizing invoices
-   and receipts. It's repetitive and sensitive."
+   "The ops lead at a small wealth-management or accounting firm spends 2–3
+   hours every week moving client data by hand, because their firm's
+   confidentiality policy bans cloud automation tools."
 
 2. **Solution** (20 sec):
    "Ghost is the trust layer for desktop automation.
@@ -358,7 +359,7 @@ When applying to YC, Ghost should have:
    - Files restored
 
 4. **Traction** (10 sec):
-   "10 beta users, 5 active, 3 paying $12/month.
+   "10 beta users, 5 active, 3 paying $79/month.
    2–3 hours saved per user per week."
 
 5. **Ask** (5 sec):
@@ -384,7 +385,7 @@ When applying to YC, Ghost should have:
 By end of Month 6, Ghost should have:
 
 - ✅ 10 beta users (with 5 still active)
-- ✅ 3 paying pilots ($12–49/month each)
+- ✅ 3 paying pilots ($79/month per seat each)
 - ✅ 3+ testimonials from real users
 - ✅ Public landing page with 50–100 waitlist signups
 - ✅ Measurable user value (2–3 hrs saved/week)
