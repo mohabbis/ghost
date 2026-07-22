@@ -4,39 +4,39 @@ Ghost has one buyer and one flagship workflow. Everything on the public surface
 reinforces the same story; capability that serves a different persona stays off
 the front page until the wedge has real, referenceable users.
 
-**Primary buyer:** finance and operations teams doing recurring, high-stakes
-data entry by hand.
+**Primary buyer:** the ops lead at a 10–50 person wealth-management or accounting
+firm who has been explicitly told "we cannot put client data through a cloud
+tool." Not "SMBs." Not "professionals." That specific person, with that specific
+constraint.
 
-**Flagship workflow:** *messy manual transfer → automated, verified transfer →
-human reviews the exceptions.* Ghost records the re-keying/copy-across you do
-every period, replays it, verifies every value against what you approved, and
-halts on any mismatch so a bad figure never flows downstream.
+**Price:** $79/month per seat. Flat — no tiers, no "contact sales."
+
+**Flagship workflow:** *client data stuck in email/PDFs → automated, verified
+transfer into the CRM or portfolio system → human reviews the exceptions.* Ghost
+records the re-keying/copy-across you do every period, replays it, verifies every
+value against what you approved, and halts on any mismatch so a bad figure never
+flows downstream — entirely on the machine, because cloud automation tools
+(Zapier, Make, etc.) are structurally disqualified by client-confidentiality
+policy.
 
 Its value is the **trust pipeline** — record → review → approve → replay →
 verify → undo — applied to the one class of work where a single wrong number is
-expensive and a clean audit trail is not optional.
+expensive, a clean audit trail is not optional, and the data cannot leave the
+building.
 
 ## Who Ghost is for
 
-### 1. Bookkeepers & controllers
+### The ops lead at a small wealth-management or accounting firm
 
-- **Job to be done:** the month-end re-keying between systems, bank/statement
-  exports, and workbooks; recurring reconciliations and report prep.
+- **Job to be done:** moving client data between email, PDFs, and the firm's
+  CRM/portfolio system — month-end re-keying, bank/statement exports and
+  workbooks, recurring reconciliations and report prep.
 - **Serving features:** Record → replay with per-step verification (the value you
   approved actually landed); the tamper-evident audit chain and undo journal; the
   `Finance` filing profile + period foldering for the documents produced.
-- **Top concern:** regulated/PII data never leaves the machine, a human approves
-  every change, a wrong value is caught before it ships, and there is a durable,
-  reversible audit trail.
-
-### 2. FP&A & operations analysts
-
-- **Job to be done:** recurring cross-sheet transfers and report assembly where a
-  transposed digit can hide for weeks.
-- **Serving features:** the same record → replay → verify loop; execution receipts
-  that record expected-vs-observed per step; deny-by-default approval.
-- **Top concern:** catching the mismatch at the keystroke, with a defensible record
-  of what ran and what it changed.
+- **Top concern:** client data is barred from cloud tools by firm policy, so it
+  never leaves the machine; a human approves every change; a wrong value is
+  caught before it ships; there is a durable, reversible audit trail.
 
 ## Cross-audience guarantees
 
@@ -60,6 +60,12 @@ Every user gets the same non-negotiables:
   freelancers, developers). Ghost *can* file those documents safely — the
   Organizer trust pipeline is audience-neutral — but that is a supporting
   capability, not who we position for or build features around.
+- "Workflow automation" or an "operating system" — one product, one workflow, not
+  a category-level platform.
+- A multi-provider LLM routing platform — which model runs underneath isn't the
+  pitch.
+- Enterprise motion — SSO, compliance questionnaires, "contact sales" — parked
+  ~18 months out, not now.
 
 ## Scope discipline
 
