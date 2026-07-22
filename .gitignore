@@ -1,1 +1,81 @@
-(src/execution/mapping-review.ts)
+# Documentation backups and temporary files
+*.backup
+*.bak
+*.tmp
+
+# Scratch/analysis markdown artifacts agents drop ad hoc (planning notes,
+# one-off audit summaries) — real docs belong under docs/ and get committed
+# deliberately, not left to accumulate at the repo root.
+*.scratch.md
+*.notes.md
+SCRATCH_*.md
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*
+
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
+
+# Build artifacts
+dist/
+build/
+*.pyc
+*.class
+*.o
+*.exe
+*.dll
+*.so
+*.a
+*.obj
+*.out
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
