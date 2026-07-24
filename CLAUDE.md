@@ -22,7 +22,8 @@ Default behavior:
 
 Ghost is not a general automation platform or an "OS." It is one product solving
 one problem for one customer at one price. Check every downstream decision — code,
-copy, roadmap — against this before proceeding.
+copy, roadmap — against this before proceeding. See `docs/product-direction.md`
+for the underlying Organizer-first product decision and its rationale.
 
 **What Ghost is:** a Tauri 2 / Rust desktop app for macOS and Windows. Local-first —
 no data leaves the machine except through explicit, scoped, opt-in integrations the
@@ -32,15 +33,18 @@ variation in input beyond rigid if-this-then-that macros, but per the Engineerin
 rules below, AI only proposes; deterministic code executes only approved plans.
 Currently developer-preview stage.
 
-**The one problem:** ops/admin staff at small finance, accounting, or boutique
-advisory firms lose 2+ hours a day manually moving client data between email,
-PDFs, and their CRM or portfolio system — because cloud automation tools (Zapier,
-Make, etc.) are banned outright by client confidentiality policy.
+**The one problem:** local files pile up — messy Downloads, client folders,
+month-end exports, PDFs, screenshots, and handoff packets — and cleaning them up
+by hand is slow, while doing it with a cloud tool is a nonstarter for anyone
+handling client or financial data. Ghost Organizer proves a trustworthy
+automation loop on that job in minutes, before asking anyone to trust it with
+broader desktop control.
 
-**The one customer:** the ops lead at a 10–50 person wealth management or
-accounting firm who has been explicitly told "we cannot put client data through a
-cloud tool." Not "SMBs." Not "professionals." That specific person, with that
-specific constraint.
+**The one customer:** people accountable for recurring operational files —
+small-business operators, finance/accounting/admin staff, consultants handling
+client deliverables, and founders whose local folders have become the system of
+record. The common thread: "I need this folder cleaned up safely, and I need
+proof of what changed."
 
 **The one price:** $79/month per seat. Flat. No tiers, no "contact sales," no
 enterprise pricing page. Priced to be expensable without a manager's signoff, and
@@ -48,8 +52,9 @@ high enough to cover LLM spend.
 
 **The pitch:**
 
-> Ghost automates client-data workflows without the data ever leaving the machine —
-> the thing cloud automation tools are structurally disqualified from doing.
+> Ghost safely organizes messy local folders: it scans, proposes a cleanup plan,
+> waits for your approval, moves/renames files, writes an audit log, and can undo
+> the run.
 
 Do not frame Ghost as:
 
@@ -72,19 +77,25 @@ Kill list — do not do these:
   sales") — parked for ~18 months out, not now.
 
 **Ship filter for this quarter:** before building or writing anything customer-facing
-or feature-shaped, ask "Does this make the ops lead's day shorter, specifically
-around moving client data between email/PDFs and their CRM?" If no, it doesn't ship
-this quarter — full stop, no exceptions for "cool to have." This filter does not
-apply to foundational trust-pipeline work already in the build order (CI, command
-classification, policy primitives, Zones, Ghost Organizer preview/execute/audit/undo,
-replay/release hardening — see Current wedge and Target product layers below); that
-work stays in scope regardless of whether it's specifically email/PDF-to-CRM shaped.
+or feature-shaped, ask "Does this make Ghost Organizer's cleanup loop (select folder
+→ scan → propose plan → review → approve → move/rename → audit → undo) faster,
+clearer, or more trustworthy?" If no, it doesn't ship this quarter — full stop, no
+exceptions for "cool to have." This filter does not apply to foundational
+trust-pipeline work already in the build order (CI, command classification, policy
+primitives, Zones, Ghost Organizer preview/execute/audit/undo, replay/release
+hardening — see Current wedge and Target product layers below); that work stays in
+scope regardless of whether it's specifically Organizer-shaped.
 
-The product value is trustworthy execution:
+The product value is trustworthy execution. Ghost Organizer is the flagship
+expression of it today:
 
 ```text
-Record -> Inspect -> Approve -> Replay -> Audit -> Undo
+Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo
 ```
+
+Record/Replay (data-entry automation) implements the same trust shape and remains
+a supporting trust-core capability — see Current wedge below — but it is not the
+homepage promise until reliability and verification are stronger.
 
 ## Current wedge
 
