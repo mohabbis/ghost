@@ -119,3 +119,17 @@ they have:
 
 Until then, broad automation remains a capability behind the Organizer-first
 trust story, not the product thesis.
+
+## Where this grows (without breaking the wedge)
+
+Organizer-first is the beachhead, not the ceiling. For how Ghost expands into a
+per-seat business along the trust/audit moat — verticals as playbook packs,
+scheduled runs, and a team audit layer — without adopting the "workflow
+automation" framing this doc forbids, see:
+
+- `docs/automation-strategy.md` — the reconciliation of the wedge with the
+  sellable platform underneath it;
+- `docs/vertical-accounting-close.md` — the first vertical (month-end close),
+  built on the existing Organizer pipeline;
+- `docs/scheduled-runs-and-team-audit.md` — the recurring-revenue architecture,
+  built on the existing Action Plan runtime and approval tokens.
