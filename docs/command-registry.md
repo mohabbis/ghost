@@ -326,16 +326,19 @@ undoable executor.
 Read-only, name-only reconciliation for the accounting-close vertical (see
 `docs/vertical-accounting-close.md`). Classifies the file *names* passed in
 against a caller-supplied expected-documents checklist and returns a report of
-what is present, partial, missing, or unexpected. Touches **nothing** — no
-filesystem, no network, no OS input, no secrets — so it is safe to run on a
-paste-in list before any folder access is granted. The verdict is arithmetic
-over classified document kinds, not a model's judgement. Filing the documents or
-signing off a close still flows through the Organizer's audited, undoable
-executor; this command only reports.
+what is present, partial, missing, or unexpected. The verdict is arithmetic over
+classified document kinds, not a model's judgement. `preview_close_reconcile` is
+name-only (touches nothing — safe to run on a paste-in list); `close_reconcile_zone`
+reads a Zone's readable source folders, but only directory *metadata* (names),
+never file contents, and only inside Zone-granted folders — the same footprint as
+`organizer_scanner_inbox_signal`. Filing the documents or signing off a close
+still flows through the Organizer's audited, undoable executor; these commands
+only report.
 
 | Command | Stability | Files | OS | Scr | Net | Auth | Win | Risk | Failure modes / notes |
 |---|---|:--:|:--:|:--:|:--:|:--:|:--:|---|---|
 | `preview_close_reconcile` | stable | – | – | – | – | – | – | low | **safe-read.** Classifies caller-supplied file names (via `classify_report`) and reconciles them against a `CloseChecklist`, returning a `ReconcileReport` (per-requirement present/partial/missing with counts + matched files, plus documents present but not on the checklist). Pure, deterministic, name-only; unclassifiable names are ignored, surplus is surfaced for the human, nothing is mutated or auto-resolved. |
+| `close_reconcile_zone` | stable | ✓ | – | – | – | – | – | low | **safe-read.** Scans a Zone's readable source folders (metadata/names only, no contents; Zone-bounded, same footprint as `organizer_scanner_inbox_signal`), classifies each name, and reconciles against a `CloseChecklist`. Read-only, no mutation; an unknown `zone_id` errors. |
 
 ### `commands/experimental.rs` — experimental (gated / not default UI)
 
