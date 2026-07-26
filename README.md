@@ -6,26 +6,31 @@
 [![Windows](https://img.shields.io/badge/Windows-10/11-0078d4?style=flat-square&logo=windows)](https://github.com/mohabbis/ghost/releases/tag/v2.0.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Ghost safely organizes messy local folders without the data ever leaving the machine.**
-> It scans a folder you choose, proposes an exact move/rename plan, waits for approval,
-> executes deterministically, writes an audit log, and can undo the run.
+> **Ghost is auditable, approval-gated automation for work that can't go to the cloud.**
+> It scans, proposes an exact plan, waits for your approval, then acts — moving, renaming,
+> or filling in — and seals a tamper-evident receipt with an undo path for every run,
+> entirely on your machine.
 
-Ghost starts with a job almost every operator understands: making sense of messy Downloads,
-client folders, month-end exports, PDFs, screenshots, and handoff packets without risking a
-silent delete or overwrite. The product wedge is **Ghost Organizer** because it proves the
-trust pipeline in minutes before asking users to trust broader desktop replay.
+Under the hood Ghost runs one trust pipeline — **Capture → Review → Approve → Execute →
+Verify → Recover** — over both file operations and app/website steps. **Ghost Organizer**,
+which safely cleans up messy local folders, is the flagship expression of that engine today.
+The same pipeline is what lets Ghost grow into auditable workflows for accounting, legal, and
+other work where a cloud tool is a nonstarter — without ever weakening the "nothing leaves
+your machine" promise.
 
-**Who it's for first:** people accountable for recurring operational files — small-business
-operators, finance/accounting/admin staff, consultants handling client deliverables, and founders
-whose local folders have become the system of record.
+**Who it's for:** people accountable for recurring operational files and workflows who handle
+client or financial data and have been told it can't go through a cloud tool — bookkeepers and
+finance/admin staff, consultants handling client deliverables, small-business operators, and
+founders whose local folders are the system of record. The common thread: *"I need this done
+safely, and I need proof of what changed."*
 
-Ghost is **not** a generic AI agent, a context layer, or an RPA clone. AI may suggest categories
-or filenames; deterministic code executes only the plan you approved — on your machine — and
-writes undo data before mutation.
+Ghost is **not** a generic AI agent or an RPA clone. AI may suggest categories, filenames, or
+steps; deterministic code executes only the plan you approved — on your machine — and writes
+undo data before it mutates anything.
 
 ---
 
-## The wedge
+## How it works
 
 ```text
 Select folder → Scan → Propose plan → Review → Approve → Move/Rename → Audit → Undo
@@ -40,7 +45,9 @@ Select folder → Scan → Propose plan → Review → Approve → Move/Rename �
 - **Audit** — the run is saved into a local audit chain.
 - **Undo** — reversible operations write undo data before execution.
 
-See [docs/product-direction.md](docs/product-direction.md) for the Organizer-first product decision.
+See [docs/product-direction.md](docs/product-direction.md) for the Organizer-first product decision,
+and [docs/automation-strategy.md](docs/automation-strategy.md) for how the same pipeline expands
+into auditable workflows beyond filing.
 
 ## What Ghost does today
 
@@ -69,6 +76,20 @@ Intent → Plan → Policy check → User approval → Execution → Audit log �
 - No silent delete, overwrite, upload, or send.
 - AI proposes only; approved plans execute in deterministic code.
 
+## Where this is going
+
+The trust pipeline above is horizontal; the roadmap turns it into auditable
+**playbooks** for specific teams. These are direction, not shipped features yet:
+
+- **Vertical playbooks** — e.g. accounting/bookkeeping month-end close: scan, rename by
+  period, file per client, reconcile against an expected-docs checklist, and produce a
+  signable close report. See [docs/vertical-accounting-close.md](docs/vertical-accounting-close.md).
+- **Scheduled runs** — recurring "propose a plan every month-end," still resolving to an
+  approval and a sealed receipt. See [docs/scheduled-runs-and-team-audit.md](docs/scheduled-runs-and-team-audit.md).
+- **Team audit layer** — aggregate sealed receipts (never files) for a reviewer or auditor.
+
+Strategy and guardrails: [docs/automation-strategy.md](docs/automation-strategy.md).
+
 ## Connect an AI assistant (MCP)
 
 Claude Desktop and Cursor can talk to Ghost over **local stdio** (`ghost mcp serve`). The assistant
@@ -91,7 +112,8 @@ replay runs.
 
 ## Pricing
 
-$79/month per seat. Flat — no tiers, no "contact sales."
+Priced per seat for teams; the number isn't being advertised while the product is in
+developer preview.
 
 ## Download
 
@@ -134,13 +156,13 @@ See `AGENTS.md` / `CLAUDE.md` for the full validation matrix and product contrac
 ## What Ghost is not
 
 - Not a generic autonomous AI agent or “context layer” for your desktop.
-- Not an RPA clone or blind macro recorder — you inspect, approve, and verify.
-- Not cloud-first — workflows and files stay on your machine by default.
-- Not a silent computer takeover — capture and replay are explicit and interruptible.
-- Not "workflow automation" or an "operating system" — one product, one workflow.
+- Not an RPA clone or blind macro recorder — you inspect, approve, and verify every run.
+- Not cloud-first — your files and workflow data stay on your machine by default.
+- Not a silent computer takeover — capture and execution are explicit, interruptible, and reversible.
 - Not a multi-provider LLM routing platform — which model runs underneath isn't the point.
 
-Ghost may propose anything; it only does what you approve, inside a boundary you control.
+Ghost may propose anything; it only does what you approve, inside a boundary you control,
+and it can undo the run.
 
 ## License
 
