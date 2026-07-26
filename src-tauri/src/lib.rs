@@ -141,6 +141,9 @@ macro_rules! run_with_commands {
                 // Read-only month-end close reconciliation preview (safe-read,
                 // name-only; classifies file names and reports met/missing).
                 commands::preview_close_reconcile,
+                // Zone-scoped variant: scans a Zone's readable folders (metadata
+                // only) and reconciles the documents found. Read-only, no mutation.
+                commands::close_reconcile_zone,
                 $($experimental_command,)*
             ])
             .run(tauri::generate_context!())

@@ -1,15 +1,21 @@
-//! Month-end close commands: read-only reconciliation preview over file names.
+//! Month-end close commands: read-only reconciliation.
 //!
-//! Risk class: **safe-read**. This command touches no filesystem, no network,
-//! no OS input, and no secrets — it classifies the file *names* the caller
-//! passes in and reconciles them against a caller-supplied checklist, returning
-//! a report. Acting on that report (filing the documents, sealing a signed-off
-//! close) still flows through the Organizer's
-//! preview -> approve -> execute -> audit -> undo pipeline; this command only
-//! reports.
+//! Risk class: **safe-read**. Both commands only *report* — they classify
+//! document names and reconcile them against a caller-supplied checklist,
+//! mutating nothing and deciding nothing. [`preview_close_reconcile`] is
+//! name-only (no disk access at all); [`close_reconcile_zone`] reads a Zone's
+//! readable source folders, but only directory *metadata* (names), never file
+//! contents, and only inside folders the Zone's rules grant read access to —
+//! the same footprint as `organizer_scanner_inbox_signal`. No network, no OS
+//! input, no secrets. Acting on a report (filing the documents, sealing a
+//! signed-off close) still flows through the Organizer's
+//! preview -> approve -> execute -> audit -> undo pipeline.
 
 use crate::filing::finance::classify_report;
 use crate::finance::close::{CloseChecklist, PresentDoc, ReconcileReport, reconcile};
+use crate::organizer::planner::scan_zone_files;
+use crate::storage::zones::get_zone;
+use crate::storage::{Db, open_default};
 
 /// Reconcile a batch of file names against a month-end close checklist.
 ///
@@ -36,6 +42,43 @@ pub fn preview_close_reconcile(
         })
         .collect();
     reconcile(&checklist, &present)
+}
+
+/// Reconcile the documents actually sitting in a Zone against a close checklist.
+///
+/// Read-only: scans the Zone's readable source folders for file *names*
+/// (metadata only, never contents — see [`scan_zone_files`]), classifies each,
+/// and reconciles against `checklist`. Only folders the Zone's rules grant read
+/// access to are scanned, so the footprint matches `organizer_scanner_inbox_signal`.
+/// Reports only — it mutates nothing; filing/sign-off stays in the audited,
+/// undoable executor.
+#[tauri::command]
+pub fn close_reconcile_zone(
+    zone_id: String,
+    checklist: CloseChecklist,
+) -> Result<ReconcileReport, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    close_reconcile_zone_with_conn(&conn, &zone_id, &checklist).map_err(|e| e.to_string())
+}
+
+/// Testable core of [`close_reconcile_zone`], split out so it can run against an
+/// in-memory database (`open_default` has no test seam).
+pub(crate) fn close_reconcile_zone_with_conn(
+    conn: &Db,
+    zone_id: &str,
+    checklist: &CloseChecklist,
+) -> anyhow::Result<ReconcileReport> {
+    get_zone(conn, zone_id)?.ok_or_else(|| anyhow::anyhow!("no zone with id {zone_id}"))?;
+    let present: Vec<PresentDoc> = scan_zone_files(conn, zone_id)?
+        .iter()
+        .filter_map(|f| {
+            classify_report(&f.file_name).map(|c| PresentDoc {
+                file_name: f.file_name.clone(),
+                kind: c.kind,
+            })
+        })
+        .collect();
+    Ok(reconcile(checklist, &present))
 }
 
 #[cfg(test)]
@@ -89,5 +132,70 @@ mod tests {
             report.unexpected.is_empty(),
             "non-financial files must not be surfaced as unexpected docs"
         );
+    }
+
+    // ── close_reconcile_zone ───────────────────────────────────────────────
+    use crate::policy::zone::{DefaultDecision, FolderRule};
+    use crate::storage::open_in_memory;
+    use crate::storage::zones::create_zone_with_rules;
+
+    // Create a Zone whose one read-only folder rule points at `dir`.
+    fn zone_over(conn: &Db, dir: &std::path::Path) -> String {
+        create_zone_with_rules(
+            conn,
+            "close",
+            None,
+            DefaultDecision::Ask,
+            false,
+            &[FolderRule::read_only(dir.to_path_buf())],
+        )
+        .unwrap()
+        .id
+    }
+
+    #[test]
+    fn zone_scan_reconciles_present_documents() {
+        let conn = open_in_memory().unwrap();
+        let tmp = crate::organizer::testutil::tempdir();
+        tmp.file("June 2026 bank statement.pdf", b"x");
+        let zone_id = zone_over(&conn, tmp.path());
+
+        let report = close_reconcile_zone_with_conn(
+            &conn,
+            &zone_id,
+            &checklist(vec![ExpectedDoc::one(ReportKind::BankStatement)]),
+        )
+        .unwrap();
+
+        assert_eq!(report.requirements[0].status, ReconcileStatus::Present);
+        assert!(report.complete);
+    }
+
+    #[test]
+    fn zone_scan_reports_missing_when_folder_empty() {
+        let conn = open_in_memory().unwrap();
+        let tmp = crate::organizer::testutil::tempdir();
+        let zone_id = zone_over(&conn, tmp.path());
+
+        let report = close_reconcile_zone_with_conn(
+            &conn,
+            &zone_id,
+            &checklist(vec![ExpectedDoc::one(ReportKind::BankStatement)]),
+        )
+        .unwrap();
+
+        assert_eq!(report.requirements[0].status, ReconcileStatus::Missing);
+        assert!(!report.complete);
+    }
+
+    #[test]
+    fn zone_scan_unknown_zone_is_error() {
+        let conn = open_in_memory().unwrap();
+        let err = close_reconcile_zone_with_conn(
+            &conn,
+            "does-not-exist",
+            &checklist(vec![ExpectedDoc::one(ReportKind::BankStatement)]),
+        );
+        assert!(err.is_err());
     }
 }
