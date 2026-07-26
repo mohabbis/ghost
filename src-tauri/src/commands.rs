@@ -6,6 +6,7 @@
 
 mod account;
 mod auth;
+mod close;
 mod compression;
 mod core;
 mod diagnostics;
@@ -23,6 +24,7 @@ mod updates;
 
 pub use account::*;
 pub use auth::*;
+pub use close::*;
 pub use compression::*;
 pub use core::*;
 pub use diagnostics::*;

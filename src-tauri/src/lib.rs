@@ -138,6 +138,9 @@ macro_rules! run_with_commands {
                 // Name-only planning; no filesystem/network access.
                 commands::preview_file_filing,
                 commands::estimate_filing_savings,
+                // Read-only month-end close reconciliation preview (safe-read,
+                // name-only; classifies file names and reports met/missing).
+                commands::preview_close_reconcile,
                 $($experimental_command,)*
             ])
             .run(tauri::generate_context!())
