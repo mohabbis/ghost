@@ -82,18 +82,25 @@ Select Close Pack + period
   -> Undo available for the whole run                (organizer_undo)
 ```
 
-### NEW capability 1 — reconciliation
+### NEW capability 1 — reconciliation — **implemented (commandless core)**
 
-A pure, read-only step over the proposed plan + the pack's expected-docs
-checklist. For each client it emits `Present | Missing | Unexpected | Duplicate`
-per expected doc type. This is deterministic (counts by classified type against
-declared minimums) — **no AI in the decision path**, consistent with rule 1 (AI
-may propose classification; the reconcile verdict is arithmetic).
+A pure, read-only step over an expected-docs checklist + the documents already
+classified as present. For each client it emits a per-requirement
+`Present | Partial | Missing` status (with `found`/`required` counts and the
+matched file names) plus any `unexpected` present documents. This is
+deterministic (counts by classified `ReportKind` against declared minimums) —
+**no AI in the decision path**, consistent with rule 1 (AI may propose
+classification; the reconcile verdict is arithmetic).
 
-Suggested home: `src-tauri/src/finance/reconcile.rs` (the `finance/` scaffolding
-already exists per `docs/enterprise-financial-operations.md`) or a new
-`organizer/reconcile.rs`. It touches: **files (read-only)**, no OS input, no
-network, no secrets. It produces review-surface data only; it never mutates.
+Landed at `src-tauri/src/finance/close/reconcile.rs` (`CloseChecklist`,
+`ExpectedDoc`, `PresentDoc`, `reconcile() -> ReconcileReport`), reusing
+`filing::finance::ReportKind` as the doc-type taxonomy and `filing::Period`.
+It touches: **nothing** — pure in/struct out, no files, OS input, network, or
+secrets, and it never mutates. It stays **commandless**: a Tauri surface on top
+must still carry its own module, risk class, policy check, approval, and
+audit/undo behavior (see the command table below). Surplus documents (`found >
+required`) are surfaced via the count for the human to resolve; the core never
+deletes a "duplicate".
 
 ### NEW capability 2 — the Close Report (the sellable artifact)
 
