@@ -3,32 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost — Organize messy local folders, safely and on your machine</title>
+    <title>Ghost — Auditable automation for work that can't go to the cloud</title>
     <meta
       name="description"
-      content="Ghost safely organizes messy local folders: it scans a folder you choose, proposes a cleanup plan, waits for your approval, moves/renames files, writes an audit log, and can undo the run — nothing leaves the machine. Built for small-business operators, finance/accounting/admin staff, consultants handling client deliverables, and founders whose local folders became the system of record. $79/month per seat, flat."
+      content="Ghost is auditable, approval-gated automation that runs entirely on your machine. It scans, proposes an exact plan, waits for your approval, then moves, renames, or files — sealing a tamper-evident receipt and an undo path for every run. Nothing is uploaded; nothing is deleted or overwritten silently. Built for people who handle client or financial data and can't put it through a cloud tool."
     />
-    <meta name="theme-color" content="#0a0e14" />
+    <meta name="theme-color" content="#070a10" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://ghost.muharafiq.com/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Ghost — Organize messy local folders, safely and on your machine" />
+    <meta property="og:title" content="Ghost — Auditable automation for work that can't go to the cloud" />
     <meta
       property="og:description"
-      content="Point Ghost at a folder: it scans read-only, proposes an exact move/rename plan, waits for your approval, and writes an audit log you can undo — entirely on your machine. $79/month per seat, flat."
+      content="Ghost scans, proposes an exact plan, waits for your approval, then acts — sealing a tamper-evident receipt and an undo path for every run, entirely on your machine. Nothing is uploaded."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
     <meta property="og:image" content="https://ghost.muharafiq.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ghost — Organize messy local folders, safely and on your machine" />
-    <meta name="twitter:description" content="Messy Downloads, client folders, month-end exports? Ghost scans, proposes a plan, waits for approval, and can undo the run — nothing leaves your machine. $79/seat, flat." />
+    <meta name="twitter:title" content="Ghost — Auditable automation for work that can't go to the cloud" />
+    <meta name="twitter:description" content="Approval-gated, reversible automation that runs on your machine and proves every change. Nothing is uploaded, deleted, or overwritten silently." />
     <meta name="twitter:image" content="https://ghost.muharafiq.com/og.png" />
-    <meta name="keywords" content="local file organization software, folder cleanup automation, file management for small business, desktop file organizer Mac Windows, audit undo file automation, local-first automation" />
+    <meta name="keywords" content="local-first automation, auditable automation, approval-gated file automation, desktop automation Mac Windows, audit undo automation, on-premise automation for regulated data" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -41,12 +41,11 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Ghost",
-        "applicationCategory": "UtilitiesApplication",
+        "applicationCategory": "BusinessApplication",
         "operatingSystem": "macOS, Windows",
         "url": "https://ghost.muharafiq.com/",
-        "description": "Ghost safely organizes messy local folders on macOS and Windows. It scans a folder read-only, proposes an exact move/rename plan, waits for approval, executes deterministically, writes an audit log, and can undo the run.",
-        "keywords": "local file organization software, folder cleanup automation, desktop automation Mac Windows, audit undo file automation, local-first automation",
-        "offers": { "@type": "Offer", "price": "79", "priceCurrency": "USD", "priceSpecification": { "@type": "UnitPriceSpecification", "price": "79", "priceCurrency": "USD", "unitText": "MONTH", "billingIncrement": 1 } },
+        "description": "Ghost is auditable, approval-gated automation that runs entirely on your machine. It scans, proposes an exact plan, waits for approval, executes deterministically, seals a tamper-evident receipt, and can undo the run — nothing leaves the device.",
+        "keywords": "local-first automation, auditable automation, approval-gated file automation, desktop automation Mac Windows, audit undo automation",
         "downloadUrl": "https://ghost.muharafiq.com/#download"
       }
     </script>
@@ -87,65 +86,67 @@
         <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
         <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
         <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+        <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14M5 7l-2.5 6a3 3 0 0 0 5 0zM19 7l-2.5 6a3 3 0 0 0 5 0z"/></symbol>
+        <symbol id="i-heart-pulse" viewBox="0 0 24 24"><path d="M20.8 6.6a4.6 4.6 0 0 0-7.8-2.4L12 5.1l-1-1a4.6 4.6 0 0 0-6.8 6.2l6.9 7.4a1.2 1.2 0 0 0 1.8 0l3.2-3.4"/><path d="M14 11h2l1.5-2.2L19 13h3"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
       </defs>
     </svg>
 
     <header class="nav" id="top">
-      <a class="brand" href="#top" aria-label="Ghost home">
-        <span class="brand__mark" aria-hidden="true">
-          <img src="/assets/ghost-mark.svg" alt="" width="26" height="26" class="ghost-logo" />
-        </span>
-        <span>Ghost</span>
-      </a>
+        <a class="brand" href="#top" aria-label="Ghost home">
+          <span class="brand__mark" aria-hidden="true">
+            <img src="/assets/ghost-mark.svg" alt="" width="26" height="26" class="ghost-logo" />
+          </span>
+          <span>Ghost</span>
+        </a>
 
-      <nav class="nav__links" id="nav-links" aria-label="Primary">
-        <a href="#how">How it works</a>
-        <a href="#demo">Demo</a>
-        <a href="#app">Inside the app</a>
-        <a href="#audiences">Who it's for</a>
-        <a href="#privacy">Privacy</a>
-        <a href="#roadmap">Roadmap</a>
-      </nav>
+        <nav class="nav__links" id="nav-links" aria-label="Primary">
+          <a href="#how">How it works</a>
+          <a href="#demo">Demo</a>
+          <a href="#verticals">Verticals</a>
+          <a href="#audiences">Who it's for</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#roadmap">Roadmap</a>
+        </nav>
 
-      <div class="nav__end">
-        <a class="btn btn--ghost btn--sm" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github"/></svg> GitHub</a>
-        <a class="btn btn--sm" href="#download"><svg class="i"><use href="#i-download"/></svg> Download</a>
-      </div>
+        <div class="nav__end">
+          <a class="btn btn--ghost btn--sm" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github"/></svg> GitHub</a>
+          <a class="btn btn--sm" href="#download"><svg class="i"><use href="#i-download"/></svg> Download</a>
+        </div>
 
-      <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
-        <span></span><span></span><span></span>
-      </button>
-    </header>
+        <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
+          <span></span><span></span><span></span>
+        </button>
+      </header>
 
     <main id="main">
       <div class="hero-shell">
       <!-- ───────────────────────── Hero ───────────────────────── -->
       <section class="hero reveal">
         <div class="hero__copy">
-          <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span> Safely organize messy local folders — nothing leaves your machine</p>
-          <h1>Your Downloads folder became the filing system.<br /><span class="grad">Ghost cleans it up — and shows its work.</span></h1>
+          <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span> Local-first · Auditable · Reversible</p>
+          <h1>The automation you can run on files that can't leave your&nbsp;<span class="grad">machine</span>.</h1>
           <p class="lede">
-            Point Ghost at a folder and it <strong>scans read-only, proposes an exact move/rename
-            plan, and waits for your approval</strong> before it touches anything. Nothing is
-            overwritten or deleted silently. Every run writes an audit log — and can be undone in
-            one click.
+            Ghost <strong>scans, proposes an exact plan, and waits for your approval</strong> — then
+            moves, renames, or files, sealing a <strong>tamper-evident receipt</strong> and an undo
+            path for every run. Nothing is uploaded. Nothing is deleted or overwritten silently.
           </p>
           <div class="hero__actions">
             <a class="btn btn--lg" href="#download" data-download-primary><svg class="i"><use href="#i-download"/></svg><span data-download-label>Download for Mac</span></a>
             <a class="btn btn--secondary btn--lg" href="#demo"><svg class="i"><use href="#i-play"/></svg> See it work</a>
           </div>
-          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v2.0.3 · Mac &amp; Windows · technical preview · no account required · local-first by default</p>
+          <p class="hero__note"><svg class="i"><use href="#i-shield"/></svg> v2.0.3 · Mac &amp; Windows · developer preview · no account required · local-first by default</p>
         </div>
 
-        <!-- Hero mock: Ghost Organizer receipt after approval -->
+        <!-- Hero mock: Ghost run receipt after approval -->
         <aside class="mock" aria-hidden="true">
-          <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — Organizer receipt</em></div>
+          <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — execution receipt</em></div>
           <div class="mock__body">
             <div class="mock__row"><span class="tag tag--move"><svg class="i"><use href="#i-arrow-right"/></svg> move</span> Invoice_0417.pdf → Clients/Acme/2026-04/</div>
             <div class="mock__row"><span class="tag tag--rename"><svg class="i"><use href="#i-pencil"/></svg> rename</span> scan(3).pdf → 2026-04-17_Statement.pdf</div>
             <div class="mock__row mock__row--warn"><span class="tag tag--warn"><svg class="i"><use href="#i-alert"/></svg> conflict</span> Report.xlsx already exists at destination → flagged for review</div>
             <div class="mock__row"><span class="tag tag--new"><svg class="i"><use href="#i-check-circle"/></svg> approve</span> 14 of 15 changes approved · 0 silent writes</div>
-            <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-undo"/></svg> undo</span> journal written before each change</div>
+            <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-receipt"/></svg> seal</span> receipt hash-chained · undo journal written first</div>
             <div class="mock__foot">
               <button class="btn btn--sm" type="button" tabindex="-1">View receipt</button>
               <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Undo run</button>
@@ -158,42 +159,44 @@
       </section>
 
       <div class="trust-strip reveal">
-        <span><svg class="i"><use href="#i-folder-open"/></svg> Scan a folder, read-only</span>
-        <span><svg class="i"><use href="#i-check-circle"/></svg> Preview every move &amp; rename</span>
+        <span><svg class="i"><use href="#i-folder-open"/></svg> Scans read-only</span>
+        <span><svg class="i"><use href="#i-check-circle"/></svg> Previews every change</span>
         <span><svg class="i"><use href="#i-alert"/></svg> Flags conflicts before it acts</span>
-        <span><svg class="i"><use href="#i-undo"/></svg> Audited &amp; reversible</span>
+        <span><svg class="i"><use href="#i-receipt"/></svg> Sealed receipt &amp; undo</span>
       </div>
       </div>
 
+      <!-- ───────────────────────── The engine ───────────────────────── -->
       <section id="v2" class="v2-band reveal">
         <div class="v2-band__inner">
           <div class="section__head">
-            <p class="eyebrow">The wedge</p>
-            <h2>The folder that quietly became your filing system.</h2>
+            <p class="eyebrow">One engine</p>
+            <h2>One trust pipeline, under everything Ghost does.</h2>
             <p class="section__sub">
-              Downloads, client folders, month-end packets, exports, screenshots, PDFs, and
-              duplicates pile up for almost everyone. Ghost proves the trust pipeline in
-              minutes — scan, propose, approve — before asking you to trust it with anything
-              bigger.
+              Ghost runs a single pipeline over both file operations and app steps. <strong>Ghost
+              Organizer</strong> — safe folder cleanup — is the flagship expression of it today. The
+              same pipeline is what lets Ghost grow into auditable workflows for teams that can't put
+              their data through a cloud tool.
             </p>
           </div>
           <div class="v2-grid">
             <article class="v2-card">
               <span class="v2-card__ico"><svg class="i"><use href="#i-folder-open"/></svg></span>
-              <h3>Scan a folder, read-only</h3>
-              <p>Point Ghost at a folder or Zone. It reads file metadata only — nothing moves until you approve a plan.</p>
+              <h3>Capture &amp; review</h3>
+              <p>Ghost scans the boundary you chose — read-only — and compiles a reviewable plan. Every proposed step is visible before/after, with conflicts and low-confidence items called out.</p>
             </article>
             <article class="v2-card">
-              <span class="v2-card__ico"><svg class="i"><use href="#i-sliders"/></svg></span>
-              <h3>Review the exact plan</h3>
-              <p>Every proposed move and rename is visible before/after, with conflicts and low-confidence items called out.</p>
+              <span class="v2-card__ico"><svg class="i"><use href="#i-check-circle"/></svg></span>
+              <h3>Approve &amp; execute</h3>
+              <p>Nothing mutates until you approve the exact plan. Deterministic code then executes it, re-checking policy per step — never a model's raw output, never a silent delete or overwrite.</p>
             </article>
             <article class="v2-card">
-              <span class="v2-card__ico"><svg class="i"><use href="#i-undo"/></svg></span>
-              <h3>Approve, audit, undo</h3>
-              <p>Nothing runs until you approve it, every change is logged to an audit chain, and undo data is written first — so a run reverses in one click.</p>
+              <span class="v2-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
+              <h3>Verify &amp; recover</h3>
+              <p>Each step is verified, the run is sealed into a tamper-evident receipt, and undo data is written first — so any run reverses in one click.</p>
             </article>
           </div>
+          <div class="pipeline-flow"><b>Capture</b> → <b>Review</b> → <b>Approve</b> → <b>Execute</b> → <b>Verify</b> → <b>Recover</b></div>
         </div>
       </section>
 
@@ -327,55 +330,73 @@
         </p>
       </section>
 
+      <!-- ───────────────────────── Verticals ───────────────────────── -->
+      <section id="verticals" class="section reveal">
+        <div class="section__head">
+          <p class="eyebrow">Where this is going</p>
+          <h2>The same pipeline, shaped into playbooks for specific teams.</h2>
+          <p class="section__sub">
+            Organizer is the beachhead. The roadmap turns the audited pipeline into repeatable
+            <strong>playbooks</strong> for the teams that feel the pain most — always local, always
+            approval-gated, always reversible. These are direction, not shipped features yet.
+          </p>
+        </div>
+        <div class="vert-grid">
+          <article class="vert-card">
+            <span class="vert-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
+            <h3>Accounting &amp; bookkeeping</h3>
+            <p>Month-end close: scan and rename by period, file per client, reconcile against an expected-docs checklist, and produce a partner-signable close report.</p>
+            <span class="vert-flag"><svg class="i"><use href="#i-clock"/></svg> Roadmap</span>
+          </article>
+          <article class="vert-card">
+            <span class="vert-card__ico"><svg class="i"><use href="#i-scale"/></svg></span>
+            <h3>Legal &amp; paralegal</h3>
+            <p>Matter intake and filing, dated renaming, and privilege-review packet assembly — with on-export redaction, entirely on the machine that holds the client files.</p>
+            <span class="vert-flag"><svg class="i"><use href="#i-clock"/></svg> Roadmap</span>
+          </article>
+          <article class="vert-card">
+            <span class="vert-card__ico"><svg class="i"><use href="#i-heart-pulse"/></svg></span>
+            <h3>Healthcare admin</h3>
+            <p>Claims, EOB, and record filing where cloud RPA is a compliance burden — local, audited, and reversible, with on-device OCR and ID parsing.</p>
+            <span class="vert-flag"><svg class="i"><use href="#i-clock"/></svg> Roadmap</span>
+          </article>
+          <article class="vert-card">
+            <span class="vert-card__ico"><svg class="i"><use href="#i-keyboard"/></svg></span>
+            <h3>Legacy data entry</h3>
+            <p>Desktop apps with no API: record once, review every step, approve, and replay with semantic resolution and coordinate fallback — the trusted alternative to heavyweight RPA.</p>
+            <span class="vert-flag"><svg class="i"><use href="#i-clock"/></svg> Roadmap</span>
+          </article>
+        </div>
+        <p class="vert-note">Each playbook rides the same audited pipeline above — nothing gets a fast lane around approval, receipt, or undo.</p>
+      </section>
+
       <!-- ───────────────────────── Who it's for ───────────────────────── -->
       <section id="audiences" class="section reveal">
         <div class="section__head">
           <p class="eyebrow">Who it's for</p>
-          <h2>Built for people whose local folders became the system of record.</h2>
+          <h2>Built for people whose data can't go to the cloud.</h2>
           <p class="section__sub">
-            Ghost is for small-business operators, finance/accounting/admin staff, consultants
-            handling client deliverables, and founders whose Downloads, client folders, and
-            exports have become the filing system. Ghost proves a safe cleanup loop in minutes,
-            before asking anyone to trust it with anything bigger.
+            Ghost is for bookkeepers and finance/admin staff, consultants handling client
+            deliverables, small-business operators, and founders whose local folders became the
+            system of record — people who need the work done safely and need proof of what changed.
           </p>
         </div>
         <div class="niche-grid">
           <article class="niche-card">
-            <span class="niche-card__ico"><svg class="i"><use href="#i-user"/></svg></span>
-            <h3>Recurring operational files, not a one-off cleanup</h3>
-            <p>Downloads, client folders, month-end packets, exports, screenshots, and handoff PDFs — scanned, proposed, approved, and reversible if anything looks wrong.</p>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-cloud-off"/></svg></span>
+            <h3>Barred from cloud tools</h3>
+            <p>Handling client financials, PHI, or privileged files and told it can't go through a cloud service. Ghost runs entirely on your machine — no account, no uploads.</p>
           </article>
           <article class="niche-card">
-            <span class="niche-card__ico"><svg class="i"><use href="#i-check-circle"/></svg></span>
-            <h3>$79/month per seat. Flat.</h3>
-            <p>No tiers, no "contact sales," no enterprise pricing page. Expensable without a manager's signoff.</p>
+            <span class="niche-card__ico"><svg class="i"><use href="#i-receipt"/></svg></span>
+            <h3>Accountable for what changed</h3>
+            <p>Recurring operational files and workflows — month-end packets, client deliverables, exports — where "what moved, and can I show it" is the job, not a nicety.</p>
           </article>
           <article class="niche-card">
             <span class="niche-card__ico"><svg class="i"><use href="#i-lock"/></svg></span>
             <h3>The same non-negotiables</h3>
-            <p>Local-first — no account required, no uploads, files never leave the machine. Nothing runs unapproved, every change is audited, and reversible steps undo in one click.</p>
+            <p>Local-first, no account required, files never leave the machine. Nothing runs unapproved, every change is audited, and reversible steps undo in one click.</p>
           </article>
-        </div>
-      </section>
-
-      <!-- ───────────────────────── Works with ───────────────────────── -->
-      <section id="works-with" class="section reveal">
-        <div class="section__head">
-          <p class="eyebrow">Works with</p>
-          <h2>The apps and machines you already have.</h2>
-          <p class="section__sub">
-            No account, API key, or cloud setup. Ghost drives the spreadsheets and desktop apps
-            already open on your Mac or PC and works on whatever is sitting in your folders —
-            nothing has to move to a vendor's servers first.
-          </p>
-        </div>
-        <div class="trust-strip works-strip">
-          <span><svg class="i"><use href="#i-apple"/></svg> macOS 12+</span>
-          <span><svg class="i"><use href="#i-windows"/></svg> Windows 10 &amp; 11</span>
-          <span><svg class="i"><use href="#i-keyboard"/></svg> Excel, Sheets &amp; desktop spreadsheet apps</span>
-          <span><svg class="i"><use href="#i-receipt"/></svg> Workbook &amp; export formats — .xlsx, .xls, .csv, .ods</span>
-          <span><svg class="i"><use href="#i-folder"/></svg> PDFs, Word &amp; text documents</span>
-          <span><svg class="i"><use href="#i-cloud-off"/></svg> No sign-in, no uploads — local by default</span>
         </div>
       </section>
 
@@ -400,12 +421,12 @@
       <section id="why" class="section reveal">
         <div class="section__head">
           <p class="eyebrow">The sharper claim</p>
-          <h2>“Approve before it acts” is table stakes. Reversible and audited isn't.</h2>
-          <p class="section__sub">Every serious automation now waits for a human. Ghost's difference is what happens next: no silent delete or overwrite, ever — every run is sealed into an audit trail, and any run can be undone in one click.</p>
+          <h2>“Approve before it acts” is table stakes. Local, reversible, and audited isn't.</h2>
+          <p class="section__sub">Every serious automation now waits for a human. Ghost's difference is where it runs and what happens next: entirely on your machine, no silent delete or overwrite ever, every run sealed into an audit trail, and any run undoable in one click.</p>
         </div>
         <div class="compare compare--three">
           <div class="compare__col compare__col--them">
-            <h3>Manual cleanup</h3>
+            <h3>Manual work</h3>
             <ul>
               <li>You're the safety net — a wrong delete or overwrite is permanent</li>
               <li>No record of what moved where, or why</li>
@@ -425,17 +446,17 @@
           <div class="compare__col compare__col--us">
             <h3><span class="brand__mark brand__mark--sm" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span> Ghost</h3>
             <ul>
-              <li>Previews the exact move/rename plan before anything happens</li>
+              <li>Previews the exact plan before anything happens</li>
               <li>Never deletes or overwrites silently — conflicts are flagged, not guessed</li>
               <li>Runs entirely on your Mac or PC — no account, no uploads</li>
-              <li>Every run seals an audit chain; every change is reversible</li>
+              <li>Every run seals a tamper-evident receipt; every change is reversible</li>
               <li>Deterministic code executes the approved plan, not a model's raw output</li>
             </ul>
           </div>
         </div>
-        <div class="buildbuy" role="list" aria-label="Paths to a safe cleanup">
+        <div class="buildbuy" role="list" aria-label="Paths to trustworthy automation">
           <div class="buildbuy__item" role="listitem">
-            <h4>Keep cleaning up by hand</h4>
+            <h4>Keep doing it by hand</h4>
             <p>You are the safety net. A wrong delete or overwrite is permanent — if you even notice.</p>
           </div>
           <div class="buildbuy__item" role="listitem">
@@ -448,11 +469,11 @@
           </div>
           <div class="buildbuy__item buildbuy__item--ghost" role="listitem">
             <h4>Ghost</h4>
-            <p>Download, point it at a folder, and approve the exact plan — same machine, same day, free.</p>
+            <p>Download, point it at a folder, and approve the exact plan — same machine, same day.</p>
           </div>
         </div>
         <p class="anchor-quote">
-          “Automate the cleanup, but never let it delete or overwrite silently — that's the whole trust model.”
+          “Automate the work, but never let it delete or overwrite silently — and prove every change. That's the whole trust model.”
         </p>
       </section>
 
@@ -501,13 +522,13 @@
           </div>
           <div class="roadmap__col">
             <span class="pill">Next</span>
-            <h3>Deeper filing profiles &amp; plan quality</h3>
-            <p>Group plans by destination, show conflict reasons and confidence, and expand practical filing profiles (client filing, bookkeeping inbox, Downloads cleanup) — building now, not fully shipped yet.</p>
+            <h3>Scheduled runs &amp; the first vertical playbook</h3>
+            <p>Recurring “propose a plan every month-end” that still resolves to an approval and a sealed receipt, plus the accounting-close playbook (reconcile + signable close report) — building now, not fully shipped.</p>
           </div>
           <div class="roadmap__col">
             <span class="pill">Later</span>
-            <h3>Source-vs-destination reconciliation &amp; connectors</h3>
-            <p>Full cross-sheet transfer checking for record/replay, plus opt-in, scoped connectors to the systems teams already run — behind the experimental flag. Ghost proposes; deterministic code executes only what you approved.</p>
+            <h3>Team audit layer &amp; scoped connectors</h3>
+            <p>Aggregate sealed receipts (never files) for a reviewer or auditor, and opt-in, scoped connectors to the systems teams already run — behind the experimental flag. Ghost proposes; deterministic code executes only what you approved.</p>
           </div>
         </div>
       </section>
@@ -582,19 +603,19 @@
     <footer class="footer">
       <div class="footer__brand">
         <span class="brand"><span class="brand__mark" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span> Ghost</span>
-        <p>Scan → Propose plan → Review → Approve → Move/Rename → Audit → Undo.</p>
+        <p>Capture → Review → Approve → Execute → Verify → Recover.</p>
       </div>
       <nav class="footer__links" aria-label="Footer">
         <a href="#how">How it works</a>
         <a href="#demo">Demo</a>
-        <a href="#app">Inside the app</a>
+        <a href="#verticals">Verticals</a>
         <a href="#audiences">Who it's for</a>
         <a href="#privacy">Privacy</a>
         <a href="#connect">Connect your AI</a>
         <a href="#roadmap">Roadmap</a>
         <a href="https://github.com/mohabbis/ghost">GitHub</a>
       </nav>
-      <p class="footer__fine">Ghost safely organizes messy local folders on your machine · $79/seat, flat · © 2026 Ghost</p>
+      <p class="footer__fine">Ghost — auditable automation that runs on your machine · local-first · © 2026 Ghost</p>
     </footer>
   </body>
 </html>
