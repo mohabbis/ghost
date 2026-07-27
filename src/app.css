@@ -1995,6 +1995,13 @@ h3 .i,
 .ghost2-step__label {
   font-weight: 500;
 }
+.ghost2-step__reason {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
 .ghost2-summary {
   margin: 8px 0 12px;
   color: var(--text-muted, #9ca3af);

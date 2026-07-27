@@ -40,12 +40,14 @@ the planner is testable without a database and defaults dated renaming off:
    first prefixes the filename with the file's modified month (falling back to
    created time) as `YYYY-MM name`; existing `YYYY-MM ` or `YYYY-MM-` prefixes
    are left unchanged. The safe name then comes from `naming::safe_file_name`
-   (cross-platform sanitization, no silent meaning change).
+   (cross-platform sanitization, no silent meaning change). Any applied date
+   prefix or sanitization is appended to the action reason for review clients.
 5. **Detect conflicts** (`conflict`): if the proposed target already exists on
    disk (`TargetExists`) or another planned file claims it (`DuplicateInPlan`),
    the planner picks a de-duplicated name (`name (2).ext`) via
    `naming::deduplicate` and **records the conflict on the action**. The
-   Organizer never silently overwrites.
+   Organizer never silently overwrites, and the action reason states that the
+   filename changed to avoid the conflict.
 6. **Build capabilities**: `CreateFolder` (once per new destination folder),
    then `MoveFile` (different folder) or `RenameFile` (same folder, name change).
    Files already correctly placed and safely named are skipped
@@ -53,11 +55,14 @@ the planner is testable without a database and defaults dated renaming off:
 7. **Evaluate** every capability through `policy::evaluate` and attach the
    resulting `PolicyDecision` to the action.
 8. **Return** an `OrganizerPlan` — `actions` (each with decision, confidence,
-   reason, optional conflict), `skipped` files, and a `PlanSummary` of counts.
+   reason, optional conflict, and explicit source/target paths), `skipped`
+   files, and a `PlanSummary` of counts.
 
 ## Output shape
 
-- `PlanAction { capability, decision, confidence, reason, conflict }`
+- `PlanAction { capability, decision, confidence, reason, conflict, source_path,
+  target_path }`; the explicit paths are optional for compatibility with plans
+  serialized before they were added.
 - `SkippedFile { path, reason }` where `reason` is `AlreadyOrganized` or
   `NoDestination`
 - `PlanSummary { files_scanned, create_folder, move_file, rename_file,

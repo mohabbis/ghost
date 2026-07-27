@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use super::classifier::{LOW_CONFIDENCE, classify};
 use super::conflict::Conflict;
 use super::file_identity::FileIdentity;
-use super::naming::{dated_prefix, deduplicate, safe_file_name};
+use super::naming::{dated_prefix_with_description, deduplicate_with_description, safe_file_name};
 use super::scanner::{ScannedFile, scan};
 
 /// One proposed change, paired with its policy decision and the metadata the
@@ -50,6 +50,12 @@ pub struct PlanAction {
     /// File identity captured at scan time; used to detect TOCTOU swaps before execution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_identity: Option<FileIdentity>,
+    /// The source path of the file or folder being acted upon, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<PathBuf>,
+    /// The target path of the file or folder being acted upon, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_path: Option<PathBuf>,
 }
 
 /// Why a scanned file produced no action.
@@ -154,15 +160,20 @@ pub fn plan_with_rules_and_options(
     for file in files {
         let class = classify(&file);
         let target_dir = dest_root.join(class.category.folder_name());
-        let proposed_name = if rename_dated {
+        let (proposed_name, date_description) = if rename_dated {
             match file.modified.or(file.created) {
-                Some(timestamp) => dated_prefix(&file.file_name, timestamp),
-                None => file.file_name.clone(),
+                Some(timestamp) => dated_prefix_with_description(&file.file_name, timestamp),
+                None => (file.file_name.clone(), String::new()),
             }
         } else {
-            file.file_name.clone()
+            (file.file_name.clone(), String::new())
         };
         let base_name = safe_file_name(&proposed_name);
+        let sanitization_description = if base_name != proposed_name {
+            " sanitized filename"
+        } else {
+            ""
+        };
         let already_here = file.path.parent() == Some(target_dir.as_path());
 
         // A file already correctly placed and safely named needs no action.
@@ -185,7 +196,7 @@ pub fn plan_with_rules_and_options(
         } else {
             None
         };
-        let (final_name, conflict) =
+        let (final_name, conflict, conflict_description) =
             dir_names.resolve(&base_name, &target_dir, own_name.as_deref());
         let target = target_dir.join(&final_name);
 
@@ -205,6 +216,8 @@ pub fn plan_with_rules_and_options(
                 reason: format!("Create destination folder {}", target_dir.display()),
                 conflict: None,
                 source_identity: None,
+                source_path: None,
+                target_path: Some(target_dir.clone()),
             });
             summary.create_folder += 1;
         }
@@ -238,9 +251,14 @@ pub fn plan_with_rules_and_options(
             decision: evaluation.decision,
             rule_path: evaluation.rule_path,
             confidence: class.confidence,
-            reason: class.reason,
+            reason: format!(
+                "{}{}{}{}",
+                class.reason, date_description, sanitization_description, conflict_description
+            ),
             conflict,
             source_identity: FileIdentity::from_path(&file.path),
+            source_path: Some(file.path.clone()),
+            target_path: Some(target.clone()),
         });
     }
 
@@ -315,7 +333,7 @@ impl DirNames {
         base_name: &str,
         target_dir: &Path,
         own_name: Option<&str>,
-    ) -> (String, Option<Conflict>) {
+    ) -> (String, Option<Conflict>, String) {
         let collides_on_disk = self.disk.contains(base_name) && own_name != Some(base_name);
         let collides_in_plan = self.planned.contains(base_name);
 
@@ -338,9 +356,9 @@ impl DirNames {
             taken.remove(own);
         }
 
-        let final_name = deduplicate(base_name, &taken);
+        let (final_name, description) = deduplicate_with_description(base_name, &taken);
         self.planned.insert(final_name.clone());
-        (final_name, conflict)
+        (final_name, conflict, description)
     }
 }
 
@@ -564,6 +582,52 @@ mod tests {
         assert!(move_targets.contains(&"report card.pdf".to_string()));
         assert!(move_targets.iter().any(|n| n.contains("(2)")));
         assert!(plan.summary.conflicts >= 1);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|a| a.reason.contains("renamed to avoid conflict"))
+        );
+    }
+
+    #[test]
+    fn actions_expose_source_and_target_paths_for_review_clients() {
+        let (_tmp, rules) = organize_in_place_fixture();
+        let plan = plan_with_rules("z", &rules);
+
+        for action in plan.actions {
+            match action.capability {
+                Capability::CreateFolder { path } => {
+                    assert!(action.source_path.is_none());
+                    assert_eq!(action.target_path.as_deref(), Some(path.as_path()));
+                }
+                Capability::MoveFile { from, to } | Capability::RenameFile { from, to } => {
+                    assert_eq!(action.source_path.as_deref(), Some(from.as_path()));
+                    assert_eq!(action.target_path.as_deref(), Some(to.as_path()));
+                }
+                other => panic!("unexpected capability {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_plan_action_without_explicit_paths_still_deserializes() {
+        let action: PlanAction = serde_json::from_value(serde_json::json!({
+            "capability": {
+                "kind": "create_folder",
+                "path": "/tmp/ghost-legacy"
+            },
+            "decision": {
+                "decision": "allow"
+            },
+            "confidence": 1.0,
+            "reason": "legacy preview",
+            "conflict": null,
+            "source_identity": null
+        }))
+        .unwrap();
+
+        assert!(action.source_path.is_none());
+        assert!(action.target_path.is_none());
     }
 
     #[test]
@@ -635,6 +699,11 @@ mod tests {
             "expected YYYY-MM prefix, got {target}"
         );
         assert!(target.ends_with(" acme-invoice.pdf"));
+        assert!(
+            plan.actions
+                .iter()
+                .any(|a| a.reason.contains("added date prefix"))
+        );
     }
 
     #[test]

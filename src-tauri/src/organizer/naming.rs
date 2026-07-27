@@ -54,16 +54,24 @@ pub fn safe_file_name(name: &str) -> String {
 /// (clock damage) returns the name unchanged — better no filing period than
 /// an invented "1970-01".
 pub fn dated_prefix(name: &str, timestamp: SystemTime) -> String {
+    dated_prefix_with_description(name, timestamp).0
+}
+
+/// Prefix `name` with its `YYYY-MM` bucket and describe the visible change.
+pub fn dated_prefix_with_description(name: &str, timestamp: SystemTime) -> (String, String) {
     if starts_with_date_prefix(name) {
-        return name.to_string();
+        return (name.to_string(), String::new());
     }
 
     let Ok(since_epoch) = timestamp.duration_since(UNIX_EPOCH) else {
-        return name.to_string();
+        return (name.to_string(), String::new());
     };
     let days = (since_epoch.as_secs() / 86_400) as i64;
     let (year, month, _) = civil_from_days(days);
-    format!("{year:04}-{month:02} {name}")
+    (
+        format!("{year:04}-{month:02} {name}"),
+        " added date prefix".to_string(),
+    )
 }
 
 fn starts_with_date_prefix(name: &str) -> bool {
@@ -132,8 +140,15 @@ fn split_extension(name: &str) -> (&str, Option<&str>) {
 /// extension if needed. Does not insert the chosen name into `taken`; the
 /// caller owns that bookkeeping.
 pub fn deduplicate(name: &str, taken: &HashSet<String>) -> String {
+    deduplicate_with_description(name, taken).0
+}
+
+/// Return a name not present in `taken`, appending ` (2)`, ` (3)`, … before the
+/// extension if needed, along with a description of what was done.
+/// Does not insert the chosen name into `taken`; the caller owns that bookkeeping.
+pub fn deduplicate_with_description(name: &str, taken: &HashSet<String>) -> (String, String) {
     if !taken.contains(name) {
-        return name.to_string();
+        return (name.to_string(), String::new());
     }
     let (stem, ext) = split_extension(name);
     for n in 2..=u32::MAX {
@@ -142,11 +157,11 @@ pub fn deduplicate(name: &str, taken: &HashSet<String>) -> String {
             None => format!("{stem} ({n})"),
         };
         if !taken.contains(&candidate) {
-            return candidate;
+            return (candidate, " renamed to avoid conflict".to_string());
         }
     }
     // Unreachable in practice (would require billions of collisions).
-    name.to_string()
+    (name.to_string(), String::new())
 }
 
 #[cfg(test)]
@@ -215,6 +230,22 @@ mod tests {
     }
 
     #[test]
+    fn deduplicate_with_description_explains_conflict_rename() {
+        let mut taken = HashSet::new();
+        taken.insert("a.pdf".to_string());
+        let (result, description) = deduplicate_with_description("a.pdf", &taken);
+        assert_eq!(result, "a (2).pdf");
+        assert_eq!(description, " renamed to avoid conflict");
+    }
+
+    #[test]
+    fn deduplicate_with_description_is_empty_for_unique_name() {
+        let (result, description) = deduplicate_with_description("unique.txt", &HashSet::new());
+        assert_eq!(result, "unique.txt");
+        assert!(description.is_empty());
+    }
+
+    #[test]
     fn dated_prefix_uses_year_and_month() {
         let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
         assert_eq!(
@@ -251,5 +282,32 @@ mod tests {
         // would file the document under a period it never belonged to.
         let timestamp = UNIX_EPOCH - std::time::Duration::from_secs(86_400);
         assert_eq!(dated_prefix("a.pdf", timestamp), "a.pdf");
+    }
+
+    #[test]
+    fn dated_prefix_with_description_returns_description() {
+        let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
+        let (result, description) = dated_prefix_with_description("acme-invoice.pdf", timestamp);
+        assert_eq!(result, "2024-02 acme-invoice.pdf");
+        assert_eq!(description, " added date prefix");
+    }
+
+    #[test]
+    fn dated_prefix_with_description_no_change_when_already_prefixed() {
+        let timestamp = UNIX_EPOCH + std::time::Duration::from_secs(1_708_300_800);
+        let (result, description) =
+            dated_prefix_with_description("2024-02 acme-invoice.pdf", timestamp);
+        assert_eq!(result, "2024-02 acme-invoice.pdf");
+        assert!(description.is_empty());
+    }
+
+    #[test]
+    fn dated_prefix_with_description_no_change_when_pre_epoch() {
+        // Clock damage produces pre-epoch mtimes; stamping those "1970-01"
+        // would file the document under a period it never belonged to.
+        let timestamp = UNIX_EPOCH - std::time::Duration::from_secs(86_400);
+        let (result, description) = dated_prefix_with_description("a.pdf", timestamp);
+        assert_eq!(result, "a.pdf");
+        assert!(description.is_empty());
     }
 }

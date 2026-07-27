@@ -484,6 +484,8 @@ mod tests {
             reason: "denied".into(),
             conflict: None,
             source_identity: None,
+            source_path: None,
+            target_path: Some(PathBuf::from("/tmp/ghost-denied")),
         };
         let plan = plan_with_rules("z", &[allow_rule(PathBuf::from("/tmp").as_path())]);
         let mut denied = plan;

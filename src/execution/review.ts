@@ -53,10 +53,14 @@ export function renderActionPlanSteps(plan: ActionPlan): string {
       const kindBadge = stepKindBadge(step);
       const risk = decisionKind(step.decision) === "require_confirmation" ? decisionRisk(step.decision) : "";
       const riskClass = risk ? ` ghost2-step--risk-${escapeAttr(risk)}` : "";
+      const reason = step.reason
+        ? `<span class="ghost2-step__reason">${escapeHtml(step.reason)}</span>`
+        : "";
       return `<li class="ghost2-step${riskClass}">
         <span class="ghost2-step__label">✓ ${escapeHtml(step.label)}</span>
         ${kindBadge}
         ${badge}
+        ${reason}
       </li>`;
     })
     .join("");
