@@ -84,7 +84,9 @@ cleanup) — no dedicated backend command; the wizard is pure UI over these two.
   can_copy, can_delete, trust }`. `trust` is `automate | ask_first | never`
   (snake_case) and serde-defaults to `ask_first` when absent, so rules and
   frontends predating trust keep their behavior.
-- **PlanAction** carries an optional `rule_path` naming the boundary that fired.
+- **PlanAction** carries an optional `rule_path` naming the boundary that fired,
+  plus optional `source_path` and `target_path` fields for review clients.
+  Older serialized actions without the explicit path fields still deserialize.
 - **AuditLog** serializes transparently as an array of
   `{ capability, outcome, at }` events, each optionally carrying `rule_path`
   (the boundary that fired) and `provenance` (`automated` | `user_approved`).
