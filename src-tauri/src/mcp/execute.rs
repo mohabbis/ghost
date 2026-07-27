@@ -325,6 +325,57 @@ fn run_summary_json(stored: &StoredExecution) -> Value {
     })
 }
 
+/// Read-only run history for MCP clients (`ghost.audit_history`): every past
+/// Organizer/routine run, newest first. Summary fields only — counts, seal /
+/// finished state, and a derived status. No audit-event bodies, no receipts,
+/// no typed values, so nothing sensitive leaves the machine; a client that
+/// wants one run's detail follows up with `ghost.get_run`.
+pub fn audit_history(limit: Option<usize>) -> Result<Value, String> {
+    let conn = open_default().map_err(|e| e.to_string())?;
+    audit_history_with_db(limit, &conn)
+}
+
+/// Same as [`audit_history`], with an explicit DB (tests / alternate stores).
+pub fn audit_history_with_db(limit: Option<usize>, conn: &Db) -> Result<Value, String> {
+    use crate::storage::executions::list_executions;
+    let mut runs = list_executions(conn).map_err(|e| e.to_string())?;
+    let total = runs.len();
+    if let Some(max) = limit {
+        runs.truncate(max);
+    }
+    let runs_json: Vec<Value> = runs.iter().map(audit_history_row_json).collect();
+    Ok(json!({
+        "runs": runs_json,
+        "returned": runs_json.len(),
+        "total": total,
+        "note": "Newest first. Summary fields only — call ghost.get_run for a run's redacted receipt and verifications.",
+    }))
+}
+
+/// One history row: the [`ExecutionSummary`] fields plus a derived status. The
+/// same status vocabulary `execute_response_json` / `run_summary_json` use, so
+/// history and single-run views agree.
+fn audit_history_row_json(summary: &ExecutionSummary) -> Value {
+    let status = if !summary.finished {
+        "interrupted"
+    } else if summary.failed > 0 {
+        "failed"
+    } else {
+        "completed"
+    };
+    json!({
+        "execution_id": summary.id,
+        "zone_id": summary.zone_id,
+        "created_at": summary.created_at,
+        "applied": summary.applied,
+        "skipped": summary.skipped,
+        "failed": summary.failed,
+        "sealed": summary.sealed,
+        "finished": summary.finished,
+        "status": status,
+    })
+}
+
 pub fn undo_run(execution_id: &str) -> Result<Value, String> {
     let conn = open_default().map_err(|e| e.to_string())?;
     let report = undo_zone_run(&conn, execution_id)?;
@@ -343,6 +394,40 @@ mod tests {
     use crate::organizer::planner::{PlanAction, plan_with_rules};
     use crate::policy::{Capability, FolderRule, PolicyDecision, TrustLevel};
     use std::path::PathBuf;
+
+    #[test]
+    fn audit_history_on_empty_db_is_empty() {
+        let db = crate::storage::open_in_memory().unwrap();
+        let out = audit_history_with_db(None, &db).unwrap();
+        assert_eq!(out["total"], 0);
+        assert_eq!(out["returned"], 0);
+        assert_eq!(out["runs"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn audit_history_lists_newest_first_and_honors_limit() {
+        use crate::storage::executions::begin_execution;
+        let db = crate::storage::open_in_memory().unwrap();
+        // begin_execution rows carry a monotonic created_at; seed three.
+        let _a = begin_execution(&db, "zone-a").unwrap();
+        let _b = begin_execution(&db, "zone-b").unwrap();
+        let c = begin_execution(&db, "zone-c").unwrap();
+
+        let all = audit_history_with_db(None, &db).unwrap();
+        assert_eq!(all["total"], 3);
+        assert_eq!(all["returned"], 3);
+        // Newest first: the last-started run leads.
+        assert_eq!(all["runs"][0]["execution_id"], c);
+        // A begin_execution row has not finished — surfaced as interrupted.
+        assert_eq!(all["runs"][0]["status"], "interrupted");
+        assert_eq!(all["runs"][0]["finished"], false);
+
+        let limited = audit_history_with_db(Some(1), &db).unwrap();
+        assert_eq!(limited["total"], 3, "total reflects all runs, not the page");
+        assert_eq!(limited["returned"], 1);
+        assert_eq!(limited["runs"].as_array().unwrap().len(), 1);
+        assert_eq!(limited["runs"][0]["execution_id"], c);
+    }
 
     fn allow_rule(path: &std::path::Path) -> FolderRule {
         FolderRule {

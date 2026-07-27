@@ -12,6 +12,7 @@ pub enum McpToolKind {
     GetApprovalStatus,
     ExecuteApprovedPlan,
     GetRun,
+    AuditHistory,
     UndoRun,
     ListRoutines,
     PreviewRoutine,
@@ -33,6 +34,7 @@ impl McpToolKind {
             McpToolKind::GetApprovalStatus,
             McpToolKind::ExecuteApprovedPlan,
             McpToolKind::GetRun,
+            McpToolKind::AuditHistory,
             McpToolKind::UndoRun,
             McpToolKind::ListRoutines,
             McpToolKind::PreviewRoutine,
@@ -59,6 +61,9 @@ impl McpToolKind {
             }
             McpToolKind::GetRun => {
                 "Get run summary, halt fields (stopped_early / stop_reason / verifications), and receipt"
+            }
+            McpToolKind::AuditHistory => {
+                "List past runs newest-first (id, zone, counts, sealed/finished, status) for review; read-only, optional 'limit'"
             }
             McpToolKind::UndoRun => "Undo an eligible completed run",
             McpToolKind::ListRoutines => {
@@ -89,6 +94,7 @@ impl McpToolKind {
             McpToolKind::GetApprovalStatus => "ghost.get_approval_status",
             McpToolKind::ExecuteApprovedPlan => "ghost.execute_approved_plan",
             McpToolKind::GetRun => "ghost.get_run",
+            McpToolKind::AuditHistory => "ghost.audit_history",
             McpToolKind::UndoRun => "ghost.undo_run",
             McpToolKind::ListRoutines => "ghost.list_routines",
             McpToolKind::PreviewRoutine => "ghost.preview_routine",
