@@ -405,28 +405,44 @@ mod tests {
     }
 
     #[test]
-    fn audit_history_lists_newest_first_and_honors_limit() {
-        use crate::storage::executions::begin_execution;
+    fn audit_history_projects_list_executions_order_and_honors_limit() {
+        use crate::storage::executions::{begin_execution, list_executions};
         let db = crate::storage::open_in_memory().unwrap();
-        // begin_execution rows carry a monotonic created_at; seed three.
-        let _a = begin_execution(&db, "zone-a").unwrap();
-        let _b = begin_execution(&db, "zone-b").unwrap();
-        let c = begin_execution(&db, "zone-c").unwrap();
+        begin_execution(&db, "zone-a").unwrap();
+        begin_execution(&db, "zone-b").unwrap();
+        begin_execution(&db, "zone-c").unwrap();
+
+        // audit_history is a pure projection of list_executions, so its rows
+        // must appear in exactly list_executions' order. (created_at is
+        // second-granularity, so same-second rows tie and fall back to the
+        // id tiebreaker — don't assume creation order here.)
+        let expected: Vec<String> = list_executions(&db)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(expected.len(), 3);
 
         let all = audit_history_with_db(None, &db).unwrap();
         assert_eq!(all["total"], 3);
         assert_eq!(all["returned"], 3);
-        // Newest first: the last-started run leads.
-        assert_eq!(all["runs"][0]["execution_id"], c);
+        let got: Vec<String> = all["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["execution_id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(got, expected, "audit_history must preserve list order");
         // A begin_execution row has not finished — surfaced as interrupted.
         assert_eq!(all["runs"][0]["status"], "interrupted");
         assert_eq!(all["runs"][0]["finished"], false);
 
+        // limit truncates the head of that same order; total still counts all.
         let limited = audit_history_with_db(Some(1), &db).unwrap();
         assert_eq!(limited["total"], 3, "total reflects all runs, not the page");
         assert_eq!(limited["returned"], 1);
         assert_eq!(limited["runs"].as_array().unwrap().len(), 1);
-        assert_eq!(limited["runs"][0]["execution_id"], c);
+        assert_eq!(limited["runs"][0]["execution_id"], expected[0]);
     }
 
     fn allow_rule(path: &std::path::Path) -> FolderRule {
