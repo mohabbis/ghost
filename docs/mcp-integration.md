@@ -179,6 +179,7 @@ Start deliberately small and read-first.
 | `ghost.request_approval` | `safe-read` | Opens or focuses the Ghost desktop approval view. |
 | `ghost.get_approval_status` | `safe-read` | Reports pending/approved/denied/expired; returns `approval_token` after local approval. |
 | `ghost.execute_approved_plan` | `local-mutate` | Fails unless desktop UI approved the exact Organizer plan and issued a valid token. |
+| `ghost.audit_history` | `safe-read` | Lists past runs newest-first (id, zone, counts, sealed/finished, derived status). Summary fields only — no audit-event bodies, no receipts, no typed values. Optional `limit`. Follow up with `ghost.get_run` for one run's redacted receipt. |
 | `ghost.undo_run` | `local-mutate` | Uses undo journal and policy checks; never invents reverse operations from AI output. |
 
 ### Phase 3b: saved routines (built — flagship vertical slice)

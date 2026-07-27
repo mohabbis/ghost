@@ -106,6 +106,9 @@ pub fn handle_tool(name: &str, arguments: &Value) -> Result<Value, String> {
             let execution_id = arg_string(arguments, "execution_id")?;
             super::execute::get_run_summary(&execution_id)
         }
+        McpToolKind::AuditHistory => {
+            super::execute::audit_history(arg_usize_opt(arguments, "limit"))
+        }
         McpToolKind::UndoRun => {
             let execution_id = arg_string(arguments, "execution_id")?;
             super::execute::undo_run(&execution_id)
@@ -490,6 +493,7 @@ pub fn list_tools() -> Vec<Value> {
                         "approval_token": { "type": "string" },
                         "execution_id": { "type": "string" },
                         "pairing_code": { "type": "string" },
+                        "limit": { "type": "integer", "minimum": 0 },
                     },
                 },
             })
@@ -510,6 +514,13 @@ fn arg_string(args: &Value, key: &str) -> Result<String, String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .ok_or_else(|| format!("Missing required argument '{key}'"))
+}
+
+/// Optional non-negative integer argument (e.g. `audit_history`'s `limit`).
+/// Absent or null yields `None`; anything present but non-integer is ignored
+/// rather than erroring — an over-eager client should still get its history.
+fn arg_usize_opt(args: &Value, key: &str) -> Option<usize> {
+    args.get(key).and_then(|v| v.as_u64()).map(|n| n as usize)
 }
 
 fn approval_status_label(status: &ApprovalRequestStatus) -> &'static str {
@@ -537,6 +548,27 @@ fn plan_to_json(plan: &OrganizerPlan) -> Value {
 mod tests {
     use super::*;
     use crate::core::events::{InputEvent, KeyAction};
+
+    #[test]
+    fn arg_usize_opt_parses_limit_and_tolerates_junk() {
+        assert_eq!(arg_usize_opt(&json!({ "limit": 5 }), "limit"), Some(5));
+        assert_eq!(arg_usize_opt(&json!({}), "limit"), None);
+        // Non-integer / negative values are ignored, not fatal.
+        assert_eq!(arg_usize_opt(&json!({ "limit": "ten" }), "limit"), None);
+        assert_eq!(arg_usize_opt(&json!({ "limit": -1 }), "limit"), None);
+    }
+
+    #[test]
+    fn audit_history_tool_is_advertised_as_read_only() {
+        // ghost.audit_history is the vision's review tool: read-only, no approval,
+        // no mutation. Guard that it stays that way.
+        assert!(!McpToolKind::AuditHistory.requires_approval());
+        assert!(!McpToolKind::AuditHistory.mutates());
+        let advertised = list_tools()
+            .iter()
+            .any(|t| t["name"] == "ghost.audit_history");
+        assert!(advertised, "ghost.audit_history must be advertised");
+    }
 
     #[test]
     fn unknown_tool_name_is_rejected() {
