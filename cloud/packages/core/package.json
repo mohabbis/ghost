@@ -8,7 +8,8 @@
     "./db": "./src/db.ts",
     "./schema/step": "./src/schema/step.ts",
     "./classifier": "./src/classifier/sensitive.ts",
-    "./queue": "./src/queue.ts"
+    "./queue": "./src/queue.ts",
+    "./audit": "./src/audit.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",

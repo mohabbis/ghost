@@ -1,16 +1,24 @@
 import { Worker } from "bullmq";
-import { QUEUE_NAMES, type NoopJob } from "@ghost/core/queue";
+import { QUEUE_NAMES, type NoopJob, type RunWorkflowJob } from "@ghost/core/queue";
 import { createRedisConnection } from "./redis.js";
+import { runWorkflowJob } from "./jobs/runWorkflow.js";
 
 /**
  * Ghost worker entrypoint.
  *
- * Phase 0: consumes the `noop` queue to prove the web ↔ Redis ↔ worker wiring.
- * Phase 1 adds a `run-workflow` Worker that drives Playwright (see the project
- * plan). Each queue gets its own Worker so failures stay isolated.
+ * `noop` proves the web ↔ Redis ↔ worker wiring (Phase 0). `run-workflow`
+ * executes a workflow run via Playwright, halting at approval gates (Phase 1).
+ * Each queue gets its own Worker so failures stay isolated.
  */
 
 const connection = createRedisConnection();
+
+const runWorker = new Worker<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, runWorkflowJob, {
+  connection,
+});
+runWorker.on("failed", (job, err) => {
+  console.error(`[worker] run-workflow ${job?.data.runId} failed:`, err);
+});
 
 const noopWorker = new Worker<NoopJob>(
   QUEUE_NAMES.noop,
@@ -34,7 +42,7 @@ console.log("[worker] Ghost worker started. Listening on queues:", Object.values
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`[worker] ${signal} received, shutting down…`);
-  await noopWorker.close();
+  await Promise.all([noopWorker.close(), runWorker.close()]);
   await connection.quit();
   process.exit(0);
 }

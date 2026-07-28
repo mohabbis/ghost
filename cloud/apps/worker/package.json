@@ -7,17 +7,21 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsup src/index.ts --format esm --target node20 --clean",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.716.0",
     "@ghost/core": "workspace:*",
     "bullmq": "^5.34.4",
-    "ioredis": "^5.4.2"
+    "ioredis": "^5.4.2",
+    "playwright": "^1.55.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

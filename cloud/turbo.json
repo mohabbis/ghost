@@ -15,6 +15,12 @@
     "S3_SECRET_ACCESS_KEY",
     "NODE_ENV"
   ],
+  "globalPassThroughEnv": [
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE",
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+    "GHOST_ARTIFACT_DIR"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
