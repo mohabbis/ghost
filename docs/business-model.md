@@ -141,9 +141,9 @@ compliance questionnaires, procurement) comes later, when real pull justifies it
    to seed the network effect and author ecosystem — later, once the wedge has
    real referenceable users, not a near-term dependency for revenue.
 
-Pricing ($79/seat, flat) is already published — see `CLAUDE.md`. The remaining
-work here is proving time-to-value with real instrumentation
-(`organizer_time_to_value`), not gating pricing on it.
+Pricing for the cloud product is the tiered table above (see also `CLAUDE.md`
+and the marketing site). Early money is implementation services, then seats.
 
-The first paid-relevant feature (audit-as-compliance-artifact) is scoped as
-concrete work in `docs/PRODUCT_ROADMAP.md` §6.
+Near-term paid proof for the cloud MVP: land one customer workflow end-to-end
+(record → approve → execute → verify → audit), then expand playbooks. Desktop
+Organizer monetization notes elsewhere in this file are historical.
