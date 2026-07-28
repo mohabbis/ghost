@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkflowStep } from "@ghost/core/schema/step";
-import { BrowserSession, runStep } from "./driver.js";
+import { BrowserSession, restoreBrowserPrefix, runStep } from "./driver.js";
 
 /**
  * Hermetic integration test: drives real Chromium against a local file fixture.
@@ -77,5 +77,37 @@ describe("Playwright driver", () => {
       assertion: { kind: "textPresent", expected: "this text is not on the page" },
     } satisfies WorkflowStep);
     expect(res.verification?.passed).toBe(false);
+  });
+
+  it("restoreBrowserPrefix rebuilds page state so a gated click can resume", async () => {
+    // Simulate approval resume: a fresh page has no form; replaying the prefix
+    // (navigate + fill) must leave Submit order clickable.
+    const fresh = await BrowserSession.launch();
+    try {
+      const prefix: WorkflowStep[] = [
+        { id: "1", type: "navigate", url: fixtureUrl },
+        {
+          id: "2",
+          type: "fill",
+          selector: { role: "textbox", name: "Full name" },
+          value: "Ada Lovelace",
+          sensitive: false,
+        },
+      ];
+      await restoreBrowserPrefix(fresh.page, prefix);
+      await runStep(fresh.page, {
+        id: "3",
+        type: "click",
+        selector: { role: "button", name: "Submit order" },
+      } satisfies WorkflowStep);
+      const verify = await runStep(fresh.page, {
+        id: "4",
+        type: "verify",
+        assertion: { kind: "textPresent", expected: "Order submitted" },
+      } satisfies WorkflowStep);
+      expect(verify.verification?.passed).toBe(true);
+    } finally {
+      await fresh.close();
+    }
   });
 });

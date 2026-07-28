@@ -4,7 +4,7 @@ import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import { hashAuditEvent, type AuditPayload } from "@ghost/core/audit";
 import type { RunWorkflowJob } from "@ghost/core/queue";
 import { planNextAction, isNoopStep } from "../runtime/state-machine.js";
-import { BrowserSession, runStep } from "../browser/driver.js";
+import { BrowserSession, restoreBrowserPrefix, runStep } from "../browser/driver.js";
 import { artifactStore, screenshotKey } from "../storage/artifacts.js";
 
 /**
@@ -118,7 +118,14 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         let verification: { passed: boolean; detail: string } | null = null;
 
         if (!isNoopStep(step)) {
-          session ??= await BrowserSession.launch();
+          if (!session) {
+            session = await BrowserSession.launch();
+            // Resume-after-approval: rebuild page state lost when the prior job
+            // closed Chromium at the gate. See restoreBrowserPrefix.
+            if (cursor > 0) {
+              await restoreBrowserPrefix(session.page, steps.slice(0, cursor));
+            }
+          }
           const result = await runStep(session.page, step);
           screenshotRef = await artifactStore().put(
             screenshotKey(runId, index),
