@@ -48,7 +48,7 @@ Smoke test: sign in → **Workflows → Create demo workflow → Run** → appro
 Docs: [`cloud/README.md`](cloud/README.md) ·
 [`cloud/docs/PHASE_1_PLAN.md`](cloud/docs/PHASE_1_PLAN.md) ·
 [`cloud/docs/CURSOR_HANDOFF.md`](cloud/docs/CURSOR_HANDOFF.md) ·
-[`AGENTS.md`](AGENTS.md).
+[`AGENTS.md`](AGENTS.md) · [`docs/README.md`](docs/README.md).
 
 Validate: `cd cloud && pnpm typecheck && pnpm test && pnpm build`.
 

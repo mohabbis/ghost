@@ -1,3 +1,5 @@
+> **Legacy desktop release runbook.** The commercial product is Ghost Cloud (`cloud/`). Use this file only when cutting a Tauri installer.
+
 # Releasing Ghost
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:

@@ -338,7 +338,7 @@ function organizerDemo() {
 
 /* ============================================================
    Demo B — Ghost 2.0 Action Plan (invoice → Finance)
-   Faithful simulation of docs/GHOST_2_DEMO.md — not a live IPC call.
+   Faithful simulation of legacy Action Plan demo (removed from docs) — not a live IPC call.
    ============================================================ */
 function actionPlanDemo() {
   const planEl = $("#ap-plan");

@@ -19,7 +19,7 @@
 //!   command surface must still go through the normal trust pipeline
 //!   (module + risk class + policy + approval + audit/undo).
 //!
-//! See `docs/neural-atlas.md` for the full design and its boundaries.
+//! Atlas is retained in code but is not a marketed product surface.
 
 use serde::{Deserialize, Serialize};
 
