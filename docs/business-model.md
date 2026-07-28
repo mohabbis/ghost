@@ -1,8 +1,14 @@
 # Business model & moat
 
-Why a local-first desktop app can still win and still make money. Operational
-notes, not a vision essay — pair with `docs/gtm-organizer.md` (persona/channels)
-and `docs/PRODUCT_ROADMAP.md` (near-term build order).
+> **Updated for the cloud direction.** Ghost is now a cloud SaaS AI operator (see
+> `docs/product-direction.md`). Pricing is the tiered model in "The model" below;
+> the earlier "$79/month flat, local-first" framing is superseded. Much of the
+> historical "local-first moat" analysis in this file is retained as context, but
+> the moat is now **trust + auditability + hybrid execution across a customer's
+> existing systems**, not on-device isolation.
+
+Operational notes, not a vision essay — pair with `docs/gtm-organizer.md`
+(persona/channels) and `docs/PRODUCT_ROADMAP.md` (near-term build order).
 
 ## The hard truth
 
@@ -76,23 +82,29 @@ below):
   lock-in.
 - **Tailscale / Syncthing**: local-first with freemium + team monetization.
 
-## The model — one price, land on the wedge, expand seat-by-seat
+## The model — tiered, with implementation-led early revenue
 
-Ghost is **$79/month per seat, flat** — no tiers, no "contact sales," no
-enterprise pricing page (see `CLAUDE.md` "Product identity"). Priced to be
-expensable by the ops lead without a manager's signoff, and high enough to
-cover LLM spend.
+Ghost is priced as a cloud SaaS with tiers plus paid setup:
 
-| Who | What they get | Why they pay |
+| Tier | Price | For |
 |---|---|---|
-| The ops lead at a 10–50 person wealth-management or accounting firm | The full trust pipeline: Organizer core, Zones/routines, all filing presets, exportable/tamper-evident audit, undo | Client data barred from cloud tools by firm policy; this is the only automation option that's structurally allowed |
-| Additional seats at the same firm | Same product, same price per seat | Land with one ops lead (see `gtm-organizer.md`), expand seat-by-seat into the firm as trust compounds |
+| Individual | $29–49 / month | A single operator automating their own recurring workflows |
+| Professional | $99–199 / user / month | A team member running multi-step, connector-backed workflows |
+| Team | $500–2,000 / month | A business, priced by runs, integrations, and governance |
+| Implementation services | $2,500–15,000 (one-time) | Configuring a customer's specific workflows |
 
-There is no free tier, no usage metering, and no separate "Team" SKU — every
-seat gets the same product at the same price. Firm-wide rollout is a matter of
-adding seats, not upgrading a tier. This keeps the pitch honest to the kill
-list in `CLAUDE.md`: no enterprise motion (SSO, compliance questionnaires,
-"contact sales") until real pull justifies it, not before.
+The early money is expected to come from **implementation, not self-serve
+subscriptions.** Operations-heavy SMBs don't wake up craving automation software;
+they pay to remove a specific, recurring, expensive headache. Land by configuring
+one high-value workflow (reporting, reconciliation, document processing), prove it,
+then expand into more workflows and more seats.
+
+The moat is engineered, not assumed: **trust + auditability** (approval gates,
+verification, hash-chained audit an auditor accepts), **hybrid execution** across
+the customer's existing systems (API → browser → desktop → vision fallback, so
+Ghost works where clean integrations don't exist), and **accumulated workflow
+IP** (each configured workflow raises switching cost). Enterprise motion (SSO,
+compliance questionnaires, procurement) comes later, when real pull justifies it.
 
 ## What we do NOT do (protect the moat)
 

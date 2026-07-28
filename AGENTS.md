@@ -4,21 +4,57 @@ Canonical instructions for AI coding agents working in this repository.
 
 Read this file before changing code, docs, workflows, releases, or product positioning. If another instruction file conflicts with this one, follow this file unless the user explicitly overrides it.
 
+> **Product direction (current): Ghost is a cloud SaaS in `cloud/`.** The
+> "Legacy desktop app" section below describes the **legacy Rust/Tauri desktop
+> product** (repo root: `src-tauri/`, `src/`, `apps/macos/`) — superseded, retained
+> in-tree, still accurate for that code. For the cloud product, the authoritative
+> docs are `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`, and
+> `cloud/docs/CURSOR_HANDOFF.md`. The trust *principles* in that section
+> (deny-by-default, approval before mutation, verify, audit, risk classification)
+> carry forward and remain in force for the cloud product; the platform specifics
+> (Tauri commands, local-first storage, keyboard/replay) and the Organizer wedge do
+> not.
+
 ## Product contract
 
-Ghost is a local-first desktop automation product for macOS and Windows.
+Ghost is an **AI operator** delivered as a cloud SaaS (`cloud/`): it learns a
+business workflow once, then executes it across the software a company already
+uses — browser automation and APIs today, desktop later — with human approval on
+sensitive actions, verification of outcomes, and a full audit log.
 
 Build toward this promise:
 
 ```text
-Record -> Inspect -> Approve -> Replay -> Audit -> Undo
+Capture -> Review -> Approve -> Execute -> Verify -> Audit -> Recover
 ```
 
-Ghost should turn repeated computer work into safe, reusable, permission-bounded routines. It must not be presented or built as a generic autonomous agent that silently controls the user's computer.
+Prefer, in order: **APIs → browser automation → desktop automation → vision
+fallback.** Ghost should understand the objective and adapt when an interface
+changes — not merely replay clicks. It must not be built as a generic autonomous
+agent that acts without approval on sensitive steps or without an audit trail.
 
-Ghost supports account sign-in (Microsoft/Google) and is meant to eventually connect with the tech stacks users already run — Microsoft Fabric/Power BI, Google Cloud, and AI-assistant connectors (Claude, Cursor, Codex, ChatGPT). That connectivity is a competitive advantage, not the thesis: every integration is additive to the trust pipeline below, never a way around it. See `docs/integrations-roadmap.md` for what's built versus planned.
+Connectors (Gmail/Outlook, Salesforce, HubSpot, QuickBooks, cloud storage, etc.)
+use **scoped, revocable, least-privilege credentials**, disclosed to the customer,
+and every action still flows through the approval + audit pipeline below — never
+around it.
 
-## Current product wedge
+## Current focus (cloud MVP)
+
+Build the five-part MVP in `cloud/`: (1) record a browser workflow, (2) convert it
+to editable steps, (3) replay across browser/API, (4) require approval before
+sensitive actions, (5) log every run (status, screenshots, verification, errors).
+Phase 1 (the execution engine + approval gate + run UI) is built; recording is
+next. See `cloud/docs/PHASE_1_PLAN.md`.
+
+---
+
+## Legacy desktop app (superseded — retained in-tree)
+
+> The rest of this file documents the legacy desktop product. Read the trust
+> pipeline, non-negotiable rules, and risk classes as **principles that still
+> apply** to the cloud product (translate "Tauri command" → "API route / worker
+> job"). Read the Organizer wedge, command architecture, build order, validation
+> commands, and Cursor-Cloud notes as **desktop-specific and historical**.
 
 Prioritize **Ghost Organizer** first.
 

@@ -1,5 +1,14 @@
 # Automation strategy — what Ghost sells beyond "file organizer"
 
+> **Read in light of the cloud direction.** Ghost is now a cloud SaaS AI operator
+> (`docs/product-direction.md`, `cloud/`). This doc's core thesis — the product is
+> *auditable, approval-gated execution across the systems a business already uses*,
+> and go-to-market is workflow-by-workflow — still holds and is in fact the current
+> direction. Two things here are superseded: the **local-first / on-device**
+> framing (execution now runs in the cloud with scoped credentials) and the **$79
+> flat pricing** (now tiered — see `docs/business-model.md`). Treat "Organizer" as
+> one workflow type among many, not the wedge.
+
 Status: **strategy / planning doc, not a build order.** It reconciles two things
 that look like they conflict but don't:
 
