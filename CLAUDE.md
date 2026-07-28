@@ -4,6 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `AGENTS.md` is the canonical agent contract. Read and follow it first. This file adds Claude-specific execution guidance and should not conflict with `AGENTS.md`.
 
+> ## Product direction (current): Ghost is a cloud SaaS
+>
+> The **active product lives in `cloud/`** — an **AI operator** that learns a
+> business workflow once, then executes it across the software a company already
+> uses (browser + API now, desktop later) with **human approval on sensitive
+> actions, verification of outcomes, and a full audit log**. Start here:
+> `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`, `cloud/docs/CURSOR_HANDOFF.md`.
+>
+> The **Rust/Tauri desktop app** at the repo root (`src-tauri/`, `src/`,
+> `apps/macos/`) — and most sections of this file below the "Architecture
+> direction" heading — describe the **legacy, local-first desktop product**. It is
+> **superseded** by the cloud SaaS but **retained in-tree** for reference; treat
+> that content as historical unless you are specifically working on the legacy app.
+>
+> **What carries forward** into the cloud product: the trust pipeline — AI
+> proposes; deterministic code executes only approved plans; deny-by-default on
+> risky actions; explicit approval before mutating; verify the outcome; audit
+> everything (hash-chained); undo where practical. **What does not carry forward**:
+> the local-first / on-device delivery model. The cloud product runs in the cloud,
+> holds scoped credentials for the systems it operates, and its trust story is
+> approval-gates + verification + tamper-evident audit logs rather than on-device
+> isolation. The `cloud/` code and docs are authoritative for the cloud product.
+
 ## Operating mode
 
 Work like a cautious product engineer, not a demo agent chasing novelty.
@@ -20,101 +43,78 @@ Default behavior:
 
 ## Product identity
 
-Ghost is not a general automation platform or an "OS." It is one product solving
-one problem for one customer at one price. Check every downstream decision — code,
-copy, roadmap — against this before proceeding. See `docs/product-direction.md`
-for the underlying Organizer-first product decision and its rationale.
+Ghost is an **AI operator**: it learns a business workflow once, then executes it
+across the software a company already uses — combining browser automation and
+APIs today (desktop automation later), with human approval on sensitive actions,
+verification of outcomes, and a full audit log. It is a **cloud SaaS** (the
+`cloud/` workspace), not a desktop utility.
 
-**What Ghost is:** a Tauri 2 / Rust desktop app for macOS and Windows. Local-first —
-no data leaves the machine except through explicit, scoped, opt-in integrations the
-user approves (account sign-in, stack connectors — see `docs/integrations-roadmap.md`
-and Privacy boundaries below). AI-assisted, suggestion-only — it interprets
-variation in input beyond rigid if-this-then-that macros, but per the Engineering
-rules below, AI only proposes; deterministic code executes only approved plans.
-Currently developer-preview stage.
+**What Ghost is:** a modern cloud application (`cloud/` — Next.js + Node worker +
+Postgres + Redis + Playwright). It sits *above* existing tools rather than
+replacing them. AI-assisted but not AI-executed: per the Engineering rules below,
+AI only proposes/interprets; deterministic code executes approved plans. Early
+stage — the execution engine and the run → approval → verify loop are built
+(`cloud/docs/PHASE_1_PLAN.md`); recording and connector integrations are next.
 
-**The one problem:** local files pile up — messy Downloads, client folders,
-month-end exports, PDFs, screenshots, and handoff packets — and cleaning them up
-by hand is slow, while doing it with a cloud tool is a nonstarter for anyone
-handling client or financial data. Ghost Organizer proves a trustworthy
-automation loop on that job in minutes, before asking anyone to trust it with
-broader desktop control.
+**The core promise:**
 
-**The one customer:** people accountable for recurring operational files —
-small-business operators, finance/accounting/admin staff, consultants handling
-client deliverables, and founders whose local folders have become the system of
-record. The common thread: "I need this folder cleaned up safely, and I need
-proof of what changed."
+> Teach Ghost a workflow once. Ghost executes it reliably, adapts when the
+> interface changes, verifies the outcome, and involves a human only when
+> necessary — leaving an audit trail of exactly what it changed.
 
-**The one price:** $79/month per seat. Flat. No tiers, no "contact sales," no
-enterprise pricing page. Priced to be expensable without a manager's signoff, and
-high enough to cover LLM spend.
+**The problem:** operations-heavy businesses move information by hand between
+disconnected systems — email, PDFs, Excel, ERPs, CRMs, web portals, and legacy
+desktop apps. That work is repetitive, error-prone, and expensive. Ghost
+automates those cross-app workflows with controls a regulated business will
+accept.
 
-**The pitch:**
+**The first customers:** operations-heavy SMBs — wholesale distributors, property
+managers, accounting/bookkeeping firms, logistics, recruiting, financial-ops and
+healthcare-admin teams. The common thread: recurring, measurable, reversible
+work that spans several systems.
 
-> Ghost safely organizes messy local folders: it scans, proposes a cleanup plan,
-> waits for your approval, moves/renames files, writes an audit log, and can undo
-> the run.
+**Positioning — Ghost is:** an execution platform / AI operator. **Ghost is not:**
+another chatbot, a no-code automation builder, a macro recorder, or a generic AI
+assistant. The differentiator is *taught-then-trusted execution*: demonstrate a
+real process once; Ghost executes, adapts, verifies, and escalates exceptions.
 
-Do not frame Ghost as:
+**Pricing (tiered):** Individual $29–49/mo · Professional $99–199/user/mo · Team
+$500–2,000/mo (by runs/integrations/governance) · Implementation services
+$2,500–15,000 to configure workflows. Early revenue is expected to come from
+implementation, not self-serve. (See `docs/business-model.md`.)
 
-- a generic autonomous AI agent;
-- a chatbot;
-- an RPA clone;
-- a macro recorder only;
-- an app that silently takes over the user's computer;
-- "workflow automation," an "operating system," or any other category-level label;
-- a platform for multi-provider LLM routing — that's plumbing, not the pitch. The
-  customer doesn't care which model runs underneath.
-
-Kill list — do not do these:
-
-- do not build or ship features aimed at consumers/general users. This is not a
-  prosumer tool right now;
-- do not build settings, toggles, or configs for hypothetical use cases nobody has
-  asked for;
-- do not start enterprise-motion work (SSO, compliance questionnaires, "contact
-  sales") — parked for ~18 months out, not now.
-
-**Ship filter for this quarter:** before building or writing anything customer-facing
-or feature-shaped, ask "Does this make Ghost Organizer's cleanup loop (select folder
-→ scan → propose plan → review → approve → move/rename → audit → undo) faster,
-clearer, or more trustworthy?" If no, it doesn't ship this quarter — full stop, no
-exceptions for "cool to have." This filter does not apply to foundational
-trust-pipeline work already in the build order (CI, command classification, policy
-primitives, Zones, Ghost Organizer preview/execute/audit/undo, replay/release
-hardening — see Current wedge and Target product layers below); that work stays in
-scope regardless of whether it's specifically Organizer-shaped.
-
-The product value is trustworthy execution. Ghost Organizer is the flagship
-expression of it today:
+The product value is **trustworthy execution**, expressed as one engine:
 
 ```text
-Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo
+Capture -> Review -> Approve -> Execute -> Verify -> Audit -> Recover
 ```
 
-Record/Replay (data-entry automation) implements the same trust shape and remains
-a supporting trust-core capability — see Current wedge below — but it is not the
-homepage promise until reliability and verification are stronger.
+Prefer, in order: **APIs → browser automation → desktop automation → visual
+(vision) interaction as a last resort.** Ghost should understand the objective,
+not merely replay clicks.
 
-## Current wedge
+## Current focus (cloud MVP)
 
-Prioritize Ghost Organizer before broad automation.
+Build the five-part MVP in `cloud/`, in order:
 
-Ghost Organizer flow:
+1. **Record** a browser workflow (a user performs the task once).
+2. **Convert** the recording into editable, typed steps.
+3. **Replay** the workflow across browser / API actions.
+4. **Require approval** before sensitive actions (send, pay, delete, submit).
+5. **Log** every run: per-step status, screenshots, verification, errors.
 
-```text
-Select folder -> Scan -> Propose plan -> Review -> Approve -> Move/Rename -> Audit -> Undo
-```
+Built so far (Phase 1): the execution engine, the deterministic approval gate,
+per-step screenshots + verification, the hash-chained audit log, and the run →
+approval → verify UI. Recording (steps 1–2) is next. See
+`cloud/docs/PHASE_1_PLAN.md` and `cloud/docs/CURSOR_HANDOFF.md`.
 
-Required behavior:
+Required behavior (unchanged in spirit from the desktop trust pipeline):
 
-- preview every filesystem mutation;
-- deny silent delete and silent overwrite;
-- detect conflicts;
-- require approval before mutation;
-- write audit events;
-- write undo data before reversible operations.
+- preview / review the plan before execution;
+- deny risky actions by default; no silent send/pay/delete/overwrite;
+- require explicit approval before a sensitive action;
+- verify each step's outcome;
+- write audit events (hash-chained) for every run and step.
 
 ## Engineering rules
 
@@ -143,42 +143,62 @@ Rules:
 9. Sensitive reads must be scoped and visible to the user.
 10. Marketing/docs must not promise capabilities the app cannot support.
 
-## Privacy boundaries
+## Trust & data boundaries (cloud)
 
-Default stance:
+The cloud product runs Ghost's servers and, with the customer's explicit grant,
+holds scoped credentials for the systems it operates. Local-first isolation is no
+longer the model; the trust story is **least privilege + approval + verification +
+tamper-evident audit**. Default stance:
 
-- no camera;
-- no microphone;
-- no hidden screen capture;
-- no background email monitoring;
-- no background browser/tab reading;
-- no raw secret capture;
-- no cloud-first storage for workflow/organizer data — it stays local and encrypted at rest, regardless of which account or stack integrations are enabled;
-- keyboard/pointer capture only during explicit recording or approved replay.
+- **Scoped, revocable credentials.** Each connector grant is explicit,
+  least-privilege, revocable, and disclosed. Never request broader access than a
+  workflow needs.
+- **Approval before sensitive actions.** Send, pay, delete, submit, and other
+  mutating/outbound actions are deny-by-default and require human approval (the
+  deterministic classifier decides which; AI never does).
+- **Secrets never captured into logs, screenshots, audit, or model prompts.**
+  Redact secret/PII fields; store credentials encrypted (envelope), never as raw
+  values in a row.
+- **Tenant isolation.** Every record and action is scoped to an organization;
+  cross-tenant access is a bug.
+- **Encryption in transit and at rest** for workflow data, run artifacts, and
+  credentials.
+- **No monitoring the customer hasn't asked for.** Inbox/portal monitoring exists
+  only under an explicit, scoped, opt-in grant — never a silent background default.
+- **Auditability.** Every run and mutation is recorded in a hash-chained audit
+  log the customer (and their auditor) can review.
 
-Account sign-in (Microsoft/Google OAuth) and any stack integration (Fabric/Power BI, Google Cloud, AI-assistant connectors) are opt-in, scoped, and disclosed — see `docs/integrations-roadmap.md`. None of them weaken the privacy defaults above.
+Verification and undo remain first-class: a run isn't "done" until the outcome is
+verified, and reversible actions should be recoverable.
 
-For Organizer, use explicit folder selection and local filesystem operations.
-
-For Routines later, input recording requires visible active state, emergency stop, permission checks, sensitive-input suppression, and a deterministic review layer before execution.
-
-## Target product layers
+## Target product layers (cloud)
 
 Build in this order:
 
-1. **Ghost Organizer**
-   - safe file/folder cleanup;
-   - classification, naming, moving, conflict detection, preview, audit, undo.
-2. **Ghost Routines**
-   - explicit recorded routines across apps and websites;
-   - deterministic event compression into reviewable semantic steps;
-   - semantic replay with coordinates as fallback.
-3. **Ghost Intelligence**
-   - suggestion-only planning, classification, explanation, and routine detection.
+1. **Execution engine** — deterministic, approval-gated replay across browser and
+   API actions, with verification, screenshots, and a hash-chained audit log.
+   (Phase 1 — built.)
+2. **Recording → editable workflow** — capture a demonstrated process and compile
+   it into typed, reviewable steps. (Phase 2.)
+3. **Connectors** — first-class API integrations (Gmail/Outlook, Salesforce,
+   HubSpot, QuickBooks, etc.) with scoped, revocable credentials, executed through
+   the same approval + audit pipeline.
+4. **Intelligence** — suggestion-only reasoning (intent, extraction, summaries,
+   next-action under ambiguity). AI proposes; deterministic code executes.
 
-Organizer first. Routines second. Intelligence last.
+See `cloud/docs/PHASE_1_PLAN.md` for the detailed build order.
 
-## Architecture direction
+---
+
+## Legacy desktop app (superseded — retained in-tree)
+
+> Everything from here down describes the **legacy Rust/Tauri desktop product**
+> (`src-tauri/`, `src/`, `apps/macos/`). It is **superseded by the cloud SaaS in
+> `cloud/`** but kept for reference and accurate for that code. Do not treat it as
+> the current product direction; work on it only when explicitly maintaining the
+> legacy app.
+
+## Architecture direction (legacy desktop)
 
 Keep Rust/Tauri. Do not rewrite the whole product before proving the wedge.
 
