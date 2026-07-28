@@ -1,8 +1,8 @@
 /* ============================================================
-   Ghost marketing site — interactions + interactive demos.
-   Vanilla ES module, no dependencies. All demos are faithful
-   in-browser SIMULATIONS of the desktop app; nothing here
-   touches real files or the network.
+   Ghost marketing site — interactions.
+   Desktop Organizer demos were removed when the product pivoted
+   to the cloud AI operator; demo helpers below no-op if markup
+   is absent so this file stays safe to load.
    ============================================================ */
 
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -40,13 +40,17 @@ function platformDetection() {
   document.body.dataset.platform = platform;
 
   const sub = $("#download-sub");
-  if (platform === "mac" && sub) sub.textContent = "Detected macOS — v2.0.3 (notarized).";
-  if (platform === "windows" && sub) sub.textContent = "Detected Windows — v2.0.3 (unsigned installer).";
+  if (platform === "mac" && sub) {
+    sub.textContent = "Detected macOS — legacy desktop v2.0.3 (notarized). Not the current product.";
+  }
+  if (platform === "windows" && sub) {
+    sub.textContent = "Detected Windows — legacy desktop v2.0.3 (unsigned). Not the current product.";
+  }
 
   const primaryLabel = $("[data-download-label]");
   if (primaryLabel) {
-    if (platform === "mac") primaryLabel.textContent = "Download v2.0.3 for macOS";
-    else if (platform === "windows") primaryLabel.textContent = "Download v2.0.3 for Windows";
+    if (platform === "mac") primaryLabel.textContent = "Legacy macOS v2.0.3";
+    else if (platform === "windows") primaryLabel.textContent = "Legacy Windows v2.0.3";
   }
 }
 
@@ -136,6 +140,7 @@ function setupMobileNav() {
 function setupTabs() {
   const tabs = $$(".demo__tab");
   const panels = $$(".demo__panel");
+  if (!tabs.length) return;
 
   const select = (tab, focus = false) => {
     const name = tab.dataset.tab;
@@ -726,7 +731,8 @@ window.addEventListener("DOMContentLoaded", () => {
   setupMobileNav();
   setupTabs();
   setupScrollSpy();
-  organizerDemo();
-  actionPlanDemo();
-  replayDemo();
+  // Legacy desktop demos — only if old markup is present.
+  if ($("[data-panel='organizer']")) organizerDemo();
+  if ($("#ap-run")) actionPlanDemo();
+  if ($("#rep-run")) replayDemo();
 });
