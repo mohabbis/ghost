@@ -15,9 +15,7 @@
     "S3_SECRET_ACCESS_KEY",
     "APP_URL",
     "NODE_ENV",
-    "GHOST_AGENT_API_KEY",
-    "GHOST_AGENT_ORG_ID",
-    "GHOST_AGENT_USER_ID",
+    "GHOST_ACCESS_TOKEN",
     "GHOST_API_URL"
   ],
   "globalPassThroughEnv": [

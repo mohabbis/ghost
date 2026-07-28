@@ -25,12 +25,13 @@ hard to sell). Do not block engineering on naming.
 
 ## What shipped in this surface
 
-| Piece | Path | Notes |
-|---|---|---|
-| Tool catalog | `@ghost/core/agent` | Allow-listed tools + explicit forbid list |
-| HTTP API | `/api/agent/*` | Session cookie **or** bearer `GHOST_AGENT_API_KEY` |
-| MCP stdio | `cloud/apps/mcp` | Thin bridge → HTTP invoke |
-| Approval | Ghost web UI only | `POST /api/agent/approvals` → **403** |
+| Piece              | Path                        | Notes                                                |
+| ------------------ | --------------------------- | ---------------------------------------------------- |
+| Tool catalog       | `@ghost/core/agent`         | Allow-listed tools + explicit forbid list            |
+| HTTP API           | `/api/agent/*`              | Session cookie **or** Ghost-issued bearer credential |
+| MCP stdio          | `cloud/apps/mcp`            | Thin bridge → HTTP invoke                            |
+| Claude Code plugin | `plugins/claude-code/ghost` | Skill + bundled MCP bridge                           |
+| Approval           | Ghost web UI only           | `POST /api/agent/approvals` → **403**                |
 
 ### Agent tools (allow list)
 
@@ -45,29 +46,27 @@ hard to sell). Do not block engineering on naming.
 Anything that approves or rejects (`approve_run`, `reject_run`, …). Invoke and
 MCP return an error; there is no approve tool in the catalog.
 
-## Local setup (MCP + API key)
+## Claude Code setup (Ghost authentication)
 
 1. Run Ghost Cloud (`pnpm dev` in `cloud/`).
-2. Sign in once, create a demo workflow if needed.
-3. Copy your **org id** and **user id** (from the DB, or Settings once exposed):
+2. Sign in, open **Settings → Claude Code and agent access**, and create a
+   credential. Ghost shows the plaintext once and stores only its SHA-256
+   digest. The credential inherits the signed-in user's organization and can be
+   revoked from the same screen.
+3. Export the credential and load the bundled plugin:
 
 ```bash
-# example — adjust to your docker/psql
-docker compose exec postgres psql -U ghost -d ghost \
-  -c 'select m."orgId", m."userId", u.email from "Membership" m join "User" u on u.id = m."userId";'
+export GHOST_API_URL="http://localhost:3000"
+export GHOST_ACCESS_TOKEN="ghost_agent_…"
+claude --plugin-dir ./plugins/claude-code/ghost
 ```
 
-4. Add to `cloud/.env`:
+4. Ask Claude to list and run a Ghost workflow. When a run reaches
+   `AWAITING_APPROVAL`, approve in the Ghost app — not in Claude Code.
 
-```bash
-GHOST_AGENT_API_KEY="$(openssl rand -hex 32)"
-GHOST_AGENT_ORG_ID="<org cuid>"
-GHOST_AGENT_USER_ID="<user cuid>"
-```
+## Generic MCP setup
 
-Restart web so it picks up the env. Turbo `globalEnv` includes these keys.
-
-5. Point Cursor (or another MCP client) at the bridge:
+Point Cursor or another stdio MCP client at the workspace bridge:
 
 ```json
 {
@@ -78,20 +77,20 @@ Restart web so it picks up the env. Turbo `globalEnv` includes these keys.
       "cwd": "/absolute/path/to/repo/cloud",
       "env": {
         "GHOST_API_URL": "http://localhost:3000",
-        "GHOST_AGENT_API_KEY": "<same key as web .env>"
+        "GHOST_ACCESS_TOKEN": "ghost_agent_…"
       }
     }
   }
 }
 ```
 
-6. Ask the agent: “List Ghost workflows and start the demo run.” When it hits
-   `AWAITING_APPROVAL`, approve in the browser — not in the agent chat.
+Ask the agent: “List Ghost workflows and start the demo run.” When it hits
+`AWAITING_APPROVAL`, approve in the browser — not in the agent chat.
 
 ### curl smoke
 
 ```bash
-export KEY=… BASE=http://localhost:3000
+export KEY=ghost_agent_… BASE=http://localhost:3000
 curl -s -H "Authorization: Bearer $KEY" "$BASE/api/agent" | jq .
 curl -s -H "Authorization: Bearer $KEY" -H 'content-type: application/json' \
   -d '{"name":"list_workflows","arguments":{}}' "$BASE/api/agent/invoke" | jq .
@@ -100,15 +99,16 @@ curl -s -X POST -H "Authorization: Bearer $KEY" -H 'content-type: application/js
 # → 403
 ```
 
-## Auth model (honest / early)
+## Auth model
 
-| Path | When |
-|---|---|
-| Session cookie | Same browser session as the dashboard |
-| Bearer `GHOST_AGENT_API_KEY` | Local MCP; identity = `GHOST_AGENT_ORG_ID` + `GHOST_AGENT_USER_ID` |
+| Path                           | When                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| Session cookie                 | Same browser session as the dashboard                                            |
+| Ghost-issued bearer credential | Claude Code / MCP; identity is bound to its creating Ghost user and organization |
 
-Per-org rotatable API keys in Postgres are **follow-up**. Until then, treat the
-env key as a local/dev secret — not multi-tenant SaaS credentials.
+Credentials are random, stored only as hashes, shown once, and individually
+revocable. Treat the plaintext like a password. Agents still have no approval
+tool, regardless of authentication method.
 
 ## Non-goals for this surface
 

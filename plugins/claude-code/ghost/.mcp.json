@@ -1,0 +1,10 @@
+{
+  "ghost": {
+    "command": "node",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/bin/ghost-mcp.mjs"],
+    "env": {
+      "GHOST_API_URL": "${GHOST_API_URL:-http://localhost:3000}",
+      "GHOST_ACCESS_TOKEN": "${GHOST_ACCESS_TOKEN}"
+    }
+  }
+}

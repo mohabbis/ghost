@@ -31,6 +31,7 @@ model User {
   createdFlows Workflow[]   @relation("WorkflowCreatedBy")
   triggeredRuns Run[]       @relation("RunTriggeredBy")
   resolvedApprovals Approval[] @relation("ApprovalResolvedBy")
+  agentCredentials AgentCredential[]
 }
 
 model Account {
@@ -91,6 +92,28 @@ model Organization {
   runs        Run[]
   auditEvents AuditEvent[]
   connectors  Connector[]
+  agentCredentials AgentCredential[]
+}
+
+// Revocable credentials created by an authenticated Ghost user for agent/MCP
+// clients. Only a SHA-256 digest is persisted; the plaintext is shown once.
+model AgentCredential {
+  id         String    @id @default(cuid())
+  orgId      String
+  userId     String
+  name       String
+  tokenHash  String    @unique
+  tokenHint  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@index([userId])
 }
 
 model Membership {

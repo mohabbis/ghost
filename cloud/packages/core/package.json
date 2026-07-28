@@ -10,7 +10,8 @@
     "./classifier": "./src/classifier/sensitive.ts",
     "./queue": "./src/queue.ts",
     "./audit": "./src/audit.ts",
-    "./agent": "./src/agent/tools.ts"
+    "./agent": "./src/agent/tools.ts",
+    "./agent-credentials": "./src/agent/credentials.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",
