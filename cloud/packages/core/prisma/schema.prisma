@@ -1,0 +1,320 @@
+// Ghost Cloud data model.
+// Trust pipeline: Workflow -> Version (immutable steps) -> Run -> RunStep,
+// with Approval gates on sensitive steps and an append-only hash-chained
+// AuditEvent log. Auth.js owns User/Account/Session; everything else is scoped
+// to an Organization for multi-tenant B2B.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) — standard adapter models.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts     Account[]
+  sessions     Session[]
+  memberships  Membership[]
+  createdFlows Workflow[]   @relation("WorkflowCreatedBy")
+  triggeredRuns Run[]       @relation("RunTriggeredBy")
+  resolvedApprovals Approval[] @relation("ApprovalResolvedBy")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  workflows   Workflow[]
+  recordings  Recording[]
+  runs        Run[]
+  auditEvents AuditEvent[]
+  connectors  Connector[]
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  orgId     String
+  role      Role     @default(OWNER)
+  createdAt DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+}
+
+// ---------------------------------------------------------------------------
+// Workflows
+// ---------------------------------------------------------------------------
+
+model Workflow {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  description String?
+  archived    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org       Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions  WorkflowVersion[]
+
+  @@index([orgId])
+}
+
+// Immutable snapshot of a workflow's steps. Runs always target a version, so
+// editing a workflow never mutates the definition a past run executed.
+model WorkflowVersion {
+  id         String   @id @default(cuid())
+  workflowId String
+  version    Int
+  // Array of steps validated by packages/core/src/schema/step.ts (Zod).
+  steps      Json
+  note       String?
+  createdAt  DateTime @default(now())
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  runs     Run[]
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+}
+
+// ---------------------------------------------------------------------------
+// Recording (Phase 2) — captured events compiled into a WorkflowVersion.
+// ---------------------------------------------------------------------------
+
+enum RecordingStatus {
+  ACTIVE
+  STOPPED
+  COMPILED
+  DISCARDED
+}
+
+model Recording {
+  id          String          @id @default(cuid())
+  orgId       String
+  status      RecordingStatus @default(ACTIVE)
+  // S3 key of the raw captured event trace.
+  rawTraceKey String?
+  sessionMeta Json?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+// ---------------------------------------------------------------------------
+// Runs
+// ---------------------------------------------------------------------------
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  AWAITING_APPROVAL
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  AWAITING_APPROVAL
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+model Run {
+  id                String    @id @default(cuid())
+  orgId             String
+  workflowVersionId String
+  status            RunStatus @default(QUEUED)
+  triggeredById     String?
+  // Index of the next step to execute; drives resume-after-approval.
+  cursor            Int       @default(0)
+  error             String?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime  @default(now())
+
+  org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
+  triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  steps           RunStep[]
+  approvals       Approval[]
+
+  @@index([orgId])
+  @@index([workflowVersionId])
+}
+
+model RunStep {
+  id           String     @id @default(cuid())
+  runId        String
+  index        Int
+  type         String
+  status       StepStatus @default(PENDING)
+  // Human-readable label copied from the step definition.
+  label        String?
+  // S3 key of the screenshot captured after this step.
+  screenshotKey String?
+  // Result of the step's verification assertion, if any.
+  verification Json?
+  logs         Json?
+  error        String?
+  startedAt    DateTime?
+  endedAt      DateTime?
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, index])
+  @@index([runId])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Approval {
+  id           String         @id @default(cuid())
+  runId        String
+  stepIndex    Int
+  status       ApprovalStatus @default(PENDING)
+  reason       String
+  resolvedById String?
+  requestedAt  DateTime       @default(now())
+  resolvedAt   DateTime?
+  note         String?
+
+  run        Run   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ApprovalResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Audit — append-only, hash-chained per organization.
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  orgId      String
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  // Hash chain: hash = sha256(prevHash + canonical(payload)).
+  prevHash   String?
+  hash       String
+  createdAt  DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Connectors (post-MVP) — scoped, encrypted credentials for API integrations.
+// Schema is present so the trust model is designed in from the start; no UI or
+// command reads these yet.
+// ---------------------------------------------------------------------------
+
+enum ConnectorKind {
+  GMAIL
+  OUTLOOK
+  SALESFORCE
+  HUBSPOT
+  QUICKBOOKS
+  NETSUITE
+  GOOGLE_DRIVE
+  DROPBOX
+  CUSTOM
+}
+
+model Connector {
+  id        String        @id @default(cuid())
+  orgId     String
+  kind      ConnectorKind
+  label     String
+  // Encrypted at rest (envelope encryption); never a raw secret in the row.
+  secretRef String?
+  scopes    String[]
+  createdAt DateTime      @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
