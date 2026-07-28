@@ -1,0 +1,37 @@
+{
+  "name": "@ghost/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@ghost/core": "workspace:*",
+    "bullmq": "^5.34.4",
+    "clsx": "^2.1.1",
+    "ioredis": "^5.4.2",
+    "lucide-react": "^0.469.0",
+    "next": "^15.1.3",
+    "next-auth": "^5.0.0-beta.25",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2"
+  }
+}

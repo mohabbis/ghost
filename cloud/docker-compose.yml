@@ -1,0 +1,39 @@
+# Local development dependencies for Ghost Cloud.
+#   docker compose up -d
+# Brings up Postgres (5432) and Redis (6379) matching cloud/.env.example.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ghost-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ghost
+      POSTGRES_PASSWORD: ghost
+      POSTGRES_DB: ghost
+    ports:
+      - "5432:5432"
+    volumes:
+      - ghost-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ghost -d ghost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ghost-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ghost-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ghost-postgres-data:
+  ghost-redis-data:

@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# turbo
+.turbo/
+
+# prisma generated client
+packages/core/src/generated/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+
+# test / coverage
+coverage/
+
+# playwright
+test-results/
+playwright-report/

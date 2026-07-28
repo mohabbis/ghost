@@ -1,0 +1,55 @@
+name: cloud
+
+# CI for the Ghost Cloud SaaS (cloud/). Scoped to cloud/** so it never runs on
+# Rust-only changes and never collides with rust.yml.
+on:
+  push:
+    branches: [master, develop]
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloud.yml"
+  pull_request:
+    paths:
+      - "cloud/**"
+      - ".github/workflows/cloud.yml"
+
+defaults:
+  run:
+    working-directory: cloud
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Placeholders so Prisma/Next have the vars they read. No network calls hit
+    # these at check/build time — authed pages are force-dynamic.
+    env:
+      AUTH_SECRET: build-time-placeholder-secret-value-000000
+      DATABASE_URL: postgresql://ghost:ghost@localhost:5432/ghost?schema=public
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cloud/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma validate
+        run: pnpm db:validate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
