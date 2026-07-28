@@ -140,6 +140,7 @@ function setupMobileNav() {
 function setupTabs() {
   const tabs = $$(".demo__tab");
   const panels = $$(".demo__panel");
+  if (!tabs.length) return;
 
   const select = (tab, focus = false) => {
     const name = tab.dataset.tab;
