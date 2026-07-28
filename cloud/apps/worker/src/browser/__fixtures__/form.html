@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ghost fixture — order form</title>
+  </head>
+  <body>
+    <h1>Order form</h1>
+    <label>
+      Full name
+      <input aria-label="Full name" id="name" type="text" />
+    </label>
+    <button
+      id="submit"
+      type="button"
+      onclick="document.getElementById('result').textContent = 'Order submitted'"
+    >
+      Submit order
+    </button>
+    <p id="result"></p>
+  </body>
+</html>

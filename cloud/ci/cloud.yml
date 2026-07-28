@@ -42,6 +42,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright Chromium
+        # The worker's driver test drives real Chromium. On CI runners there is
+        # no preinstalled browser, so install it (with OS deps) into Playwright's
+        # default cache. PLAYWRIGHT_BROWSERS_PATH is left unset, so the driver's
+        # discovery no-ops and Playwright uses that cache.
+        run: pnpm --filter @ghost/worker exec playwright install --with-deps chromium
+
       - name: Prisma validate
         run: pnpm db:validate
 

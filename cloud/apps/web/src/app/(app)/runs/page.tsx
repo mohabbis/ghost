@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardBody } from "@/components/ui/card";
@@ -30,19 +31,21 @@ export default async function RunsPage() {
           <CardBody className="py-12 text-center">
             <p className="text-sm font-medium">No runs yet</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-muted)]">
-              The execution engine and live run timeline land in Phase 1.
+              Create the demo workflow and hit Run to see a live run here.
             </p>
           </CardBody>
         </Card>
       ) : (
         <div className="space-y-2">
           {runs.map((r) => (
-            <Card key={r.id}>
-              <CardBody className="flex items-center justify-between">
-                <div className="font-mono text-xs text-[var(--color-muted)]">{r.id}</div>
-                <div className="text-xs">{r.status}</div>
-              </CardBody>
-            </Card>
+            <Link key={r.id} href={`/runs/${r.id}`} className="block">
+              <Card className="transition-colors hover:border-[var(--color-accent)]">
+                <CardBody className="flex items-center justify-between">
+                  <div className="font-mono text-xs text-[var(--color-muted)]">{r.id}</div>
+                  <div className="text-xs">{r.status}</div>
+                </CardBody>
+              </Card>
+            </Link>
           ))}
         </div>
       )}
