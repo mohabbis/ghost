@@ -68,10 +68,17 @@ for i from run.cursor to end:
 run.status = SUCCEEDED
 ```
 
-Resume: when an `Approval` is resolved **APPROVED**, set `run.cursor = i + 1` and
-re-enqueue `runWorkflow{ runId, fromStepIndex: i+1 }`. **REJECTED** →
-`run.status = FAILED` (or CANCELED), no further steps. This keeps approval a
-one-way gate the engine can't bypass — the trust guarantee.
+Resume: when an `Approval` is resolved **APPROVED**, leave `run.cursor` at the
+gated index `i` and re-enqueue `runWorkflow`. The worker launches a fresh
+browser, **restores page state** by replaying `steps[0..i)`
+(`restoreBrowserPrefix`), then executes step `i` because an APPROVED approval
+now exists. **REJECTED** → `run.status = FAILED`, no further steps. The engine
+cannot bypass the gate — that is the trust guarantee.
+
+> Phase 1 browsers are ephemeral per job. Closing Chromium at the gate is
+> intentional; prefix restore is the resume contract until Phase 2 adds a
+> persistent per-org context. Workflows must gate *before* irreversible
+> mutations so the prefix is setup (navigate/fill), not a double-submit.
 
 Invariants carried from the desktop engine: interruptible (cancel checked each step),
 deterministic execution of an approved plan, audit + (where applicable) undo.

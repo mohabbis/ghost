@@ -13,14 +13,15 @@ inside `cloud/`.
 
 ## What Ghost does (MVP)
 
-1. **Record** a browser workflow (a user performs the task once).
-2. **Convert** the recording into an editable, step-by-step workflow.
-3. **Replay** the workflow across browser / API actions.
-4. **Require approval** before sensitive actions (send, pay, delete, submit).
-5. **Log** every run: per-step status, screenshots, verification, errors.
+1. **Record** a browser workflow (a user performs the task once). — Phase 2
+2. **Convert** the recording into an editable, step-by-step workflow. — Phase 2
+3. **Replay** the workflow across browser / API actions. — **built (Phase 1)**
+4. **Require approval** before sensitive actions (send, pay, delete, submit). — **built**
+5. **Log** every run: per-step status, screenshots, verification, errors. — **built**
 
 The engine shape is `Capture → Review → Approve → Execute → Verify → Recover`.
-AI proposes; deterministic code executes only approved plans.
+AI proposes; deterministic code executes only approved plans. The approval gate
+is a pure state machine (`classifyStep` in `@ghost/core`) — no AI in that decision.
 
 ## Layout
 
@@ -31,7 +32,7 @@ cloud/
     worker/    Node worker: BullMQ consumers + Playwright execution     → container
   packages/
     core/      Prisma schema/client, Zod workflow-step schema,
-               deterministic sensitive-action classifier, shared types
+               deterministic sensitive-action classifier, audit hash chain
 ```
 
 - `apps/web` talks to Postgres (via `@ghost/core`) and enqueues jobs to Redis.
@@ -51,10 +52,15 @@ cloud/
 
 ```bash
 cd cloud
-cp .env.example .env            # then edit AUTH_SECRET at minimum
+cp .env.example .env
+# Required edits in .env:
+#   AUTH_SECRET          -> `openssl rand -base64 32`
+#   GHOST_ARTIFACT_DIR   -> ABSOLUTE path shared by web+worker, e.g. $PWD/.artifacts
+#   APP_URL              -> http://localhost:3000
 pnpm install                    # runs `prisma generate` via core postinstall
 docker compose up -d            # Postgres :5432, Redis :6379
 pnpm db:migrate                 # apply the Prisma schema
+pnpm --filter @ghost/worker exec playwright install chromium
 pnpm dev                        # web on http://localhost:3000 + worker
 ```
 
@@ -65,25 +71,38 @@ pnpm --filter @ghost/web dev
 pnpm --filter @ghost/worker dev
 ```
 
-## Smoke test (Phase 0)
+## Smoke test (Phase 1)
 
-1. Open http://localhost:3000 and sign in (the dev-credentials provider accepts
-   any email locally; an `Organization` is created on first sign-in).
-2. From the dashboard, click **Enqueue test job**.
-3. Watch the worker terminal — it logs the consumed no-op job. That proves the
-   web ↔ Redis ↔ worker wiring end to end.
+1. Open http://localhost:3000 and sign in (dev-credentials accepts any email;
+   an `Organization` is created on first sign-in).
+2. **Workflows → Create demo workflow → Run.**
+3. Timeline: navigate + fill succeed with screenshots; run **halts** at
+   "Submit order" (`AWAITING_APPROVAL`).
+4. **Approve** → run resumes (worker restores page state), submits, verifies
+   "Order submitted", finishes **SUCCEEDED**. **Reject** → run **FAILED**, no submit.
+
+If screenshots don't render, `GHOST_ARTIFACT_DIR` is almost always not the same
+absolute path for both processes. If Chromium won't launch, run the
+`playwright install chromium` step above.
 
 ## Validation
 
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm test
+pnpm test          # includes DB-backed runWorkflow tests when DATABASE_URL is set
 pnpm build
 ```
 
 ## Status
 
-**Phase 0 — running skeleton** (this scaffold): workspace, data model, auth, app
-shell, queue wiring, CI. Phases 1–3 (replay + approval + logs, then recording,
-then hardening) are specified in the project plan and build on this skeleton.
+| Phase | What | Status |
+|---|---|---|
+| 0 | Workspace, Prisma, Auth.js, app shell, BullMQ wiring | **done** |
+| 1.1 | Playwright engine, approval state machine, artifacts, hash-chained audit | **done** |
+| 1.2 | Run trigger, live timeline, approve/reject resume | **done** |
+| 1.x | Typed step editor, timeouts/retry, cancel button, audit-verify API | remaining |
+| 2 | Browser recording → editable steps | next major |
+
+Authoritative handoff: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
+Phase 1 plan: [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md).

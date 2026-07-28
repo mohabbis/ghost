@@ -40,13 +40,12 @@ export class BrowserSession {
 }
 
 /**
- * Execute one workflow step against the page and capture a screenshot. Throws on
- * a failed browser action; the caller records the step as failed and stops.
+ * Apply one workflow step's browser action (no screenshot / verification).
  * `approval` and connector steps (`apiCall`/`sendEmail`) do not act on the page
  * in Phase 1 — the approval gate is handled by the state machine, and connector
  * execution lands in a later phase.
  */
-export async function runStep(page: Page, step: WorkflowStep): Promise<StepResult> {
+export async function applyStep(page: Page, step: WorkflowStep): Promise<void> {
   switch (step.type) {
     case "navigate":
       await page.goto(step.url, { waitUntil: "domcontentloaded" });
@@ -79,6 +78,33 @@ export async function runStep(page: Page, step: WorkflowStep): Promise<StepResul
     case "sendEmail":
       break;
   }
+}
+
+/**
+ * Rebuild page state after an approval halt.
+ *
+ * Phase 1 uses an ephemeral browser per job: when the worker stops at a gate it
+ * closes Chromium, so resume would otherwise start on `about:blank` and fail to
+ * find the gated control. Replaying the prefix (`steps[0..cursor)`) restores the
+ * page. Correctly authored workflows gate *before* the irreversible action, so
+ * the prefix is setup (navigate/fill), not a double-submit. Phase 2 persistent
+ * contexts will replace this.
+ */
+export async function restoreBrowserPrefix(
+  page: Page,
+  prefix: readonly WorkflowStep[],
+): Promise<void> {
+  for (const step of prefix) {
+    await applyStep(page, step);
+  }
+}
+
+/**
+ * Execute one workflow step against the page and capture a screenshot. Throws on
+ * a failed browser action; the caller records the step as failed and stops.
+ */
+export async function runStep(page: Page, step: WorkflowStep): Promise<StepResult> {
+  await applyStep(page, step);
 
   const verification =
     step.type === "verify"
