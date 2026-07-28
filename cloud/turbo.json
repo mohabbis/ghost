@@ -14,7 +14,11 @@
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
     "APP_URL",
-    "NODE_ENV"
+    "NODE_ENV",
+    "GHOST_AGENT_API_KEY",
+    "GHOST_AGENT_ORG_ID",
+    "GHOST_AGENT_USER_ID",
+    "GHOST_API_URL"
   ],
   "globalPassThroughEnv": [
     "PLAYWRIGHT_BROWSERS_PATH",

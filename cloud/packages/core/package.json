@@ -9,7 +9,8 @@
     "./schema/step": "./src/schema/step.ts",
     "./classifier": "./src/classifier/sensitive.ts",
     "./queue": "./src/queue.ts",
-    "./audit": "./src/audit.ts"
+    "./audit": "./src/audit.ts",
+    "./agent": "./src/agent/tools.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",

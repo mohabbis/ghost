@@ -104,8 +104,9 @@ Build the five-part MVP in `cloud/`, in order:
 5. **Log** every run: per-step status, screenshots, verification, errors.
 
 Built so far (Phase 1): the execution engine, the deterministic approval gate,
-per-step screenshots + verification, the hash-chained audit log, and the run →
-approval → verify UI. Recording (steps 1–2) is next. See
+per-step screenshots + verification, the hash-chained audit log, the run →
+approval → verify UI, and the agent HTTP/MCP surface (agents propose; humans
+approve — `cloud/docs/AGENT_PLUGIN.md`). Recording (steps 1–2) is next. See
 `cloud/docs/PHASE_1_PLAN.md` and `cloud/docs/CURSOR_HANDOFF.md`.
 
 Required behavior (unchanged in spirit from the desktop trust pipeline):

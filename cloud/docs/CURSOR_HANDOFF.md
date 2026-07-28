@@ -1,14 +1,22 @@
 # Ghost Cloud — handoff for Cursor
 
-You're picking up **Ghost Cloud**, the cloud SaaS rebuild of Ghost: an AI
-operator that learns a business workflow once, then executes it across existing
-software with **human approval on sensitive actions, verification, and a full
-audit log**. All new work lives under `cloud/` (a self-contained pnpm +
-Turborepo workspace). The legacy Rust/Tauri desktop app at the repo root is
-out of scope unless explicitly requested.
+You're picking up **Ghost Cloud**, the cloud SaaS rebuild of Ghost: the
+**governed execution / trust runtime AI agents plug into**.
 
-Read `cloud/README.md` and `cloud/docs/PHASE_1_PLAN.md` first — this file is the
-"where we are / what to do next" layer on top of them.
+```text
+Agent (propose) → Ghost (approve · execute · verify · audit)
+```
+
+Ghost learns a business workflow once, then executes it across existing software
+with **human approval on sensitive actions, verification, and a full audit log**.
+Agents may list/preview/start runs via `/api/agent` + `apps/mcp`; they **must
+not** approve. All new work lives under `cloud/` (pnpm + Turborepo). The legacy
+Rust/Tauri desktop app at the repo root is out of scope unless explicitly
+requested.
+
+Read `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`, and
+`cloud/docs/AGENT_PLUGIN.md` first — this file is the "where we are / what to do
+next" layer on top of them.
 
 ## Where we are
 
@@ -55,9 +63,10 @@ Then: sign in (any email) → Workflows → Create demo workflow → Run → App
 
 ```
 cloud/
-  packages/core/         Prisma, Zod workflow-step schema, classifyStep, audit chain
-  apps/web/              Next.js 15 + Tailwind v4 + Auth.js v5
+  packages/core/         Prisma, Zod steps, classifyStep, audit chain, agent tool catalog
+  apps/web/              Next.js 15 + Tailwind v4 + Auth.js v5 + /api/agent/*
   apps/worker/           BullMQ + Playwright execution engine
+  apps/mcp/              Stdio MCP bridge → /api/agent/invoke (no approve tools)
 ```
 
 **Trust model (do not regress):** AI may propose; deterministic code executes
@@ -76,6 +85,15 @@ hash-chained `AuditEvent`.
   restores prefix, executes the gated step, continues. Reject → `FAILED`.
 - UI: `run-timeline.tsx` polls every 1.5s.
 
+## Agent plugin surface (shipped)
+
+- Tool catalog: `@ghost/core/agent` (forbid list includes approve/reject)
+- HTTP: `GET /api/agent`, `POST /api/agent/invoke`, plus REST mirrors under
+  `/api/agent/workflows|runs|approvals` (POST approvals → 403)
+- Auth: session **or** bearer `GHOST_AGENT_API_KEY` + env-bound org/user
+- MCP: `pnpm --filter @ghost/mcp exec tsx src/index.ts`
+- Doc: `cloud/docs/AGENT_PLUGIN.md`
+
 ## Remaining Phase 1 work (priority)
 
 1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only
@@ -83,8 +101,9 @@ hash-chained `AuditEvent`.
 2. **Harden** — per-step timeouts + retry; emergency-stop UI (set `CANCELED`;
    worker already checks each step); `GET` audit-chain verify using
    `verifyAuditChain` in `@ghost/core/audit`.
-3. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
-4. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
+3. **Per-org agent API keys** in Postgres (replace env-bound identity for SaaS).
+4. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
+5. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
 
 ## Phase 2
 
