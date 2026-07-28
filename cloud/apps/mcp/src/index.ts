@@ -6,8 +6,7 @@
  *
  * Env:
  *   GHOST_API_URL           default http://localhost:3000
- *   GHOST_AGENT_API_KEY     required (same key as the web app)
- *   (web also needs GHOST_AGENT_ORG_ID + GHOST_AGENT_USER_ID)
+ *   GHOST_ACCESS_TOKEN      required (created in Ghost Settings)
  *
  * Cursor example (~/.cursor/mcp.json):
  * {
@@ -18,7 +17,7 @@
  *       "cwd": "<repo>/cloud",
  *       "env": {
  *         "GHOST_API_URL": "http://localhost:3000",
- *         "GHOST_AGENT_API_KEY": "…"
+ *         "GHOST_ACCESS_TOKEN": "ghost_agent_…"
  *       }
  *     }
  *   }
@@ -97,7 +96,10 @@ async function handle(
     case "tools/list":
       return ok(id, toolList());
     case "tools/call": {
-      const p = (params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+      const p = (params ?? {}) as {
+        name?: string;
+        arguments?: Record<string, unknown>;
+      };
       const name = typeof p.name === "string" ? p.name : "";
       if (!name) return fail(id, -32602, "tools/call requires name");
       try {
@@ -124,7 +126,7 @@ async function handle(
 }
 
 async function main() {
-  const apiKey = requireEnv("GHOST_AGENT_API_KEY");
+  const apiKey = requireEnv("GHOST_ACCESS_TOKEN");
   const baseUrl = process.env.GHOST_API_URL?.trim() || "http://localhost:3000";
   const client = new GhostAgentClient({ baseUrl, apiKey });
 

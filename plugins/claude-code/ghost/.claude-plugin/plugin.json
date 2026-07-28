@@ -1,0 +1,8 @@
+{
+  "name": "ghost",
+  "description": "Connect Claude Code to Ghost's governed workflow runtime. Claude proposes; humans approve in Ghost.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ghost"
+  }
+}

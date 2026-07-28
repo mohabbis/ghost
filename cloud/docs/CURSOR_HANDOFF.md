@@ -90,7 +90,7 @@ hash-chained `AuditEvent`.
 - Tool catalog: `@ghost/core/agent` (forbid list includes approve/reject)
 - HTTP: `GET /api/agent`, `POST /api/agent/invoke`, plus REST mirrors under
   `/api/agent/workflows|runs|approvals` (POST approvals → 403)
-- Auth: session **or** bearer `GHOST_AGENT_API_KEY` + env-bound org/user
+- Auth: session **or** a hashed, revocable bearer credential created in Ghost Settings
 - MCP: `pnpm --filter @ghost/mcp exec tsx src/index.ts`
 - Doc: `cloud/docs/AGENT_PLUGIN.md`
 
@@ -101,7 +101,7 @@ hash-chained `AuditEvent`.
 2. **Harden** — per-step timeouts + retry; emergency-stop UI (set `CANCELED`;
    worker already checks each step); `GET` audit-chain verify using
    `verifyAuditChain` in `@ghost/core/audit`.
-3. **Per-org agent API keys** in Postgres (replace env-bound identity for SaaS).
+3. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
 4. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
 5. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
 
