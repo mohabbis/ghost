@@ -191,14 +191,14 @@ mod tests {
     }
 
     #[test]
-    fn docs_sample_payloads_parse() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    fn fixture_sample_payloads_parse() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let samples = [
-            "docs/samples/fabric-eventstream/ghost-native.json",
-            "docs/samples/fabric-eventstream/pos-shift-close.json",
-            "docs/samples/fabric-eventstream/cloudevents-pipeline-done.json",
-            "docs/samples/fabric-eventstream/fabric-item-event.json",
-            "docs/samples/fabric-eventstream/eventstream-row-bridge.json",
+            "tests/fixtures/fabric-eventstream/ghost-native.json",
+            "tests/fixtures/fabric-eventstream/pos-shift-close.json",
+            "tests/fixtures/fabric-eventstream/cloudevents-pipeline-done.json",
+            "tests/fixtures/fabric-eventstream/fabric-item-event.json",
+            "tests/fixtures/fabric-eventstream/eventstream-row-bridge.json",
         ];
         for rel in samples {
             let path = root.join(rel);

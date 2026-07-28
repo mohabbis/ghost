@@ -137,8 +137,8 @@ Command implementations are split by product boundary:
 
 Before adding or changing commands, read:
 
-- `docs/command-registry.md`
-- `docs/core-boundaries.md`
+- `docs/legacy/command-registry.md` (desktop Tauri surface — legacy)
+- `docs/core-boundaries.md` (cloud stable vs gated)
 
 Command requirements:
 
@@ -219,14 +219,16 @@ Work in this order unless the user explicitly changes priorities:
 
 When changing behavior, update the matching docs in the same change:
 
-- command changes -> `docs/command-registry.md`;
-- stable/experimental boundary changes -> `docs/core-boundaries.md`;
-- product direction changes -> `README.md` and this file;
-- Claude-specific guidance -> `CLAUDE.md`;
-- release flow changes -> `RELEASING.md`;
-- deployment changes -> `DEPLOYMENT.md` or `VERCEL_DEPLOYMENT_GUIDE.md`.
+- cloud API / job / trust changes → `cloud/docs/` + `docs/trust-pipeline.md` as needed;
+- product direction → `docs/product-direction.md`, `README.md`, and this file;
+- desktop Tauri command changes (legacy only) → `docs/legacy/command-registry.md`;
+- stable/experimental cloud boundary → `docs/core-boundaries.md`;
+- Claude-specific guidance → `CLAUDE.md`;
+- desktop release flow (legacy) → `RELEASING.md`;
+- cloud deploy → `DEPLOYMENT.md`.
 
-Keep docs short, current, and operational. Do not add vision essays when a checklist will do.
+Front door: `docs/README.md`. Keep docs short and current. Delete or rewrite docs that
+describe the wrong product rather than stacking more essays.
 
 ## Working in parallel (multiple agents)
 
