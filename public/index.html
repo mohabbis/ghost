@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost — Approval-gated AI operator (open build)</title>
+    <title>Ghost — Trust runtime for AI agents (open build)</title>
     <meta
       name="description"
-      content="Ghost is an open, early-stage AI operator: teach a business workflow once, execute it across existing tools with human approval on sensitive steps, verification, and a hash-chained audit log. Built in public by Muhammad Rafiq."
+      content="Ghost is the governed execution layer AI agents plug into: propose → human approve → execute → verify → audit. Open early-stage build by Muhammad Rafiq."
     />
     <meta name="theme-color" content="#070a10" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -15,20 +15,20 @@
     <meta name="author" content="Muhammad Rafiq" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Ghost — Approval-gated AI operator" />
+    <meta property="og:title" content="Ghost — Trust runtime for AI agents" />
     <meta
       property="og:description"
-      content="An open systems project: capture → review → approve → execute → verify → audit. Real engine in the repo — not a landing-page mock."
+      content="Agents propose. Ghost runs with human approval on sensitive steps, verification, and a hash-chained audit log. Open build — not a landing-page mock."
     />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
     <meta property="og:image" content="https://ghost.muharafiq.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ghost — Approval-gated AI operator" />
+    <meta name="twitter:title" content="Ghost — Trust runtime for AI agents" />
     <meta
       name="twitter:description"
-      content="Teach a workflow once. Ghost runs it with human approval on sensitive steps, verifies outcomes, and leaves an audit trail. Open build."
+      content="Agent proposes → Ghost approves/executes/verifies/audits. Human gate on sensitive steps. Open build."
     />
     <meta name="twitter:image" content="https://ghost.muharafiq.com/og.png" />
     <meta
@@ -53,14 +53,14 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
         "url": "https://ghost.muharafiq.com/",
-        "description": "Open early-stage AI operator with approval gates, verification, and a hash-chained audit log. Built by Muhammad Rafiq.",
+        "description": "Governed execution runtime for AI agents: propose → human approve → execute → verify → audit. Built by Muhammad Rafiq.",
         "author": {
           "@type": "Person",
           "name": "Muhammad Rafiq",
           "url": "https://github.com/mohabbis"
         },
         "codeRepository": "https://github.com/mohabbis/ghost",
-        "keywords": "AI operator, workflow automation, approval-gated automation, audit log"
+        "keywords": "AI trust runtime, agent plugin, workflow automation, approval-gated automation, audit log"
       }
     </script>
   </head>
@@ -131,15 +131,15 @@
         <section class="hero reveal">
           <div class="hero__copy">
             <p class="hero__badge">
-              <span class="hero__badge-dot" aria-hidden="true"></span> Open build · Approval-gated · Audit-first
+              <span class="hero__badge-dot" aria-hidden="true"></span> Open build · Agent plugin · Human approve
             </p>
             <h1>
-              An AI operator that <span class="grad">stops</span> for sensitive work.
+              The trust runtime <span class="grad">agents</span> plug into.
             </h1>
             <p class="lede">
-              Ghost learns a business workflow once, then executes it across tools a company already
-              uses — with a human approval gate on send/pay/submit, outcome verification, and a
-              hash-chained audit log. Designed so a manager can trust the run, not just the demo.
+              Ghost is not another AI agent. Claude, Cursor, and Codex may propose and start work;
+              Ghost stops for send/pay/submit, verifies outcomes, and seals a hash-chained audit log.
+              Designed so a manager can trust the run — not just the demo.
             </p>
             <div class="hero__actions">
               <a class="btn btn--lg" href="https://github.com/mohabbis/ghost"
@@ -197,8 +197,8 @@
           <p class="eyebrow">The loop</p>
           <h2>Capture → Review → Approve → Execute → Verify → Recover</h2>
           <p class="section__sub">
-            AI may propose. Deterministic code executes only approved plans. Sensitivity is decided by
-            a classifier — not a model hoping for the best.
+            Agents may propose. Deterministic code executes only approved plans. Sensitivity is decided by
+            a classifier — not a model hoping for the best. Agents never approve.
           </p>
         </div>
         <ol class="pipeline">
@@ -270,6 +270,13 @@
             </div>
           </li>
           <li>
+            <svg class="i"><use href="#i-check-circle" /></svg>
+            <div>
+              <strong>Agent HTTP + MCP tools</strong>
+              <span>List/preview/start runs from Cursor or Claude; approve stays human-only in Ghost UI.</span>
+            </div>
+          </li>
+          <li>
             <svg class="i"><use href="#i-alert" /></svg>
             <div>
               <strong>Not built yet</strong>
@@ -300,6 +307,10 @@
           <article class="stack-card">
             <h3>Core</h3>
             <p>Prisma · Postgres · Zod step schema · audit chain</p>
+          </article>
+          <article class="stack-card">
+            <h3>Agent</h3>
+            <p>HTTP <code>/api/agent</code> · MCP stdio · no self-approve</p>
           </article>
           <article class="stack-card">
             <h3>Ops</h3>
@@ -343,6 +354,7 @@
           <span><svg class="i"><use href="#i-ban" /></svg> Not a chatbot wrapper</span>
           <span><svg class="i"><use href="#i-ban" /></svg> Not a Zapier clone</span>
           <span><svg class="i"><use href="#i-ban" /></svg> Not unsupervised “agentic” magic</span>
+          <span><svg class="i"><use href="#i-ban" /></svg> Not agent self-approval</span>
           <span><svg class="i"><use href="#i-ban" /></svg> Not a fake customer page</span>
         </div>
       </section>

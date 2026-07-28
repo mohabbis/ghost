@@ -2,17 +2,18 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-> **Ghost is an AI operator** — teach it a business workflow once; it executes
-> that workflow across the software you already use, with human approval on
-> sensitive actions, verification of outcomes, and a full audit log.
+> **Ghost is the trust runtime AI agents plug into** — teach it a business
+> workflow once; agents may propose and start runs; humans approve sensitive
+> steps; Ghost executes, verifies, and audits.
 
 ```text
+Agent (propose) → Ghost (approve · execute · verify · audit)
 Capture → Review → Approve → Execute → Verify → Recover
 ```
 
 Prefer, in order: **APIs → browser automation → desktop automation → vision
 fallback.** AI may propose; deterministic code executes only approved plans.
-Ghost is not a generic autonomous agent.
+Ghost is not another autonomous agent.
 
 **Who it's for:** operations-heavy SMBs — wholesale distributors, property
 managers, accounting/bookkeeping firms, logistics, recruiting, financial-ops and
@@ -31,6 +32,7 @@ worker + Postgres + Redis + Playwright.
 | Replay across browser / API | **Phase 1 — built** |
 | Approval before sensitive actions | **Phase 1 — built** |
 | Log every run (screenshots, verify, audit) | **Phase 1 — built** |
+| Agent HTTP + MCP tools (no self-approve) | **built** — [`cloud/docs/AGENT_PLUGIN.md`](cloud/docs/AGENT_PLUGIN.md) |
 
 ```bash
 cd cloud

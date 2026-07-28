@@ -1,0 +1,27 @@
+{
+  "name": "@ghost/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ghost Cloud MCP stdio bridge — agents propose; humans approve in Ghost UI.",
+  "bin": {
+    "ghost-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --target node20 --clean",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ghost/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

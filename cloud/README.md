@@ -1,10 +1,16 @@
 # Ghost Cloud
 
-Ghost is an **AI operator** that learns a business workflow once, then executes
-it across the software a company already uses — combining APIs, browser
-automation, and (later) desktop automation, with **human approval on sensitive
-actions**, **verification of outcomes**, and a **full execution log** for every
-run.
+Ghost is the **governed execution / trust runtime AI agents plug into** — not
+another autonomous agent.
+
+```text
+Agent (propose) → Ghost (approve · execute · verify · audit)
+```
+
+Teach it a business workflow once; it executes across software a company already
+uses (APIs, browser automation, later desktop) with **human approval on sensitive
+actions**, **verification**, and a **full execution log**. Agents may propose and
+start runs via HTTP/MCP; they cannot approve.
 
 This directory holds the cloud SaaS. It is a self-contained pnpm + Turborepo
 workspace and does **not** share tooling with the repository root (which still
@@ -28,12 +34,14 @@ is a pure state machine (`classifyStep` in `@ghost/core`) — no AI in that deci
 ```
 cloud/
   apps/
-    web/       Next.js 15 (App Router) — UI + API route handlers        → Vercel
+    web/       Next.js 15 (App Router) — UI + API + /api/agent/*         → Vercel
     worker/    Node worker: BullMQ consumers + Playwright execution     → container
+    mcp/       Stdio MCP bridge for Cursor/Claude (no approve tools)
   packages/
-    core/      Prisma schema/client, Zod workflow-step schema,
-               deterministic sensitive-action classifier, audit hash chain
+    core/      Prisma, Zod steps, classifyStep, audit chain, agent catalog
 ```
+
+Agent plugin details: [`docs/AGENT_PLUGIN.md`](docs/AGENT_PLUGIN.md).
 
 - `apps/web` talks to Postgres (via `@ghost/core`) and enqueues jobs to Redis.
 - `apps/worker` consumes those jobs and drives Playwright. Playwright needs a

@@ -4,27 +4,31 @@ Canonical instructions for AI coding agents working in this repository.
 
 Read this file before changing code, docs, workflows, releases, or product positioning. If another instruction file conflicts with this one, follow this file unless the user explicitly overrides it.
 
-> **Product direction (current): Ghost is a cloud SaaS in `cloud/`.** The
-> "Legacy desktop app" section below describes the **legacy Rust/Tauri desktop
+> **Product direction (current): Ghost is a cloud SaaS in `cloud/`** — the
+> **trust runtime AI agents plug into** (`Agent → Ghost approve/execute/verify/audit`).
+> The "Legacy desktop app" section below describes the **legacy Rust/Tauri desktop
 > product** (repo root: `src-tauri/`, `src/`, `apps/macos/`) — superseded, retained
 > in-tree, still accurate for that code. For the cloud product, the authoritative
-> docs are `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`, and
-> `cloud/docs/CURSOR_HANDOFF.md`. The trust *principles* in that section
-> (deny-by-default, approval before mutation, verify, audit, risk classification)
-> carry forward and remain in force for the cloud product; the platform specifics
-> (Tauri commands, local-first storage, keyboard/replay) and the Organizer wedge do
-> not.
+> docs are `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`,
+> `cloud/docs/CURSOR_HANDOFF.md`, and `cloud/docs/AGENT_PLUGIN.md`. The trust
+> *principles* in that section (deny-by-default, approval before mutation, verify,
+> audit, risk classification) carry forward and remain in force for the cloud
+> product; the platform specifics (Tauri commands, local-first storage,
+> keyboard/replay) and the Organizer wedge do not.
 
 ## Product contract
 
-Ghost is an **AI operator** delivered as a cloud SaaS (`cloud/`): it learns a
-business workflow once, then executes it across the software a company already
-uses — browser automation and APIs today, desktop later — with human approval on
-sensitive actions, verification of outcomes, and a full audit log.
+Ghost is the **governed execution / trust runtime** delivered as a cloud SaaS
+(`cloud/`): it learns a business workflow once, then executes it across software
+a company already uses — browser automation and APIs today, desktop later — with
+human approval on sensitive actions, verification of outcomes, and a full audit
+log. External AI agents may propose and start runs via HTTP/MCP; **agents must
+not approve** gated steps.
 
 Build toward this promise:
 
 ```text
+Agent (propose) -> Ghost (approve · execute · verify · audit)
 Capture -> Review -> Approve -> Execute -> Verify -> Audit -> Recover
 ```
 
@@ -43,7 +47,8 @@ around it.
 Build the five-part MVP in `cloud/`: (1) record a browser workflow, (2) convert it
 to editable steps, (3) replay across browser/API, (4) require approval before
 sensitive actions, (5) log every run (status, screenshots, verification, errors).
-Phase 1 (the execution engine + approval gate + run UI) is built; recording is
+Agent HTTP + MCP tools (no self-approve) are part of the distribution surface —
+see `cloud/docs/AGENT_PLUGIN.md`.Phase 1 (the execution engine + approval gate + run UI) is built; recording is
 next. See `cloud/docs/PHASE_1_PLAN.md`.
 
 ---

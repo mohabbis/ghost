@@ -17,6 +17,7 @@ If a doc contradicts this index or `cloud/README.md`, treat the cloud docs as tr
 | [`../cloud/README.md`](../cloud/README.md) | How to run the SaaS |
 | [`../cloud/docs/CURSOR_HANDOFF.md`](../cloud/docs/CURSOR_HANDOFF.md) | Where we are / what to build next |
 | [`../cloud/docs/PHASE_1_PLAN.md`](../cloud/docs/PHASE_1_PLAN.md) | Phase 1 engine + approval acceptance |
+| [`../cloud/docs/AGENT_PLUGIN.md`](../cloud/docs/AGENT_PLUGIN.md) | Agent/MCP trust runtime surface |
 | [`product-direction.md`](product-direction.md) | Category, ICP, non-goals |
 | [`business-model.md`](business-model.md) | How we make money |
 | [`audiences.md`](audiences.md) | Who we sell to first |
