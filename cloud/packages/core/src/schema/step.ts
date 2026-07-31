@@ -26,11 +26,35 @@ export const selectorSchema = z.object({
 });
 export type Selector = z.infer<typeof selectorSchema>;
 
+/**
+ * Per-step retry policy, in the spirit of a Temporal activity's retry options.
+ *
+ * Authoring a retry on a sensitive step is a mistake the runtime refuses to
+ * honour — see `effectiveRetry` in apps/worker/src/runtime/policy.ts, which
+ * clamps `maxAttempts` to 1 for anything the classifier calls sensitive.
+ * Re-clicking "Pay" because the first click timed out is a double payment, not
+ * a retry.
+ */
+export const retryPolicySchema = z.object({
+  maxAttempts: z.number().int().min(1).max(5).default(1),
+  backoffMs: z.number().int().min(0).max(60_000).default(1_000),
+  /** Multiplier applied to the backoff after each failed attempt. */
+  factor: z.number().min(1).max(10).default(2),
+});
+export type RetryPolicy = z.infer<typeof retryPolicySchema>;
+
 const base = {
   /** Stable id for referencing a step across edits and run traces. */
   id: z.string().min(1),
   /** Human-readable label shown in the editor and run timeline. */
   label: z.string().optional(),
+  /**
+   * Wall-clock budget for this step. Falls back to GHOST_STEP_TIMEOUT_MS
+   * (default 30s). Optional so workflow definitions written before this field
+   * existed still parse unchanged.
+   */
+  timeoutMs: z.number().int().positive().max(600_000).optional(),
+  retry: retryPolicySchema.optional(),
 };
 
 /** Optional post-step verification assertion. */
@@ -138,13 +162,13 @@ export type WorkflowStep = z.infer<typeof workflowStep>;
 export const workflowSteps = z.array(workflowStep);
 export type WorkflowSteps = z.infer<typeof workflowSteps>;
 
-/** Step type strings that mutate external state (used by the classifier). */
-export const MUTATING_STEP_TYPES = new Set<WorkflowStep["type"]>([
-  "click",
-  "select",
-  "apiCall",
-  "sendEmail",
-]);
+// `MUTATING_STEP_TYPES` used to live here. It was dead code — exported, never
+// imported, and its comment claimed the classifier used it when the classifier
+// has always used its own word lists. It also conflated "mutates the DOM" with
+// "mutates the world" by including `select`, which is a client-side form change
+// exactly like `fill`. Replay safety now lives in `classifier/replay.ts`, which
+// draws that line deliberately; keeping a second, wrong copy of it here would
+// be worse than having none.
 
 /** Parse + validate a raw steps array, throwing on malformed input. */
 export function parseWorkflowSteps(input: unknown): WorkflowSteps {

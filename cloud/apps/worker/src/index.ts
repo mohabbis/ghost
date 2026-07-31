@@ -15,6 +15,14 @@ const connection = createRedisConnection();
 
 const runWorker = new Worker<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, runWorkflowJob, {
   connection,
+  // A run holds a browser, so concurrency is memory-bound rather than
+  // CPU-bound; keep it small and explicit rather than relying on the default.
+  concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
+  // Must be >= the run lease in jobs/runWorkflow.ts, or BullMQ declares a job
+  // stalled and redelivers it while the original worker still owns the run.
+  lockDuration: 60_000,
+  stalledInterval: 30_000,
+  maxStalledCount: 1,
 });
 runWorker.on("failed", (job, err) => {
   console.error(`[worker] run-workflow ${job?.data.runId} failed:`, err);

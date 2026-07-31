@@ -206,6 +206,10 @@ enum RunStatus {
   SUCCEEDED
   FAILED
   CANCELED
+  // A step failed or could not be safely resumed and a human must decide:
+  // retry, skip, or cancel. Borrowed from Camunda incidents — a broken step
+  // should not silently kill a 40-invoice batch.
+  INCIDENT
 }
 
 enum StepStatus {
@@ -215,6 +219,11 @@ enum StepStatus {
   SUCCEEDED
   FAILED
   SKIPPED
+  // The step started, the worker died, and the step's effect is at-most-once
+  // (a payment, a send). We cannot know whether it landed. Re-running risks a
+  // double-submit; skipping risks a silent no-op. Neither is ours to choose —
+  // the run stops and a human decides.
+  UNKNOWN
 }
 
 model Run {
@@ -223,21 +232,74 @@ model Run {
   workflowVersionId String
   status            RunStatus @default(QUEUED)
   triggeredById     String?
-  // Index of the next step to execute; drives resume-after-approval.
+  // Denormalized cache of the next step index, for list views only.
+  //
+  // NOT the source of truth for control flow. Execution position is derived by
+  // folding the RunEvent journal (see apps/worker/src/runtime/journal.ts): a
+  // stale cursor must never be able to cause a completed step to re-execute.
+  // Written inside the same transaction that commits a step.
   cursor            Int       @default(0)
   error             String?
   startedAt         DateTime?
   endedAt           DateTime?
   createdAt         DateTime  @default(now())
 
+  // Cooperative lease: one worker owns a run at a time. Blocks the concurrent
+  // double-execution case; the journal blocks the sequential-after-crash case.
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  attempt        Int       @default(0)
+
+  // Artifact key of the ENCRYPTED storageState captured at the last halt, plus
+  // the page URL it was captured on. Restoring these is how a resumed run
+  // rebuilds browser state without re-executing any prior side effect.
+  sessionKey String?
+  sessionUrl String?
+
   org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   steps           RunStep[]
   approvals       Approval[]
+  events          RunEvent[]
 
   @@index([orgId])
   @@index([workflowVersionId])
+  @@index([status, leaseExpiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Run journal — the durable-execution substrate.
+//
+// Append-only, hash-chained per run. This is what makes resumption safe: a step
+// with a recorded terminal success is never re-executed, so a crash mid-run
+// cannot re-fire an already-approved payment. Chained per RUN rather than per
+// org so concurrent runs never contend on one chain tail (the org-wide chain in
+// AuditEvent anchors each run's head hash at run boundaries instead).
+//
+// Payloads never carry secrets: no fill values, no storageState, no cookies.
+// ---------------------------------------------------------------------------
+
+model RunEvent {
+  id String @id @default(cuid())
+
+  runId String
+  /// Monotonic per run, starting at 1. The ordering key — never order by createdAt.
+  seq   Int
+  /// Step index this event concerns; null for run-level events.
+  stepIndex Int?
+  /// See RUN_EVENT_TYPES in packages/core/src/runEvents.ts.
+  type      String
+  payload   Json?
+
+  prevHash  String?
+  hash      String
+  createdAt DateTime @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
 }
 
 model RunStep {
@@ -254,6 +316,11 @@ model RunStep {
   verification Json?
   logs         Json?
   error        String?
+  // Attempts made for this step, including retries. 0 until first execution.
+  attempt      Int        @default(0)
+  // Named values this step produced (an `extract` step's capture), readable by
+  // later steps through the expression resolver. Redacted for sensitive sources.
+  output       Json?
   startedAt    DateTime?
   endedAt      DateTime?
 
@@ -279,10 +346,17 @@ model Approval {
   requestedAt  DateTime       @default(now())
   resolvedAt   DateTime?
   note         String?
+  // After this instant the approval can no longer be consumed and the run
+  // raises an incident instead. Stops an approve clicked and forgotten from
+  // firing a payment days later.
+  expiresAt    DateTime?
 
   run        Run   @relation(fields: [runId], references: [id], onDelete: Cascade)
   resolvedBy User? @relation("ApprovalResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
+  // One approval per gated step. Without this, two concurrent workers each
+  // create a PENDING row and resolving one leaves the other pending forever.
+  @@unique([runId, stepIndex])
   @@index([runId])
   @@index([status])
 }
@@ -299,6 +373,11 @@ model AuditEvent {
   entityType String
   entityId   String?
   metadata   Json?
+  // Monotonic per org, starting at 1. Ordering key for the chain — createdAt is
+  // a TIMESTAMP(3) and can tie, which would make verification order ambiguous.
+  // The unique constraint also turns a lost append race into a retryable
+  // constraint violation rather than a silently forked chain.
+  seq        Int
   // Hash chain: hash = sha256(prevHash + canonical(payload)).
   prevHash   String?
   hash       String
@@ -306,6 +385,8 @@ model AuditEvent {
 
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  @@unique([orgId, seq])
+  @@index([orgId, seq])
   @@index([orgId, createdAt])
 }
 

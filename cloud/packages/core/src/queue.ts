@@ -18,8 +18,30 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 export interface RunWorkflowJob {
   runId: string;
   orgId: string;
-  /** Resume an approval-halted run from this step index. */
+  /**
+   * The gate index this job resumes from.
+   *
+   * Feeds the job id ONLY — it is never used for positioning. Execution
+   * position is derived by folding the run journal, so a wrong or stale value
+   * here cannot cause a step to run twice.
+   */
   fromStepIndex?: number;
+}
+
+/**
+ * Deterministic job id, so a double-clicked Run button or a double-submitted
+ * approval collapses to one job instead of racing two workers over one run.
+ *
+ * Keyed on the resume point as well as the run: a resume after approval is a
+ * *legitimate* second job for the same run, and BullMQ rejects a duplicate id
+ * while the job still exists.
+ *
+ * This is a first line of defence with a time window, not a guarantee —
+ * `removeOnComplete` eventually frees the id. The guarantees are the run lease
+ * and journal-derived position.
+ */
+export function runWorkflowJobId(runId: string, fromStepIndex?: number): string {
+  return `run:${runId}:${fromStepIndex ?? "start"}`;
 }
 
 /** Payload for the Phase 0 no-op wiring test. */

@@ -10,13 +10,16 @@
       Full name
       <input aria-label="Full name" id="name" type="text" />
     </label>
-    <button
-      id="submit"
-      type="button"
-      onclick="document.getElementById('result').textContent = 'Order submitted'"
-    >
-      Submit order
-    </button>
+    <button id="submit" type="button" onclick="submitOrder()">Submit order</button>
     <p id="result"></p>
+    <script>
+      // The submit counter persists in localStorage so a test can assert across
+      // a page reload that restoring browser state never re-clicked Submit.
+      function submitOrder() {
+        var n = Number(localStorage.getItem("ghost:submits") || "0") + 1;
+        localStorage.setItem("ghost:submits", String(n));
+        document.getElementById("result").textContent = "Order submitted";
+      }
+    </script>
   </body>
 </html>

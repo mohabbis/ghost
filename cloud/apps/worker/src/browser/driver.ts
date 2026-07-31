@@ -2,10 +2,19 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import type { WorkflowStep } from "@ghost/core/schema/step";
 import { resolveLocator } from "./selector.js";
 import { runVerification, type VerifyResult } from "./verify.js";
+import type { RestorePlan } from "../runtime/restore.js";
 
 export interface StepResult {
   screenshot: Buffer;
   verification: VerifyResult | null;
+  /** Values this step captured, by name. Only `extract` produces any. */
+  outputs: Record<string, string>;
+  /** `page.url()` after the action, recorded so a resume can restore to it. */
+  url: string;
+}
+
+export interface StepOptions {
+  timeoutMs: number;
 }
 
 function launchOptions() {
@@ -18,7 +27,8 @@ function launchOptions() {
 /**
  * A single browser session for one run. Phase 1 uses an ephemeral context per
  * run; a persistent per-org context (for stored cookies/credentials) arrives
- * with recording in Phase 2.
+ * with recording in Phase 2. Even then, a session cannot be held open across a
+ * three-day approval wait, so capture/restore stays the floor.
  */
 export class BrowserSession {
   private constructor(
@@ -27,10 +37,16 @@ export class BrowserSession {
     readonly page: Page,
   ) {}
 
-  static async launch(): Promise<BrowserSession> {
+  static async launch(storageState?: Buffer): Promise<BrowserSession> {
     const browser = await chromium.launch(launchOptions());
-    const context = await browser.newContext();
+    const context = await browser.newContext(
+      storageState
+        ? { storageState: JSON.parse(storageState.toString("utf8")) as never }
+        : undefined,
+    );
     const page = await context.newPage();
+    const defaultTimeout = Number(process.env.GHOST_STEP_TIMEOUT_MS) || 30_000;
+    page.setDefaultTimeout(defaultTimeout);
     return new BrowserSession(browser, context, page);
   }
 
@@ -45,74 +61,146 @@ export class BrowserSession {
  * in Phase 1 — the approval gate is handled by the state machine, and connector
  * execution lands in a later phase.
  */
-export async function applyStep(page: Page, step: WorkflowStep): Promise<void> {
+export async function applyStep(
+  page: Page,
+  step: WorkflowStep,
+  opts: StepOptions,
+): Promise<Record<string, string>> {
+  const timeout = opts.timeoutMs;
+
   switch (step.type) {
     case "navigate":
-      await page.goto(step.url, { waitUntil: "domcontentloaded" });
-      break;
+      await page.goto(step.url, { waitUntil: "domcontentloaded", timeout });
+      return {};
     case "click":
-      await resolveLocator(page, step.selector).first().click();
-      break;
+      await resolveLocator(page, step.selector).first().click({ timeout });
+      return {};
     case "fill":
-      await resolveLocator(page, step.selector).first().fill(step.value);
-      break;
+      await resolveLocator(page, step.selector).first().fill(step.value, { timeout });
+      return {};
     case "select":
-      await resolveLocator(page, step.selector).first().selectOption(step.value);
-      break;
+      await resolveLocator(page, step.selector).first().selectOption(step.value, { timeout });
+      return {};
     case "waitFor":
-      if (step.selector) await resolveLocator(page, step.selector).first().waitFor();
-      else if (step.urlPattern) await page.waitForURL(step.urlPattern);
+      if (step.selector) await resolveLocator(page, step.selector).first().waitFor({ timeout });
+      else if (step.urlPattern) await page.waitForURL(step.urlPattern, { timeout });
       else if (step.ms) await page.waitForTimeout(step.ms);
-      break;
-    case "extract":
-      // Read-only in Phase 1; a variable store for reusing extracted values
-      // arrives with the step editor.
-      await resolveLocator(page, step.selector)
+      return {};
+    case "extract": {
+      const value = await resolveLocator(page, step.selector)
         .first()
-        .textContent()
+        .textContent({ timeout })
         .catch(() => null);
-      break;
+      // Captured into the run journal so later steps can reference it as
+      // {{ steps.<id>.<name> }}. Null becomes "" rather than dropping the key,
+      // so a downstream reference resolves to an empty capture instead of
+      // failing as "never extracted" — the two are different diagnoses.
+      return { [step.name]: (value ?? "").trim() };
+    }
     case "verify":
     case "approval":
     case "apiCall":
     case "sendEmail":
-      break;
+      return {};
   }
 }
 
 /**
- * Rebuild page state after an approval halt.
+ * Re-apply a single step while rebuilding page state.
  *
- * Phase 1 uses an ephemeral browser per job: when the worker stops at a gate it
- * closes Chromium, so resume would otherwise start on `about:blank` and fail to
- * find the gated control. Replaying the prefix (`steps[0..cursor)`) restores the
- * page. Correctly authored workflows gate *before* the irreversible action, so
- * the prefix is setup (navigate/fill), not a double-submit. Phase 2 persistent
- * contexts will replace this.
+ * Deliberately a *separate* switch from `applyStep` with no `click`,
+ * `apiCall`, or `sendEmail` case. This is the structural fix for the old
+ * `restoreBrowserPrefix`, which looped over `applyStep` and would happily
+ * re-click an already-approved "Submit order" button. It is not possible to
+ * route a mutating action through this function, because there is no code here
+ * that performs one — and the exhaustiveness guard makes a future step type a
+ * compile error rather than a silent replay.
  */
-export async function restoreBrowserPrefix(
+export async function applyRestorativeStep(
   page: Page,
-  prefix: readonly WorkflowStep[],
+  step: WorkflowStep,
+  opts: StepOptions,
 ): Promise<void> {
-  for (const step of prefix) {
-    await applyStep(page, step);
+  const timeout = opts.timeoutMs;
+
+  switch (step.type) {
+    case "fill":
+      await resolveLocator(page, step.selector).first().fill(step.value, { timeout });
+      return;
+    case "select":
+      await resolveLocator(page, step.selector).first().selectOption(step.value, { timeout });
+      return;
+    case "waitFor":
+      if (step.selector) await resolveLocator(page, step.selector).first().waitFor({ timeout });
+      else if (step.urlPattern) await page.waitForURL(step.urlPattern, { timeout });
+      else if (step.ms) await page.waitForTimeout(step.ms);
+      return;
+    // `navigate` is subsumed by going straight to the captured URL.
+    case "navigate":
+    // Nothing to rebuild.
+    case "verify":
+    case "approval":
+    case "extract":
+      return;
+    case "click":
+    case "apiCall":
+    case "sendEmail":
+      throw new Error(
+        `refusing to replay a ${step.type} step (${step.id}) while restoring page state: ` +
+          "its effect may already have happened",
+      );
   }
+}
+
+/**
+ * Rebuild page state for a resumed run: go to the captured URL, then re-apply
+ * only the steps the restore planner cleared as restorative *on that URL*.
+ */
+export async function applyRestorePlan(
+  page: Page,
+  steps: readonly WorkflowStep[],
+  plan: Extract<RestorePlan, { kind: "restore" }>,
+  opts: StepOptions,
+): Promise<void> {
+  await page.goto(plan.url, { waitUntil: "domcontentloaded", timeout: opts.timeoutMs });
+  for (const index of plan.reapply) {
+    const step = steps[index];
+    if (step) await applyRestorativeStep(page, step, opts);
+  }
+}
+
+/** Capture cookies + storage so a halted run can resume without replaying. */
+export async function captureSessionState(
+  context: BrowserContext,
+  page: Page,
+): Promise<{ state: Buffer; url: string }> {
+  const state = await context.storageState();
+  return { state: Buffer.from(JSON.stringify(state), "utf8"), url: page.url() };
+}
+
+/** Run just the verification half of a step, without re-running its action. */
+export async function verifyStep(page: Page, step: WorkflowStep): Promise<VerifyResult | null> {
+  if (step.type === "verify") return runVerification(page, step.assertion);
+  if ("verify" in step && step.verify) return runVerification(page, step.verify);
+  return null;
 }
 
 /**
  * Execute one workflow step against the page and capture a screenshot. Throws on
  * a failed browser action; the caller records the step as failed and stops.
+ *
+ * The action and the assertion are separable (`applyStep` / `verifyStep`) so the
+ * shell can re-run a failed *verification* without re-running the action that
+ * preceded it. Re-clicking "Submit" to find out whether the first click worked
+ * is exactly the double-send this engine exists to prevent.
  */
-export async function runStep(page: Page, step: WorkflowStep): Promise<StepResult> {
-  await applyStep(page, step);
-
-  const verification =
-    step.type === "verify"
-      ? await runVerification(page, step.assertion)
-      : "verify" in step && step.verify
-        ? await runVerification(page, step.verify)
-        : null;
-
+export async function runStep(
+  page: Page,
+  step: WorkflowStep,
+  opts: StepOptions,
+): Promise<StepResult> {
+  const outputs = await applyStep(page, step, opts);
+  const verification = await verifyStep(page, step);
   const screenshot = await page.screenshot();
-  return { screenshot, verification };
+  return { screenshot, verification, outputs, url: page.url() };
 }

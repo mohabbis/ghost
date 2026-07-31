@@ -125,6 +125,23 @@ export function classifyStep(step: WorkflowStep): SensitiveVerdict {
   }
 }
 
+/**
+ * True when a step's side effect must never be applied twice.
+ *
+ * Deliberately the *same* boundary as gating rather than a second list to keep
+ * in sync: if the classifier is not trusted to decide what needs approval, it
+ * is not trusted to decide what is safe to re-run either. One predicate, one
+ * test suite, one thing to get right.
+ *
+ * The engine uses this for the crash window — a step that recorded
+ * `step.started` and no terminal outcome. Re-running an at-most-once step risks
+ * a double payment; skipping it risks a silent no-pay. Neither is the engine's
+ * call, so the run stops and a human decides.
+ */
+export function isAtMostOnce(step: WorkflowStep): boolean {
+  return classifyStep(step).sensitive;
+}
+
 /** Returns true if any step in the workflow requires approval. */
 export function workflowHasSensitiveStep(steps: WorkflowStep[]): boolean {
   return steps.some((s) => classifyStep(s).sensitive);
