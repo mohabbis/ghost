@@ -94,16 +94,43 @@ hash-chained `AuditEvent`.
 - MCP: `pnpm --filter @ghost/mcp exec tsx src/index.ts`
 - Doc: `cloud/docs/AGENT_PLUGIN.md`
 
+## Phase 1.3 — durable execution (done)
+
+Run position is now a fold over an append-only, hash-chained `RunEvent` journal
+rather than a stored cursor. A step with a recorded terminal success is
+structurally unreachable, which closes a live double-submit hole: `Run.cursor`
+used to be a local variable persisted only at gates, so a crash meant the run
+restarted from a stale cursor and — because approvals are re-read from the
+database — an already-approved sensitive step re-planned as `execute` instead of
+`gate`.
+
+Landed with it: run leases, idempotent job ids, per-step timeout/retry (clamped
+to one attempt for anything the classifier gates), Camunda-style incidents with
+retry/skip, a cancel route and button, approval decisions written into the audit
+chain, `GET /api/audit/verify` plus an `/audit` page, a variable store with a
+deliberately non-Turing-complete `{{ }}` resolver, and AES-256-GCM sealing of
+captured browser session state under a worker-only key.
+
+`restoreBrowserPrefix` is gone. Restoration is URL-scoped and re-applies only
+steps classified `restorative` in `@ghost/core/classifier/replay`; when page
+state cannot be provably rebuilt the run raises an incident rather than
+replaying an action. Rationale and prior art: `cloud/docs/PRIOR_ART.md`.
+
 ## Remaining Phase 1 work (priority)
 
 1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only
-   the demo seed. Validate with `@ghost/core` `workflowStep` Zod schema.
-2. **Harden** — per-step timeouts + retry; emergency-stop UI (set `CANCELED`;
-   worker already checks each step); `GET` audit-chain verify using
-   `verifyAuditChain` in `@ghost/core/audit`.
-3. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
-4. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
-5. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
+   the demo seed. Validate with `@ghost/core` `workflowStep` Zod schema. This is
+   also the prerequisite for n8n-style pinned data / partial re-execution.
+2. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
+3. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
+4. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
+   Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
+   only); keep it that way, because the same prefix holds encrypted session
+   blobs that must never be served.
+5. **Compensation / undo handlers** — the journal makes the saga pattern
+   tractable: walk it backwards invoking each executed step's compensator.
+6. **Four-eyes approval** — needs RBAC first; `Role` is stored and never enforced,
+   and orgs are auto-created single-member on first sign-in.
 
 ## Phase 2
 

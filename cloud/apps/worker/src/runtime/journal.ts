@@ -63,7 +63,12 @@ export function journalFromEvents(rows: readonly JournalEventRow[]): RunJournal 
     }
 
     if (row.type === RUN_EVENT_TYPES.stepRetried && i !== null) {
-      // Still in flight; the next `step.started` bumps the attempt count.
+      // A retry supersedes the recorded failure. Append-only: the original
+      // `step.failed` stays in the chain as history, but the fold stops
+      // treating the step as terminally failed so it can run again. This is how
+      // a human resolving an incident un-sticks a run without rewriting it.
+      failed.delete(i);
+      inFlight.delete(i);
       continue;
     }
 

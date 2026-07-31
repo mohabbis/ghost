@@ -27,6 +27,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     workflowName: run.workflowVersion.workflow.name,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
+    // The step the run is stopped on, so an incident can offer retry/skip.
+    cursor: run.cursor,
     steps: run.steps.map((s) => ({
       index: s.index,
       type: s.type,
@@ -35,11 +37,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       screenshotUrl: s.screenshotKey ? `/api/artifacts/${s.screenshotKey}` : null,
       verification: s.verification,
       error: s.error,
+      attempt: s.attempt,
+      output: s.output,
     })),
     approvals: run.approvals.map((a) => ({
       stepIndex: a.stepIndex,
       status: a.status,
       reason: a.reason,
+      expiresAt: a.expiresAt,
     })),
   });
 }

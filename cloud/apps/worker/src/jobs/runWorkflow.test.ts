@@ -426,4 +426,142 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
     expect(run.error).toMatch(/RESTORE_UNSAFE/);
     expect(await countSucceeded(runId, 2)).toBe(0);
   });
+
+  // -------------------------------------------------------------------------
+  // Cancel, incidents, and the variable store
+  // -------------------------------------------------------------------------
+
+  it("stops between steps when the run is canceled", async () => {
+    const runId = await seedRun(demoSteps());
+    await prisma.run.update({ where: { id: runId }, data: { status: "CANCELED" } });
+
+    await runWorkflowJob(fakeJob(runId, orgId));
+
+    const run = await prisma.run.findUniqueOrThrow({
+      where: { id: runId },
+      include: { steps: true },
+    });
+    expect(run.status).toBe("CANCELED");
+    expect(run.steps).toHaveLength(0);
+  });
+
+  it("raises an incident on a failed step instead of killing the run", async () => {
+    const runId = await seedRun([
+      { id: "nav", type: "navigate", url: `${fixtureBase}/` },
+      // A selector that will never resolve, with a short timeout so the test
+      // does not wait on Playwright's 30s default.
+      {
+        id: "ghost",
+        type: "fill",
+        selector: { css: "#does-not-exist" },
+        value: "x",
+        sensitive: false,
+        timeoutMs: 1_000,
+      },
+    ]);
+
+    await runWorkflowJob(fakeJob(runId, orgId, "incident"));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("INCIDENT");
+    expect(run.cursor).toBe(1);
+  });
+
+  it("retries a benign step according to its policy before giving up", async () => {
+    const runId = await seedRun([
+      { id: "nav", type: "navigate", url: `${fixtureBase}/` },
+      {
+        id: "ghost",
+        type: "fill",
+        selector: { css: "#does-not-exist" },
+        value: "x",
+        sensitive: false,
+        timeoutMs: 500,
+        retry: { maxAttempts: 3, backoffMs: 10, factor: 1 },
+      },
+    ]);
+
+    await runWorkflowJob(fakeJob(runId, orgId, "retries"));
+
+    const attempts = await prisma.runEvent.count({
+      where: { runId, stepIndex: 1, type: RUN_EVENT_TYPES.stepStarted },
+    });
+    expect(attempts).toBe(3);
+    const step = await prisma.runStep.findUniqueOrThrow({
+      where: { runId_index: { runId, index: 1 } },
+    });
+    expect(step.attempt).toBe(3);
+  });
+
+  it("never retries a sensitive step, whatever the definition asks for", async () => {
+    // The clamp must hold at execution time: a stored policy cannot talk the
+    // engine into clicking "Submit order" twice.
+    const runId = await seedRun([
+      { id: "nav", type: "navigate", url: `${fixtureBase}/` },
+      {
+        id: "pay",
+        type: "click",
+        selector: { role: "button", name: "Submit order — missing" },
+        timeoutMs: 500,
+        retry: { maxAttempts: 5, backoffMs: 10, factor: 1 },
+      },
+    ]);
+
+    await prisma.approval.create({
+      data: { runId, stepIndex: 1, reason: "test", status: "APPROVED", resolvedById: userId },
+    });
+    await runWorkflowJob(fakeJob(runId, orgId, "no-retry"));
+
+    const attempts = await prisma.runEvent.count({
+      where: { runId, stepIndex: 1, type: RUN_EVENT_TYPES.stepStarted },
+    });
+    expect(attempts).toBe(1);
+  });
+
+  it("feeds an extracted value into a later step", async () => {
+    const runId = await seedRun([
+      { id: "nav", type: "navigate", url: `${fixtureBase}/` },
+      { id: "who", type: "extract", selector: { css: "h1" }, name: "heading" },
+      {
+        id: "echo",
+        type: "fill",
+        selector: { role: "textbox", name: "Full name" },
+        value: "{{ steps.who.heading }}",
+        sensitive: false,
+      },
+      {
+        id: "check",
+        type: "verify",
+        assertion: { kind: "textPresent", expected: "Order form" },
+      },
+    ]);
+
+    await runWorkflowJob(fakeJob(runId, orgId, "expr"));
+
+    const run = await prisma.run.findUniqueOrThrow({
+      where: { id: runId },
+      include: { steps: { orderBy: { index: "asc" } } },
+    });
+    expect(run.status).toBe("SUCCEEDED");
+    expect(run.steps[1]!.output).toEqual({ heading: "Order form" });
+  });
+
+  it("fails a run whose expression cannot be resolved, rather than filling blank", async () => {
+    const runId = await seedRun([
+      { id: "nav", type: "navigate", url: `${fixtureBase}/` },
+      {
+        id: "echo",
+        type: "fill",
+        selector: { role: "textbox", name: "Full name" },
+        value: "{{ steps.nope.missing }}",
+        sensitive: false,
+      },
+    ]);
+
+    await runWorkflowJob(fakeJob(runId, orgId, "bad-expr"));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("FAILED");
+    expect(run.error).toMatch(/nope/);
+  });
 });

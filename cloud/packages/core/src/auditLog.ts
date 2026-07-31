@@ -1,5 +1,5 @@
-import { prisma, Prisma } from "../db.js";
-import { hashAuditEvent, type AuditPayload } from "../audit.js";
+import { prisma, Prisma } from "./db.js";
+import { hashAuditEvent, type AuditPayload } from "./audit.js";
 
 /**
  * Transactional writers for the two hash chains.

@@ -109,26 +109,11 @@ export function resetArtifactStore(): void {
   store = undefined;
 }
 
-export function screenshotKey(runId: string, stepIndex: number): string {
-  return `runs/${runId}/step-${stepIndex}.png`;
-}
-
-/** Screenshot taken immediately after a restore, so a human can see the page. */
-export function restoreScreenshotKey(runId: string, stepIndex: number): string {
-  return `runs/${runId}/restore-${stepIndex}.png`;
-}
-
-/**
- * Encrypted browser session state captured at a halt.
- *
- * Deliberately under a `session/` segment the web artifact route refuses to
- * serve — this blob is a live credential, not an artifact to look at.
- */
-export function sessionStateKey(runId: string, stepIndex: number): string {
-  return `runs/${runId}/session/gate-${stepIndex}.bin`;
-}
-
-/** Prefix holding every session blob for a run, purged when the run ends. */
-export function sessionPrefix(runId: string): string {
-  return `runs/${runId}/session`;
-}
+// Key shapes and the "may this be served over HTTP?" rule live in core so the
+// worker that writes them and the web route that gates them cannot drift.
+export {
+  screenshotKey,
+  restoreScreenshotKey,
+  sessionStateKey,
+  sessionPrefix,
+} from "@ghost/core/artifacts";

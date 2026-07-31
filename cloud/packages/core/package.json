@@ -11,10 +11,11 @@
     "./classifier/replay": "./src/classifier/replay.ts",
     "./queue": "./src/queue.ts",
     "./audit": "./src/audit.ts",
-    "./audit-log": "./src/audit/log.ts",
+    "./audit-log": "./src/auditLog.ts",
     "./run-events": "./src/runEvents.ts",
     "./expr": "./src/expr.ts",
     "./crypto": "./src/crypto/secretbox.ts",
+    "./artifacts": "./src/artifacts.ts",
     "./agent": "./src/agent/tools.ts",
     "./agent-credentials": "./src/agent/credentials.ts"
   },
