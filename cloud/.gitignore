@@ -36,3 +36,6 @@ playwright-report/
 
 # run artifacts (screenshots) written by the worker in dev
 .artifacts/
+
+# redis snapshot (only appears if you run redis-server from this dir)
+dump.rdb

@@ -116,6 +116,21 @@ steps classified `restorative` in `@ghost/core/classifier/replay`; when page
 state cannot be provably rebuilt the run raises an incident rather than
 replaying an action. Rationale and prior art: `cloud/docs/PRIOR_ART.md`.
 
+### Verifying the queue path by hand
+
+The vitest suite calls `runWorkflowJob` directly, so it does not exercise
+BullMQ delivery, job-id idempotency, or a real worker process. With Postgres,
+Redis, the web app and the worker running:
+
+```bash
+pnpm --filter @ghost/worker exec tsx src/e2e-drive.ts
+```
+
+It seeds a run against `/fixtures/order`, enqueues it, waits for the gate,
+approves, and prints the journal. A healthy run shows `session.captured` at the
+gate, `session.restored` on resume, and exactly one `step.succeeded` for the
+submit step.
+
 ## Remaining Phase 1 work (priority)
 
 1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only
