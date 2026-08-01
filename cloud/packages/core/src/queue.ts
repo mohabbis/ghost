@@ -8,6 +8,8 @@
 export const QUEUE_NAMES = {
   /** Executes a workflow run (Phase 1). */
   runWorkflow: "run-workflow",
+  /** Reverses a run's completed side effects (BPMN compensation). */
+  compensateRun: "compensate-run",
   /** Phase 0 wiring smoke test. */
   noop: "noop",
 } as const;
@@ -51,14 +53,56 @@ export interface RunWorkflowJob {
  * This is a first line of defence with a time window, not a guarantee —
  * `removeOnComplete` eventually frees the id. The guarantees are the run lease
  * and journal-derived position.
+ *
+ * **No colons.** BullMQ rejects a custom job id unless it contains either no
+ * colon or exactly two (it splits on `:` to stay compatible with repeatable-job
+ * keys). The previous `run:<id>:<from>:<token>` form has three, so every call
+ * that passed a resume token threw before reaching Redis — which is every
+ * incident retry, every incident skip, and the cleanup enqueue on cancel and
+ * on a rejected approval. Keeping the separator out of the alphabet entirely
+ * means no future segment can re-break it.
  */
 export function runWorkflowJobId(
   runId: string,
   fromStepIndex?: number,
   resumeToken?: string,
 ): string {
-  const base = `run:${runId}:${fromStepIndex ?? "start"}`;
-  return resumeToken ? `${base}:${resumeToken}` : base;
+  const base = `run-${runId}-${fromStepIndex ?? "start"}`;
+  return resumeToken ? `${base}-${resumeToken}` : base;
+}
+
+/** Payload for a `compensateRun` job. */
+export interface CompensateRunJob {
+  runId: string;
+  orgId: string;
+  /**
+   * Who asked for the reversal.
+   *
+   * Not the same person as `Run.triggeredById`, and the difference is the whole
+   * point: attributing a reversal to whoever started the original run — often
+   * an agent, or a colleague — puts the wrong name against a mutation in the
+   * audit log.
+   */
+  requestedById?: string | null;
+  /**
+   * Distinguishes a resume from the initial request, for the same reason
+   * `RunWorkflowJob.resumeToken` does. A compensation that gates and is then
+   * approved re-enters through this queue, and without a fresh token the
+   * retained completed job swallows the resume — leaving the run COMPENSATING
+   * with nothing scheduled.
+   */
+  resumeToken?: string;
+}
+
+/**
+ * Deterministic id so a double-clicked Undo collapses to a single job.
+ *
+ * Colon-free for the same reason as `runWorkflowJobId` — one colon is as
+ * illegal as three.
+ */
+export function compensateRunJobId(runId: string, resumeToken?: string): string {
+  const base = `compensate-${runId}`;
+  return resumeToken ? `${base}-${resumeToken}` : base;
 }
 
 /** Payload for the Phase 0 no-op wiring test. */

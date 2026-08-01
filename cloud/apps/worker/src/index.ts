@@ -1,7 +1,13 @@
 import { Worker } from "bullmq";
-import { QUEUE_NAMES, type NoopJob, type RunWorkflowJob } from "@ghost/core/queue";
+import {
+  QUEUE_NAMES,
+  type CompensateRunJob,
+  type NoopJob,
+  type RunWorkflowJob,
+} from "@ghost/core/queue";
 import { createRedisConnection } from "./redis.js";
 import { runWorkflowJob } from "./jobs/runWorkflow.js";
+import { compensateRunJob } from "./jobs/compensateRun.js";
 
 /**
  * Ghost worker entrypoint.
@@ -28,6 +34,17 @@ runWorker.on("failed", (job, err) => {
   console.error(`[worker] run-workflow ${job?.data.runId} failed:`, err);
 });
 
+// Reversal shares the run's lock duration but runs at lower concurrency: it is
+// rare, and a half-finished undo is the worst state to pile more work onto.
+const compensateWorker = new Worker<CompensateRunJob>(
+  QUEUE_NAMES.compensateRun,
+  compensateRunJob,
+  { connection, concurrency: 1, lockDuration: 60_000, stalledInterval: 30_000, maxStalledCount: 1 },
+);
+compensateWorker.on("failed", (job, err) => {
+  console.error(`[worker] compensate-run ${job?.data.runId} failed:`, err);
+});
+
 const noopWorker = new Worker<NoopJob>(
   QUEUE_NAMES.noop,
   async (job) => {
@@ -50,7 +67,7 @@ console.log("[worker] Ghost worker started. Listening on queues:", Object.values
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`[worker] ${signal} received, shutting down…`);
-  await Promise.all([noopWorker.close(), runWorker.close()]);
+  await Promise.all([noopWorker.close(), runWorker.close(), compensateWorker.close()]);
   await connection.quit();
   process.exit(0);
 }

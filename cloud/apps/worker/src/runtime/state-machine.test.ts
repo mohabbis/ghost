@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { planNextAction, isNoopStep, type ApprovalState } from "./state-machine.js";
-import { emptyJournal, type RunJournal } from "./journal.js";
+import { emptyJournal, type RunJournal } from "@ghost/core/journal";
 import type { WorkflowStep } from "@ghost/core/schema/step";
 
 const steps: WorkflowStep[] = [

@@ -2,7 +2,7 @@ import {
   RUN_EVENT_TYPES,
   TERMINAL_SUCCESS_EVENTS,
   TERMINAL_FAILURE_EVENTS,
-} from "@ghost/core/run-events";
+} from "../runEvents.js";
 
 /**
  * Fold the run journal into the facts the state machine needs.

@@ -20,6 +20,9 @@ interface ApprovalView {
   status: string;
   reason: string;
   expiresAt: string | null;
+  phase: "FORWARD" | "COMPENSATION";
+  /** For a compensation gate: what the reversal will actually do. */
+  actions: string[];
 }
 interface RunView {
   id: string;
@@ -36,9 +39,40 @@ interface ChainView {
   org: { intact: boolean; count: number };
   run?: { intact: boolean; count: number; anchored: boolean; anchorMatches: boolean | null };
 }
+interface UndoView {
+  canUndo: boolean;
+  complete: boolean;
+  /** Steps still landing. Non-empty means the plan is not yet trustworthy. */
+  blockedBy: number[] | null;
+  alreadyReversed: number[];
+  entries: {
+    stepIndex: number;
+    stepLabel: string;
+    description: string;
+    /** What the reversal will actually do, not just what its author called it. */
+    actions: string[];
+    requiresApproval: boolean;
+    approvalReason: string | null;
+  }[];
+  irreversible: { stepIndex: number; stepLabel: string; reason: string }[];
+}
 
-const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED"]);
-const STOPPABLE = new Set(["QUEUED", "RUNNING", "AWAITING_APPROVAL", "INCIDENT"]);
+// Stops polling and triggers chain verification. COMPENSATED belongs here:
+// leaving it out kept the page polling forever and meant the verification
+// effect never re-ran, so the panel kept showing the pre-undo audit result
+// instead of verifying the head the compensation just anchored.
+const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED", "COMPENSATED"]);
+/** States a run can be reversed from. Mirrors the undo route's allow-list. */
+const REVERSIBLE = new Set(["SUCCEEDED", "FAILED", "CANCELED", "INCIDENT"]);
+// COMPENSATING included: a reversal is a sequence of live mutations and needs
+// the same stop the forward direction has.
+const STOPPABLE = new Set([
+  "QUEUED",
+  "RUNNING",
+  "AWAITING_APPROVAL",
+  "INCIDENT",
+  "COMPENSATING",
+]);
 
 function statusColor(status: string): string {
   if (status === "SUCCEEDED") return "text-[var(--color-success)]";
@@ -47,18 +81,29 @@ function statusColor(status: string): string {
   // means nobody knows whether the action took effect.
   if (status === "UNKNOWN" || status === "INCIDENT") return "text-[var(--color-warning)]";
   if (status === "AWAITING_APPROVAL") return "text-[var(--color-warning)]";
+  // A reversed step is neither a success nor a failure — it happened, and then
+  // it was walked back.
+  if (status === "COMPENSATED" || status === "COMPENSATING") {
+    return "text-[var(--color-muted)]";
+  }
   return "text-[var(--color-muted)]";
 }
 
 export function RunTimeline({ runId }: { runId: string }) {
   const [run, setRun] = useState<RunView | null>(null);
   const [chain, setChain] = useState<ChainView | null>(null);
+  const [undo, setUndo] = useState<UndoView | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
     if (res.ok) setRun((await res.json()) as RunView);
+  }, [runId]);
+
+  const loadUndo = useCallback(async () => {
+    const res = await fetch(`/api/runs/${runId}/undo`, { cache: "no-store" });
+    if (res.ok) setUndo((await res.json()) as UndoView);
   }, [runId]);
 
   const loadChain = useCallback(async () => {
@@ -88,6 +133,12 @@ export function RunTimeline({ runId }: { runId: string }) {
     if (run && TERMINAL.has(run.status)) void loadChain();
   }, [run, loadChain]);
 
+  // The undo plan is read-only, so it can be fetched as soon as the run is in a
+  // state that could be reversed.
+  useEffect(() => {
+    if (run && REVERSIBLE.has(run.status)) void loadUndo();
+  }, [run, loadUndo]);
+
   async function post(path: string, body: unknown) {
     setBusy(true);
     setNotice(null);
@@ -102,6 +153,7 @@ export function RunTimeline({ runId }: { runId: string }) {
         setNotice(data.error ?? `Request failed (${res.status})`);
       }
       await load();
+      await loadUndo().catch(() => undefined);
     } finally {
       setBusy(false);
     }
@@ -128,7 +180,9 @@ export function RunTimeline({ runId }: { runId: string }) {
               disabled={busy}
               onClick={() => post(`/api/runs/${run.id}/cancel`, {})}
             >
-              Stop after current step
+              {run.status === "COMPENSATING"
+                ? "Stop after current reversal"
+                : "Stop after current step"}
             </Button>
           )}
         </div>
@@ -139,16 +193,28 @@ export function RunTimeline({ runId }: { runId: string }) {
 
       {pending && (
         <Card>
-          <CardBody className="flex items-center justify-between gap-4">
+          <CardBody className="flex items-start justify-between gap-4">
             <div className="text-sm">
-              <span className="font-medium">Approval required</span> — {pending.reason}
+              <span className="font-medium">
+                {pending.phase === "COMPENSATION"
+                  ? "Approval required to reverse a step"
+                  : "Approval required"}
+              </span>{" "}
+              — {pending.reason}
               {pending.expiresAt && (
                 <span className="ml-2 text-xs text-[var(--color-muted)]">
                   expires {new Date(pending.expiresAt).toLocaleString()}
                 </span>
               )}
+              {pending.actions.length > 0 && (
+                <ul className="mt-1.5 ml-4 list-disc space-y-0.5 font-mono text-xs text-[var(--color-muted)] marker:text-[var(--color-border)]">
+                  {pending.actions.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <Button
                 size="sm"
                 disabled={busy}
@@ -221,6 +287,82 @@ export function RunTimeline({ runId }: { runId: string }) {
                 Skip step
               </Button>
             </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {run && REVERSIBLE.has(run.status) && undo && (undo.entries.length > 0 || undo.irreversible.length > 0) && (
+        <Card>
+          <CardBody className="space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Undo this run</p>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  {undo.blockedBy
+                    ? `Step ${undo.blockedBy[0]! + 1} is still finishing. Undo is unavailable until the run settles.`
+                    : undo.entries.length === 0
+                      ? "Nothing left in this run can be reversed."
+                      : `${undo.entries.length} step${undo.entries.length === 1 ? "" : "s"} would be reversed, newest first.`}
+                  {undo.alreadyReversed.length > 0 &&
+                    ` ${undo.alreadyReversed.length} step${
+                      undo.alreadyReversed.length === 1 ? " has" : "s have"
+                    } already been reversed.`}
+                </p>
+              </div>
+              {undo.entries.length > 0 && undo.canUndo && (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => post(`/api/runs/${run.id}/undo`, {})}
+                >
+                  Undo run
+                </Button>
+              )}
+            </div>
+
+            {undo.entries.length > 0 && (
+              <ol className="space-y-2 text-xs">
+                {undo.entries.map((e) => (
+                  <li key={e.stepIndex} className="text-[var(--color-muted)]">
+                    <span className="text-[var(--color-fg)]">{e.stepLabel}</span> — {e.description}
+                    {e.requiresApproval && (
+                      <span className="ml-1 text-[var(--color-warning)]">(needs approval)</span>
+                    )}
+                    {/* The description is the author's claim; this is the plan.
+                        Approving a reversal you cannot see is not approval. */}
+                    {e.actions.length > 0 && (
+                      <ul className="mt-0.5 ml-3 list-disc space-y-0.5 marker:text-[var(--color-border)]">
+                        {e.actions.map((a, i) => (
+                          <li key={i} className="font-mono">
+                            {a}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {undo.irreversible.length > 0 && (
+              <div className="rounded border border-[var(--color-border)] p-2">
+                <p className="text-xs font-medium text-[var(--color-warning)]">
+                  Cannot be reversed — {undo.irreversible.length} completed step
+                  {undo.irreversible.length === 1 ? "" : "s"}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-[var(--color-muted)]">
+                  {undo.irreversible.map((e) => (
+                    <li key={e.stepIndex}>
+                      {e.stepLabel} — {e.reason}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                  Undoing this run will leave those effects in place.
+                </p>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

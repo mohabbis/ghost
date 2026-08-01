@@ -26,6 +26,14 @@ export const selectorSchema = z.object({
 });
 export type Selector = z.infer<typeof selectorSchema>;
 
+/** Optional post-step verification assertion. */
+export const verificationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("url"), expected: z.string() }),
+  z.object({ kind: z.literal("selectorVisible"), selector: selectorSchema }),
+  z.object({ kind: z.literal("textPresent"), expected: z.string() }),
+]);
+export type Verification = z.infer<typeof verificationSchema>;
+
 /**
  * Per-step retry policy, in the spirit of a Temporal activity's retry options.
  *
@@ -42,6 +50,47 @@ export const retryPolicySchema = z.object({
   factor: z.number().min(1).max(10).default(2),
 });
 export type RetryPolicy = z.infer<typeof retryPolicySchema>;
+
+/**
+ * How a step is undone — Ghost's take on BPMN compensation.
+ *
+ * Camunda links an activity to a *compensation handler* and, on compensation,
+ * invokes the handlers of completed activities in reverse. Ghost does the same
+ * over the run journal, with two deliberate restrictions:
+ *
+ *   1. A compensation is a small **declarative plan**, not a script. Its actions
+ *      go through the same sensitivity classifier, the same approval gate, and
+ *      the same hash-chained journal as forward execution. Undoing a payment is
+ *      itself a sensitive action and is treated as one.
+ *   2. Only browser actions are expressible today. Connector compensation
+ *      arrives with connector execution, which does not exist yet — so a step
+ *      that cannot be undone says so rather than pretending.
+ *
+ * `description` is what a human reads when approving the undo, so it should say
+ * what actually happens ("Open the order and click Cancel order"), not "undo".
+ */
+export const compensationAction = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("navigate"), url: z.string().url() }),
+  z.object({ type: z.literal("click"), selector: selectorSchema, description: z.string().optional() }),
+  z.object({ type: z.literal("fill"), selector: selectorSchema, value: z.string() }),
+  z.object({ type: z.literal("select"), selector: selectorSchema, value: z.string() }),
+  z.object({
+    type: z.literal("waitFor"),
+    selector: selectorSchema.optional(),
+    urlPattern: z.string().optional(),
+    ms: z.number().int().positive().optional(),
+  }),
+]);
+export type CompensationAction = z.infer<typeof compensationAction>;
+
+export const compensationSchema = z.object({
+  /** Shown to the human approving the undo. Say what happens, not "undo". */
+  description: z.string().min(1),
+  actions: z.array(compensationAction).min(1),
+  /** Optional assertion that the reversal actually took effect. */
+  verify: verificationSchema.optional(),
+});
+export type Compensation = z.infer<typeof compensationSchema>;
 
 const base = {
   /** Stable id for referencing a step across edits and run traces. */
@@ -63,15 +112,14 @@ const base = {
    */
   timeoutMs: z.number().int().positive().max(600_000).optional(),
   retry: retryPolicySchema.optional(),
+  /**
+   * How to reverse this step, if it can be reversed. Absent means "no known
+   * way to undo this" — which the undo preview reports honestly rather than
+   * quietly skipping.
+   */
+  compensate: compensationSchema.optional(),
 };
 
-/** Optional post-step verification assertion. */
-export const verificationSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("url"), expected: z.string() }),
-  z.object({ kind: z.literal("selectorVisible"), selector: selectorSchema }),
-  z.object({ kind: z.literal("textPresent"), expected: z.string() }),
-]);
-export type Verification = z.infer<typeof verificationSchema>;
 
 export const navigateStep = z.object({
   ...base,

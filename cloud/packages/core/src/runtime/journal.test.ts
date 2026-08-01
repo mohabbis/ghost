@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journalFromEvents, journalFromLegacyRunSteps, type JournalEventRow } from "./journal.js";
-import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
+import { RUN_EVENT_TYPES } from "../runEvents.js";
 
 function ev(
   seq: number,

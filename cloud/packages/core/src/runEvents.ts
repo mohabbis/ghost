@@ -54,6 +54,29 @@ export const RUN_EVENT_TYPES = {
   /** A human approved or rejected. This is the record of *who authorized what*. */
   gateResolved: "gate.resolved",
 
+  /** Reversal of the run's completed side effects began (BPMN compensation). */
+  compensationStarted: "compensation.started",
+  /**
+   * A step's reversal is about to act, written BEFORE the browser touches
+   * anything — the mirror of `step.started` on the forward path.
+   *
+   * Without it, a worker killed after a cancellation lands but before
+   * `step.compensated` commits leaves no trace, and the redelivered job cancels
+   * the order a second time. A reversal is a mutation and gets the same
+   * crash-window record the forward mutation gets.
+   */
+  stepCompensationStarted: "step.compensation_started",
+  /** One step's reversal ran. `stepIndex` is the forward step being undone. */
+  stepCompensated: "step.compensated",
+  /** One step's reversal was attempted and failed. */
+  stepCompensationFailed: "step.compensation_failed",
+  /**
+   * A completed side effect that has no defined reversal. Recorded rather than
+   * omitted: a partial undo presented as a complete one is worse than none.
+   */
+  stepIrreversible: "step.irreversible",
+  compensationFinished: "compensation.finished",
+
   /** Browser storageState was captured at a halt (payload: key + digest, never contents). */
   sessionCaptured: "session.captured",
   sessionRestored: "session.restored",

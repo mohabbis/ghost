@@ -4,6 +4,8 @@ import IORedis from "ioredis";
 import {
   QUEUE_NAMES,
   runWorkflowJobId,
+  compensateRunJobId,
+  type CompensateRunJob,
   type NoopJob,
   type RunWorkflowJob,
 } from "@ghost/core/queue";
@@ -47,6 +49,20 @@ export function enqueueRunWorkflow(data: RunWorkflowJob) {
     // lease blocks a concurrent worker and the journal blocks re-running a
     // completed step. `runWorkflowJob` records business failures rather than
     // throwing, so only infrastructure errors reach these attempts.
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+    removeOnComplete: { age: 3_600 },
+    removeOnFail: { age: 86_400 },
+  });
+}
+
+export function enqueueCompensateRun(data: CompensateRunJob) {
+  return getQueue(QUEUE_NAMES.compensateRun).add(QUEUE_NAMES.compensateRun, data, {
+    // The token has to reach the id, or it does nothing. Completed jobs are
+    // retained, so a gate resume re-added under the plain `compensate-<runId>`
+    // is silently dropped and the run sits in COMPENSATING with nothing
+    // scheduled — the exact failure the token exists to prevent.
+    jobId: compensateRunJobId(data.runId, data.resumeToken),
     attempts: 3,
     backoff: { type: "exponential", delay: 5_000 },
     removeOnComplete: { age: 3_600 },

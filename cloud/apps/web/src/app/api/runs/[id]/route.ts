@@ -36,6 +36,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ? `/api/artifacts/runs/${id}/restore-${run.cursor}.png`
     : null;
 
+  // The exact actions a compensation gate is asking to authorize, as recorded
+  // on `gate.opened`. Read from the journal rather than recomputed, so the
+  // prompt shows what the worker committed to running rather than what a fresh
+  // plan would produce now.
+  const gateEvents = await prisma.runEvent.findMany({
+    where: { runId: id, type: "gate.opened" },
+    orderBy: { seq: "asc" },
+    select: { stepIndex: true, payload: true },
+  });
+  const gateActions = new Map<string, string[]>();
+  for (const e of gateEvents) {
+    const payload = (e.payload ?? {}) as { phase?: string; actions?: string[] };
+    if (payload.actions?.length) {
+      gateActions.set(`${payload.phase ?? "FORWARD"}:${e.stepIndex}`, payload.actions);
+    }
+  }
+
   return NextResponse.json({
     id: run.id,
     status: run.status,
@@ -63,6 +80,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       status: a.status,
       reason: a.reason,
       expiresAt: a.expiresAt,
+      // Which direction is waiting. Approving a reversal is a different
+      // decision from approving the step it reverses, and the prompt has to
+      // say which one is on the table.
+      phase: a.phase,
+      actions: gateActions.get(`${a.phase}:${a.stepIndex}`) ?? [],
     })),
   });
 }

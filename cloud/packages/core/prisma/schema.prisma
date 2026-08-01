@@ -210,6 +210,11 @@ enum RunStatus {
   // retry, skip, or cancel. Borrowed from Camunda incidents — a broken step
   // should not silently kill a 40-invoice batch.
   INCIDENT
+  // Reversing the run's completed side effects (BPMN compensation).
+  COMPENSATING
+  // Reversal finished. Not the same as SUCCEEDED, and not the same as never
+  // having run — the run happened and was then walked back.
+  COMPENSATED
 }
 
 enum StepStatus {
@@ -219,6 +224,11 @@ enum StepStatus {
   SUCCEEDED
   FAILED
   SKIPPED
+  // The step ran, and its effect was later reversed by a compensation. Not the
+  // same as SKIPPED: writing SKIPPED over a reversed step made the timeline
+  // claim the original action never happened, when it happened and is precisely
+  // why there was something to undo.
+  COMPENSATED
   // The step started, the worker died, and the step's effect is at-most-once
   // (a payment, a send). We cannot know whether it landed. Re-running risks a
   // double-submit; skipping risks a silent no-op. Neither is ours to choose —
@@ -336,10 +346,18 @@ enum ApprovalStatus {
   REJECTED
 }
 
+// Which direction of the run an approval belongs to. Without this, reversing a
+// step would collide with the forward gate on the same (runId, stepIndex).
+enum ApprovalPhase {
+  FORWARD
+  COMPENSATION
+}
+
 model Approval {
   id           String         @id @default(cuid())
   runId        String
   stepIndex    Int
+  phase        ApprovalPhase  @default(FORWARD)
   status       ApprovalStatus @default(PENDING)
   reason       String
   resolvedById String?
@@ -354,9 +372,11 @@ model Approval {
   run        Run   @relation(fields: [runId], references: [id], onDelete: Cascade)
   resolvedBy User? @relation("ApprovalResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
-  // One approval per gated step. Without this, two concurrent workers each
-  // create a PENDING row and resolving one leaves the other pending forever.
-  @@unique([runId, stepIndex])
+  // One approval per gated step per phase. Without the uniqueness, two
+  // concurrent workers each create a PENDING row and resolving one leaves the
+  // other pending forever; without the phase, undoing a step would collide with
+  // the forward approval for that same step.
+  @@unique([runId, stepIndex, phase])
   @@index([runId])
   @@index([status])
 }

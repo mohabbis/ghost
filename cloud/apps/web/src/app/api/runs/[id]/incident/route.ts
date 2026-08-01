@@ -18,6 +18,25 @@ import { classifyStep } from "@ghost/core/classifier";
  * fresh approval, because otherwise "skip" would be a way to walk a run past
  * the approval gate — the one thing the engine must never allow.
  */
+/**
+ * Has a reversal been started on this run and not yet concluded?
+ *
+ * Read from the journal rather than a status flag: `COMPENSATING` is cleared
+ * the moment the reversal stops, so by the time the run is an INCIDENT the
+ * status no longer says which direction it was going.
+ */
+async function compensationInProgress(runId: string): Promise<boolean> {
+  const last = await prisma.runEvent.findFirst({
+    where: {
+      runId,
+      type: { in: [RUN_EVENT_TYPES.compensationStarted, RUN_EVENT_TYPES.compensationFinished] },
+    },
+    orderBy: { seq: "desc" },
+    select: { type: true },
+  });
+  return last?.type === RUN_EVENT_TYPES.compensationStarted;
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.orgId) {
@@ -37,6 +56,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { workflowVersion: true },
   });
   if (!run) return NextResponse.json({ error: "no incident on this run" }, { status: 404 });
+
+  // A compensation that failed also stops as INCIDENT, and these controls are
+  // forward-recovery controls. Letting them run on a reversal would append
+  // forward-step recovery events to a run whose steps are all already complete:
+  // the forward worker would find nothing left to do and mark an originally
+  // successful run SUCCEEDED, quietly erasing the fact that its undo failed
+  // partway. Reversal has its own recovery path (retry the undo, or accept the
+  // partial state) and must not borrow this one.
+  const compensation = await compensationInProgress(id);
+  if (compensation) {
+    return NextResponse.json(
+      {
+        error:
+          "this incident is a failed reversal, not a failed step — retry or skip here would " +
+          "resume the original run and hide the incomplete undo. Request the undo again once " +
+          "the cause is fixed.",
+      },
+      { status: 409 },
+    );
+  }
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
   const index = run.cursor;
