@@ -340,8 +340,37 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
     await runWorkflowJob(fakeJob(runId, orgId, "tampered"));
 
     const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
-    expect(run.status).toBe("FAILED");
+    expect(run.status).toBe("INCIDENT");
     expect(run.error).toMatch(/JOURNAL_TAMPERED/);
+  });
+
+  it("refuses to resume when a valid journal suffix was deleted", async () => {
+    const runId = await seedRun(demoSteps());
+    await runWorkflowJob(fakeJob(runId, orgId));
+    const before = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    const tail = await prisma.runEvent.findFirstOrThrow({
+      where: { runId },
+      orderBy: { seq: "desc" },
+    });
+    await prisma.runEvent.delete({ where: { id: tail.id } });
+
+    // No alternate caller may append first and overwrite journalHead with a
+    // value derived from the truncated prefix. The appender is the choke point.
+    await expect(
+      appendRunEvent(runId, { type: RUN_EVENT_TYPES.runCanceled }),
+    ).rejects.toThrow(/JOURNAL_TAMPERED/);
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: runId } })).journalHead,
+    ).toBe(before.journalHead);
+
+    await prisma.run.update({ where: { id: runId }, data: { status: "QUEUED" } });
+
+    await runWorkflowJob(fakeJob(runId, orgId, "truncated"));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("INCIDENT");
+    expect(run.error).toMatch(/tail does not match/);
+    expect(run.journalHead).toBe(before.journalHead);
   });
 
   it("holds the lease so two concurrent jobs cannot both advance a run", async () => {
@@ -430,10 +459,24 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
 
     // Strip the journal, leaving only the legacy RunStep rows — exactly what a
     // run that was mid-flight when durable execution shipped looks like.
+    //
+    // `journalHead` is cleared with it, and that detail is the whole difference
+    // between "legacy" and "tampered". The backfill in
+    // 20260801180000_run_journal_head only sets the column for runs that have
+    // RunEvent rows, so a genuinely pre-journal run carries NULL. Deleting the
+    // events while leaving a head behind is a state no real run reaches, and the
+    // engine is right to quarantine it — that case is covered separately by
+    // "refuses to resume when a valid journal suffix was deleted".
     await prisma.runEvent.deleteMany({ where: { runId } });
     await prisma.run.update({
       where: { id: runId },
-      data: { status: "QUEUED", cursor: 0, sessionKey: null, sessionUrl: null },
+      data: {
+        status: "QUEUED",
+        cursor: 0,
+        sessionKey: null,
+        sessionUrl: null,
+        journalHead: null,
+      },
     });
     const before = await prisma.runStep.findMany({
       where: { runId, index: { in: [0, 1] } },

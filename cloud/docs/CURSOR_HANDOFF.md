@@ -150,23 +150,17 @@ the way a worker-side terminal transition does. Both sides skip the append if
 the other got there first, so a running job and the route can no longer produce
 two `run.canceled` events straddling an anchor.
 
-**Open — a truncated journal tail still verifies.** `verifyAuditChain` walks
-from the first surviving row and only checks links between rows that exist, so
-deleting a complete *suffix* of a non-terminal run's journal looks intact.
-Intermediate heads are anchored into the org chain only at run boundaries, and
-the stored cursor is deliberately ignored, so removing the trailing
-`step.started` / `step.succeeded` pair makes an already-approved action eligible
-to run again.
+**Closed — a truncated journal tail is detected before resume.** Every
+`appendRunEvent` now updates `Run.journalHead` in the same transaction. Forward
+and compensation workers compare the surviving tail with that expected head in
+addition to verifying internal links. A mismatch quarantines the run without
+appending to the compromised chain (which would otherwise bless the forged
+tail); the finding is written to the independent organization audit chain.
 
-Fixing it means persisting the expected head or sequence outside the mutable
-journal — a schema decision, not a patch. Options worth weighing: a
-monotonically-updated `Run.journalHead` written in the same transaction as each
-append (cheap, but same-database so it falls to an attacker with write access to
-both), or anchoring into the org chain at every gate rather than only at run
-boundaries (more writes, but the org chain is what the customer verifies).
-
-Until it closes, tamper-evidence holds against accidental corruption and mid-run
-crashes, but not against an attacker with write access to the journal.
+This protects against deletion from `RunEvent`, including deletion of the whole
+journal. Because the expected head is in the same database, an attacker able to
+rewrite both the journal and `Run.journalHead` remains outside this threat model;
+run-boundary anchors in the organization chain remain the customer-visible seal.
 
 ### Known gaps in compensation (undo)
 
