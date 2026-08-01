@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { appendAuditEvent } from "@ghost/core/audit-log";
 import { parseMaxActiveRuns } from "@ghost/core/concurrency";
+import { enqueueCompensateRun, enqueueRunWorkflow } from "@/lib/queue";
 
 /**
  * Update a workflow's settings. Currently only its concurrency cap.
@@ -30,23 +31,83 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     return Response.json({ error: (err as Error).message }, { status: 400 });
   }
 
-  // Org-scope the read before the write: a workflow id alone must never be
-  // enough to reconfigure another tenant's workflow.
-  const workflow = await prisma.workflow.findFirst({
-    where: { id, orgId },
-    select: { id: true, maxActiveRuns: true },
-  });
-  if (!workflow) return Response.json({ error: "workflow not found" }, { status: 404 });
-
-  if (workflow.maxActiveRuns !== maxActiveRuns) {
-    await prisma.workflow.update({ where: { id }, data: { maxActiveRuns } });
-    await appendAuditEvent(orgId, session.user.id ?? null, {
-      action: "workflow.concurrency_changed",
-      entityType: "Workflow",
-      entityId: id,
-      metadata: { from: workflow.maxActiveRuns, to: maxActiveRuns },
+  // Read, write and audit in one transaction. As separate statements, a failed
+  // audit append left the setting changed with no record of who changed it, and
+  // two concurrent PATCHes could both read the same `from` value and write two
+  // audit entries claiming the same starting point — a governance control whose
+  // log does not match what happened.
+  const result = await prisma.$transaction(async (tx) => {
+    // Org-scope the read before the write: a workflow id alone must never be
+    // enough to reconfigure another tenant's workflow.
+    const workflow = await tx.workflow.findFirst({
+      where: { id, orgId },
+      select: { id: true, maxActiveRuns: true },
     });
+    if (!workflow) return { ok: false as const };
+
+    const from = workflow.maxActiveRuns;
+    if (from !== maxActiveRuns) {
+      await tx.workflow.update({ where: { id }, data: { maxActiveRuns } });
+      await appendAuditEvent(
+        orgId,
+        session.user.id ?? null,
+        {
+          action: "workflow.concurrency_changed",
+          entityType: "Workflow",
+          entityId: id,
+          metadata: { from, to: maxActiveRuns },
+        },
+        tx,
+      );
+    }
+    return { ok: true as const, from };
+  });
+
+  if (!result.ok) return Response.json({ error: "workflow not found" }, { status: 404 });
+
+  // Raising or clearing a cap creates capacity, and capacity nobody is told
+  // about is not capacity: the runs already waiting would sit until each of
+  // their five-minute re-checks fired. Best-effort — the setting is saved
+  // either way, and the re-checks remain the backstop.
+  const relaxed =
+    result.from !== maxActiveRuns &&
+    (maxActiveRuns === null || (result.from !== null && maxActiveRuns > result.from));
+  if (relaxed) {
+    await wakeWaitingRuns(id, maxActiveRuns).catch(() => undefined);
   }
 
   return Response.json({ id, maxActiveRuns });
+}
+
+/**
+ * Offer the new capacity to the runs already waiting on it.
+ *
+ * Deliberately not a re-implementation of admission: it just knocks on the
+ * door. Each woken run goes through `claimSlot` like any other, so waking more
+ * than there is room for costs a job and nothing else — while waking too few
+ * leaves a workflow stalled behind a cap that was already raised.
+ *
+ * Two shapes of waiting: a forward run sits in QUEUED, a refused reversal sits
+ * in COMPENSATING with no slot, and they resume through different queues.
+ */
+async function wakeWaitingRuns(workflowId: string, cap: number | null): Promise<void> {
+  const waiting = await prisma.run.findMany({
+    where: {
+      slotHeldAt: null,
+      status: { in: ["QUEUED", "COMPENSATING"] },
+      workflowVersion: { workflowId },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, orgId: true, status: true },
+    take: cap ?? 25,
+  });
+
+  for (const run of waiting) {
+    const token = `cap-raised-${Date.now()}-${run.id.slice(-6)}`;
+    if (run.status === "COMPENSATING") {
+      await enqueueCompensateRun({ runId: run.id, orgId: run.orgId, resumeToken: token });
+    } else {
+      await enqueueRunWorkflow({ runId: run.id, orgId: run.orgId, resumeToken: token });
+    }
+  }
 }

@@ -20,7 +20,7 @@ import {
 import { resolveStep, ExpressionError, type ExpressionScope } from "@ghost/core/expr";
 import { BrowserSession, applyStep, verifyStep } from "../browser/driver.js";
 import { artifactStore, compensationScreenshotKey } from "../storage/artifacts.js";
-import { releaseSlot } from "../runtime/slots.js";
+import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
 
 /**
  * Reverse a run's completed side effects — the BPMN saga, over the run journal.
@@ -79,6 +79,22 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
     return;
   }
   if (run.status !== "COMPENSATING") return;
+
+  // A reversal occupies the customer's system exactly as a forward run does, so
+  // it goes through the same admission. Without this the undo route could put a
+  // compensation to work alongside a forward run already filling the cap —
+  // two of Ghost's browsers mutating the same system at once, which is the one
+  // thing the cap exists to prevent.
+  const admission = await claimSlot({
+    runId,
+    workflowId: run.workflowVersion.workflowId,
+    alreadyStarted: true,
+    runningStatus: "COMPENSATING",
+  });
+  if (admission.kind === "throttle") {
+    await recordThrottle(runId, run.orgId, admission.cap, admission.holders, "compensation");
+    return;
+  }
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   admitRun,
-  holdsSlot,
+  freeSlots,
+  releasesSlot,
   parseMaxActiveRuns,
   throttleReason,
-  SLOT_HOLDING_STATUSES,
+  SLOT_RELEASING_STATUSES,
 } from "./concurrency.js";
 
 describe("admitRun", () => {
@@ -48,27 +49,50 @@ describe("admitRun", () => {
   });
 });
 
-describe("holdsSlot", () => {
-  it("counts runs that are executing or parked mid-flow", () => {
-    expect(holdsSlot("RUNNING")).toBe(true);
-    expect(holdsSlot("AWAITING_APPROVAL")).toBe(true);
-    expect(holdsSlot("COMPENSATING")).toBe(true);
-  });
-
-  it("does not count the waiting pool or terminal runs", () => {
-    for (const s of ["QUEUED", "SUCCEEDED", "FAILED", "CANCELED", "COMPENSATED"]) {
-      expect(holdsSlot(s)).toBe(false);
+describe("releasesSlot", () => {
+  it("gives the slot back once the run is finished with the system", () => {
+    for (const s of ["SUCCEEDED", "FAILED", "CANCELED", "COMPENSATED"]) {
+      expect(releasesSlot(s)).toBe(true);
     }
   });
 
-  it("does not count an incident, so one broken run cannot wedge a workflow", () => {
-    expect(holdsSlot("INCIDENT")).toBe(false);
+  it("gives it back on an incident, so one broken run cannot wedge a workflow", () => {
+    expect(releasesSlot("INCIDENT")).toBe(true);
   });
 
-  it("exposes the holding set for the query that counts them", () => {
-    // The worker builds its `status: { in: ... }` filter from this, so the
-    // constant and the predicate must not drift apart.
-    for (const s of SLOT_HOLDING_STATUSES) expect(holdsSlot(s)).toBe(true);
+  it("keeps it while the run is working or parked at its gate", () => {
+    // The deliberate trade-off: an approval holds its slot so a later run
+    // cannot overtake one parked mid-flow and interleave against the same
+    // system.
+    expect(releasesSlot("RUNNING")).toBe(false);
+    expect(releasesSlot("AWAITING_APPROVAL")).toBe(false);
+    expect(releasesSlot("COMPENSATING")).toBe(false);
+  });
+
+  it("keeps it while the run is queued, because ownership is not status", () => {
+    // A run passes through QUEUED on its way back from an approval. Reading
+    // ownership off the status would drop the slot in that gap and let another
+    // run take it, stranding the approved mid-flow run behind it.
+    expect(releasesSlot("QUEUED")).toBe(false);
+  });
+
+  it("exposes the releasing set for anything that needs to enumerate it", () => {
+    for (const s of SLOT_RELEASING_STATUSES) expect(releasesSlot(s)).toBe(true);
+  });
+});
+
+describe("freeSlots", () => {
+  it("reports what is left under the cap", () => {
+    expect(freeSlots(3, 1)).toBe(2);
+    expect(freeSlots(3, 3)).toBe(0);
+  });
+
+  it("never goes negative when the cap was lowered under live runs", () => {
+    expect(freeSlots(1, 3)).toBe(0);
+  });
+
+  it("is unbounded with no cap", () => {
+    expect(freeSlots(null, 100)).toBeGreaterThan(1000);
   });
 });
 

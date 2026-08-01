@@ -70,12 +70,21 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
   const run = await prisma.run.findUnique({
     where: { id: runId },
     include: {
-      workflowVersion: { include: { workflow: { select: { maxActiveRuns: true } } } },
+      workflowVersion: true,
       approvals: true,
       steps: true,
     },
   });
   if (!run) throw new Error(`run ${runId} not found`);
+
+  // A throttled run's own re-check, fired five minutes later. If the run was
+  // handed a slot in the meantime it has moved on — possibly to an approval
+  // gate — and re-driving it here would set it back to RUNNING and append
+  // another `run.resumed`, another `gate.opened` and another approval audit
+  // entry, none of which any human asked for. It is only ever a poll of
+  // "am I still waiting?", so it does nothing unless the answer is yes.
+  if (job.data.throttleRecheck && run.status !== "QUEUED") return;
+
   if (TERMINAL.has(run.status) || run.status === "INCIDENT") {
     // A run can reach a terminal state without the engine ever seeing it again:
     // a rejected approval and a cancel of a QUEUED run are both decided in the
@@ -119,7 +128,6 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
   let session: BrowserSession | undefined;
-
   try {
     // ---- Admission -------------------------------------------------------
     // Airflow's `max_active_runs`: hold the run in QUEUED rather than adding it
@@ -129,7 +137,6 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     const admission = await claimSlot({
       runId,
       workflowId: run.workflowVersion.workflowId,
-      cap: run.workflowVersion.workflow.maxActiveRuns,
       alreadyStarted: run.startedAt !== null,
     });
     if (admission.kind === "throttle") {
@@ -422,9 +429,10 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         data: { leaseOwner: null, leaseExpiresAt: null },
       })
       .catch(() => undefined);
-    // Whatever happened above — finished, failed, gated, parked as an incident —
-    // this asks whether the run still holds its slot and hands it on if not.
-    // Never allowed to mask the run's own outcome, hence the swallow.
+    // Hands the slot on if the run reached a status that gives it up. A no-op
+    // for a run parked at its gate (it keeps its slot) and for a throttled run
+    // (it never took one — and releasing there would nominate itself, with no
+    // delay, forever). Never allowed to mask the run's own outcome.
     await releaseSlot(runId).catch(() => undefined);
   }
 }

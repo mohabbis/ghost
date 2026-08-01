@@ -11,37 +11,50 @@
  * The cap is per **workflow**, not per version — bumping a workflow to v4 must
  * not double the load it is allowed to put on the system it operates.
  *
+ * **A slot is taken and given back, not inferred.** `Run.slotHeldAt` records
+ * ownership directly. Deriving it from `Run.status` looks simpler and is wrong:
+ * status moves for reasons that have nothing to do with whether the run is
+ * still touching the customer's system. A cancel marks a run CANCELED while the
+ * worker is deliberately letting the current browser action finish, and an
+ * approved run passes through QUEUED on its way back to RUNNING. Each of those
+ * windows would let a second run be admitted alongside one that is still
+ * executing — the one thing the cap exists to prevent.
+ *
  * Pure: no Prisma, no Redis. The caller supplies the current holders and gets
  * back a decision it must then commit under a lock.
  */
 
 /**
- * Statuses that hold a slot.
+ * Statuses at which a run has stopped occupying the customer's system for good,
+ * so its slot should be handed on.
  *
- * The rule is *in flight*, and the two exclusions are deliberate:
+ * This is a *release* rule, not a hold rule, and the difference is the point. A
+ * run holds its slot from admission until one of these is reached, whatever the
+ * status does in between.
  *
- * - `QUEUED` is the waiting pool itself. Counting it would deadlock instantly.
- * - `INCIDENT` is an indefinite park. A run that failed and is waiting on a
- *   human is not touching the customer's system, and one broken run must not
- *   wedge its workflow forever. It re-enters admission when a human retries it,
- *   so the cap still holds on what is actually executing.
+ * `INCIDENT` is here deliberately. A run that failed and is waiting on a human
+ * is not touching anything, and one broken run must not wedge its workflow
+ * forever; it re-enters admission when a human retries it, so the cap still
+ * governs what is actually executing.
  *
- * `AWAITING_APPROVAL` *does* hold its slot, unlike `INCIDENT`. An approval is
- * part of a run's normal flow and is expected to resolve in minutes, and
- * letting a later run overtake one parked at its gate would interleave two runs
- * against the same system — the exact thing the cap exists to prevent. The
- * cost is real: a cap of 1 plus an approval left sitting for a day stalls every
- * later run of that workflow. That is visible in the timeline (`run.throttled`
- * names the holder) and is the safer of the two failure modes.
+ * `AWAITING_APPROVAL` is deliberately *not* here. An approval is part of a
+ * run's normal flow and is expected to resolve in minutes, and letting a later
+ * run overtake one parked at its gate would interleave two runs against the
+ * same system. The cost is real: a cap of 1 plus an approval left sitting for a
+ * day stalls every later run of that workflow. That is visible in the timeline
+ * (`run.throttled` names the holder) and is the safer of the two failure modes.
  */
-export const SLOT_HOLDING_STATUSES: readonly string[] = [
-  "RUNNING",
-  "AWAITING_APPROVAL",
-  "COMPENSATING",
+export const SLOT_RELEASING_STATUSES: readonly string[] = [
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELED",
+  "COMPENSATED",
+  "INCIDENT",
 ];
 
-export function holdsSlot(status: string): boolean {
-  return SLOT_HOLDING_STATUSES.includes(status);
+/** Whether reaching this status means the run should give its slot back. */
+export function releasesSlot(status: string): boolean {
+  return SLOT_RELEASING_STATUSES.includes(status);
 }
 
 export interface AdmissionInput {
@@ -70,6 +83,18 @@ export function admitRun({ cap, holders, runId }: AdmissionInput): Admission {
   if (holders.includes(runId)) return { kind: "admit" };
   if (holders.length < cap) return { kind: "admit" };
   return { kind: "throttle", cap, holders };
+}
+
+/**
+ * How many further runs may be admitted right now. Never negative.
+ *
+ * Used when handing slots on: waking exactly one run per release leaves
+ * capacity idle when two holders finish at once, because both releases pick the
+ * same oldest waiting run.
+ */
+export function freeSlots(cap: number | null | undefined, holderCount: number): number {
+  if (cap === null || cap === undefined) return Number.MAX_SAFE_INTEGER;
+  return Math.max(0, cap - holderCount);
 }
 
 /** One line an operator can act on, for the journal payload and the timeline. */

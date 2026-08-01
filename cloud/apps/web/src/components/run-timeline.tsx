@@ -32,6 +32,8 @@ interface RunView {
   cursor: number;
   restoreScreenshotUrl: string | null;
   restoreOutcome: string | null;
+  /** Null only if the run has never executed a step. */
+  startedAt: string | null;
   steps: StepView[];
   approvals: ApprovalView[];
   /** Set when the run is queued behind its workflow's concurrency cap. */
@@ -200,8 +202,12 @@ export function RunTimeline({ runId }: { runId: string }) {
               <span className="font-medium">Waiting its turn</span> — {run.throttle.reason}
             </div>
             <p className="text-xs text-[var(--color-muted)]">
-              Nothing has run yet. This run starts as soon as one of the runs ahead of it
-              finishes.
+              {run.startedAt
+                ? // A run retried from an incident is waiting again, but its
+                  // earlier steps really happened — telling an operator nothing
+                  // has run would be false, and about side effects.
+                  "This run has already executed some steps. It continues as soon as one of the runs ahead of it finishes."
+                : "Nothing has run yet. This run starts as soon as one of the runs ahead of it finishes."}
             </p>
             {run.throttle.activeRunIds.length > 0 && (
               <ul className="space-y-0.5 text-xs">

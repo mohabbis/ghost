@@ -14,7 +14,7 @@ In the cloud MVP this maps to:
 | Plan | Immutable `WorkflowVersion` steps |
 | Policy | `classifyStep` in `@ghost/core` (deterministic) |
 | Approval | `Approval` row + UI; run `AWAITING_APPROVAL` |
-| Execution | Worker Playwright / later connectors |
+| Execution | Worker Playwright / later connectors, under a per-workflow concurrency cap |
 | Verify | Per-step assertions + screenshots |
 | Audit | Hash-chained `AuditEvent` per org |
 | Recover | Cancel between steps; incident retry/skip; undo (compensation) |
@@ -47,6 +47,15 @@ that fails stops the run rather than pressing on through a half-undone state.
 Compensation has known gaps, listed in `cloud/docs/CURSOR_HANDOFF.md` under
 "Known gaps in compensation". The one that limits what it is useful for today:
 reversals run in a fresh, unauthenticated browser context.
+
+## Execution limits
+
+A workflow may cap how many of its runs are in flight at once
+(`Workflow.maxActiveRuns`, Airflow's `max_active_runs`). Opt-in, null by default.
+Held-back runs wait in `QUEUED` and say why; a slot is taken at admission and
+given back explicitly rather than inferred from status, because a cancel drain
+and an approval resume both move a run's status while it is still occupying the
+customer's system. Full contract in `cloud/docs/CONCURRENCY.md`.
 
 ## Rules
 

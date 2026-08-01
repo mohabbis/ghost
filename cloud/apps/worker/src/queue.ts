@@ -1,5 +1,11 @@
 import { Queue } from "bullmq";
-import { QUEUE_NAMES, runWorkflowJobId, type RunWorkflowJob } from "@ghost/core/queue";
+import {
+  QUEUE_NAMES,
+  runWorkflowJobId,
+  compensateRunJobId,
+  type CompensateRunJob,
+  type RunWorkflowJob,
+} from "@ghost/core/queue";
 import { createRedisConnection } from "./redis.js";
 
 /**
@@ -14,6 +20,7 @@ import { createRedisConnection } from "./redis.js";
  * and so the tests, which import this module transitively, do not need Redis.
  */
 let queue: Queue<RunWorkflowJob> | undefined;
+let compQueue: Queue<CompensateRunJob> | undefined;
 
 function runQueue(): Queue<RunWorkflowJob> {
   if (!queue) {
@@ -22,6 +29,15 @@ function runQueue(): Queue<RunWorkflowJob> {
     });
   }
   return queue;
+}
+
+function compensateQueue(): Queue<CompensateRunJob> {
+  if (!compQueue) {
+    compQueue = new Queue<CompensateRunJob>(QUEUE_NAMES.compensateRun, {
+      connection: createRedisConnection(),
+    });
+  }
+  return compQueue;
 }
 
 /**
@@ -47,10 +63,36 @@ export async function nudgeRun(
   });
 }
 
+/**
+ * The same nudge, for a reversal.
+ *
+ * A compensation waiting on a concurrency slot cannot be woken through the run
+ * queue: `runWorkflowJob` only leases QUEUED / RUNNING / AWAITING_APPROVAL, so
+ * a job sent there for a COMPENSATING run returns immediately and the reversal
+ * never resumes.
+ */
+export async function nudgeCompensation(
+  data: CompensateRunJob & { resumeToken: string },
+  opts: { delayMs?: number } = {},
+): Promise<void> {
+  await compensateQueue().add(QUEUE_NAMES.compensateRun, data, {
+    jobId: compensateRunJobId(data.runId, data.resumeToken),
+    delay: opts.delayMs,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+    removeOnComplete: { age: 3_600 },
+    removeOnFail: { age: 86_400 },
+  });
+}
+
 /** For tests and graceful shutdown. */
 export async function closeQueue(): Promise<void> {
   if (queue) {
     await queue.close();
     queue = undefined;
+  }
+  if (compQueue) {
+    await compQueue.close();
+    compQueue = undefined;
   }
 }

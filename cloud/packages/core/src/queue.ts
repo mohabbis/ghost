@@ -38,6 +38,17 @@ export interface RunWorkflowJob {
    * sits in QUEUED, and no worker ever picks it up.
    */
   resumeToken?: string;
+  /**
+   * This job is a throttled run's own safety-net re-check, not a real resume.
+   *
+   * It sits in Redis for five minutes, so a run that gets handed a slot
+   * directly in the meantime — and has since reached an approval gate — would
+   * otherwise be re-driven by this stale job: back to RUNNING, another
+   * `run.resumed`, another `gate.opened`, another approval audit entry, none of
+   * it corresponding to anything a human did. Marked so it can no-op once the
+   * run is no longer waiting.
+   */
+  throttleRecheck?: boolean;
 }
 
 /**
