@@ -139,7 +139,8 @@
             <p class="lede">
               Ghost is not another AI agent. Claude, Cursor, and Codex may propose and start work;
               Ghost stops for send/pay/submit, verifies outcomes, and seals a hash-chained audit log.
-              Designed so a manager can trust the run — not just the demo.
+              A crash mid-run cannot re-fire an approved payment — execution position is proven from
+              the journal, not remembered. Designed so a manager can trust the run, not just the demo.
             </p>
             <div class="hero__actions">
               <a class="btn btn--lg" href="https://github.com/mohabbis/ghost"
@@ -227,6 +228,15 @@
             <h3>Verify &amp; audit</h3>
             <p>Assertions + screenshots per step. Hash-chained audit events per organization.</p>
           </li>
+          <li>
+            <span class="pipeline__n">6</span>
+            <h3>Recover</h3>
+            <p>
+              A broken step stops the run for a human — retry, skip, cancel — instead of killing a
+              40-invoice batch. Where a workflow defines a reversal, completed steps can be walked
+              back through the same gate.
+            </p>
+          </li>
         </ol>
       </section>
 
@@ -258,6 +268,19 @@
           <li>
             <svg class="i"><use href="#i-check-circle" /></svg>
             <div>
+              <strong>Durable execution</strong>
+              <span
+                >Position is folded from an append-only journal, never a stored cursor — so a crash
+                mid-run cannot re-fire an approved payment, and a redelivered job cannot repeat
+                completed work. A time-based run lease keeps two workers off the same run in the
+                ordinary case; it is not a fencing token, so a worker stalled past its lease can
+                still overlap with the one that takes over.</span
+              >
+            </div>
+          </li>
+          <li>
+            <svg class="i"><use href="#i-check-circle" /></svg>
+            <div>
               <strong>Live run timeline</strong>
               <span>Status, screenshots, approve/reject; resume restores browser state after the gate.</span>
             </div>
@@ -265,8 +288,51 @@
           <li>
             <svg class="i"><use href="#i-check-circle" /></svg>
             <div>
-              <strong>Hash-chained audit log</strong>
-              <span>Per-org append-only events for run/step/gate/finish.</span>
+              <strong>Incidents, retry and cancel</strong>
+              <span
+                >A step that failed for a reason retrying could fix waits for a person instead of
+                killing the batch. A rejected approval or a workflow that cannot resolve fails the
+                run outright — retrying those changes nothing. Runs stop between steps; a step
+                already in flight finishes, which is the honest behaviour for an action that must
+                not happen twice.</span
+              >
+            </div>
+          </li>
+          <li>
+            <svg class="i"><use href="#i-check-circle" /></svg>
+            <div>
+              <strong>Undo (compensation)</strong>
+              <span
+                >Reverses completed steps in reverse order, through the same classifier, gate and
+                journal — on a stricter bar than the forward path. A reversal is checked against its
+                own assertion where the workflow defines one; otherwise the screenshot is evidence
+                rather than proof. Effects with no defined reversal are reported, never quietly
+                skipped.</span
+              >
+            </div>
+          </li>
+          <li>
+            <svg class="i"><use href="#i-check-circle" /></svg>
+            <div>
+              <strong>Per-workflow concurrency cap</strong>
+              <span
+                >An opt-in limit on how many runs of one workflow are in flight at once — off by
+                default, and per workflow rather than per system, so it bounds a stampede rather
+                than guaranteeing Ghost works a system alone. Held-back runs say why they are
+                waiting.</span
+              >
+            </div>
+          </li>
+          <li>
+            <svg class="i"><use href="#i-check-circle" /></svg>
+            <div>
+              <strong>Hash-chained audit log — and a verifier</strong>
+              <span
+                >Per-org append-only events for run/step/gate/finish, with each run&rsquo;s head
+                anchored into the org chain. The chain can be re-checked in-product, not merely
+                written — including deletion of a journal&rsquo;s tail, which leaves every surviving
+                link valid and so needs an expected head recorded outside it.</span
+              >
             </div>
           </li>
           <li>
@@ -281,6 +347,20 @@
             <div>
               <strong>Not built yet</strong>
               <span>Browser recording, real connectors (email/CRM/ERP), billing, customer deployments.</span>
+            </div>
+          </li>
+          <li>
+            <svg class="i"><use href="#i-alert" /></svg>
+            <div>
+              <strong>Known limits of what is built</strong>
+              <span
+                >Undo runs in a fresh browser session, so it only reaches systems that do not require
+                a login. Journal tampering — edits, gaps, and deletion of the tail — is detected and
+                quarantines the run, but every expected value lives in the same database as the
+                thing it checks, and nothing is anchored anywhere outside it. So this catches
+                corruption and a partial edit; it does not withstand someone with write access to
+                the whole database. Tracked in the repo, not papered over.</span
+              >
             </div>
           </li>
         </ul>

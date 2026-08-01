@@ -159,8 +159,21 @@ tail); the finding is written to the independent organization audit chain.
 
 This protects against deletion from `RunEvent`, including deletion of the whole
 journal. Because the expected head is in the same database, an attacker able to
-rewrite both the journal and `Run.journalHead` remains outside this threat model;
-run-boundary anchors in the organization chain remain the customer-visible seal.
+rewrite both the journal and `Run.journalHead` remains outside this threat model.
+
+**The organization chain is not a stronger seal, and should not be described as
+one.** It has the same weakness the run journal had before this change: no
+expected head is persisted for it, and `/api/audit/verify` derives the org head
+from the surviving `AuditEvent` rows, so deleting a valid *suffix* of that chain
+verifies as intact. Run-boundary anchors do mean tampering with a run journal
+contradicts a value already recorded in the org chain — but only while the org
+chain's own tail is intact.
+
+Nothing in the system is anchored outside the database. Until something is —
+periodic export of the org head to storage the app cannot write, a countersigned
+receipt, anything — the honest scope is: this detects corruption and partial
+edits, not an attacker with write access to the whole database. Say that
+plainly rather than implying a seal that does not exist.
 
 ### Known gaps in compensation (undo)
 
