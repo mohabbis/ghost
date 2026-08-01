@@ -44,7 +44,7 @@ export async function GET(req: Request) {
   if (runId) {
     const owned = await prisma.run.findFirst({
       where: { id: runId, orgId },
-      select: { id: true },
+      select: { id: true, journalHead: true },
     });
     if (!owned) return NextResponse.json({ error: "not found" }, { status: 404 });
 
@@ -63,16 +63,19 @@ export async function GET(req: Request) {
     // The org chain records each finished run's journal head. If the two
     // disagree, the journal was altered after the run sealed it.
     const head = runEvents.at(-1)?.hash ?? null;
+    const expectedHeadMatches = head === owned.journalHead;
     const anchors = events
       .filter((e) => e.entityId === runId && e.metadata && typeof e.metadata === "object")
       .map((e) => (e.metadata as { runChainHead?: unknown }).runChainHead)
       .filter((h): h is string => typeof h === "string");
 
     body.run = {
-      intact: chain.intact,
+      intact: chain.intact && expectedHeadMatches,
       firstBreakIndex: chain.firstBreakIndex,
       count: runEvents.length,
       headHash: head,
+      expectedHeadHash: owned.journalHead,
+      expectedHeadMatches,
       anchored: anchors.length > 0,
       anchorMatches: anchors.length === 0 ? null : anchors.includes(head ?? ""),
     };

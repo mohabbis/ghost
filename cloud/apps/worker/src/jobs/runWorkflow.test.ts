@@ -340,8 +340,27 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
     await runWorkflowJob(fakeJob(runId, orgId, "tampered"));
 
     const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
-    expect(run.status).toBe("FAILED");
+    expect(run.status).toBe("INCIDENT");
     expect(run.error).toMatch(/JOURNAL_TAMPERED/);
+  });
+
+  it("refuses to resume when a valid journal suffix was deleted", async () => {
+    const runId = await seedRun(demoSteps());
+    await runWorkflowJob(fakeJob(runId, orgId));
+    const before = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    const tail = await prisma.runEvent.findFirstOrThrow({
+      where: { runId },
+      orderBy: { seq: "desc" },
+    });
+    await prisma.runEvent.delete({ where: { id: tail.id } });
+    await prisma.run.update({ where: { id: runId }, data: { status: "QUEUED" } });
+
+    await runWorkflowJob(fakeJob(runId, orgId, "truncated"));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("INCIDENT");
+    expect(run.error).toMatch(/tail does not match/);
+    expect(run.journalHead).toBe(before.journalHead);
   });
 
   it("holds the lease so two concurrent jobs cannot both advance a run", async () => {

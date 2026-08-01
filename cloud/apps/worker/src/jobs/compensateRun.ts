@@ -98,21 +98,28 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
 
-  const events = await prisma.runEvent.findMany({ where: { runId }, orderBy: { seq: "asc" } });
+  const journalRecord = await prisma.run.findUniqueOrThrow({
+    where: { id: runId },
+    select: { journalHead: true, events: { orderBy: { seq: "asc" } } },
+  });
+  const events = journalRecord.events;
 
   // A journal you do not verify is a log, not a proof — the same rule forward
   // execution follows. Here it decides which real-world effects get reversed,
   // so trusting a broken chain could cancel an order that was never placed.
-  if (events.length > 0) {
+  if (events.length > 0 || journalRecord.journalHead !== null) {
     const chain = verifyAuditChain(
       events.map((e) => ({ prevHash: e.prevHash, hash: e.hash, payload: runEventPayloadFromRow(e) })),
     );
-    if (!chain.intact) {
+    const actualHead = events.at(-1)?.hash ?? null;
+    if (!chain.intact || actualHead !== journalRecord.journalHead) {
       await prisma.run.update({
         where: { id: runId },
         data: {
           status: "INCIDENT",
-          error: `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken at event ${chain.firstBreakIndex}`,
+          error: !chain.intact
+            ? `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken at event ${chain.firstBreakIndex}`
+            : "JOURNAL_TAMPERED: refusing to reverse a run whose journal tail does not match its expected head",
         },
       });
       await releaseSlot(runId).catch(() => undefined);

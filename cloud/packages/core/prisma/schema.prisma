@@ -284,6 +284,11 @@ model Run {
   sessionKey String?
   sessionUrl String?
 
+  // Expected tail of the append-only journal. appendRunEvent updates this in
+  // the same transaction as every event, so deleting a valid suffix cannot
+  // make an already-completed action reachable again.
+  journalHead String?
+
   org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
@@ -306,7 +311,9 @@ model Run {
 // with a recorded terminal success is never re-executed, so a crash mid-run
 // cannot re-fire an already-approved payment. Chained per RUN rather than per
 // org so concurrent runs never contend on one chain tail (the org-wide chain in
-// AuditEvent anchors each run's head hash at run boundaries instead).
+// AuditEvent anchors each run's head hash at run boundaries as an independent,
+// customer-visible seal. Run.journalHead protects resumptions between those
+// boundaries from a truncated suffix.
 //
 // Payloads never carry secrets: no fill values, no storageState, no cookies.
 // ---------------------------------------------------------------------------

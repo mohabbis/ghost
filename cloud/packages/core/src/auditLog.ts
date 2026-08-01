@@ -133,8 +133,8 @@ export async function appendAuditEvent(
  * Append one event to a run's journal.
  *
  * Per-run rather than per-org so concurrent runs never contend on a single
- * chain tail. The org chain anchors each run's head hash at run boundaries, so
- * tampering with a RunEvent still breaks a chain the customer can verify.
+ * chain tail. The expected head is also stored on Run in this transaction,
+ * because internal links alone cannot detect deletion of a valid suffix.
  */
 export async function appendRunEvent(
   runId: string,
@@ -172,6 +172,8 @@ export async function appendRunEvent(
         hash,
       },
     });
+
+    await client.run.update({ where: { id: runId }, data: { journalHead: hash } });
 
     return { seq, hash };
   };
