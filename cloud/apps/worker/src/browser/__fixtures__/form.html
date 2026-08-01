@@ -11,14 +11,21 @@
       <input aria-label="Full name" id="name" type="text" />
     </label>
     <button id="submit" type="button" onclick="submitOrder()">Submit order</button>
+    <button id="cancel" type="button" onclick="cancelOrder()">Cancel order</button>
     <p id="result"></p>
     <script>
-      // The submit counter persists in localStorage so a test can assert across
-      // a page reload that restoring browser state never re-clicked Submit.
+      // Counters persist in localStorage so a test can assert across a page
+      // reload that restoring browser state never re-clicked Submit, and that
+      // a compensation actually ran.
       function submitOrder() {
         var n = Number(localStorage.getItem("ghost:submits") || "0") + 1;
         localStorage.setItem("ghost:submits", String(n));
         document.getElementById("result").textContent = "Order submitted";
+      }
+      function cancelOrder() {
+        var n = Number(localStorage.getItem("ghost:cancels") || "0") + 1;
+        localStorage.setItem("ghost:cancels", String(n));
+        document.getElementById("result").textContent = "Order canceled";
       }
     </script>
   </body>
