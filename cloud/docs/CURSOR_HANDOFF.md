@@ -168,6 +168,44 @@ boundaries (more writes, but the org chain is what the customer verifies).
 Until it closes, tamper-evidence holds against accidental corruption and mid-run
 crashes, but not against an attacker with write access to the journal.
 
+### Known gaps in compensation (undo)
+
+Three findings from the review of PR #374 are deliberately open. Each needs a
+decision rather than a patch, and none of them is safe to forget.
+
+**A reversal runs in an unauthenticated browser.** `compensateRunJob` launches a
+fresh context with no storage state, and forward completion deliberately purges
+the run's captured session. So a compensation against any system behind a login
+— which is most of them — lands on a sign-in page and fails. The reversal is
+reported honestly (the run stops as an incident, nothing is claimed as undone),
+but the feature only really works against unauthenticated targets today.
+
+Closing it means keeping a run's credentials alive past the run's end, which is
+the opposite of the current rule that browser credentials must not outlive the
+run that captured them. Options: retain the session blob for a bounded undo
+window and say so in the product; or re-authenticate at reversal time from the
+connector grant once connectors exist. The second is the better shape and is
+blocked on connectors, so the first is the honest interim — but it is a
+credential-retention decision, not a code change, and it should be made
+deliberately rather than by whoever touches this file next.
+
+**Cancellation can anchor ahead of an in-flight step.** Cancelling a run whose
+current step is mid-execution lets the route read and seal the journal head
+before that step commits its `step.succeeded`. The worker then sees the existing
+`run.canceled` event and skips re-anchoring — by design, to avoid two terminal
+events — leaving the final head not matching the sealed anchor, which
+verification reports as tampering on a run that was never tampered with. Fixing
+it properly means the cancel path coordinating with the run lease rather than
+racing it. Same family as the truncated-tail gap above.
+
+**The AAD change has no story for blobs sealed before it.** Session blobs are
+now sealed with associated data binding them to their run and gate. A blob
+written by the previous code has none, so opening it fails authentication, the
+catch falls back to an empty context, and an authenticated run waiting at a gate
+across the deploy cannot resume. There is no deployed environment holding such
+blobs today, which is the only reason this is not a migration task; if that
+changes before this is addressed, version the blob format and accept both.
+
 ## Remaining Phase 1 work (priority)
 
 1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only

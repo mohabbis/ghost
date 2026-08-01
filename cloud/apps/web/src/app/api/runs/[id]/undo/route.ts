@@ -4,8 +4,9 @@ import { prisma } from "@/lib/db";
 import { enqueueCompensateRun } from "@/lib/queue";
 import { appendAuditEvent } from "@ghost/core/audit-log";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
-import { planCompensation } from "@ghost/core/compensate";
+import { describeActions, planCompensation, remainingEntries } from "@ghost/core/compensate";
 import { journalFromEvents, journalFromLegacyRunSteps } from "@ghost/core/journal";
+import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 
 /**
  * Preview (GET) and trigger (POST) the reversal of a run.
@@ -40,7 +41,21 @@ async function loadPlan(runId: string, orgId: string) {
       ? journalFromEvents(events)
       : journalFromLegacyRunSteps(run.steps.map((s) => ({ index: s.index, status: s.status })));
 
-  return { run, plan: planCompensation(steps, journal) };
+  const plan = planCompensation(steps, journal);
+
+  // Subtract what a previous, partly-successful reversal already undid.
+  // `INCIDENT` is a reversible state, so a run that reversed two steps and then
+  // failed on a third can be previewed again — and the preview must show what
+  // is *left*, not re-offer work the worker's own `done` set will skip. The
+  // count reported in the audit event comes from the same set.
+  const alreadyCompensated = new Set(
+    events
+      .filter((e) => e.type === RUN_EVENT_TYPES.stepCompensated)
+      .map((e) => e.stepIndex)
+      .filter((i): i is number => i !== null),
+  );
+
+  return { run, plan, remaining: remainingEntries(plan, alreadyCompensated), alreadyCompensated };
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -53,15 +68,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const loaded = await loadPlan(id, session.user.orgId);
   if (!loaded) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const { run, plan } = loaded;
+  const { run, plan, remaining, alreadyCompensated } = loaded;
   return NextResponse.json({
     runStatus: run.status,
-    canUndo: REVERSIBLE_STATES.has(run.status),
+    // A step still in flight makes the plan untrustworthy, so undo is not on
+    // offer until the run settles — see `CompensationPlan.inFlight`.
+    canUndo: REVERSIBLE_STATES.has(run.status) && plan.inFlight.length === 0,
+    blockedBy: plan.inFlight.length > 0 ? plan.inFlight : null,
     complete: plan.complete,
-    entries: plan.entries.map((e) => ({
+    alreadyReversed: [...alreadyCompensated].sort((a, b) => a - b),
+    entries: remaining.map((e) => ({
       stepIndex: e.stepIndex,
       stepLabel: e.stepLabel,
       description: e.compensation.description,
+      // The author's description is a claim; these are what will actually run.
+      // An approver cannot review "Open the order and click Cancel" — it says
+      // nothing about which URL is opened or which control is clicked.
+      actions: describeActions(e.compensation),
       requiresApproval: e.requiresApproval,
       approvalReason: e.approvalReason ?? null,
     })),
@@ -85,20 +108,34 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const loaded = await loadPlan(id, orgId);
   if (!loaded) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const { run, plan } = loaded;
+  const { run, plan, remaining } = loaded;
   if (!REVERSIBLE_STATES.has(run.status)) {
     return NextResponse.json(
       { error: `a ${run.status} run cannot be reversed` },
       { status: 409 },
     );
   }
-  if (plan.entries.length === 0) {
+  if (plan.inFlight.length > 0) {
+    // Cancellation lets the current step finish. Undoing around a step that is
+    // still landing would reverse the steps before it and then let the draining
+    // worker apply the newer side effect — breaking reverse order and reporting
+    // a complete undo with the last action still in place.
+    return NextResponse.json(
+      {
+        error: `step ${plan.inFlight[0]} is still in flight — wait for the run to settle before reversing it`,
+      },
+      { status: 409 },
+    );
+  }
+  if (remaining.length === 0) {
     return NextResponse.json(
       {
         error:
-          plan.irreversible.length > 0
-            ? "nothing in this run can be reversed"
-            : "this run made no changes to reverse",
+          plan.entries.length > 0
+            ? "every reversible step in this run has already been reversed"
+            : plan.irreversible.length > 0
+              ? "nothing in this run can be reversed"
+              : "this run made no changes to reverse",
       },
       { status: 409 },
     );
@@ -119,11 +156,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     entityId: id,
     metadata: {
       requestedById: userId,
-      reversible: plan.entries.length,
+      reversible: remaining.length,
       irreversible: plan.irreversible.length,
     },
   });
 
-  await enqueueCompensateRun({ runId: id, orgId });
-  return NextResponse.json({ ok: true, reversing: plan.entries.length });
+  // `requestedById` follows the job so the worker attributes each reversal to
+  // the person who asked for it, not to whoever started the original run.
+  await enqueueCompensateRun({
+    runId: id,
+    orgId,
+    requestedById: userId,
+    resumeToken: `req-${Date.now()}`,
+  });
+  return NextResponse.json({ ok: true, reversing: remaining.length });
 }

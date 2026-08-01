@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { planCompensation, hasSideEffect, classifyCompensation } from "./compensate.js";
+import {
+  planCompensation,
+  hasSideEffect,
+  classifyCompensation,
+  describeActions,
+  remainingEntries,
+} from "./compensate.js";
 import { emptyJournal, type RunJournal } from "./journal.js";
 import { workflowStep, type WorkflowStep } from "../schema/step.js";
 
@@ -91,9 +97,18 @@ describe("planCompensation", () => {
     const submit = plan.entries.find((e) => e.stepId === "submit");
     expect(submit?.requiresApproval).toBe(true);
     expect(submit?.approvalReason).toMatch(/cancel order/i);
+  });
 
+  it("gates a reversal that types into a field, even a restorative one", () => {
+    // Clearing a name field is harmless, and this still gates. A compensation
+    // action carries no `sensitive` flag of its own, so the alternative is to
+    // assume every reversal fill is safe — which would let a reversal type into
+    // a field named "API token" with no approval, looser than the identical
+    // forward step. The false positive lands on the rare path.
+    const plan = planCompensation(steps, journal([0, 1, 2]));
     const name = plan.entries.find((e) => e.stepId === "name");
-    expect(name?.requiresApproval).toBe(false);
+    expect(name?.requiresApproval).toBe(true);
+    expect(name?.approvalReason).toMatch(/Full name/);
   });
 
   it("carries the human-readable description into the plan", () => {
@@ -148,11 +163,78 @@ describe("classifyCompensation", () => {
     expect(verdict.reason).toMatch(/Cancel order/);
   });
 
-  it("does not gate a purely restorative reversal", () => {
+  it("gates any fill, because a compensation action cannot declare its own sensitivity", () => {
     const verdict = classifyCompensation({
       description: "Clear the field",
       actions: [{ type: "fill", selector: { name: "Notes" }, value: "" }],
     });
+    expect(verdict.sensitive).toBe(true);
+    expect(verdict.reason).toMatch(/Notes/);
+  });
+
+  it("does not gate a reversal that only looks at the page", () => {
+    // The reversal still has to be *able* to not gate, or the gate stops
+    // carrying information.
+    const verdict = classifyCompensation({
+      description: "Return to the order list",
+      actions: [
+        { type: "navigate", url: "https://shop.example.com/orders" },
+        { type: "waitFor", selector: { role: "heading", name: "Orders" } },
+      ],
+    });
     expect(verdict.sensitive).toBe(false);
+  });
+});
+
+describe("describeActions", () => {
+  it("says what a reversal will actually do, not what its author called it", () => {
+    // The failure this prevents: an approver shown only "Open the order and
+    // click Cancel" cannot tell that the reversal navigates somewhere else.
+    expect(
+      describeActions({
+        description: "Open the order and click Cancel order",
+        actions: [
+          { type: "navigate", url: "https://shop.example.com/orders/latest" },
+          { type: "click", selector: { role: "button", name: "Cancel order" } },
+        ],
+      }),
+    ).toEqual([
+      "navigate to https://shop.example.com/orders/latest",
+      'click the button "Cancel order"',
+    ]);
+  });
+
+  it("never shows a fill value", () => {
+    // A compensation may legitimately type a credential; the point of the
+    // preview is what it targets.
+    const lines = describeActions({
+      description: "Restore the key",
+      actions: [{ type: "fill", selector: { name: "API token" }, value: "sk-live-abc123" }],
+    });
+    expect(lines.join(" ")).not.toContain("sk-live-abc123");
+    expect(lines[0]).toMatch(/API token/);
+  });
+});
+
+describe("remainingEntries", () => {
+  it("drops steps a previous attempt already reversed", () => {
+    // A partly-reversed run can be previewed again, and re-offering finished
+    // work would tell the operator more will be undone than actually will.
+    const plan = planCompensation(steps, journal([0, 1, 2]));
+    expect(remainingEntries(plan, new Set([2])).map((e) => e.stepId)).toEqual(["name"]);
+    expect(remainingEntries(plan, new Set([1, 2]))).toEqual([]);
+  });
+});
+
+describe("plan.inFlight", () => {
+  it("reports a step that started and never reported an outcome", () => {
+    // Cancellation lets the current step finish, so an undo requested straight
+    // after a cancel can be built while a side effect is still landing.
+    const j: RunJournal = { ...journal([0, 1]), inFlight: new Set([2]) };
+    expect(planCompensation(steps, j).inFlight).toEqual([2]);
+  });
+
+  it("is empty for a settled run", () => {
+    expect(planCompensation(steps, journal([0, 1, 2])).inFlight).toEqual([]);
   });
 });

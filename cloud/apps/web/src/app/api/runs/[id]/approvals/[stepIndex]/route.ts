@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { enqueueRunWorkflow } from "@/lib/queue";
+import { enqueueCompensateRun, enqueueRunWorkflow } from "@/lib/queue";
 import { appendAuditEvent, appendRunEvent } from "@ghost/core/audit-log";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 
@@ -94,7 +94,11 @@ export async function POST(
       {
         type: RUN_EVENT_TYPES.gateResolved,
         stepIndex: index,
-        payload: { decision: body.decision, resolvedById: userId },
+        // The phase is part of the record, not just of the lookup. Without it,
+        // approving step 3 and approving the *reversal* of step 3 leave
+        // identical rows, and an auditor reading the chain cannot tell which
+        // mutation was authorized.
+        payload: { decision: body.decision, resolvedById: userId, phase: pending.phase },
       },
       tx,
     );
@@ -108,12 +112,30 @@ export async function POST(
   await appendAuditEvent(orgId, userId, {
     action: approve ? "approval.approved" : "approval.rejected",
     entityType: "Approval",
-    entityId: `${id}:${index}`,
-    metadata: { stepIndex: index, runId: id },
+    // Phase is part of the identity: `<run>:<step>` alone collides between the
+    // forward approval for a step and the approval of that step's reversal.
+    entityId: `${id}:${index}:${pending.phase}`,
+    metadata: { stepIndex: index, runId: id, phase: pending.phase },
   });
 
   if (approve) {
-    await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
+    if (compensating) {
+      // Through the compensation queue, not the run queue. `runWorkflowJob`
+      // only leases QUEUED / RUNNING / AWAITING_APPROVAL runs, so a job sent
+      // there for a COMPENSATING run returns immediately — and since the
+      // original compensation job already ended at the gate, nothing would ever
+      // pick the reversal back up and the run would sit in COMPENSATING
+      // forever. The resume token matters for the same reason: the initial
+      // compensation job is retained under the plain id and would swallow this.
+      await enqueueCompensateRun({
+        runId: id,
+        orgId,
+        requestedById: userId,
+        resumeToken: `gate-${index}-${Date.now()}`,
+      });
+    } else {
+      await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
+    }
     return NextResponse.json({ ok: true, resumed: true });
   }
 

@@ -163,6 +163,7 @@ export function resetArtifactStore(): void {
 export {
   screenshotKey,
   restoreScreenshotKey,
+  compensationScreenshotKey,
   sessionStateKey,
   sessionPrefix,
 } from "@ghost/core/artifacts";

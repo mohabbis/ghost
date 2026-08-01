@@ -6,6 +6,7 @@
  *
  *   `runs/<id>/step-<n>.png`          screenshots — safe to show a user
  *   `runs/<id>/restore-<n>.png`       post-restore evidence — safe to show
+ *   `runs/<id>/undo-<n>.png`          post-reversal evidence — safe to show
  *   `runs/<id>/session/gate-<n>.bin`  ENCRYPTED storageState — never served
  *
  * The session blob holds live session cookies for the customer's systems. It is
@@ -23,6 +24,19 @@ export function restoreScreenshotKey(runId: string, stepIndex: number): string {
   return `runs/${runId}/restore-${stepIndex}.png`;
 }
 
+/**
+ * Screenshot taken after a step's reversal.
+ *
+ * Deliberately a different key from `screenshotKey`. Writing the reversal image
+ * over the forward step's image would destroy the record of what originally
+ * happened — the very thing a reversal exists to account for — and the
+ * `step.succeeded` event would silently start resolving to a picture of the
+ * undo.
+ */
+export function compensationScreenshotKey(runId: string, stepIndex: number): string {
+  return `runs/${runId}/undo-${stepIndex}.png`;
+}
+
 /** Encrypted browser session state captured at a halt. Never served. */
 export function sessionStateKey(runId: string, stepIndex: number): string {
   return `runs/${runId}/session/gate-${stepIndex}.bin`;
@@ -33,7 +47,7 @@ export function sessionPrefix(runId: string): string {
   return `runs/${runId}/session`;
 }
 
-const SERVABLE_FILENAME = /^(?:step|restore)-\d+\.png$/;
+const SERVABLE_FILENAME = /^(?:step|restore|undo)-\d+\.png$/;
 
 /**
  * Whether a key path may be streamed to a browser.

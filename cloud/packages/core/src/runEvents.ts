@@ -56,6 +56,16 @@ export const RUN_EVENT_TYPES = {
 
   /** Reversal of the run's completed side effects began (BPMN compensation). */
   compensationStarted: "compensation.started",
+  /**
+   * A step's reversal is about to act, written BEFORE the browser touches
+   * anything — the mirror of `step.started` on the forward path.
+   *
+   * Without it, a worker killed after a cancellation lands but before
+   * `step.compensated` commits leaves no trace, and the redelivered job cancels
+   * the order a second time. A reversal is a mutation and gets the same
+   * crash-window record the forward mutation gets.
+   */
+  stepCompensationStarted: "step.compensation_started",
   /** One step's reversal ran. `stepIndex` is the forward step being undone. */
   stepCompensated: "step.compensated",
   /** One step's reversal was attempted and failed. */

@@ -75,6 +75,23 @@ export function runWorkflowJobId(
 export interface CompensateRunJob {
   runId: string;
   orgId: string;
+  /**
+   * Who asked for the reversal.
+   *
+   * Not the same person as `Run.triggeredById`, and the difference is the whole
+   * point: attributing a reversal to whoever started the original run — often
+   * an agent, or a colleague — puts the wrong name against a mutation in the
+   * audit log.
+   */
+  requestedById?: string | null;
+  /**
+   * Distinguishes a resume from the initial request, for the same reason
+   * `RunWorkflowJob.resumeToken` does. A compensation that gates and is then
+   * approved re-enters through this queue, and without a fresh token the
+   * retained completed job swallows the resume — leaving the run COMPENSATING
+   * with nothing scheduled.
+   */
+  resumeToken?: string;
 }
 
 /**
@@ -83,8 +100,9 @@ export interface CompensateRunJob {
  * Colon-free for the same reason as `runWorkflowJobId` — one colon is as
  * illegal as three.
  */
-export function compensateRunJobId(runId: string): string {
-  return `compensate-${runId}`;
+export function compensateRunJobId(runId: string, resumeToken?: string): string {
+  const base = `compensate-${runId}`;
+  return resumeToken ? `${base}-${resumeToken}` : base;
 }
 
 /** Payload for the Phase 0 no-op wiring test. */

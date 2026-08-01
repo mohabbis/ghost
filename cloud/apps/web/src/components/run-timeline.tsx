@@ -20,6 +20,9 @@ interface ApprovalView {
   status: string;
   reason: string;
   expiresAt: string | null;
+  phase: "FORWARD" | "COMPENSATION";
+  /** For a compensation gate: what the reversal will actually do. */
+  actions: string[];
 }
 interface RunView {
   id: string;
@@ -39,17 +42,26 @@ interface ChainView {
 interface UndoView {
   canUndo: boolean;
   complete: boolean;
+  /** Steps still landing. Non-empty means the plan is not yet trustworthy. */
+  blockedBy: number[] | null;
+  alreadyReversed: number[];
   entries: {
     stepIndex: number;
     stepLabel: string;
     description: string;
+    /** What the reversal will actually do, not just what its author called it. */
+    actions: string[];
     requiresApproval: boolean;
     approvalReason: string | null;
   }[];
   irreversible: { stepIndex: number; stepLabel: string; reason: string }[];
 }
 
-const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED"]);
+// Stops polling and triggers chain verification. COMPENSATED belongs here:
+// leaving it out kept the page polling forever and meant the verification
+// effect never re-ran, so the panel kept showing the pre-undo audit result
+// instead of verifying the head the compensation just anchored.
+const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED", "COMPENSATED"]);
 /** States a run can be reversed from. Mirrors the undo route's allow-list. */
 const REVERSIBLE = new Set(["SUCCEEDED", "FAILED", "CANCELED", "INCIDENT"]);
 const STOPPABLE = new Set(["QUEUED", "RUNNING", "AWAITING_APPROVAL", "INCIDENT"]);
@@ -166,16 +178,28 @@ export function RunTimeline({ runId }: { runId: string }) {
 
       {pending && (
         <Card>
-          <CardBody className="flex items-center justify-between gap-4">
+          <CardBody className="flex items-start justify-between gap-4">
             <div className="text-sm">
-              <span className="font-medium">Approval required</span> — {pending.reason}
+              <span className="font-medium">
+                {pending.phase === "COMPENSATION"
+                  ? "Approval required to reverse a step"
+                  : "Approval required"}
+              </span>{" "}
+              — {pending.reason}
               {pending.expiresAt && (
                 <span className="ml-2 text-xs text-[var(--color-muted)]">
                   expires {new Date(pending.expiresAt).toLocaleString()}
                 </span>
               )}
+              {pending.actions.length > 0 && (
+                <ul className="mt-1.5 ml-4 list-disc space-y-0.5 font-mono text-xs text-[var(--color-muted)] marker:text-[var(--color-border)]">
+                  {pending.actions.map((a, i) => (
+                    <li key={i}>{a}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <Button
                 size="sm"
                 disabled={busy}
@@ -259,12 +283,18 @@ export function RunTimeline({ runId }: { runId: string }) {
               <div>
                 <p className="text-sm font-medium">Undo this run</p>
                 <p className="mt-1 text-xs text-[var(--color-muted)]">
-                  {undo.entries.length === 0
-                    ? "Nothing in this run can be reversed."
-                    : `${undo.entries.length} step${undo.entries.length === 1 ? "" : "s"} would be reversed, newest first.`}
+                  {undo.blockedBy
+                    ? `Step ${undo.blockedBy[0]! + 1} is still finishing. Undo is unavailable until the run settles.`
+                    : undo.entries.length === 0
+                      ? "Nothing left in this run can be reversed."
+                      : `${undo.entries.length} step${undo.entries.length === 1 ? "" : "s"} would be reversed, newest first.`}
+                  {undo.alreadyReversed.length > 0 &&
+                    ` ${undo.alreadyReversed.length} step${
+                      undo.alreadyReversed.length === 1 ? " has" : "s have"
+                    } already been reversed.`}
                 </p>
               </div>
-              {undo.entries.length > 0 && (
+              {undo.entries.length > 0 && undo.canUndo && (
                 <Button
                   size="sm"
                   variant="danger"
@@ -277,12 +307,23 @@ export function RunTimeline({ runId }: { runId: string }) {
             </div>
 
             {undo.entries.length > 0 && (
-              <ol className="space-y-1 text-xs">
+              <ol className="space-y-2 text-xs">
                 {undo.entries.map((e) => (
                   <li key={e.stepIndex} className="text-[var(--color-muted)]">
                     <span className="text-[var(--color-fg)]">{e.stepLabel}</span> — {e.description}
                     {e.requiresApproval && (
                       <span className="ml-1 text-[var(--color-warning)]">(needs approval)</span>
+                    )}
+                    {/* The description is the author's claim; this is the plan.
+                        Approving a reversal you cannot see is not approval. */}
+                    {e.actions.length > 0 && (
+                      <ul className="mt-0.5 ml-3 list-disc space-y-0.5 marker:text-[var(--color-border)]">
+                        {e.actions.map((a, i) => (
+                          <li key={i} className="font-mono">
+                            {a}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </li>
                 ))}
