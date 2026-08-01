@@ -224,6 +224,26 @@ real fix; this is the honest interim.
 | Multiple approvers, Slack/email approval | Windmill | Needs a notification surface |
 | Four-eyes approval | Camunda | Orgs are auto-created single-member on first sign-in, and `Role` is stored but never enforced. Needs RBAC first |
 
+## Known gaps in the durability story
+
+Three review findings on the durable-execution work were accepted and deferred
+rather than patched under a deadline. They are recorded in full, with the fix
+each needs, in [`CURSOR_HANDOFF.md`](./CURSOR_HANDOFF.md) — "Known gaps in
+durable execution":
+
+1. a captured session blob is not verified against its recorded digest, nor
+   bound to its run via AES-GCM associated data;
+2. deleting a complete *tail* of a run journal still verifies as intact, which
+   can make an already-approved action eligible to run again;
+3. cancellation's state change, journal append and anchoring are three writes
+   rather than one transition.
+
+Until these close, "tamper-evident durable execution" holds against accidental
+corruption and mid-run crashes, but not against an attacker with write access to
+the journal or the artifact store. Saying so plainly here is the point — a trust
+claim that outruns its implementation is the failure mode this whole document
+exists to avoid.
+
 ## Sources
 
 - [Temporal — Workflow Execution overview](https://docs.temporal.io/workflow-execution)

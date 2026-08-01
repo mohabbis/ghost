@@ -131,6 +131,38 @@ approves, and prints the journal. A healthy run shows `session.captured` at the
 gate, `session.restored` on resume, and exactly one `step.succeeded` for the
 submit step.
 
+### Known gaps in durable execution (accepted, not yet fixed)
+
+Three findings from the review of PR #373 were deliberately deferred rather than
+patched under a merge deadline. Each is real; each is design work rather than a
+fix. Do not treat the durability story as complete until they are closed.
+
+1. **A captured session blob is not bound to its own record.** `session.captured`
+   stores the encrypted blob's SHA-256, but `openSession` decrypts whatever
+   object currently sits at `Run.sessionKey` without checking that digest, and
+   the AES-GCM seal carries no associated data tying the ciphertext to its run
+   and artifact key. Every run shares one worker key, so a blob swapped for
+   another valid one authenticates cleanly and a run could resume under a
+   different customer's browser session. Fix: verify the recorded digest before
+   decrypting, and bind run id + key as AAD (a format change —
+   `packages/core/src/crypto/secretbox.ts`).
+
+2. **A truncated journal tail still verifies.** `verifyAuditChain` walks from the
+   first surviving row and only checks links between rows that exist, so deleting
+   a complete *suffix* of a non-terminal run's journal looks intact. Intermediate
+   heads are anchored into the org chain only at run boundaries, and the stored
+   cursor is deliberately ignored, so removing the trailing `step.started` /
+   `step.succeeded` pair makes an already-approved action eligible to run again.
+   Fix: persist the expected head or sequence outside the mutable journal and
+   validate it before trusting the journal for resume.
+
+3. **Cancellation is not one transition.** The route's status change, journal
+   append and audit anchoring are three separate writes. A queued or
+   approval-waiting run canceled from the web never reaches the worker's cancel
+   branch, so its journal is left unanchored; and for a running job the worker
+   can observe `CANCELED`, append and anchor, after which the route appends
+   again — leaving the final head looking tampered.
+
 ## Remaining Phase 1 work (priority)
 
 1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only
