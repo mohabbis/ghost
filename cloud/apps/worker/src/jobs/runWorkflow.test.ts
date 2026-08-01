@@ -353,6 +353,16 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
       orderBy: { seq: "desc" },
     });
     await prisma.runEvent.delete({ where: { id: tail.id } });
+
+    // No alternate caller may append first and overwrite journalHead with a
+    // value derived from the truncated prefix. The appender is the choke point.
+    await expect(
+      appendRunEvent(runId, { type: RUN_EVENT_TYPES.runCanceled }),
+    ).rejects.toThrow(/JOURNAL_TAMPERED/);
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: runId } })).journalHead,
+    ).toBe(before.journalHead);
+
     await prisma.run.update({ where: { id: runId }, data: { status: "QUEUED" } });
 
     await runWorkflowJob(fakeJob(runId, orgId, "truncated"));
