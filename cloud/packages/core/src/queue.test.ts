@@ -1,7 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { runWorkflowJobId, QUEUE_NAMES } from "./queue.js";
+import { compensateRunJobId, runWorkflowJobId, QUEUE_NAMES } from "./queue.js";
 
 describe("runWorkflowJobId", () => {
+  it("produces ids BullMQ will accept", () => {
+    // BullMQ validates custom ids: it splits on `:` for repeatable-job
+    // compatibility and throws unless the result is one part or three. The
+    // previous format was `run:<id>:<from>:<token>` — four parts — so *every*
+    // enqueue that carried a resume token threw before reaching Redis. That is
+    // every incident retry, every incident skip, and the cleanup enqueue on
+    // cancel and on a rejected approval. It went unnoticed because the only
+    // path exercised against a real queue never passed a token.
+    //
+    // Asserted as the constraint rather than the exact string, so changing the
+    // format stays free as long as it stays legal.
+    const ids = [
+      runWorkflowJobId("clxrun123"),
+      runWorkflowJobId("clxrun123", 2),
+      runWorkflowJobId("clxrun123", 2, "incident-3"),
+      runWorkflowJobId("clxrun123", undefined, "cleanup-1700000000"),
+      compensateRunJobId("clxrun123"),
+    ];
+    for (const id of ids) {
+      const parts = id.split(":").length;
+      expect(parts === 1 || parts === 3, `illegal job id: ${id}`).toBe(true);
+    }
+  });
+
+  it("keeps a run and its reversal apart", () => {
+    expect(compensateRunJobId("r1")).not.toBe(runWorkflowJobId("r1"));
+  });
+
   it("collapses duplicate submissions from the same resume point", () => {
     // A double-clicked Run button or a double-submitted approval must not race
     // two workers over one run.

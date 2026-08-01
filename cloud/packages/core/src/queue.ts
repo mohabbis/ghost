@@ -53,14 +53,22 @@ export interface RunWorkflowJob {
  * This is a first line of defence with a time window, not a guarantee —
  * `removeOnComplete` eventually frees the id. The guarantees are the run lease
  * and journal-derived position.
+ *
+ * **No colons.** BullMQ rejects a custom job id unless it contains either no
+ * colon or exactly two (it splits on `:` to stay compatible with repeatable-job
+ * keys). The previous `run:<id>:<from>:<token>` form has three, so every call
+ * that passed a resume token threw before reaching Redis — which is every
+ * incident retry, every incident skip, and the cleanup enqueue on cancel and
+ * on a rejected approval. Keeping the separator out of the alphabet entirely
+ * means no future segment can re-break it.
  */
 export function runWorkflowJobId(
   runId: string,
   fromStepIndex?: number,
   resumeToken?: string,
 ): string {
-  const base = `run:${runId}:${fromStepIndex ?? "start"}`;
-  return resumeToken ? `${base}:${resumeToken}` : base;
+  const base = `run-${runId}-${fromStepIndex ?? "start"}`;
+  return resumeToken ? `${base}-${resumeToken}` : base;
 }
 
 /** Payload for a `compensateRun` job. */
@@ -69,9 +77,14 @@ export interface CompensateRunJob {
   orgId: string;
 }
 
-/** Deterministic id so a double-clicked Undo collapses to a single job. */
+/**
+ * Deterministic id so a double-clicked Undo collapses to a single job.
+ *
+ * Colon-free for the same reason as `runWorkflowJobId` — one colon is as
+ * illegal as three.
+ */
 export function compensateRunJobId(runId: string): string {
-  return `compensate:${runId}`;
+  return `compensate-${runId}`;
 }
 
 /** Payload for the Phase 0 no-op wiring test. */
