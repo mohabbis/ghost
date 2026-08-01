@@ -150,26 +150,26 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
       orderBy: { seq: "asc" },
     });
 
-    if (events.length > 0) {
-      // A journal you do not verify is a log, not a proof. Refuse to resume on
-      // a broken chain rather than trusting it to tell us what already ran.
-      const chain = verifyAuditChain(
-        events.map((e) => ({
-          prevHash: e.prevHash,
-          hash: e.hash,
-          payload: runEventPayloadFromRow(e),
-        })),
+    // A journal you do not verify is a log, not a proof. The independently
+    // persisted expected tail is essential: links between surviving rows cannot
+    // reveal deletion of a complete suffix (including deletion of every row).
+    const chain = verifyAuditChain(
+      events.map((e) => ({
+        prevHash: e.prevHash,
+        hash: e.hash,
+        payload: runEventPayloadFromRow(e),
+      })),
+      { seq: run.journalSeq, hash: run.journalHead },
+    );
+    if (!chain.intact) {
+      await failRun(
+        runId,
+        run.orgId,
+        run.triggeredById,
+        run.cursor,
+        `JOURNAL_TAMPERED: run journal broken or truncated at event ${chain.firstBreakIndex}`,
       );
-      if (!chain.intact) {
-        await failRun(
-          runId,
-          run.orgId,
-          run.triggeredById,
-          run.cursor,
-          `JOURNAL_TAMPERED: run journal broken at event ${chain.firstBreakIndex}`,
-        );
-        return;
-      }
+      return;
     }
 
     const loaded =
