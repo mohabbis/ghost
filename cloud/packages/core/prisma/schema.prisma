@@ -224,6 +224,11 @@ enum StepStatus {
   SUCCEEDED
   FAILED
   SKIPPED
+  // The step ran, and its effect was later reversed by a compensation. Not the
+  // same as SKIPPED: writing SKIPPED over a reversed step made the timeline
+  // claim the original action never happened, when it happened and is precisely
+  // why there was something to undo.
+  COMPENSATED
   // The step started, the worker died, and the step's effect is at-most-once
   // (a payment, a send). We cannot know whether it landed. Re-running risks a
   // double-submit; skipping risks a silent no-op. Neither is ours to choose —

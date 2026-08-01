@@ -67,6 +67,15 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
     include: { workflowVersion: true, approvals: true, steps: true },
   });
   if (!run) throw new Error(`run ${runId} not found`);
+
+  // Cancelled between the request and this job picking it up. The cancel route
+  // already sealed the run, but a reversal that was part-way through has to say
+  // so — otherwise a half-undone run is indistinguishable from an ordinary
+  // cancellation, and an operator would reasonably assume nothing was reversed.
+  if (run.status === "CANCELED") {
+    await sealCanceledCompensation(runId, run.orgId, actorFor(job, run.triggeredById));
+    return;
+  }
   if (run.status !== "COMPENSATING") return;
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
@@ -113,16 +122,39 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
     return;
   }
 
-  // Reversals already done in a previous attempt — this job is re-entrant for
-  // the same reason forward execution is.
-  const done = new Set(indicesOf(events, RUN_EVENT_TYPES.stepCompensated));
+  // Where each step's reversal stands, by its *latest* event rather than by
+  // whether a given event type appears anywhere.
+  //
+  // Set membership is not enough: retry a failed reversal and the historical
+  // `step.compensation_failed` sits in the journal forever, so a set-based test
+  // would let it mask the new attempt's start — and the redelivered job would
+  // cancel the order a second time. Events arrive in `seq` order, so the last
+  // one wins.
+  const latest = new Map<number, string>();
+  for (const e of events) {
+    if (e.stepIndex === null) continue;
+    if (
+      e.type === RUN_EVENT_TYPES.stepCompensationStarted ||
+      e.type === RUN_EVENT_TYPES.stepCompensated ||
+      e.type === RUN_EVENT_TYPES.stepCompensationFailed
+    ) {
+      latest.set(e.stepIndex, e.type);
+    }
+  }
 
-  // Reversals that began and never finished. The browser action may or may not
-  // have landed, and re-running it could cancel an order twice, so the same
-  // rule as an at-most-once forward step applies: stop and let a human decide.
-  const started = indicesOf(events, RUN_EVENT_TYPES.stepCompensationStarted).filter(
-    (i) => !done.has(i) && !indicesOf(events, RUN_EVENT_TYPES.stepCompensationFailed).includes(i),
+  // Reversals already done — this job is re-entrant for the same reason forward
+  // execution is.
+  const done = new Set(
+    [...latest].filter(([, t]) => t === RUN_EVENT_TYPES.stepCompensated).map(([i]) => i),
   );
+
+  // Reversals that began and never reported an outcome. The browser action may
+  // or may not have landed, so the at-most-once rule applies exactly as it does
+  // to a forward step: stop and let a human decide.
+  const started = [...latest]
+    .filter(([, t]) => t === RUN_EVENT_TYPES.stepCompensationStarted)
+    .map(([i]) => i)
+    .sort((a, b) => a - b);
   if (started.length > 0) {
     await prisma.run.update({
       where: { id: runId },
@@ -187,6 +219,19 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
     for (const entry of plan.entries) {
       if (done.has(entry.stepIndex)) continue;
 
+      // Checked before each reversal, exactly as the forward loop checks before
+      // each step. A reversal already running finishes — stopping mid-action
+      // would leave an effect nobody can account for — but the ones after it do
+      // not start.
+      const fresh = await prisma.run.findUnique({
+        where: { id: runId },
+        select: { status: true },
+      });
+      if (fresh?.status === "CANCELED") {
+        await sealCanceledCompensation(runId, run.orgId, requester);
+        return;
+      }
+
       if (rejected.has(entry.stepIndex)) {
         await finish(
           runId,
@@ -223,14 +268,60 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
   }
 }
 
-function indicesOf(
-  events: readonly { type: string; stepIndex: number | null }[],
-  type: string,
-): number[] {
-  return events
-    .filter((e) => e.type === type)
-    .map((e) => e.stepIndex)
-    .filter((i): i is number => i !== null);
+
+/**
+ * Close out a reversal that was stopped by request.
+ *
+ * The run stays CANCELED — the cancel route already sealed that transition —
+ * but a partly-reversed run must not read as an ordinary cancellation. The
+ * counts come from the journal rather than from a loop variable, so this says
+ * the same thing whether the stop was seen before the job started or between
+ * two reversals.
+ *
+ * A no-op for a run whose reversal never began, and for one already sealed, so
+ * a redelivered job cannot append a second ending.
+ */
+async function sealCanceledCompensation(
+  runId: string,
+  orgId: string,
+  actorId: string | null,
+): Promise<void> {
+  const events = await prisma.runEvent.findMany({
+    where: { runId },
+    orderBy: { seq: "asc" },
+    select: { type: true, stepIndex: true },
+  });
+  const began = events.some((e) => e.type === RUN_EVENT_TYPES.compensationStarted);
+  const ended = events.some((e) => e.type === RUN_EVENT_TYPES.compensationFinished);
+  if (!began || ended) return;
+
+  const reversed = new Set(
+    events
+      .filter((e) => e.type === RUN_EVENT_TYPES.stepCompensated)
+      .map((e) => e.stepIndex)
+      .filter((i): i is number => i !== null),
+  ).size;
+
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.run.update({
+      where: { id: runId },
+      data: {
+        error: `reversal stopped by request after undoing ${reversed} step(s) — the rest of this run's effects are still in place`,
+      },
+    });
+    await appendRunEvent(
+      runId,
+      { type: RUN_EVENT_TYPES.compensationFinished, payload: { outcome: "canceled", reversed } },
+      tx,
+    );
+  });
+
+  await appendAuditEvent(orgId, actorId, {
+    action: "run.compensation_canceled",
+    entityType: "Run",
+    entityId: runId,
+    metadata: { reversed, runChainHead: await runChainHead(runId) },
+  });
 }
 
 /**
@@ -361,7 +452,9 @@ async function reverseOne({
     await prisma.$transaction(async (tx) => {
       await tx.runStep.updateMany({
         where: { runId, index: entry.stepIndex },
-        data: { status: "SKIPPED", endedAt: new Date() },
+        // COMPENSATED, not SKIPPED. The forward action ran; it was undone. A
+        // timeline that says "skipped" is describing a run that never happened.
+        data: { status: "COMPENSATED", endedAt: new Date() },
       });
       await appendRunEvent(
         runId,

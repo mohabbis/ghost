@@ -70,17 +70,17 @@ export async function POST(
     });
     if (count !== 1) return false;
 
-    if (approve) {
+    if (approve || compensating) {
+      // A refused reversal also goes back to the compensation worker, rather
+      // than being marked INCIDENT here. The worker's rejected branch is what
+      // appends `compensation.finished` and anchors the new head; deciding the
+      // terminal state in this route skipped both, so verification reported a
+      // permanent anchor mismatch and the reversal looked open forever —
+      // blocking forward incident recovery on that run for good. The worker
+      // still lands on INCIDENT, just sealed.
       await tx.run.updateMany({
         where: { id, status: "AWAITING_APPROVAL" },
         data: { status: compensating ? "COMPENSATING" : "QUEUED" },
-      });
-    } else if (compensating) {
-      // A refused reversal is not a failed run — the run already happened. It
-      // stops as an incident so a human can decide what to do instead.
-      await tx.run.update({
-        where: { id },
-        data: { status: "INCIDENT", error: `reversal rejected at step ${index}` },
       });
     } else {
       await tx.run.update({
@@ -118,24 +118,29 @@ export async function POST(
     metadata: { stepIndex: index, runId: id, phase: pending.phase },
   });
 
+  if (compensating) {
+    // Both decisions go through the compensation queue, not the run queue.
+    // `runWorkflowJob` only leases QUEUED / RUNNING / AWAITING_APPROVAL runs, so
+    // a job sent there for a COMPENSATING run returns immediately — and since
+    // the original compensation job already ended at the gate, nothing would
+    // pick the reversal back up and the run would sit in COMPENSATING forever.
+    // On a rejection the worker stops without reversing anything and seals the
+    // run as an incident, which is why the rejection needs the worker too.
+    //
+    // The resume token matters for the same reason it does anywhere else: the
+    // initial compensation job is retained under the plain id and would
+    // otherwise swallow this one.
+    await enqueueCompensateRun({
+      runId: id,
+      orgId,
+      requestedById: userId,
+      resumeToken: `gate-${index}-${Date.now()}`,
+    });
+    return NextResponse.json({ ok: true, resumed: approve });
+  }
+
   if (approve) {
-    if (compensating) {
-      // Through the compensation queue, not the run queue. `runWorkflowJob`
-      // only leases QUEUED / RUNNING / AWAITING_APPROVAL runs, so a job sent
-      // there for a COMPENSATING run returns immediately — and since the
-      // original compensation job already ended at the gate, nothing would ever
-      // pick the reversal back up and the run would sit in COMPENSATING
-      // forever. The resume token matters for the same reason: the initial
-      // compensation job is retained under the plain id and would swallow this.
-      await enqueueCompensateRun({
-        runId: id,
-        orgId,
-        requestedById: userId,
-        resumeToken: `gate-${index}-${Date.now()}`,
-      });
-    } else {
-      await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
-    }
+    await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
     return NextResponse.json({ ok: true, resumed: true });
   }
 

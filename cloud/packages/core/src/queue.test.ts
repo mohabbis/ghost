@@ -30,6 +30,18 @@ describe("runWorkflowJobId", () => {
     expect(compensateRunJobId("r1")).not.toBe(runWorkflowJobId("r1"));
   });
 
+  it("separates a resumed compensation from the request that started it", () => {
+    // A reversal that gates, is approved, and resumes goes through the same
+    // queue twice. Sharing an id means BullMQ drops the resume — completed jobs
+    // are retained — and the run sits in COMPENSATING forever with the API
+    // reporting success. This is the assertion the producer must satisfy; it
+    // was passing a token that the producer then discarded.
+    expect(compensateRunJobId("r1", "gate-1-123")).not.toBe(compensateRunJobId("r1"));
+    expect(compensateRunJobId("r1", "gate-1-123")).not.toBe(
+      compensateRunJobId("r1", "gate-1-456"),
+    );
+  });
+
   it("collapses duplicate submissions from the same resume point", () => {
     // A double-clicked Run button or a double-submitted approval must not race
     // two workers over one run.

@@ -17,6 +17,10 @@ import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
  * happen twice, that is the honest behaviour: a cancel that claimed to stop a
  * payment mid-flight would be the same class of lie as a silent double-send.
  * The UI says "stop after the current step" for that reason.
+ *
+ * The same applies to a run being reversed. A compensation is a sequence of
+ * mutations against a live system, so it needs the same stop — checked between
+ * reversals, with whatever has already been undone left undone and stated.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -40,7 +44,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       where: {
         id,
         orgId,
-        status: { in: ["QUEUED", "RUNNING", "AWAITING_APPROVAL", "INCIDENT"] },
+        // COMPENSATING included: a reversal is a sequence of real mutations,
+        // and an operator who sees a multi-step undo working the wrong records
+        // needs the same stop the forward direction has. The compensation
+        // worker polls this between reversals.
+        status: { in: ["QUEUED", "RUNNING", "AWAITING_APPROVAL", "INCIDENT", "COMPENSATING"] },
       },
       data: {
         status: "CANCELED",

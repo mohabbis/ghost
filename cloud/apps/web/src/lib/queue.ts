@@ -58,7 +58,11 @@ export function enqueueRunWorkflow(data: RunWorkflowJob) {
 
 export function enqueueCompensateRun(data: CompensateRunJob) {
   return getQueue(QUEUE_NAMES.compensateRun).add(QUEUE_NAMES.compensateRun, data, {
-    jobId: compensateRunJobId(data.runId),
+    // The token has to reach the id, or it does nothing. Completed jobs are
+    // retained, so a gate resume re-added under the plain `compensate-<runId>`
+    // is silently dropped and the run sits in COMPENSATING with nothing
+    // scheduled — the exact failure the token exists to prevent.
+    jobId: compensateRunJobId(data.runId, data.resumeToken),
     attempts: 3,
     backoff: { type: "exponential", delay: 5_000 },
     removeOnComplete: { age: 3_600 },

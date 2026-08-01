@@ -150,24 +150,49 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "run is already being reversed" }, { status: 409 });
   }
 
-  await appendAuditEvent(orgId, userId, {
-    action: "run.compensation_requested",
-    entityType: "Run",
-    entityId: id,
-    metadata: {
-      requestedById: userId,
-      reversible: remaining.length,
-      irreversible: plan.irreversible.length,
-    },
-  });
+  // Past this point the run is COMPENSATING, and the only thing that will ever
+  // move it again is the job scheduled below. If the audit append or the
+  // enqueue fails, that job does not exist — and because the conditional update
+  // above no longer matches, pressing Undo again returns 409. The run would be
+  // stuck until someone edited the database. So the claim is given back.
+  try {
+    await appendAuditEvent(orgId, userId, {
+      action: "run.compensation_requested",
+      entityType: "Run",
+      entityId: id,
+      metadata: {
+        requestedById: userId,
+        reversible: remaining.length,
+        irreversible: plan.irreversible.length,
+      },
+    });
 
-  // `requestedById` follows the job so the worker attributes each reversal to
-  // the person who asked for it, not to whoever started the original run.
-  await enqueueCompensateRun({
-    runId: id,
-    orgId,
-    requestedById: userId,
-    resumeToken: `req-${Date.now()}`,
-  });
+    // `requestedById` follows the job so the worker attributes each reversal to
+    // the person who asked for it, not to whoever started the original run.
+    await enqueueCompensateRun({
+      runId: id,
+      orgId,
+      requestedById: userId,
+      resumeToken: `req-${Date.now()}`,
+    });
+  } catch (err) {
+    // Restore exactly what was there. Nothing has been reversed — the worker
+    // never ran — so the run is as it was and Undo can be pressed again.
+    await prisma.run
+      .updateMany({
+        where: { id, orgId, status: "COMPENSATING" },
+        data: { status: run.status, error: run.error, endedAt: run.endedAt },
+      })
+      .catch(() => undefined);
+    return NextResponse.json(
+      {
+        error: `could not schedule the reversal: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      },
+      { status: 503 },
+    );
+  }
+
   return NextResponse.json({ ok: true, reversing: remaining.length });
 }

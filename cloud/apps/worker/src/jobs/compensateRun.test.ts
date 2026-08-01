@@ -348,6 +348,114 @@ describe.skipIf(!hasDb)("compensateRunJob (Postgres)", () => {
     ).toBe(0);
   });
 
+  it("does not let an old failure mask a newer interrupted attempt", async () => {
+    // Reverse, fail, retry, get interrupted after the external action. A
+    // membership test would see the historical `step.compensation_failed` for
+    // this index and conclude the reversal is not in flight — cancelling the
+    // order a second time. Only the *latest* event for the step counts.
+    const runId = await seedRun(reversibleSteps());
+    await runToCompletion(runId);
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId));
+    const gate = await prisma.approval.findFirstOrThrow({ where: { runId, phase: "COMPENSATION" } });
+    await prisma.approval.update({
+      where: { id: gate.id },
+      data: { status: "APPROVED", resolvedById: userId, resolvedAt: new Date() },
+    });
+
+    // An earlier attempt that failed, then a newer one that started and never
+    // reported back — the crash window.
+    await appendRunEvent(runId, {
+      type: RUN_EVENT_TYPES.stepCompensationStarted,
+      stepIndex: 1,
+      payload: { stepId: "submit" },
+    });
+    await appendRunEvent(runId, {
+      type: RUN_EVENT_TYPES.stepCompensationFailed,
+      stepIndex: 1,
+      payload: { stepId: "submit", error: "transient" },
+    });
+    await appendRunEvent(runId, {
+      type: RUN_EVENT_TYPES.stepCompensationStarted,
+      stepIndex: 1,
+      payload: { stepId: "submit" },
+    });
+
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("INCIDENT");
+    expect(run.error).toMatch(/never reported an outcome/);
+    expect(
+      await prisma.runEvent.count({ where: { runId, type: RUN_EVENT_TYPES.stepCompensated } }),
+    ).toBe(0);
+  });
+
+  it("marks a reversed step COMPENSATED, not SKIPPED", async () => {
+    // "Skipped" would claim the forward action never ran — when it ran, and is
+    // the reason there was anything to undo.
+    const runId = await seedRun(reversibleSteps());
+    await runToCompletion(runId);
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId));
+    const gate = await prisma.approval.findFirstOrThrow({ where: { runId, phase: "COMPENSATION" } });
+    await prisma.approval.update({
+      where: { id: gate.id },
+      data: { status: "APPROVED", resolvedById: userId, resolvedAt: new Date() },
+    });
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId));
+
+    const step = await prisma.runStep.findFirstOrThrow({ where: { runId, index: 1 } });
+    expect(step.status).toBe("COMPENSATED");
+  });
+
+  it("stops a reversal on request, and says what is still in place", async () => {
+    // "Replay must be interruptible" applies to the way back too. A multi-step
+    // undo working the wrong records has to be stoppable, and what it already
+    // undid has to be stated — a half-reversed run that reads as an ordinary
+    // cancellation would leave an operator assuming nothing was touched.
+    const runId = await seedRun(reversibleSteps());
+    await runToCompletion(runId);
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId)); // opens the gate
+
+    // Stopped while parked on the approval, as the cancel route leaves it.
+    await prisma.run.update({ where: { id: runId }, data: { status: "CANCELED" } });
+    await compensateRunJob(compJob(runId, orgId));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("CANCELED");
+    expect(run.error).toMatch(/reversal stopped by request after undoing 0 step\(s\)/);
+    // Nothing was reversed, and the reversal is sealed rather than left open.
+    expect(
+      await prisma.runEvent.count({ where: { runId, type: RUN_EVENT_TYPES.stepCompensated } }),
+    ).toBe(0);
+    expect(
+      await prisma.runEvent.count({
+        where: { runId, type: RUN_EVENT_TYPES.compensationFinished },
+      }),
+    ).toBe(1);
+  });
+
+  it("does not seal a stop twice when the job is redelivered", async () => {
+    const runId = await seedRun(reversibleSteps());
+    await runToCompletion(runId);
+    await prisma.run.update({ where: { id: runId }, data: { status: "COMPENSATING" } });
+    await compensateRunJob(compJob(runId, orgId));
+    await prisma.run.update({ where: { id: runId }, data: { status: "CANCELED" } });
+
+    await compensateRunJob(compJob(runId, orgId));
+    await compensateRunJob(compJob(runId, orgId));
+
+    expect(
+      await prisma.runEvent.count({
+        where: { runId, type: RUN_EVENT_TYPES.compensationFinished },
+      }),
+    ).toBe(1);
+  });
+
   it("refuses to reverse a run whose journal does not verify", async () => {
     // The plan is derived from the journal, so a single altered row could
     // invent a reversal for an action that never happened.

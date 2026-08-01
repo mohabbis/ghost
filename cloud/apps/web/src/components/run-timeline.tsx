@@ -64,7 +64,15 @@ interface UndoView {
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED", "COMPENSATED"]);
 /** States a run can be reversed from. Mirrors the undo route's allow-list. */
 const REVERSIBLE = new Set(["SUCCEEDED", "FAILED", "CANCELED", "INCIDENT"]);
-const STOPPABLE = new Set(["QUEUED", "RUNNING", "AWAITING_APPROVAL", "INCIDENT"]);
+// COMPENSATING included: a reversal is a sequence of live mutations and needs
+// the same stop the forward direction has.
+const STOPPABLE = new Set([
+  "QUEUED",
+  "RUNNING",
+  "AWAITING_APPROVAL",
+  "INCIDENT",
+  "COMPENSATING",
+]);
 
 function statusColor(status: string): string {
   if (status === "SUCCEEDED") return "text-[var(--color-success)]";
@@ -73,6 +81,11 @@ function statusColor(status: string): string {
   // means nobody knows whether the action took effect.
   if (status === "UNKNOWN" || status === "INCIDENT") return "text-[var(--color-warning)]";
   if (status === "AWAITING_APPROVAL") return "text-[var(--color-warning)]";
+  // A reversed step is neither a success nor a failure — it happened, and then
+  // it was walked back.
+  if (status === "COMPENSATED" || status === "COMPENSATING") {
+    return "text-[var(--color-muted)]";
+  }
   return "text-[var(--color-muted)]";
 }
 
@@ -167,7 +180,9 @@ export function RunTimeline({ runId }: { runId: string }) {
               disabled={busy}
               onClick={() => post(`/api/runs/${run.id}/cancel`, {})}
             >
-              Stop after current step
+              {run.status === "COMPENSATING"
+                ? "Stop after current reversal"
+                : "Stop after current step"}
             </Button>
           )}
         </div>
