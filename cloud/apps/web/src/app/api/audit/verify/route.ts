@@ -44,7 +44,7 @@ export async function GET(req: Request) {
   if (runId) {
     const owned = await prisma.run.findFirst({
       where: { id: runId, orgId },
-      select: { id: true },
+      select: { id: true, journalHead: true, journalSeq: true },
     });
     if (!owned) return NextResponse.json({ error: "not found" }, { status: 404 });
 
@@ -58,6 +58,7 @@ export async function GET(req: Request) {
         hash: e.hash,
         payload: runEventPayloadFromRow(e),
       })),
+      { seq: owned.journalSeq, hash: owned.journalHead },
     );
 
     // The org chain records each finished run's journal head. If the two
@@ -73,6 +74,9 @@ export async function GET(req: Request) {
       firstBreakIndex: chain.firstBreakIndex,
       count: runEvents.length,
       headHash: head,
+      expectedHeadHash: owned.journalHead,
+      expectedCount: owned.journalSeq,
+      tailMatches: chain.intact,
       anchored: anchors.length > 0,
       anchorMatches: anchors.length === 0 ? null : anchors.includes(head ?? ""),
     };
