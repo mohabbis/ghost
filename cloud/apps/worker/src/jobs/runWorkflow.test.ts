@@ -459,10 +459,24 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
 
     // Strip the journal, leaving only the legacy RunStep rows — exactly what a
     // run that was mid-flight when durable execution shipped looks like.
+    //
+    // `journalHead` is cleared with it, and that detail is the whole difference
+    // between "legacy" and "tampered". The backfill in
+    // 20260801180000_run_journal_head only sets the column for runs that have
+    // RunEvent rows, so a genuinely pre-journal run carries NULL. Deleting the
+    // events while leaving a head behind is a state no real run reaches, and the
+    // engine is right to quarantine it — that case is covered separately by
+    // "refuses to resume when a valid journal suffix was deleted".
     await prisma.runEvent.deleteMany({ where: { runId } });
     await prisma.run.update({
       where: { id: runId },
-      data: { status: "QUEUED", cursor: 0, sessionKey: null, sessionUrl: null },
+      data: {
+        status: "QUEUED",
+        cursor: 0,
+        sessionKey: null,
+        sessionUrl: null,
+        journalHead: null,
+      },
     });
     const before = await prisma.runStep.findMany({
       where: { runId, index: { in: [0, 1] } },
