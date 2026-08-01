@@ -173,13 +173,26 @@ export async function appendRunEvent(
       },
     });
 
+    // The journal cannot detect deletion of a complete suffix by inspecting
+    // its surviving rows. Persist the expected tail outside RunEvent in the
+    // same transaction, so a truncated journal can never drive execution.
+    await client.run.update({
+      where: { id: runId },
+      data: { journalHead: hash, journalSeq: seq },
+    });
+
     return { seq, hash };
   };
 
   return tx ? run(tx) : prisma.$transaction(run);
 }
 
-/** The current head hash of a run's journal, or null if it has no events. */
+/**
+ * The current head hash of a run's journal, or null if it has no events.
+ *
+ * This reads the event rows for anchoring only. Execution integrity must compare
+ * those rows with Run.journalHead/journalSeq before trusting the journal.
+ */
 export async function runChainHead(runId: string, tx?: Tx): Promise<string | null> {
   const client = tx ?? prisma;
   const head = await client.runEvent.findFirst({
