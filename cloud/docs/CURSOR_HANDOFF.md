@@ -131,37 +131,42 @@ approves, and prints the journal. A healthy run shows `session.captured` at the
 gate, `session.restored` on resume, and exactly one `step.succeeded` for the
 submit step.
 
-### Known gaps in durable execution (accepted, not yet fixed)
+### Known gaps in durable execution
 
-Three findings from the review of PR #373 were deliberately deferred rather than
-patched under a merge deadline. Each is real; each is design work rather than a
-fix. Do not treat the durability story as complete until they are closed.
+Three findings from the review of PR #373 were deferred rather than patched
+under a merge deadline. Two are now closed on the compensation branch (#374);
+one remains.
 
-1. **A captured session blob is not bound to its own record.** `session.captured`
-   stores the encrypted blob's SHA-256, but `openSession` decrypts whatever
-   object currently sits at `Run.sessionKey` without checking that digest, and
-   the AES-GCM seal carries no associated data tying the ciphertext to its run
-   and artifact key. Every run shares one worker key, so a blob swapped for
-   another valid one authenticates cleanly and a run could resume under a
-   different customer's browser session. Fix: verify the recorded digest before
-   decrypting, and bind run id + key as AAD (a format change —
-   `packages/core/src/crypto/secretbox.ts`).
+**Closed — session blobs are bound to their run.** `seal`/`open` take associated
+data and session state is sealed under `ghost:session:v1:<runId>:<artifactKey>`,
+so a blob cannot be replayed into another run or another gate. `openSession`
+also verifies the blob against the SHA-256 the journal recorded at capture
+before decrypting it. Previously encryption proved only that a blob was
+authentic under the worker key, which every run shares.
 
-2. **A truncated journal tail still verifies.** `verifyAuditChain` walks from the
-   first surviving row and only checks links between rows that exist, so deleting
-   a complete *suffix* of a non-terminal run's journal looks intact. Intermediate
-   heads are anchored into the org chain only at run boundaries, and the stored
-   cursor is deliberately ignored, so removing the trailing `step.started` /
-   `step.succeeded` pair makes an already-approved action eligible to run again.
-   Fix: persist the expected head or sequence outside the mutable journal and
-   validate it before trusting the journal for resume.
+**Closed — cancellation is one transition.** The route's status change, approval
+invalidation and journal append commit together, and it anchors the journal head
+the way a worker-side terminal transition does. Both sides skip the append if
+the other got there first, so a running job and the route can no longer produce
+two `run.canceled` events straddling an anchor.
 
-3. **Cancellation is not one transition.** The route's status change, journal
-   append and audit anchoring are three separate writes. A queued or
-   approval-waiting run canceled from the web never reaches the worker's cancel
-   branch, so its journal is left unanchored; and for a running job the worker
-   can observe `CANCELED`, append and anchor, after which the route appends
-   again — leaving the final head looking tampered.
+**Open — a truncated journal tail still verifies.** `verifyAuditChain` walks
+from the first surviving row and only checks links between rows that exist, so
+deleting a complete *suffix* of a non-terminal run's journal looks intact.
+Intermediate heads are anchored into the org chain only at run boundaries, and
+the stored cursor is deliberately ignored, so removing the trailing
+`step.started` / `step.succeeded` pair makes an already-approved action eligible
+to run again.
+
+Fixing it means persisting the expected head or sequence outside the mutable
+journal — a schema decision, not a patch. Options worth weighing: a
+monotonically-updated `Run.journalHead` written in the same transaction as each
+append (cheap, but same-database so it falls to an attacker with write access to
+both), or anchoring into the org chain at every gate rather than only at run
+boundaries (more writes, but the org chain is what the customer verifies).
+
+Until it closes, tamper-evidence holds against accidental corruption and mid-run
+crashes, but not against an attacker with write access to the journal.
 
 ## Remaining Phase 1 work (priority)
 
