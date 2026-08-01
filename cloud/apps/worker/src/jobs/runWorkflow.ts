@@ -19,7 +19,7 @@ import {
   journalFromEvents,
   journalFromLegacyRunSteps,
   type RunJournal,
-} from "../runtime/journal.js";
+} from "@ghost/core/journal";
 import { planRestore, type ExecutedRecord } from "../runtime/restore.js";
 import { classifyError } from "../runtime/errors.js";
 import { effectiveRetry, effectiveTimeout, backoffFor } from "../runtime/policy.js";
@@ -151,8 +151,11 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     const journal: RunJournal = { ...loaded, completed };
 
     // ---- Approvals -------------------------------------------------------
+    // Forward execution only ever consults FORWARD-phase approvals. Approving
+    // the *reversal* of step N must never be mistaken for approving step N.
+    const forwardApprovals = run.approvals.filter((a) => a.phase === "FORWARD");
     const now = new Date();
-    const expired = run.approvals.filter(
+    const expired = forwardApprovals.filter(
       (a) => a.status === "APPROVED" && a.expiresAt !== null && a.expiresAt < now,
     );
     const liveExpired = expired.find((a) => !journal.completed.has(a.stepIndex));
@@ -169,12 +172,12 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
 
     const approvals: ApprovalState = {
       approved: new Set(
-        run.approvals
+        forwardApprovals
           .filter((a) => a.status === "APPROVED" && !expired.includes(a))
           .map((a) => a.stepIndex),
       ),
       rejected: new Set(
-        run.approvals.filter((a) => a.status === "REJECTED").map((a) => a.stepIndex),
+        forwardApprovals.filter((a) => a.status === "REJECTED").map((a) => a.stepIndex),
       ),
     };
 
@@ -287,8 +290,15 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
 
         await prisma.$transaction(async (tx) => {
           await tx.approval.upsert({
-            where: { runId_stepIndex: { runId, stepIndex: action.index } },
-            create: { runId, stepIndex: action.index, reason: action.reason },
+            where: {
+              runId_stepIndex_phase: { runId, stepIndex: action.index, phase: "FORWARD" },
+            },
+            create: {
+              runId,
+              stepIndex: action.index,
+              phase: "FORWARD",
+              reason: action.reason,
+            },
             update: {},
           });
           await tx.run.update({

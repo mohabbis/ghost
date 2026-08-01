@@ -16,6 +16,8 @@
     "./expr": "./src/expr.ts",
     "./crypto": "./src/crypto/secretbox.ts",
     "./artifacts": "./src/artifacts.ts",
+    "./journal": "./src/runtime/journal.ts",
+    "./compensate": "./src/runtime/compensate.ts",
     "./agent": "./src/agent/tools.ts",
     "./agent-credentials": "./src/agent/credentials.ts"
   },

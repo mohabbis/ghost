@@ -1,6 +1,6 @@
 import { classifyStep, isAtMostOnce } from "@ghost/core/classifier";
 import type { WorkflowStep } from "@ghost/core/schema/step";
-import type { RunJournal } from "./journal.js";
+import type { RunJournal } from "@ghost/core/journal";
 
 /**
  * Pure run-state machine. Given the workflow steps, what the journal says has

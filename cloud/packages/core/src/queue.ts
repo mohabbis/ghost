@@ -8,6 +8,8 @@
 export const QUEUE_NAMES = {
   /** Executes a workflow run (Phase 1). */
   runWorkflow: "run-workflow",
+  /** Reverses a run's completed side effects (BPMN compensation). */
+  compensateRun: "compensate-run",
   /** Phase 0 wiring smoke test. */
   noop: "noop",
 } as const;
@@ -59,6 +61,17 @@ export function runWorkflowJobId(
 ): string {
   const base = `run:${runId}:${fromStepIndex ?? "start"}`;
   return resumeToken ? `${base}:${resumeToken}` : base;
+}
+
+/** Payload for a `compensateRun` job. */
+export interface CompensateRunJob {
+  runId: string;
+  orgId: string;
+}
+
+/** Deterministic id so a double-clicked Undo collapses to a single job. */
+export function compensateRunJobId(runId: string): string {
+  return `compensate:${runId}`;
 }
 
 /** Payload for the Phase 0 no-op wiring test. */

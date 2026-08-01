@@ -43,12 +43,24 @@ export async function POST(
   const approve = body.decision === "approve";
   const now = new Date();
 
+  // Which direction of the run is waiting. A gate opened while reversing the
+  // run resumes the compensation job, not the forward one — approving the undo
+  // of step N must never restart step N.
+  const pending = await prisma.approval.findFirst({
+    where: { runId: id, stepIndex: index, status: "PENDING" },
+    select: { phase: true },
+  });
+  if (!pending) {
+    return NextResponse.json({ error: "no pending approval for step" }, { status: 409 });
+  }
+  const compensating = pending.phase === "COMPENSATION";
+
   // One conditional update decides the race: a double-submitted approval
   // updates zero rows the second time and becomes a no-op, so only one resume
   // is ever enqueued.
   const resolved = await prisma.$transaction(async (tx) => {
     const { count } = await tx.approval.updateMany({
-      where: { runId: id, stepIndex: index, status: "PENDING" },
+      where: { runId: id, stepIndex: index, phase: pending.phase, status: "PENDING" },
       data: {
         status: approve ? "APPROVED" : "REJECTED",
         resolvedById: userId,
@@ -61,7 +73,14 @@ export async function POST(
     if (approve) {
       await tx.run.updateMany({
         where: { id, status: "AWAITING_APPROVAL" },
-        data: { status: "QUEUED" },
+        data: { status: compensating ? "COMPENSATING" : "QUEUED" },
+      });
+    } else if (compensating) {
+      // A refused reversal is not a failed run — the run already happened. It
+      // stops as an incident so a human can decide what to do instead.
+      await tx.run.update({
+        where: { id },
+        data: { status: "INCIDENT", error: `reversal rejected at step ${index}` },
       });
     } else {
       await tx.run.update({
