@@ -255,6 +255,11 @@ model Run {
   // stale cursor must never be able to cause a completed step to re-execute.
   // Written inside the same transaction that commits a step.
   cursor            Int       @default(0)
+  // Expected journal tail, maintained atomically by appendRunEvent. The event
+  // rows alone cannot reveal deletion of a complete suffix; execution verifies
+  // both values before folding the journal and fails closed on disagreement.
+  journalHead       String?
+  journalSeq        Int       @default(0)
   error             String?
   startedAt         DateTime?
   endedAt           DateTime?
