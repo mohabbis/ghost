@@ -299,9 +299,11 @@
             <div>
               <strong>Undo (compensation)</strong>
               <span
-                >Reverses completed steps in reverse order, through the same classifier, gate,
-                verification and journal — on a stricter bar than the forward path. Effects with no
-                defined reversal are reported, never quietly skipped.</span
+                >Reverses completed steps in reverse order, through the same classifier, gate and
+                journal — on a stricter bar than the forward path. A reversal is checked against its
+                own assertion where the workflow defines one; otherwise the screenshot is evidence
+                rather than proof. Effects with no defined reversal are reported, never quietly
+                skipped.</span
               >
             </div>
           </li>
@@ -310,8 +312,10 @@
             <div>
               <strong>Per-workflow concurrency cap</strong>
               <span
-                >At most N runs of a workflow in flight, so Ghost never puts several browsers into
-                one customer&rsquo;s system at once. Held-back runs say why they are waiting.</span
+                >An opt-in limit on how many runs of one workflow are in flight at once — off by
+                default, and per workflow rather than per system, so it bounds a stampede rather
+                than guaranteeing Ghost works a system alone. Held-back runs say why they are
+                waiting.</span
               >
             </div>
           </li>
