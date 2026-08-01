@@ -26,6 +26,69 @@ export function CreateDemoButton() {
   );
 }
 
+/**
+ * The per-workflow concurrency cap (Airflow's `max_active_runs`).
+ *
+ * Blank means uncapped, which is both the default and what every existing
+ * workflow has — a cap is opt-in, because guessing one for a customer's system
+ * is worse than leaving it off and letting them set it deliberately.
+ */
+export function ConcurrencyCap({
+  workflowId,
+  value,
+}: {
+  workflowId: string;
+  value: number | null;
+}) {
+  const router = useRouter();
+  const [draft, setDraft] = useState(value === null ? "" : String(value));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(next: string) {
+    if (next === (value === null ? "" : String(value))) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/workflows/${workflowId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ maxActiveRuns: next === "" ? null : Number(next) }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "failed");
+      router.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+      setDraft(value === null ? "" : String(value));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+      <span title="Maximum runs of this workflow in flight at once. Blank means no limit.">
+        Max active
+      </span>
+      <input
+        type="number"
+        min={1}
+        max={100}
+        inputMode="numeric"
+        placeholder="∞"
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => void save(e.target.value)}
+        className="w-14 rounded border border-[var(--color-border)] bg-transparent px-1.5 py-0.5 text-center text-xs"
+        aria-label="Maximum active runs"
+      />
+      {error && <span className="text-[var(--color-danger)]">{error}</span>}
+    </label>
+  );
+}
+
 export function RunButton({ workflowId }: { workflowId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

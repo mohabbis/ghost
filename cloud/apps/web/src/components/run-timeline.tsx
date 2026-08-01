@@ -34,6 +34,8 @@ interface RunView {
   restoreOutcome: string | null;
   steps: StepView[];
   approvals: ApprovalView[];
+  /** Set when the run is queued behind its workflow's concurrency cap. */
+  throttle: { reason: string; activeRunIds: string[] } | null;
 }
 interface ChainView {
   org: { intact: boolean; count: number };
@@ -190,6 +192,32 @@ export function RunTimeline({ runId }: { runId: string }) {
 
       {run.error && <p className="text-sm text-[var(--color-danger)]">{run.error}</p>}
       {notice && <p className="text-sm text-[var(--color-danger)]">{notice}</p>}
+
+      {run.throttle && (
+        <Card>
+          <CardBody className="space-y-2">
+            <div className="text-sm">
+              <span className="font-medium">Waiting its turn</span> — {run.throttle.reason}
+            </div>
+            <p className="text-xs text-[var(--color-muted)]">
+              Nothing has run yet. This run starts as soon as one of the runs ahead of it
+              finishes.
+            </p>
+            {run.throttle.activeRunIds.length > 0 && (
+              <ul className="space-y-0.5 text-xs">
+                {run.throttle.activeRunIds.map((id) => (
+                  <li key={id}>
+                    <a className="underline underline-offset-2" href={`/runs/${id}`}>
+                      Run {id.slice(0, 8)}
+                    </a>{" "}
+                    <span className="text-[var(--color-muted)]">holds a slot</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {pending && (
         <Card>

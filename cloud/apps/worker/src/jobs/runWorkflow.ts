@@ -22,6 +22,7 @@ import {
   type RunJournal,
 } from "@ghost/core/journal";
 import { planRestore, type ExecutedRecord } from "../runtime/restore.js";
+import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
 import { classifyError } from "../runtime/errors.js";
 import { effectiveRetry, effectiveTimeout, backoffFor } from "../runtime/policy.js";
 import {
@@ -68,7 +69,11 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
 
   const run = await prisma.run.findUnique({
     where: { id: runId },
-    include: { workflowVersion: true, approvals: true, steps: true },
+    include: {
+      workflowVersion: { include: { workflow: { select: { maxActiveRuns: true } } } },
+      approvals: true,
+      steps: true,
+    },
   });
   if (!run) throw new Error(`run ${runId} not found`);
   if (TERMINAL.has(run.status) || run.status === "INCIDENT") {
@@ -78,6 +83,9 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     // guard is also the cleanup path — web routes enqueue a job purely to
     // trigger it.
     if (run.sessionKey) await purgeSession(runId);
+    // Same for the concurrency slot: a run canceled from the web never reaches
+    // the loop below, and the next run must not wait on a slot nobody holds.
+    await releaseSlot(runId).catch(() => undefined);
     return;
   }
 
@@ -113,6 +121,22 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
   let session: BrowserSession | undefined;
 
   try {
+    // ---- Admission -------------------------------------------------------
+    // Airflow's `max_active_runs`: hold the run in QUEUED rather than adding it
+    // to a crowd already working the customer's system. Runs *after* the lease
+    // so only one worker per run asks, and the claim commits inside the same
+    // locked transaction as the count — see runtime/slots.ts.
+    const admission = await claimSlot({
+      runId,
+      workflowId: run.workflowVersion.workflowId,
+      cap: run.workflowVersion.workflow.maxActiveRuns,
+      alreadyStarted: run.startedAt !== null,
+    });
+    if (admission.kind === "throttle") {
+      await recordThrottle(runId, run.orgId, admission.cap, admission.holders);
+      return;
+    }
+
     // ---- Journal ---------------------------------------------------------
     const events = await prisma.runEvent.findMany({
       where: { runId },
@@ -183,10 +207,9 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     };
 
     // ---- Start / resume --------------------------------------------------
-    await prisma.run.update({
-      where: { id: runId },
-      data: run.startedAt ? { status: "RUNNING" } : { status: "RUNNING", startedAt: new Date() },
-    });
+    // `RUNNING` and `startedAt` were already written by `claimSlot`: the status
+    // *is* the slot, so it has to be taken under the admission lock rather than
+    // here, where two runs could both have passed the count.
     if (!run.startedAt) {
       await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runStarted });
       await appendAuditEvent(run.orgId, run.triggeredById, {
@@ -399,6 +422,10 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         data: { leaseOwner: null, leaseExpiresAt: null },
       })
       .catch(() => undefined);
+    // Whatever happened above — finished, failed, gated, parked as an incident —
+    // this asks whether the run still holds its slot and hands it on if not.
+    // Never allowed to mask the run's own outcome, hence the swallow.
+    await releaseSlot(runId).catch(() => undefined);
   }
 }
 

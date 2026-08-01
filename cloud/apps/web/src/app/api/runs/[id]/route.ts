@@ -53,7 +53,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  // "Queued" alone does not say whether Ghost is busy, broken, or deliberately
+  // holding this run back behind its workflow's concurrency cap. Only report
+  // the wait while the run is actually still waiting — a stale throttle event
+  // from earlier in the run's life must not make a running run look blocked.
+  let throttle: { reason: string; activeRunIds: string[] } | null = null;
+  if (run.status === "QUEUED") {
+    const last = await prisma.runEvent.findFirst({
+      where: { runId: id },
+      orderBy: { seq: "desc" },
+      select: { type: true, payload: true },
+    });
+    if (last?.type === "run.throttled") {
+      const payload = (last.payload ?? {}) as { reason?: string; activeRunIds?: string[] };
+      throttle = {
+        reason: payload.reason ?? "Waiting for a free slot.",
+        activeRunIds: payload.activeRunIds ?? [],
+      };
+    }
+  }
+
   return NextResponse.json({
+    throttle,
     id: run.id,
     status: run.status,
     error: run.error,
