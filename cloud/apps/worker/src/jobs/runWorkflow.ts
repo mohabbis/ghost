@@ -9,6 +9,7 @@ import { resolveStep, ExpressionError, type ExpressionScope } from "@ghost/core/
 import {
   seal,
   open as openSealed,
+  sessionAad,
   sessionKeyFromEnv,
   hasSessionKey,
   digest,
@@ -207,8 +208,17 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         select: { status: true },
       });
       if (fresh?.status === "CANCELED") {
-        await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runCanceled });
-        await anchorRunChain(runId, run.orgId, run.triggeredById, "run.canceled");
+        // The web route may already have journalled and anchored this. Appending
+        // a second `run.canceled` after that anchor would leave the sealed head
+        // no longer matching the journal — which reads as tampering.
+        const already = await prisma.runEvent.findFirst({
+          where: { runId, type: RUN_EVENT_TYPES.runCanceled },
+          select: { id: true },
+        });
+        if (!already) {
+          await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runCanceled });
+          await anchorRunChain(runId, run.orgId, run.triggeredById, "run.canceled");
+        }
         return;
       }
 
@@ -367,7 +377,7 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         steps,
         journal,
         ensureSession: async () => {
-          if (!session) session = await openSession(run.sessionKey);
+          if (!session) session = await openSession(runId, run.sessionKey);
           return session;
         },
         restoreIfNeeded: async (s) => restoreIfNeeded(runId, run, steps, journal, s),
@@ -621,17 +631,43 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
 // Session capture / restore
 // ---------------------------------------------------------------------------
 
-async function openSession(sessionKey: string | null): Promise<BrowserSession> {
+async function openSession(runId: string, sessionKey: string | null): Promise<BrowserSession> {
   if (!sessionKey || !hasSessionKey()) return BrowserSession.launch();
   try {
     const sealed = await artifactStore().get(sessionKey);
-    return await BrowserSession.launch(openSealed(sealed, sessionKeyFromEnv()));
+
+    // Check the blob against the digest the journal recorded when it was
+    // captured, before decrypting it. Encryption alone proves the bytes are
+    // authentic under the worker key; every run shares that key, so it does not
+    // prove they are *this* run's bytes. The digest and the AAD below are what
+    // make that true.
+    const expected = await expectedSessionDigest(runId, sessionKey);
+    if (expected && digest(sealed) !== expected) {
+      throw new Error("captured session blob does not match its recorded digest");
+    }
+
+    const plaintext = openSealed(sealed, sessionKeyFromEnv(), sessionAad(runId, sessionKey));
+    return await BrowserSession.launch(plaintext);
   } catch {
-    // A missing or undecryptable blob is not fatal by itself — the restore
-    // planner still decides whether continuing without it is safe, and it
-    // refuses rather than replaying actions when it is not.
+    // A missing, mismatched or undecryptable blob is not fatal by itself — the
+    // restore planner still decides whether continuing without it is safe, and
+    // it refuses rather than replaying actions when it is not.
     return BrowserSession.launch();
   }
+}
+
+/** The SHA-256 the journal recorded for this run's session blob, if any. */
+async function expectedSessionDigest(runId: string, key: string): Promise<string | null> {
+  const rows = await prisma.runEvent.findMany({
+    where: { runId, type: RUN_EVENT_TYPES.sessionCaptured },
+    orderBy: { seq: "desc" },
+    select: { payload: true },
+  });
+  for (const row of rows) {
+    const p = row.payload as { key?: unknown; sha256?: unknown } | null;
+    if (p && p.key === key && typeof p.sha256 === "string") return p.sha256;
+  }
+  return null;
 }
 
 async function captureSession(
@@ -640,8 +676,10 @@ async function captureSession(
   session: BrowserSession,
 ): Promise<{ key: string; url: string; sha256: string }> {
   const { state, url } = await captureSessionState(session.context, session.page);
-  const sealed = seal(state, sessionKeyFromEnv());
   const key = sessionStateKey(runId, stepIndex);
+  // AAD binds the ciphertext to this run and this exact key, so a blob cannot
+  // be replayed into another run or another gate.
+  const sealed = seal(state, sessionKeyFromEnv(), sessionAad(runId, key));
   await artifactStore().put(key, sealed, "application/octet-stream");
   return { key, url, sha256: digest(sealed) };
 }

@@ -11,6 +11,14 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:
  *
  * AES-256-GCM. Layout: `IV (12) || TAG (16) || CIPHERTEXT`.
  *
+ * Callers pass **associated data** binding the ciphertext to where it belongs —
+ * for session blobs, the run id and artifact key. Without it, encryption alone
+ * proves only that *some* blob sealed under the worker key is authentic, not
+ * that it is the right one: every run shares that key, so a blob swapped
+ * between two runs would decrypt cleanly and resume a workflow under another
+ * customer's browser session. AAD is authenticated but not encrypted, and a
+ * mismatch fails the same way a tampered ciphertext does.
+ *
  * The key is read from `GHOST_SESSION_KEY` and is expected to be present only
  * in the **worker's** environment. The web app never holds it, so a web-side
  * vulnerability with filesystem or bucket read access still cannot decrypt a
@@ -31,7 +39,7 @@ export class MissingSessionKeyError extends Error {
   }
 }
 
-export function seal(plaintext: Buffer, key: Buffer): Buffer {
+export function seal(plaintext: Buffer, key: Buffer, aad?: string): Buffer {
   if (key.length !== KEY_BYTES) {
     throw new Error(`session key must be ${KEY_BYTES} bytes, got ${key.length}`);
   }
@@ -39,11 +47,12 @@ export function seal(plaintext: Buffer, key: Buffer): Buffer {
   // is never derived from the plaintext or a counter.
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
+  if (aad !== undefined) cipher.setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]);
 }
 
-export function open(sealed: Buffer, key: Buffer): Buffer {
+export function open(sealed: Buffer, key: Buffer, aad?: string): Buffer {
   if (key.length !== KEY_BYTES) {
     throw new Error(`session key must be ${KEY_BYTES} bytes, got ${key.length}`);
   }
@@ -56,9 +65,21 @@ export function open(sealed: Buffer, key: Buffer): Buffer {
 
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
-  // Throws on a tampered blob or a wrong key — GCM authenticates before we
-  // ever hand the bytes back.
+  if (aad !== undefined) decipher.setAAD(Buffer.from(aad, "utf8"));
+  // Throws on a tampered blob, a wrong key, or AAD that does not match what was
+  // sealed — GCM authenticates before we ever hand the bytes back.
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+/**
+ * The associated data for a run's captured browser session.
+ *
+ * Binds the ciphertext to both the run and the exact artifact key it was
+ * written to, so a blob cannot be replayed into a different run or a different
+ * gate of the same run.
+ */
+export function sessionAad(runId: string, artifactKey: string): string {
+  return `ghost:session:v1:${runId}:${artifactKey}`;
 }
 
 /** Read and validate the worker's session key. Throws if absent or malformed. */

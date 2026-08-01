@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { randomBytes } from "node:crypto";
-import { seal, open, digest, sessionKeyFromEnv, hasSessionKey } from "./secretbox.js";
+import {
+  seal,
+  open,
+  digest,
+  sessionAad,
+  sessionKeyFromEnv,
+  hasSessionKey,
+} from "./secretbox.js";
 
 const key = randomBytes(32);
 
@@ -58,6 +65,41 @@ describe("secretbox", () => {
       if (prev === undefined) delete process.env.GHOST_SESSION_KEY;
       else process.env.GHOST_SESSION_KEY = prev;
     }
+  });
+
+  // --- Associated data binds a blob to where it belongs --------------------
+
+  it("round-trips with matching associated data", () => {
+    const aad = sessionAad("run_1", "runs/run_1/session/gate-2.bin");
+    const plaintext = Buffer.from("cookies");
+    expect(open(seal(plaintext, key, aad), key, aad)).toEqual(plaintext);
+  });
+
+  it("refuses a blob sealed for a different run", () => {
+    // The attack this closes: every run shares one worker key, so without AAD a
+    // blob lifted from another run decrypts cleanly and would resume a workflow
+    // under someone else's browser session.
+    const sealed = seal(
+      Buffer.from("victim session"),
+      key,
+      sessionAad("run_victim", "runs/run_victim/session/gate-0.bin"),
+    );
+    expect(() =>
+      open(sealed, key, sessionAad("run_attacker", "runs/run_attacker/session/gate-0.bin")),
+    ).toThrow();
+  });
+
+  it("refuses a blob sealed for a different gate of the same run", () => {
+    const sealed = seal(Buffer.from("s"), key, sessionAad("run_1", "runs/run_1/session/gate-0.bin"));
+    expect(() =>
+      open(sealed, key, sessionAad("run_1", "runs/run_1/session/gate-9.bin")),
+    ).toThrow();
+  });
+
+  it("refuses an AAD-sealed blob opened without AAD, and vice versa", () => {
+    const aad = sessionAad("run_1", "k");
+    expect(() => open(seal(Buffer.from("s"), key, aad), key)).toThrow();
+    expect(() => open(seal(Buffer.from("s"), key), key, aad)).toThrow();
   });
 
   it("digests deterministically", () => {
