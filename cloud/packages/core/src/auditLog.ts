@@ -26,6 +26,20 @@ const RUN_CHAIN = "ghost:audit:run";
 export type Tx = Prisma.TransactionClient;
 
 /**
+ * Raised when an append observes a different tail from the one committed on
+ * Run. Refusing the append preserves the evidence instead of blessing a
+ * truncated journal with a new expected head.
+ */
+export class RunJournalIntegrityError extends Error {
+  constructor(runId: string, expected: string | null, actual: string | null) {
+    super(
+      `JOURNAL_TAMPERED: run ${runId} journal tail does not match its expected head (expected ${expected ?? "empty"}, actual ${actual ?? "empty"})`,
+    );
+    this.name = "RunJournalIntegrityError";
+  }
+}
+
+/**
  * The exact payload shape that gets hashed.
  *
  * Writer and verifier must agree byte-for-byte, so the payload is normalized
@@ -133,8 +147,8 @@ export async function appendAuditEvent(
  * Append one event to a run's journal.
  *
  * Per-run rather than per-org so concurrent runs never contend on a single
- * chain tail. The org chain anchors each run's head hash at run boundaries, so
- * tampering with a RunEvent still breaks a chain the customer can verify.
+ * chain tail. The expected head is also stored on Run in this transaction,
+ * because internal links alone cannot detect deletion of a valid suffix.
  */
 export async function appendRunEvent(
   runId: string,
@@ -149,6 +163,14 @@ export async function appendRunEvent(
       orderBy: { seq: "desc" },
       select: { seq: true, hash: true },
     });
+    const expected = await client.run.findUniqueOrThrow({
+      where: { id: runId },
+      select: { journalHead: true },
+    });
+    const actualHead = head?.hash ?? null;
+    if (actualHead !== expected.journalHead) {
+      throw new RunJournalIntegrityError(runId, expected.journalHead, actualHead);
+    }
 
     const stepIndex = event.stepIndex ?? null;
     const payload = runEventPayloadFromRow({
@@ -172,6 +194,8 @@ export async function appendRunEvent(
         hash,
       },
     });
+
+    await client.run.update({ where: { id: runId }, data: { journalHead: hash } });
 
     return { seq, hash };
   };

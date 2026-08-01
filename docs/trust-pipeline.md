@@ -9,14 +9,14 @@ Intent → Plan → Policy check → User approval → Execution → Audit log �
 In the cloud MVP this maps to:
 
 | Stage | Where |
-|---|---|
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Intent | User triggers a run / later: a recording |
 | Plan | Immutable `WorkflowVersion` steps |
 | Policy | `classifyStep` in `@ghost/core` (deterministic) |
 | Approval | `Approval` row + UI; run `AWAITING_APPROVAL` |
 | Execution | Worker Playwright / later connectors, under a per-workflow concurrency cap |
 | Verify | Per-step assertions + screenshots |
-| Audit | Hash-chained `AuditEvent` per org |
+| Audit     | Per-run hash-chained `RunEvent`, with its expected head stored atomically on `Run`, anchored into the org-wide `AuditEvent` chain at run boundaries |
 | Recover | Cancel between steps; incident retry/skip; undo (compensation) |
 
 ## Recover
@@ -24,15 +24,15 @@ In the cloud MVP this maps to:
 Undo is not a future feature — it ships as **compensation**, Ghost's take on the
 BPMN saga. A step may carry a `compensate` block: a description plus a short
 list of browser actions. Reversal walks the run journal backwards, so it undoes
-what the run is *recorded* to have done rather than what its definition says it
+what the run is _recorded_ to have done rather than what its definition says it
 would do.
 
 The reversal is not a privileged path. It goes through the same pipeline:
 
 | Stage | In a reversal |
-|---|---|
+| --------- | ------------------------------------------------------------------------------------------------ |
 | Plan | `planCompensation` over the verified run journal, newest first |
-| Policy | `classifyCompensation` — *stricter* than forward: every click and every fill gates |
+| Policy    | `classifyCompensation` — _stricter_ than forward: every click and every fill gates               |
 | Approval | `COMPENSATION`-phase `Approval`, so it cannot be confused with the forward gate on the same step |
 | Execution | The compensation worker, one run at a time, interruptible between reversals |
 | Verify | The compensation's own assertion, plus a screenshot under its own key |
@@ -65,6 +65,9 @@ customer's system. Full contract in `cloud/docs/CONCURRENCY.md`.
 4. Secrets never land in logs, screenshots, or model prompts.
 5. Every mutating API route / job is org-scoped via auth.
 6. Undoing an action is itself an action: classified, gated, verified, audited.
+7. A run may resume only when both its internal hash links and its independently
+   stored expected journal head verify; a missing valid suffix quarantines the
+   run rather than making a completed side effect reachable again.
 
-Desktop Organizer had the same *principles* with different mechanics; see
+Desktop Organizer had the same _principles_ with different mechanics; see
 `legacy/` only when maintaining that code.

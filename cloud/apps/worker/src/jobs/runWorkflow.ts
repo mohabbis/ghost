@@ -145,12 +145,13 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     }
 
     // ---- Journal ---------------------------------------------------------
-    const events = await prisma.runEvent.findMany({
-      where: { runId },
-      orderBy: { seq: "asc" },
+    const journalRecord = await prisma.run.findUniqueOrThrow({
+      where: { id: runId },
+      select: { journalHead: true, events: { orderBy: { seq: "asc" } } },
     });
+    const events = journalRecord.events;
 
-    if (events.length > 0) {
+    if (events.length > 0 || journalRecord.journalHead !== null) {
       // A journal you do not verify is a log, not a proof. Refuse to resume on
       // a broken chain rather than trusting it to tell us what already ran.
       const chain = verifyAuditChain(
@@ -160,14 +161,20 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
           payload: runEventPayloadFromRow(e),
         })),
       );
-      if (!chain.intact) {
-        await failRun(
-          runId,
-          run.orgId,
-          run.triggeredById,
-          run.cursor,
-          `JOURNAL_TAMPERED: run journal broken at event ${chain.firstBreakIndex}`,
-        );
+      const actualHead = events.at(-1)?.hash ?? null;
+      if (!chain.intact || actualHead !== journalRecord.journalHead) {
+        const reason = !chain.intact
+          ? `JOURNAL_TAMPERED: run journal broken at event ${chain.firstBreakIndex}`
+          : "JOURNAL_TAMPERED: run journal tail does not match its expected head";
+        // Appending here would move journalHead to the forged tail and erase
+        // the evidence. Quarantine the run and use the independent org chain.
+        await prisma.run.update({ where: { id: runId }, data: { status: "INCIDENT", error: reason } });
+        await appendAuditEvent(run.orgId, run.triggeredById, {
+          action: "run.journal_tampered",
+          entityType: "Run",
+          entityId: runId,
+          metadata: { expectedHead: journalRecord.journalHead, actualHead, reason },
+        });
         return;
       }
     }
