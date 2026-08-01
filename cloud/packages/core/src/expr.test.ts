@@ -3,17 +3,12 @@ import { interpolate, resolveStep, hasExpression, ExpressionError, EMPTY_SCOPE }
 import type { WorkflowStep } from "./schema/step.js";
 
 const scope = {
-  steps: { total: { amount: "250.00", currency: "GBP" } },
-  vars: { customer: "Ada Lovelace" },
+  steps: { total: { amount: "250.00", currency: "GBP" }, who: { customer: "Ada Lovelace" } },
 };
 
 describe("interpolate", () => {
   it("resolves a step output reference", () => {
     expect(interpolate("{{ steps.total.amount }}", scope)).toBe("250.00");
-  });
-
-  it("resolves a run variable", () => {
-    expect(interpolate("Hello {{ vars.customer }}", scope)).toBe("Hello Ada Lovelace");
   });
 
   it("resolves several references in one string", () => {
@@ -30,7 +25,6 @@ describe("interpolate", () => {
   it("throws on an unresolved reference rather than substituting empty", () => {
     // Quietly turning an unresolved amount into "" is exactly the class of bug
     // this product exists to prevent.
-    expect(() => interpolate("{{ vars.missing }}", scope)).toThrow(ExpressionError);
     expect(() => interpolate("{{ steps.total.vat }}", scope)).toThrow(/no value named "vat"/);
     expect(() => interpolate("{{ steps.nope.amount }}", scope)).toThrow(/step "nope"/);
   });
@@ -40,21 +34,27 @@ describe("interpolate", () => {
   it("does not evaluate code", () => {
     expect(() => interpolate("{{ 1 + 1 }}", scope)).toThrow(ExpressionError);
     expect(() => interpolate("{{ process.env.SECRET }}", scope)).toThrow(ExpressionError);
-    expect(() => interpolate("{{ vars.customer.toUpperCase() }}", scope)).toThrow(ExpressionError);
+    expect(() => interpolate("{{ steps.who.customer.toUpperCase() }}", scope)).toThrow(ExpressionError);
     expect(() => interpolate("{{ steps.total.amount; drop() }}", scope)).toThrow(ExpressionError);
   });
 
   it("rejects property walks beyond the two accepted shapes", () => {
     expect(() => interpolate("{{ steps.total }}", scope)).toThrow(ExpressionError);
     expect(() => interpolate("{{ steps.total.amount.length }}", scope)).toThrow(ExpressionError);
-    expect(() => interpolate("{{ vars }}", scope)).toThrow(ExpressionError);
+    expect(() => interpolate("{{ steps }}", scope)).toThrow(ExpressionError);
   });
 
   it("does not re-interpolate a resolved value", () => {
     // A captured value that happens to contain braces must be inserted as
     // data, never re-parsed as an expression.
-    const hostile = { steps: {}, vars: { evil: "{{ vars.customer }}" } };
-    expect(interpolate("{{ vars.evil }}", hostile)).toBe("{{ vars.customer }}");
+    const hostile = { steps: { s: { evil: "{{ steps.total.amount }}" } } };
+    expect(interpolate("{{ steps.s.evil }}", hostile)).toBe("{{ steps.total.amount }}");
+  });
+
+  it("rejects the vars form, which no longer exists", () => {
+    // Removed rather than left failing: nothing populates run inputs yet, so
+    // every use of it was a guaranteed error against a documented syntax.
+    expect(() => interpolate("{{ vars.customer }}", scope)).toThrow(/only \{\{ steps/);
   });
 });
 
@@ -75,7 +75,7 @@ describe("resolveStep", () => {
     const step: WorkflowStep = {
       id: "go",
       type: "navigate",
-      url: "https://example.com/{{ vars.customer }}",
+      url: "https://example.com/{{ steps.who.customer }}",
     };
     const resolved = resolveStep(step, scope);
     expect(resolved.type === "navigate" && resolved.url).toContain("Ada Lovelace");
@@ -88,10 +88,10 @@ describe("resolveStep", () => {
     const step: WorkflowStep = {
       id: "c",
       type: "click",
-      selector: { role: "button", name: "{{ vars.customer }}" },
+      selector: { role: "button", name: "{{ steps.who.customer }}" },
     };
     const resolved = resolveStep(step, scope);
-    expect(resolved.type === "click" && resolved.selector.name).toBe("{{ vars.customer }}");
+    expect(resolved.type === "click" && resolved.selector.name).toBe("{{ steps.who.customer }}");
   });
 
   it("passes through steps with nothing to resolve", () => {

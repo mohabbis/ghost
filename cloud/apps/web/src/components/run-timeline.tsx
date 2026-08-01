@@ -27,6 +27,8 @@ interface RunView {
   error: string | null;
   workflowName: string;
   cursor: number;
+  restoreScreenshotUrl: string | null;
+  restoreOutcome: string | null;
   steps: StepView[];
   approvals: ApprovalView[];
 }
@@ -186,6 +188,21 @@ export function RunTimeline({ runId }: { runId: string }) {
                 repeated. Check the target system before retrying — Ghost will not guess whether it
                 took effect.
               </p>
+            )}
+            {run.restoreScreenshotUrl && (
+              <div className="space-y-1">
+                <p className="text-xs text-[var(--color-muted)]">
+                  {run.restoreOutcome === "session.restore_failed"
+                    ? "The page as Ghost found it when it could not rebuild the session:"
+                    : "The page after Ghost rebuilt the session:"}
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={run.restoreScreenshotUrl}
+                  alt="page state after restore"
+                  className="max-h-64 rounded border border-[var(--color-border)]"
+                />
+              </div>
             )}
             <div className="flex gap-2">
               <Button

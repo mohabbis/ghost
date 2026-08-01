@@ -31,7 +31,13 @@ export type NextAction =
    * is the engine's decision to make.
    */
   | { kind: "indeterminate"; index: number; step: WorkflowStep; reason: string }
-  | { kind: "failed"; index: number; reason: string }
+  /**
+   * `recoverable` separates a step that failed at runtime — which a human can
+   * retry or skip through the incident flow — from a decision or an authoring
+   * error that retrying cannot change. A rejected approval and an unresolvable
+   * expression are terminal; a step that errored is not.
+   */
+  | { kind: "failed"; index: number; reason: string; recoverable: boolean }
   | { kind: "done" };
 
 export interface ApprovalState {
@@ -43,7 +49,7 @@ export interface ApprovalState {
  * Resolves a step's `{{ }}` references against values captured earlier in the
  * run. Applied to the candidate step *before* it is classified, so the gate
  * decision and the approval preview describe the action that will actually
- * run — approving `Pay {{ vars.amount }}` and resolving it afterwards would
+ * run — approving `Pay {{ steps.total.amount }}` and resolving it afterwards would
  * make the gate theater. Must be pure; throwing means an unresolvable
  * reference, which is an authoring error and fails the run.
  */
@@ -67,21 +73,36 @@ export function planNextAction(
     if (journal.completed.has(index)) continue;
 
     if (journal.failed.has(index)) {
-      return { kind: "failed", index, reason: `step ${index} previously failed` };
+      // Recoverable: the incident flow (retry / skip) exists for exactly this.
+      return {
+        kind: "failed",
+        index,
+        reason: `step ${index} previously failed`,
+        recoverable: true,
+      };
     }
 
     if (approvals.rejected.has(index)) {
-      return { kind: "failed", index, reason: `approval rejected at step ${index}` };
+      // A human decided. Retrying is not the engine's to offer.
+      return {
+        kind: "failed",
+        index,
+        reason: `approval rejected at step ${index}`,
+        recoverable: false,
+      };
     }
 
     let step: WorkflowStep;
     try {
       step = resolve(raw, index);
     } catch (err) {
+      // An unresolvable reference is an authoring error: the workflow
+      // definition is wrong, and running it again produces the same error.
       return {
         kind: "failed",
         index,
         reason: `step ${index}: ${err instanceof Error ? err.message : String(err)}`,
+        recoverable: false,
       };
     }
 

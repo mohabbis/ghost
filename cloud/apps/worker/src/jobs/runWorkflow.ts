@@ -70,7 +70,15 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     include: { workflowVersion: true, approvals: true, steps: true },
   });
   if (!run) throw new Error(`run ${runId} not found`);
-  if (TERMINAL.has(run.status) || run.status === "INCIDENT") return;
+  if (TERMINAL.has(run.status) || run.status === "INCIDENT") {
+    // A run can reach a terminal state without the engine ever seeing it again:
+    // a rejected approval and a cancel of a QUEUED run are both decided in the
+    // web app. Captured browser credentials must not outlive them, so this
+    // guard is also the cleanup path — web routes enqueue a job purely to
+    // trigger it.
+    if (run.sessionKey) await purgeSession(runId);
+    return;
+  }
 
   // ---- Lease ------------------------------------------------------------
   // One worker owns a run at a time. A second job for the same run is a no-op
@@ -187,7 +195,7 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     }
 
     // Values captured by earlier `extract` steps, referenced by later steps.
-    const scope: ExpressionScope = { steps: { ...journal.outputs }, vars: {} };
+    const scope: ExpressionScope = { steps: { ...journal.outputs } };
     const mutableOutputs = scope.steps as Record<string, Record<string, string>>;
 
     for (;;) {
@@ -206,18 +214,34 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
       );
 
       if (action.kind === "done") {
-        await prisma.run.update({
-          where: { id: runId },
-          data: { status: "SUCCEEDED", endedAt: new Date(), cursor: steps.length },
+        // Status and terminal journal event commit together. Marking the run
+        // SUCCEEDED first meant a crash before the append left a finished run
+        // with no terminal event and no anchor — and re-entry returns early at
+        // the terminal guard, so it could never be repaired.
+        await prisma.$transaction(async (tx) => {
+          await tx.run.update({
+            where: { id: runId },
+            data: { status: "SUCCEEDED", endedAt: new Date(), cursor: steps.length },
+          });
+          await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runSucceeded }, tx);
         });
-        await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runSucceeded });
         await anchorRunChain(runId, run.orgId, run.triggeredById, "run.succeeded");
         await purgeSession(runId);
         return;
       }
 
       if (action.kind === "failed") {
-        await failRun(runId, run.orgId, run.triggeredById, action.index, action.reason);
+        // A step the journal records as failed is recoverable: the incident
+        // flow (retry / skip) exists precisely for it, and resuming into a
+        // terminal FAILED would lose that flow whenever the worker died between
+        // committing `step.failed` and raising the incident. A rejected
+        // approval or a broken expression is not recoverable — retrying cannot
+        // change either — so those stay terminal.
+        if (action.recoverable) {
+          await raiseIncident(runId, run.orgId, run.triggeredById, action.index, action.reason);
+        } else {
+          await failRun(runId, run.orgId, run.triggeredById, action.index, action.reason);
+        }
         return;
       }
 
@@ -384,10 +408,18 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
   const timeoutMs = effectiveTimeout(step);
   const retry = effectiveRetry(step);
 
-  let attempt = 0;
+  // Attempts already spent on this step in earlier entries of the job. Without
+  // this the budget resets on every worker restart, so a `maxAttempts: 5` step
+  // could run far more than five times across redeliveries.
+  let attempt = args.journal.attempts.get(index) ?? 0;
+  // The budget is the TOTAL across resumes, not a fresh allowance per entry —
+  // adding to the prior count would reproduce the very leak this fixes. A
+  // human-requested incident retry resets the count in the journal fold, which
+  // is the one case where a fresh budget is intended.
+  const budget = retry.maxAttempts;
   let lastError = "";
 
-  while (attempt < retry.maxAttempts) {
+  while (attempt < budget) {
     attempt += 1;
 
     const delay = backoffFor(retry, attempt);
@@ -541,7 +573,7 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
         return { kind: "halt" };
       }
 
-      const canRetry = errorClass === "retryable" && attempt < retry.maxAttempts;
+      const canRetry = errorClass === "retryable" && attempt < budget;
       if (canRetry) {
         await appendRunEvent(runId, {
           type: RUN_EVENT_TYPES.stepRetried,
@@ -606,7 +638,7 @@ async function captureSession(
 
 /** A session blob's useful life is one approval wait; keeping it is liability. */
 async function purgeSession(runId: string): Promise<void> {
-  await artifactStore().delete(sessionPrefix(runId)).catch(() => undefined);
+  await artifactStore().deletePrefix(sessionPrefix(runId)).catch(() => undefined);
   await prisma.run
     .update({ where: { id: runId }, data: { sessionKey: null, sessionUrl: null } })
     .catch(() => undefined);
@@ -623,9 +655,11 @@ async function restoreIfNeeded(
   session: BrowserSession,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (restoreDone.has(session)) return { ok: true };
-  restoreDone.add(session);
 
-  if (journal.completed.size === 0) return { ok: true };
+  if (journal.completed.size === 0) {
+    restoreDone.add(session);
+    return { ok: true };
+  }
 
   const rows = await prisma.runEvent.findMany({
     where: { runId, type: RUN_EVENT_TYPES.stepSucceeded },
@@ -653,7 +687,10 @@ async function restoreIfNeeded(
 
   const plan = planRestore(steps, executed, run.sessionUrl);
 
-  if (plan.kind === "cold") return { ok: true };
+  if (plan.kind === "cold") {
+    restoreDone.add(session);
+    return { ok: true };
+  }
 
   if (plan.kind === "unsafe") {
     await appendRunEvent(runId, {
@@ -680,6 +717,10 @@ async function restoreIfNeeded(
     type: RUN_EVENT_TYPES.sessionRestored,
     payload: { url: plan.url, reapplied: plan.reapply },
   });
+  // Marked only now. Setting this up front meant a restore that threw partway
+  // was skipped on the retry, and the step then ran against a half-rebuilt
+  // page — resolving its selector against whatever happened to be there.
+  restoreDone.add(session);
   return { ok: true };
 }
 
@@ -715,6 +756,10 @@ async function failRun(
     payload: { error },
   });
   await anchorRunChain(runId, orgId, actorId, "run.failed", { error, stepIndex: index });
+  // A failed run is not resuming, so its captured credentials have no further
+  // use. A session blob's useful life is one approval wait; keeping it is
+  // liability, whichever way the run ended.
+  await purgeSession(runId);
 }
 
 /**

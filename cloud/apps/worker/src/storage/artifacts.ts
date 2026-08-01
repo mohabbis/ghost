@@ -1,6 +1,13 @@
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from "@aws-sdk/client-s3";
 
 /**
  * Storage for run artifacts. Returns a stable key stored on the run row; the
@@ -22,6 +29,16 @@ export interface ArtifactStore {
   put(key: string, body: Buffer, contentType: string): Promise<string>;
   get(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
+  /**
+   * Delete every object under a prefix.
+   *
+   * Separate from `delete` because object stores have no directories: on S3,
+   * deleting the key `runs/<id>/session` removes an object with exactly that
+   * name and leaves `runs/<id>/session/gate-2.bin` untouched. Purging session
+   * credentials with `delete` therefore did nothing at all on S3, which is the
+   * deployment where it matters most.
+   */
+  deletePrefix(prefix: string): Promise<void>;
 }
 
 class DiskArtifactStore implements ArtifactStore {
@@ -50,6 +67,11 @@ class DiskArtifactStore implements ArtifactStore {
 
   async delete(key: string): Promise<void> {
     await rm(this.full(key), { force: true, recursive: true });
+  }
+
+  /** On disk a prefix is a real directory, so a recursive remove is enough. */
+  async deletePrefix(prefix: string): Promise<void> {
+    await rm(this.full(prefix), { force: true, recursive: true });
   }
 }
 
@@ -83,6 +105,33 @@ class S3ArtifactStore implements ArtifactStore {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    // List then delete: S3 has no prefix delete, and the keys under a run's
+    // session prefix are the encrypted browser credentials we most need gone.
+    let token: string | undefined;
+    do {
+      const listed = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix.endsWith("/") ? prefix : `${prefix}/`,
+          ContinuationToken: token,
+        }),
+      );
+      const keys = (listed.Contents ?? [])
+        .map((o) => o.Key)
+        .filter((k): k is string => Boolean(k));
+      if (keys.length > 0) {
+        await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })) },
+          }),
+        );
+      }
+      token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+    } while (token);
   }
 }
 

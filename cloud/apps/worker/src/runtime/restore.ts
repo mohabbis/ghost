@@ -39,6 +39,36 @@ export type RestorePlan =
   /** State cannot be provably rebuilt. Stop and ask a human. */
   | { kind: "unsafe"; reason: string; blockingIndex: number | null };
 
+/**
+ * Did this step change anything beyond the browser's own view?
+ *
+ * Distinct from `isAtMostOnce`, which asks "must a human approve this?". An
+ * `approval` step answers yes to that (it *is* a gate) while doing nothing at
+ * all to the page. Restoration cares about the second question, not the first.
+ */
+function touchesOutsideWorld(step: WorkflowStep): boolean {
+  switch (step.type) {
+    case "click":
+    case "fill":
+    case "select":
+    case "apiCall":
+    case "sendEmail":
+      return true;
+    case "navigate":
+    case "waitFor":
+    case "extract":
+    case "verify":
+    case "approval":
+      return false;
+    default: {
+      // Fail closed: an unclassified step type is assumed to have acted.
+      const _never: never = step;
+      void _never;
+      return true;
+    }
+  }
+}
+
 export function planRestore(
   steps: readonly WorkflowStep[],
   executed: readonly ExecutedRecord[],
@@ -62,6 +92,12 @@ export function planRestore(
   for (const record of executed) {
     const step = steps[record.index];
     if (!step || !isAtMostOnce(step)) continue;
+    // ...but only if it actually did something. An `approval` step is
+    // at-most-once by classification (it is a gate, so it is "sensitive") yet
+    // it never touches the page, and the engine records it with `url: null`.
+    // Treating that null as "a different page" made every workflow with an
+    // explicit approval gate followed by a browser step refuse to resume.
+    if (!touchesOutsideWorld(step)) continue;
     if (record.url !== lastUrl) {
       return {
         kind: "unsafe",

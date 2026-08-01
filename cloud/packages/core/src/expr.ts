@@ -8,10 +8,13 @@ import type { WorkflowStep } from "./schema/step.js";
  * approved plan containing arbitrary code is not a plan — it is a program that
  * can compute a different action at runtime than the one the human reviewed.
  *
- * So this resolves exactly two forms and nothing else:
+ * So this resolves exactly one form and nothing else:
  *
  *   {{ steps.<stepId>.<name> }}   a value captured by an earlier `extract`
- *   {{ vars.<name> }}             a run-scoped input
+ *
+ * A `{{ vars.<name> }}` form is deliberately absent until runs can actually
+ * carry inputs. Advertising a syntax that fails every time it is used is worse
+ * than not having it; run inputs arrive with the typed step editor.
  *
  * No `eval`, no arithmetic, no method calls, no property walks. `{{ 1 + 1 }}`
  * is not an expression, it is an error. An unresolved reference is a hard
@@ -38,20 +41,17 @@ export class ExpressionError extends Error {
 export interface ExpressionScope {
   /** Outputs by step id: `steps[stepId][name]`. */
   steps: Readonly<Record<string, Readonly<Record<string, string>>>>;
-  /** Run-scoped inputs. */
-  vars: Readonly<Record<string, string>>;
 }
 
-export const EMPTY_SCOPE: ExpressionScope = { steps: {}, vars: {} };
+export const EMPTY_SCOPE: ExpressionScope = { steps: {} };
 
 /**
  * One `{{ ... }}` placeholder. The inner grammar is fully anchored — anything
- * that is not one of the two accepted shapes fails to match and is reported as
+ * that is not the accepted shape fails to match and is reported as
  * an unsupported expression rather than being evaluated.
  */
 const PLACEHOLDER = /\{\{([^}]*)\}\}/g;
 const STEP_REF = /^steps\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/;
-const VAR_REF = /^vars\.([A-Za-z0-9_-]+)$/;
 
 /** True when the string contains at least one placeholder. */
 export function hasExpression(input: string): boolean {
@@ -77,18 +77,8 @@ export function interpolate(input: string, scope: ExpressionScope): string {
       return value;
     }
 
-    const varMatch = VAR_REF.exec(ref);
-    if (varMatch) {
-      const [, name] = varMatch as unknown as [string, string];
-      const value = scope.vars[name];
-      if (value === undefined) {
-        throw new ExpressionError(`no run variable named "${name}"`, ref);
-      }
-      return value;
-    }
-
     throw new ExpressionError(
-      `unsupported expression "${ref}" — only {{ steps.<id>.<name> }} and {{ vars.<name> }} are allowed`,
+      `unsupported expression "${ref}" — only {{ steps.<id>.<name> }} is allowed`,
       ref,
     );
   });

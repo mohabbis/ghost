@@ -26,8 +26,23 @@ export const RUN_EVENT_TYPES = {
   stepFailed: "step.failed",
   /** A human resolved an incident by skipping this step. */
   stepSkipped: "step.skipped",
-  /** One attempt failed and another follows. Makes retry counts auditable. */
+  /**
+   * One attempt failed and another follows, within a single execution of the
+   * step. Makes retry counts auditable.
+   *
+   * Deliberately does NOT change what the journal fold believes about the
+   * step's state. A verification retry is appended *after* the action has
+   * already run, so treating it as "no longer in flight" would let a crash
+   * mid-retry make an already-executed sensitive step look un-executed — and
+   * re-run it.
+   */
   stepRetried: "step.retried",
+  /**
+   * A human resolved an incident by asking for the step to run again. This is
+   * the only event that clears a recorded failure, and it is separate from
+   * `step.retried` precisely so the two can never be confused.
+   */
+  stepRetryRequested: "step.retry_requested",
   /**
    * An at-most-once step started and never recorded a terminal outcome. The
    * engine cannot tell whether the effect landed; a human must decide.

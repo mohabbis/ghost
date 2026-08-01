@@ -20,6 +20,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // Evidence captured when the engine rebuilt the page after a halt. It is
+  // written for the human reviewing an incident, so it has to be reachable
+  // from the product — writing it and never surfacing it would defeat the
+  // purpose of capturing it.
+  const restoreEvent = await prisma.runEvent.findFirst({
+    where: {
+      runId: id,
+      type: { in: ["session.restored", "session.restore_failed"] },
+    },
+    orderBy: { seq: "desc" },
+    select: { type: true },
+  });
+  const restoreScreenshotUrl = restoreEvent
+    ? `/api/artifacts/runs/${id}/restore-${run.cursor}.png`
+    : null;
+
   return NextResponse.json({
     id: run.id,
     status: run.status,
@@ -29,6 +45,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     endedAt: run.endedAt,
     // The step the run is stopped on, so an incident can offer retry/skip.
     cursor: run.cursor,
+    restoreScreenshotUrl,
+    restoreOutcome: restoreEvent?.type ?? null,
     steps: run.steps.map((s) => ({
       index: s.index,
       type: s.type,

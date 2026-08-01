@@ -128,15 +128,17 @@ executions ignore pinned data.
 Ghost's first engineering rule is *AI may propose; deterministic code executes only
 approved plans*. An approved plan containing arbitrary JavaScript is not a plan — it is
 a program that can compute a different action at runtime than the one the human
-reviewed. Ghost's resolver handles `{{ steps.<id>.<name> }}` and `{{ vars.<name> }}`
-and nothing else. No `eval`, no arithmetic, no method calls. An unresolvable reference
-is a hard error, never a silent empty string.
+reviewed. Ghost's resolver handles `{{ steps.<id>.<name> }}` and nothing else. No
+`eval`, no arithmetic, no method calls. An unresolvable reference is a hard error,
+never a silent empty string. A `{{ vars.<name> }}` form is deliberately absent until
+runs can carry inputs — a documented syntax that fails every single time it is used is
+worse than no syntax at all. Run inputs arrive with the typed step editor.
 
 Two rules travel with the feature, and both matter more than the feature:
 
 1. **Interpolation happens before classification and before the approval preview.** The
-   human approves the *resolved* action. Approving "Pay `{{ vars.amount }}`" and letting
-   the engine resolve it afterwards would make the gate theater.
+   human approves the *resolved* action. Approving "Pay `{{ steps.total.amount }}`" and
+   letting the engine resolve it afterwards would make the gate theater.
 2. **A resolved value re-triggers classification.** A value flowing into a
    sensitive-looking field gates, regardless of where it came from.
 

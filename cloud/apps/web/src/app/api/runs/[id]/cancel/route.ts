@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { appendAuditEvent, appendRunEvent } from "@ghost/core/audit-log";
+import { enqueueRunWorkflow } from "@/lib/queue";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 
 /**
@@ -57,6 +58,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     entityType: "Run",
     entityId: id,
   });
+
+  // A canceled run may never re-enter the engine (it could still be QUEUED),
+  // so nothing would otherwise delete the browser credentials captured at its
+  // last gate. This job hits the worker's terminal guard, which purges them.
+  await enqueueRunWorkflow({
+    runId: id,
+    orgId,
+    resumeToken: `cleanup-${Date.now()}`,
+  }).catch(() => undefined);
 
   return NextResponse.json({ ok: true });
 }

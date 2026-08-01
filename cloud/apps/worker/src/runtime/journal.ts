@@ -63,12 +63,34 @@ export function journalFromEvents(rows: readonly JournalEventRow[]): RunJournal 
     }
 
     if (row.type === RUN_EVENT_TYPES.stepRetried && i !== null) {
-      // A retry supersedes the recorded failure. Append-only: the original
-      // `step.failed` stays in the chain as history, but the fold stops
-      // treating the step as terminally failed so it can run again. This is how
-      // a human resolving an incident un-sticks a run without rewriting it.
+      // An in-execution retry (a transient action error, or a re-run of a
+      // failed assertion). It records that an attempt happened and changes
+      // nothing else.
+      //
+      // Critically, it must NOT clear `inFlight`. A verification retry is
+      // appended *after* the action has already run: for a sensitive step, the
+      // click has reached the server. If this cleared the in-flight marker, a
+      // crash during the assertion retry would leave the step looking neither
+      // completed nor in flight, the approval would still be on record, and the
+      // state machine would return `execute` — submitting the order twice.
+      continue;
+    }
+
+    if (row.type === RUN_EVENT_TYPES.stepRetryRequested && i !== null) {
+      // A human resolved an incident and asked for the step to run again. This
+      // supersedes the recorded failure. Append-only: the original `step.failed`
+      // stays in the chain as history, but the fold stops treating the step as
+      // terminally failed so it can be attempted once more.
+      //
+      // Clearing `inFlight` here is safe because a person has looked at the
+      // step and decided — which is exactly the judgement the engine refuses to
+      // make on its own for an at-most-once action.
       failed.delete(i);
       inFlight.delete(i);
+      // A person asking for another attempt grants a fresh retry budget;
+      // otherwise a step that had already exhausted its attempts could never be
+      // retried from an incident.
+      attempts.delete(i);
       continue;
     }
 

@@ -43,6 +43,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const step = steps[index];
   if (!step) return NextResponse.json({ error: "incident step not found" }, { status: 409 });
 
+  // Monotonic discriminator for the resume job id. Both an approval resume and
+  // this incident retry resume from the same step index, and BullMQ would drop
+  // the second as a duplicate — leaving the run QUEUED with nothing to pick it
+  // up. The journal sequence is already monotonic per run, so it distinguishes
+  // them without inventing a second counter.
+  let resumeSeq = 0;
+
   if (body.action === "skip") {
     if (classifyStep(step).sensitive) {
       return NextResponse.json(
@@ -72,7 +79,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         where: { id },
         data: { status: "QUEUED", error: null, cursor: index + 1 },
       });
-      await appendRunEvent(
+      const { seq } = await appendRunEvent(
         id,
         {
           type: RUN_EVENT_TYPES.stepSkipped,
@@ -81,6 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
         tx,
       );
+      resumeSeq = seq;
     });
   } else {
     // Retry: clear the recorded failure so the journal fold stops reporting it.
@@ -92,15 +100,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         data: { status: "PENDING", error: null },
       });
       await tx.run.update({ where: { id }, data: { status: "QUEUED", error: null } });
-      await appendRunEvent(
+      const { seq } = await appendRunEvent(
         id,
         {
-          type: RUN_EVENT_TYPES.stepRetried,
+          type: RUN_EVENT_TYPES.stepRetryRequested,
           stepIndex: index,
           payload: { phase: "incident", retriedById: userId },
         },
         tx,
       );
+      resumeSeq = seq;
     });
   }
 
@@ -111,6 +120,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     metadata: { stepIndex: index },
   });
 
-  await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
+  await enqueueRunWorkflow({
+    runId: id,
+    orgId,
+    fromStepIndex: index,
+    resumeToken: `incident-${resumeSeq}`,
+  });
   return NextResponse.json({ ok: true });
 }

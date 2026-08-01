@@ -80,6 +80,26 @@ describe("planRestore", () => {
     }
   });
 
+  it("does not let an approval no-op block restoration", () => {
+    // An `approval` step is at-most-once by classification (it *is* a gate) but
+    // never touches the page, so the engine records it with `url: null`.
+    // Treating that null as "a different page" made every workflow with an
+    // explicit approval gate followed by a browser step refuse to resume.
+    const withGate: WorkflowStep[] = [
+      { id: "nav", type: "navigate", url: PAGE1 },
+      { id: "ok", type: "approval", reason: "check the totals" },
+      { id: "name", type: "fill", selector: { name: "Full name" }, value: "Ada", sensitive: false },
+      { id: "pay", type: "click", selector: { role: "button", name: "Pay now" } },
+    ];
+    const plan = planRestore(
+      withGate,
+      [rec(0, PAGE1), rec(1, null), rec(2, PAGE1)],
+      PAGE1,
+    );
+    expect(plan.kind).toBe("restore");
+    if (plan.kind === "restore") expect(plan.reapply).toEqual([2]);
+  });
+
   it("allows the common single-gate case to resume", () => {
     // A benign click before the gate must not trip the refusal, or the demo
     // workflow and every single-gate workflow would stop working.

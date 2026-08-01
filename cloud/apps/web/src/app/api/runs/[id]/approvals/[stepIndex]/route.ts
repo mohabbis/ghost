@@ -97,5 +97,14 @@ export async function POST(
     await enqueueRunWorkflow({ runId: id, orgId, fromStepIndex: index });
     return NextResponse.json({ ok: true, resumed: true });
   }
+
+  // Rejected: the run is terminal and will not resume, so the browser
+  // credentials captured at the gate must go. The worker's terminal guard does
+  // the deletion — the web app has no artifact store of its own.
+  await enqueueRunWorkflow({
+    runId: id,
+    orgId,
+    resumeToken: `cleanup-${Date.now()}`,
+  }).catch(() => undefined);
   return NextResponse.json({ ok: true, resumed: false });
 }

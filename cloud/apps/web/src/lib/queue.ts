@@ -42,7 +42,7 @@ export function enqueueNoop(data: NoopJob) {
 
 export function enqueueRunWorkflow(data: RunWorkflowJob) {
   return getQueue(QUEUE_NAMES.runWorkflow).add(QUEUE_NAMES.runWorkflow, data, {
-    jobId: runWorkflowJobId(data.runId, data.fromStepIndex),
+    jobId: runWorkflowJobId(data.runId, data.fromStepIndex, data.resumeToken),
     // Queue-level retries are only safe because re-entry is idempotent: the run
     // lease blocks a concurrent worker and the journal blocks re-running a
     // completed step. `runWorkflowJob` records business failures rather than

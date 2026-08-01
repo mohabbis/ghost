@@ -49,9 +49,17 @@ const base = {
   /** Human-readable label shown in the editor and run timeline. */
   label: z.string().optional(),
   /**
-   * Wall-clock budget for this step. Falls back to GHOST_STEP_TIMEOUT_MS
-   * (default 30s). Optional so workflow definitions written before this field
-   * existed still parse unchanged.
+   * Timeout for this step's browser **action** — the click, fill, navigation
+   * or wait itself. Falls back to GHOST_STEP_TIMEOUT_MS (default 30s).
+   *
+   * Deliberately *not* a wall-clock budget for the whole step: retry backoff,
+   * verification and its retries, the screenshot, and the artifact upload all
+   * run outside it, and a `waitFor` with an explicit `ms` sleeps for that long
+   * regardless. A step with `timeoutMs: 1000` can therefore still occupy a
+   * worker for considerably longer. Named for what it actually bounds rather
+   * than what would be nicer to promise.
+   *
+   * Optional, so definitions written before this field existed still parse.
    */
   timeoutMs: z.number().int().positive().max(600_000).optional(),
   retry: retryPolicySchema.optional(),

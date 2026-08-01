@@ -91,7 +91,8 @@ describe("planNextAction", () => {
       journal({ completed: new Set([0, 1]) }),
       approvals({ rejected: new Set([2]) }),
     );
-    expect(action).toMatchObject({ kind: "failed", index: 2 });
+    // A human decided; the incident flow must not offer to retry past it.
+    expect(action).toMatchObject({ kind: "failed", index: 2, recoverable: false });
   });
 
   it("fails at a step the journal records as previously failed", () => {
@@ -100,7 +101,8 @@ describe("planNextAction", () => {
       journal({ completed: new Set([0]), failed: new Set([1]) }),
       NO_APPROVALS,
     );
-    expect(action).toMatchObject({ kind: "failed", index: 1 });
+    // Recoverable: a human can retry or skip it through the incident flow.
+    expect(action).toMatchObject({ kind: "failed", index: 1, recoverable: true });
   });
 
   // --- Durable execution: the regression that motivated the journal ---------
@@ -147,7 +149,7 @@ describe("planNextAction", () => {
 
   it("classifies the resolved step, so a human approves what will actually run", () => {
     const templated: WorkflowStep[] = [
-      { id: "amt", type: "fill", selector: { name: "Amount" }, value: "{{ vars.amount }}", sensitive: false },
+      { id: "amt", type: "fill", selector: { name: "Amount" }, value: "{{ steps.total.amount }}", sensitive: false },
     ];
     const action = planNextAction(templated, journal(), NO_APPROVALS, (step) =>
       step.type === "fill" ? { ...step, value: "250.00" } : step,
@@ -160,12 +162,16 @@ describe("planNextAction", () => {
 
   it("fails the run when a reference cannot be resolved", () => {
     const templated: WorkflowStep[] = [
-      { id: "amt", type: "fill", selector: { name: "Amount" }, value: "{{ vars.missing }}", sensitive: false },
+      { id: "amt", type: "fill", selector: { name: "Amount" }, value: "{{ steps.nope.missing }}", sensitive: false },
     ];
     const action = planNextAction(templated, journal(), NO_APPROVALS, () => {
-      throw new Error("no run variable named \"missing\"");
+      throw new Error('no value named "missing" was captured by step "nope"');
     });
     expect(action.kind).toBe("failed");
-    if (action.kind === "failed") expect(action.reason).toMatch(/missing/);
+    if (action.kind === "failed") {
+      expect(action.reason).toMatch(/missing/);
+      // An authoring error: retrying cannot change the outcome.
+      expect(action.recoverable).toBe(false);
+    }
   });
 });

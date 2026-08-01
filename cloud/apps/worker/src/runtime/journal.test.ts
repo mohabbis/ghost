@@ -73,6 +73,38 @@ describe("journalFromEvents", () => {
     expect(j.attempts.get(0)).toBe(2);
   });
 
+  // --- The regression that a verification retry must not cause --------------
+
+  it("keeps a step in flight across an in-execution retry", () => {
+    // THE bug this guards. A sensitive step's action runs, its verification
+    // fails, and the engine appends `step.retried` to re-run the assertion. If
+    // that cleared the in-flight marker, a crash mid-retry would leave the step
+    // looking neither completed nor in flight — and since the approval is still
+    // on record, the state machine would return `execute` and click Submit a
+    // second time.
+    const j = journalFromEvents([
+      ev(1, RUN_EVENT_TYPES.stepStarted, 2),
+      ev(2, RUN_EVENT_TYPES.stepRetried, 2, { phase: "verify", attempt: 2 }),
+    ]);
+    expect([...j.inFlight]).toEqual([2]);
+    expect(j.completed.size).toBe(0);
+  });
+
+  it("clears state only for a human-requested retry", () => {
+    // A person looked at the incident and decided — the one case where the
+    // engine is entitled to consider the step no longer in flight.
+    const j = journalFromEvents([
+      ev(1, RUN_EVENT_TYPES.stepStarted, 2),
+      ev(2, RUN_EVENT_TYPES.stepFailed, 2),
+      ev(3, RUN_EVENT_TYPES.stepRetryRequested, 2, { phase: "incident" }),
+    ]);
+    expect(j.failed.size).toBe(0);
+    expect(j.inFlight.size).toBe(0);
+    // ...and it grants a fresh retry budget, or an exhausted step could never
+    // be retried from an incident.
+    expect(j.attempts.get(2)).toBeUndefined();
+  });
+
   it("collects extract outputs keyed by step id", () => {
     const j = journalFromEvents([
       ev(1, RUN_EVENT_TYPES.stepSucceeded, 0, {

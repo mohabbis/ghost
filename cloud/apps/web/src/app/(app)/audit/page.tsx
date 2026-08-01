@@ -18,14 +18,29 @@ export default async function AuditPage() {
   const session = await auth();
   const orgId = session?.user.orgId;
 
-  const events = orgId
-    ? await prisma.auditEvent.findMany({ where: { orgId }, orderBy: { seq: "desc" }, take: 200 })
-    : [];
+  // Verification must walk the chain from its real first event. Verifying a
+  // truncated window would report every healthy chain past the page size as
+  // "broken at #0", because the oldest row in that window has a non-null
+  // `prevHash` while the walk expects the first link's predecessor to be null —
+  // a false alarm in the one feature whose entire job is trustworthy
+  // verification.
+  const [events, allForChain] = orgId
+    ? await Promise.all([
+        prisma.auditEvent.findMany({ where: { orgId }, orderBy: { seq: "desc" }, take: 200 }),
+        prisma.auditEvent.findMany({
+          where: { orgId },
+          orderBy: { seq: "asc" },
+          select: { action: true, entityType: true, entityId: true, metadata: true, prevHash: true, hash: true },
+        }),
+      ])
+    : [[], []];
 
-  // Verification walks the chain forward; the list is shown newest-first.
-  const ordered = [...events].reverse();
   const chain = verifyAuditChain(
-    ordered.map((e) => ({ prevHash: e.prevHash, hash: e.hash, payload: auditPayloadFromRow(e) })),
+    allForChain.map((e) => ({
+      prevHash: e.prevHash,
+      hash: e.hash,
+      payload: auditPayloadFromRow(e),
+    })),
   );
 
   return (
@@ -42,9 +57,11 @@ export default async function AuditPage() {
           <div className="text-sm">
             <span className="font-medium">Chain integrity</span>
             <p className="mt-1 text-xs text-[var(--color-muted)]">
-              {events.length === 0
+              {allForChain.length === 0
                 ? "No events recorded yet."
-                : `${events.length} most recent events verified.`}
+                : `Full chain verified — all ${allForChain.length} events${
+                    allForChain.length > events.length ? `, showing the most recent ${events.length}` : ""
+                  }.`}
             </p>
           </div>
           <span
@@ -52,7 +69,11 @@ export default async function AuditPage() {
               chain.intact ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"
             }`}
           >
-            {events.length === 0 ? "—" : chain.intact ? "Intact" : `Broken at #${chain.firstBreakIndex}`}
+            {allForChain.length === 0
+              ? "—"
+              : chain.intact
+                ? "Intact"
+                : `Broken at #${(chain.firstBreakIndex ?? 0) + 1}`}
           </span>
         </CardBody>
       </Card>

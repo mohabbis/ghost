@@ -285,6 +285,43 @@ describe.skipIf(!hasDb)("runWorkflowJob (Postgres)", () => {
     expect(step?.status).toBe("UNKNOWN");
   });
 
+  it("does not re-run a sensitive step after a crash during its verification retry", async () => {
+    // End-to-end form of the regression the journal fold guards. The approved
+    // click executes, its verification fails, the engine appends `step.retried`
+    // to re-run the assertion, and the worker dies mid-retry. Resumption must
+    // treat the step as still in flight — not as never having run — or the
+    // order is submitted a second time.
+    const runId = await seedRun(demoSteps());
+
+    await runWorkflowJob(fakeJob(runId, orgId));
+    const approval = await prisma.approval.findFirstOrThrow({ where: { runId, status: "PENDING" } });
+    await prisma.approval.update({
+      where: { id: approval.id },
+      data: { status: "APPROVED", resolvedById: userId, resolvedAt: new Date() },
+    });
+
+    // The click ran; its assertion is being retried when the worker dies.
+    await appendRunEvent(runId, {
+      type: RUN_EVENT_TYPES.stepStarted,
+      stepIndex: 2,
+      payload: { type: "click", attempt: 1 },
+    });
+    await appendRunEvent(runId, {
+      type: RUN_EVENT_TYPES.stepRetried,
+      stepIndex: 2,
+      payload: { phase: "verify", attempt: 2 },
+    });
+    await prisma.run.update({ where: { id: runId }, data: { status: "QUEUED" } });
+
+    await runWorkflowJob(fakeJob(runId, orgId, "after-verify-crash"));
+
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(run.status).toBe("INCIDENT");
+    expect(run.error).toMatch(/OUTCOME_UNKNOWN/);
+    // The decisive assertion: the click was never repeated.
+    expect(await countSucceeded(runId, 2)).toBe(0);
+  });
+
   it("refuses to resume on a tampered journal", async () => {
     const runId = await seedRun(demoSteps());
     await runWorkflowJob(fakeJob(runId, orgId));
