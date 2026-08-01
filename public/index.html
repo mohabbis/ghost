@@ -322,7 +322,8 @@
               <span
                 >Per-org append-only events for run/step/gate/finish, with each run&rsquo;s head
                 anchored into the org chain. The chain can be re-checked in-product, not merely
-                written.</span
+                written — including deletion of a journal&rsquo;s tail, which leaves every surviving
+                link valid and so needs an expected head recorded outside it.</span
               >
             </div>
           </li>
@@ -346,9 +347,11 @@
               <strong>Known limits of what is built</strong>
               <span
                 >Undo runs in a fresh browser session, so it only reaches systems that do not require
-                a login. Journal verification detects edits and gaps, but a removed trailing segment
-                of a still-running run is not yet detected. Both are tracked in the repo, not
-                papered over.</span
+                a login. Journal tampering — edits, gaps, and deletion of the tail — is detected and
+                quarantines the run, but the expected tail lives in the same database, so an attacker
+                who can rewrite both is outside what this defends against; the organization chain is
+                the seal that does not share that weakness. Tracked in the repo, not papered
+                over.</span
               >
             </div>
           </li>
