@@ -109,8 +109,15 @@ pnpm build
 | 0 | Workspace, Prisma, Auth.js, app shell, BullMQ wiring | **done** |
 | 1.1 | Playwright engine, approval state machine, artifacts, hash-chained audit | **done** |
 | 1.2 | Run trigger, live timeline, approve/reject resume | **done** |
-| 1.x | Typed step editor, timeouts/retry, cancel button, audit-verify API | remaining |
+| 1.3 | Durable execution (run journal), timeouts/retry, incidents + cancel, audit-verify, variable store | **done** |
+| 1.x | Typed step editor | remaining |
 | 2 | Browser recording → editable steps | next major |
+
+Phase 1.3 made run position a fold over an append-only, hash-chained journal
+instead of a stored cursor, so a completed step cannot execute twice after a
+crash — see [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md) for what that borrows from
+Temporal, Camunda, Windmill and n8n, and what it deliberately refuses.
 
 Authoritative handoff: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
 Phase 1 plan: [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md).
+Prior art and design rationale: [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md).

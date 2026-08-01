@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Workflow, PlayCircle, Settings } from "lucide-react";
+import { LayoutDashboard, Workflow, PlayCircle, ShieldCheck, Settings } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/workflows", label: "Workflows", icon: Workflow },
   { href: "/runs", label: "Runs", icon: PlayCircle },
+  { href: "/audit", label: "Audit", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

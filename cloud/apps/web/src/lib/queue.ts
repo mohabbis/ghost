@@ -1,7 +1,12 @@
 import "server-only";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
-import { QUEUE_NAMES, type NoopJob, type RunWorkflowJob } from "@ghost/core/queue";
+import {
+  QUEUE_NAMES,
+  runWorkflowJobId,
+  type NoopJob,
+  type RunWorkflowJob,
+} from "@ghost/core/queue";
 
 /**
  * Queue producers for the web app. The web side only *enqueues*; the worker
@@ -36,5 +41,15 @@ export function enqueueNoop(data: NoopJob) {
 }
 
 export function enqueueRunWorkflow(data: RunWorkflowJob) {
-  return getQueue(QUEUE_NAMES.runWorkflow).add(QUEUE_NAMES.runWorkflow, data);
+  return getQueue(QUEUE_NAMES.runWorkflow).add(QUEUE_NAMES.runWorkflow, data, {
+    jobId: runWorkflowJobId(data.runId, data.fromStepIndex, data.resumeToken),
+    // Queue-level retries are only safe because re-entry is idempotent: the run
+    // lease blocks a concurrent worker and the journal blocks re-running a
+    // completed step. `runWorkflowJob` records business failures rather than
+    // throwing, so only infrastructure errors reach these attempts.
+    attempts: 3,
+    backoff: { type: "exponential", delay: 5_000 },
+    removeOnComplete: { age: 3_600 },
+    removeOnFail: { age: 86_400 },
+  });
 }
