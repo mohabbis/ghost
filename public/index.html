@@ -271,8 +271,10 @@
               <strong>Durable execution</strong>
               <span
                 >Position is folded from an append-only journal, never a stored cursor — so a crash
-                mid-run cannot re-fire an approved payment. A run lease blocks two workers racing;
-                the journal blocks a redelivered job repeating completed work.</span
+                mid-run cannot re-fire an approved payment, and a redelivered job cannot repeat
+                completed work. A time-based run lease keeps two workers off the same run in the
+                ordinary case; it is not a fencing token, so a worker stalled past its lease can
+                still overlap with the one that takes over.</span
               >
             </div>
           </li>
@@ -288,9 +290,11 @@
             <div>
               <strong>Incidents, retry and cancel</strong>
               <span
-                >A failed step waits for a person instead of killing the batch. Runs stop between
-                steps — a step already in flight finishes, which is the honest behaviour for an
-                action that must not happen twice.</span
+                >A step that failed for a reason retrying could fix waits for a person instead of
+                killing the batch. A rejected approval or a workflow that cannot resolve fails the
+                run outright — retrying those changes nothing. Runs stop between steps; a step
+                already in flight finishes, which is the honest behaviour for an action that must
+                not happen twice.</span
               >
             </div>
           </li>
@@ -352,10 +356,10 @@
               <span
                 >Undo runs in a fresh browser session, so it only reaches systems that do not require
                 a login. Journal tampering — edits, gaps, and deletion of the tail — is detected and
-                quarantines the run, but the expected tail lives in the same database, so an attacker
-                who can rewrite both is outside what this defends against; the organization chain is
-                the seal that does not share that weakness. Tracked in the repo, not papered
-                over.</span
+                quarantines the run, but every expected value lives in the same database as the
+                thing it checks, and nothing is anchored anywhere outside it. So this catches
+                corruption and a partial edit; it does not withstand someone with write access to
+                the whole database. Tracked in the repo, not papered over.</span
               >
             </div>
           </li>
