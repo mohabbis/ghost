@@ -101,23 +101,26 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
   const events = await prisma.runEvent.findMany({ where: { runId }, orderBy: { seq: "asc" } });
 
   // A journal you do not verify is a log, not a proof — the same rule forward
-  // execution follows. Here it decides which real-world effects get reversed,
-  // so trusting a broken chain could cancel an order that was never placed.
-  if (events.length > 0) {
-    const chain = verifyAuditChain(
-      events.map((e) => ({ prevHash: e.prevHash, hash: e.hash, payload: runEventPayloadFromRow(e) })),
-    );
-    if (!chain.intact) {
-      await prisma.run.update({
-        where: { id: runId },
-        data: {
-          status: "INCIDENT",
-          error: `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken at event ${chain.firstBreakIndex}`,
-        },
-      });
-      await releaseSlot(runId).catch(() => undefined);
-      return;
-    }
+  // execution follows. The expected tail also detects deletion of a complete
+  // suffix, including deletion of every event.
+  const chain = verifyAuditChain(
+    events.map((e) => ({
+      prevHash: e.prevHash,
+      hash: e.hash,
+      payload: runEventPayloadFromRow(e),
+    })),
+    { seq: run.journalSeq, hash: run.journalHead },
+  );
+  if (!chain.intact) {
+    await prisma.run.update({
+      where: { id: runId },
+      data: {
+        status: "INCIDENT",
+        error: `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken or truncated at event ${chain.firstBreakIndex}`,
+      },
+    });
+    await releaseSlot(runId).catch(() => undefined);
+    return;
   }
 
   const journal =
