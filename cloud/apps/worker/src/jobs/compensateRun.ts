@@ -20,6 +20,7 @@ import {
 import { resolveStep, ExpressionError, type ExpressionScope } from "@ghost/core/expr";
 import { BrowserSession, applyStep, verifyStep } from "../browser/driver.js";
 import { artifactStore, compensationScreenshotKey } from "../storage/artifacts.js";
+import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
 
 /**
  * Reverse a run's completed side effects — the BPMN saga, over the run journal.
@@ -74,9 +75,26 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
   // cancellation, and an operator would reasonably assume nothing was reversed.
   if (run.status === "CANCELED") {
     await sealCanceledCompensation(runId, run.orgId, actorFor(job, run.triggeredById));
+    await releaseSlot(runId).catch(() => undefined);
     return;
   }
   if (run.status !== "COMPENSATING") return;
+
+  // A reversal occupies the customer's system exactly as a forward run does, so
+  // it goes through the same admission. Without this the undo route could put a
+  // compensation to work alongside a forward run already filling the cap —
+  // two of Ghost's browsers mutating the same system at once, which is the one
+  // thing the cap exists to prevent.
+  const admission = await claimSlot({
+    runId,
+    workflowId: run.workflowVersion.workflowId,
+    alreadyStarted: true,
+    runningStatus: "COMPENSATING",
+  });
+  if (admission.kind === "throttle") {
+    await recordThrottle(runId, run.orgId, admission.cap, admission.holders, "compensation");
+    return;
+  }
 
   const steps = parseWorkflowSteps(run.workflowVersion.steps);
 
@@ -97,6 +115,7 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
           error: `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken at event ${chain.firstBreakIndex}`,
         },
       });
+      await releaseSlot(runId).catch(() => undefined);
       return;
     }
   }
@@ -119,6 +138,7 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
         error: `cannot reverse while step ${plan.inFlight[0]} is still in flight`,
       },
     });
+    await releaseSlot(runId).catch(() => undefined);
     return;
   }
 
@@ -170,6 +190,7 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
       entityId: runId,
       metadata: { stepIndex: started[0] },
     });
+    await releaseSlot(runId).catch(() => undefined);
     return;
   }
 
@@ -265,6 +286,10 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
     await finish(runId, run.orgId, requester, "complete", plan.irreversible.length);
   } finally {
     if (session) await session.close().catch(() => undefined);
+    // COMPENSATING holds a concurrency slot like RUNNING does. Reaching
+    // COMPENSATED or INCIDENT frees it, and the next run should not wait for
+    // the safety-net re-check to notice.
+    await releaseSlot(runId).catch(() => undefined);
   }
 }
 

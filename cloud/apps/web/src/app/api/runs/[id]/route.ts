@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { throttleReason } from "@ghost/core/concurrency";
 
 /** Run detail for polling: run status + ordered steps + pending approvals. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     include: {
       steps: { orderBy: { index: "asc" } },
       approvals: { orderBy: { stepIndex: "asc" } },
-      workflowVersion: { include: { workflow: { select: { name: true } } } },
+      workflowVersion: { include: { workflow: { select: { name: true, maxActiveRuns: true } } } },
     },
   });
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -53,7 +54,49 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
+  // "Queued" alone does not say whether Ghost is busy, broken, or deliberately
+  // holding this run back behind its workflow's concurrency cap.
+  //
+  // The journal event records *that* the run was throttled; the holders are
+  // read live. A run held for hours outlives the run that was blocking it when
+  // the event was written, and linking an operator to a run that finished long
+  // ago is worse than not linking at all.
+  let throttle: { reason: string; activeRunIds: string[] } | null = null;
+  if (run.status === "QUEUED" || (run.status === "COMPENSATING" && run.slotHeldAt === null)) {
+    const throttled = await prisma.runEvent.findFirst({
+      where: { runId: id, type: "run.throttled" },
+      orderBy: { seq: "desc" },
+      select: { seq: true },
+    });
+    // Only while the throttle is the run's latest word — an older one from
+    // earlier in the run's life must not make a moving run look blocked.
+    const newer = throttled
+      ? await prisma.runEvent.count({ where: { runId: id, seq: { gt: throttled.seq } } })
+      : 0;
+
+    if (throttled && newer === 0) {
+      const cap = run.workflowVersion.workflow.maxActiveRuns;
+      const live = await prisma.run.findMany({
+        where: {
+          slotHeldAt: { not: null },
+          workflowVersion: { workflowId: run.workflowVersion.workflowId },
+        },
+        orderBy: { slotHeldAt: "asc" },
+        select: { id: true },
+      });
+      const activeRunIds = live.map((r) => r.id);
+      throttle = {
+        reason:
+          cap === null
+            ? "Waiting for a free slot."
+            : throttleReason(cap, activeRunIds),
+        activeRunIds,
+      };
+    }
+  }
+
   return NextResponse.json({
+    throttle,
     id: run.id,
     status: run.status,
     error: run.error,

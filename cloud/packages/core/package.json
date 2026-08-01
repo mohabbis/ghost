@@ -18,6 +18,7 @@
     "./artifacts": "./src/artifacts.ts",
     "./journal": "./src/runtime/journal.ts",
     "./compensate": "./src/runtime/compensate.ts",
+    "./concurrency": "./src/runtime/concurrency.ts",
     "./agent": "./src/agent/tools.ts",
     "./agent-credentials": "./src/agent/credentials.ts"
   },

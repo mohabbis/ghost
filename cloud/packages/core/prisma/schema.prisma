@@ -140,6 +140,12 @@ model Workflow {
   name        String
   description String?
   archived    Boolean  @default(false)
+  // Airflow's `max_active_runs`: at most this many runs of this workflow may be
+  // in flight at once; the rest wait in QUEUED. Null means no cap. Per workflow
+  // rather than per version, so publishing v4 does not double the load the
+  // workflow is allowed to put on the system it operates. See
+  // packages/core/src/runtime/concurrency.ts for which statuses hold a slot.
+  maxActiveRuns Int?
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -260,6 +266,18 @@ model Run {
   leaseExpiresAt DateTime?
   attempt        Int       @default(0)
 
+  // When this run took a concurrency slot under its workflow's cap, or null if
+  // it holds none. See packages/core/src/runtime/concurrency.ts.
+  //
+  // Explicit rather than derived from `status`, because status moves for
+  // reasons that have nothing to do with whether the run is still touching the
+  // customer's system: a cancel flips to CANCELED while the worker is
+  // deliberately letting the current action finish, and an approved run passes
+  // through QUEUED on its way back to RUNNING. Both windows let another run be
+  // admitted alongside one that is still executing — which is the single thing
+  // the cap exists to prevent. A slot is taken and given back, not inferred.
+  slotHeldAt DateTime?
+
   // Artifact key of the ENCRYPTED storageState captured at the last halt, plus
   // the page URL it was captured on. Restoring these is how a resumed run
   // rebuilds browser state without re-executing any prior side effect.
@@ -276,6 +294,9 @@ model Run {
   @@index([orgId])
   @@index([workflowVersionId])
   @@index([status, leaseExpiresAt])
+  // Admission counts a workflow's in-flight runs on every start and resume.
+  @@index([workflowVersionId, status])
+  @@index([workflowVersionId, slotHeldAt])
 }
 
 // ---------------------------------------------------------------------------

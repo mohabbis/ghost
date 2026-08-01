@@ -16,6 +16,14 @@ export const RUN_EVENT_TYPES = {
   runStarted: "run.started",
   /** A job picked the run back up after a halt or a crash. */
   runResumed: "run.resumed",
+  /**
+   * The run was held back because its workflow's concurrency cap was full.
+   *
+   * Recorded rather than left implicit: "queued" alone does not tell an
+   * operator whether Ghost is busy, broken, or deliberately holding the run,
+   * and the difference matters when a customer asks why nothing happened.
+   */
+  runThrottled: "run.throttled",
   runSucceeded: "run.succeeded",
   runFailed: "run.failed",
   runCanceled: "run.canceled",
