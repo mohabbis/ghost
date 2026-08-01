@@ -42,8 +42,21 @@ export function hashAuditEvent(prevHash: string | null, payload: AuditPayload): 
 }
 
 /** Verify a chain of `{ prevHash, hash, payload }` rows in order. */
+export interface ExpectedChainTail {
+  /** Number of rows that must exist in the complete chain. */
+  seq: number;
+  /** Hash of the final row, or null for an empty chain. */
+  hash: string | null;
+}
+
+/**
+ * Verify the links and hashes in a chain, optionally against an independently
+ * persisted expected tail. Link verification alone cannot detect deletion of a
+ * complete suffix: the surviving prefix is still internally valid.
+ */
 export function verifyAuditChain(
   events: Array<{ prevHash: string | null; hash: string; payload: AuditPayload }>,
+  expectedTail?: ExpectedChainTail,
 ): { intact: boolean; firstBreakIndex: number | null } {
   let expectedPrev: string | null = null;
   for (let i = 0; i < events.length; i++) {
@@ -54,5 +67,18 @@ export function verifyAuditChain(
     }
     expectedPrev = e.hash;
   }
+
+  if (
+    expectedTail &&
+    (events.length !== expectedTail.seq || expectedPrev !== expectedTail.hash)
+  ) {
+    // A missing suffix breaks immediately after the last surviving row. An
+    // unexpected extra suffix also reports at the expected boundary.
+    return {
+      intact: false,
+      firstBreakIndex: Math.min(events.length, expectedTail.seq),
+    };
+  }
+
   return { intact: true, firstBreakIndex: null };
 }
