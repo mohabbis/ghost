@@ -4,7 +4,7 @@ import {
   type AgentToolName,
 } from "@ghost/core/agent";
 import { prisma } from "@/lib/db";
-import { enqueueRunWorkflow } from "@/lib/queue";
+import { startRun as createAndEnqueueRun } from "@/lib/start-run";
 import type { AgentPrincipal } from "@/lib/agent-auth";
 
 export type InvokeResult =
@@ -103,21 +103,19 @@ async function startRun(
   });
   if (!version) return { ok: false, error: "workflow not found", status: 404 };
 
-  const run = await prisma.run.create({
-    data: {
-      orgId: principal.orgId,
-      workflowVersionId: version.id,
-      triggeredById: principal.userId,
-      status: "QUEUED",
-    },
+  const started = await createAndEnqueueRun({
+    orgId: principal.orgId,
+    workflowVersionId: version.id,
+    triggeredById: principal.userId,
   });
-
-  await enqueueRunWorkflow({ runId: run.id, orgId: principal.orgId });
+  if (!started.ok) {
+    return { ok: false, error: started.error, status: 503 };
+  }
 
   return {
     ok: true,
     data: {
-      runId: run.id,
+      runId: started.runId,
       status: "QUEUED",
       note: "Sensitive steps will halt for human approval in the Ghost UI. Agents cannot approve.",
     },

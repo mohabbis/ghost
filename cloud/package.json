@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "description": "Ghost Cloud — AI operator that learns business workflows and executes them across existing software (record → review → approve → replay → verify → audit).",
+  "description": "Ghost Cloud \u2014 AI operator that learns business workflows and executes them across existing software (record \u2192 review \u2192 approve \u2192 replay \u2192 verify \u2192 audit).",
   "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=20"
@@ -18,7 +18,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
     "db:generate": "pnpm --filter @ghost/core db:generate",
     "db:migrate": "pnpm --filter @ghost/core db:migrate",
-    "db:validate": "pnpm --filter @ghost/core db:validate"
+    "db:validate": "pnpm --filter @ghost/core db:validate",
+    "db:migrate:deploy": "pnpm --filter @ghost/core db:migrate:deploy"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

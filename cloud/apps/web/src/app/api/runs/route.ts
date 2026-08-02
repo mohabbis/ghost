@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { enqueueRunWorkflow } from "@/lib/queue";
+import { startRun } from "@/lib/start-run";
 
 /** Trigger a run of a workflow's latest version. */
 export async function POST(req: Request) {
@@ -25,16 +25,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "workflow not found" }, { status: 404 });
   }
 
-  const run = await prisma.run.create({
-    data: {
-      orgId,
-      workflowVersionId: version.id,
-      triggeredById: session.user.id,
-      status: "QUEUED",
-    },
+  const started = await startRun({
+    orgId,
+    workflowVersionId: version.id,
+    triggeredById: session.user.id,
   });
+  if (!started.ok) {
+    // 503, not 500: the request was fine and retrying is the right move once
+    // the queue is reachable again.
+    return NextResponse.json({ error: started.error, runId: started.runId }, { status: 503 });
+  }
 
-  await enqueueRunWorkflow({ runId: run.id, orgId });
-
-  return NextResponse.json({ runId: run.id });
+  return NextResponse.json({ runId: started.runId });
 }

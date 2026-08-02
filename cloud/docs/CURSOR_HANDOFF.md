@@ -20,26 +20,51 @@ next" layer on top of them.
 
 ## Where we are
 
-Phase 0 + Phase 1.1 + Phase 1.2 are **merged on `master`**. The DB-backed
-demo loop has been executed end-to-end:
+Phase 0 + Phase 1.1 + Phase 1.2 are **merged on `master`**, and workflows are
+now **authorable**: `POST /api/workflows`, `POST /api/workflows/[id]/versions`
+and a typed step editor at `workflows/new` / `workflows/[id]`. Editing publishes
+a new version rather than mutating one — a `Run` pins its `workflowVersionId`,
+so a run in flight keeps the definition it started with.
+
+The loop has been executed end-to-end against a workflow authored **through the
+UI**, not only the seeded demo:
 
 ```text
-sign-in → create demo workflow → run → AWAITING_APPROVAL on Submit
-  → Approve → prefix restore → submit → verify → SUCCEEDED
+author steps → run → AWAITING_APPROVAL on Submit → Approve
+  → session restore → submit → verify → SUCCEEDED
 ```
 
-Reject path fails the run without submitting.
+with exactly one `step.succeeded` for the submit step across the halt. Reject
+fails the run without submitting.
 
-### Bug fixed: resume after approval
+Two rules the editor enforces, both worth preserving:
 
-Ephemeral Chromium is closed when the worker halts at a gate. On resume the
-job used to start on `about:blank` and time out looking for "Submit order".
-`restoreBrowserPrefix` in `apps/worker/src/browser/driver.ts` replays
-`steps[0..cursor)` before continuing. Covered by:
+- every step shows its `classifyStep` verdict live, and nothing turns a gate off
+- only step types the worker implements are offered. `apiCall`/`sendEmail` parse
+  and gate but `applyStep` returns `{}` for them, so authoring one would skip
+  the step and report success. Guarded by `EDITABLE_STEP_TYPES`, a server-side
+  refusal, and `apps/worker/src/browser/editable-steps.test.ts`
+
+Ghost is licensed **AGPL-3.0-or-later** as of PR #380. Section 13 obliges a
+modified network deployment to offer its users source, so the app links it from
+the sidebar and sign-in page via `NEXT_PUBLIC_SOURCE_URL` — set that to your own
+published source if you run a fork.
+
+### Resume after approval
+
+Ephemeral Chromium is closed when the worker halts at a gate, so on resume the
+job would otherwise start on `about:blank` and time out looking for "Submit
+order". Restoration is URL-scoped and re-applies only steps classified
+`restorative` in `@ghost/core/classifier/replay`; when page state cannot be
+provably rebuilt the run raises an incident rather than replaying an action.
+Covered by:
 
 - `apps/worker/src/browser/driver.test.ts` (hermetic restore)
 - `apps/worker/src/jobs/runWorkflow.test.ts` (Postgres gate → approve → succeed;
   reject → fail) — runs when `DATABASE_URL` is set, otherwise skipped
+
+(An earlier `restoreBrowserPrefix` looped over `applyStep` and would happily
+re-click an already-approved Submit. It is gone; see "Phase 1.3" below.)
 
 ## Local loop
 
@@ -213,12 +238,33 @@ across the deploy cannot resume. There is no deployed environment holding such
 blobs today, which is the only reason this is not a migration task; if that
 changes before this is addressed, version the blob format and accept both.
 
+## Read this before trusting a green PR
+
+**`cloud/` has no CI.** The workflows GitHub actually runs are `rust.yml`,
+`security.yml`, `release.yml` and `deploy-website.yml` — none of which touch
+`cloud/`. `rust.yml` is not path-scoped, so a PR changing only `cloud/` still
+shows ~22 green checks that compile, typecheck and test **none of the changed
+code**.
+
+`cloud/ci/cloud.yml` is written, fixed and verified locally against a fresh
+database, but it cannot be activated by an automation token — GitHub refuses
+writes to `.github/workflows/` without the `workflow` OAuth scope. A maintainer
+signed in normally needs one command; see `cloud/ci/README.md`.
+
+Until then, validate locally **with `DATABASE_URL` set and Postgres + Redis
+running**:
+
+```bash
+cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 220 tests
+```
+
+Without a database roughly 90 of those skip themselves and you learn nothing
+about the engine. If the worker suite reports 45 rather than 90, the database is
+not being reached.
+
 ## Remaining Phase 1 work (priority)
 
-1. **Typed step editor** (`workflows/new` + `[id]`) — author steps, not only
-   the demo seed. Validate with `@ghost/core` `workflowStep` Zod schema. This is
-   also the prerequisite for n8n-style pinned data / partial re-execution.
-2. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
+1. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
 3. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
 4. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
    Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
@@ -239,7 +285,8 @@ Recording → editable workflow. Open decision: server-side remote cloud browser
 - Validate from `cloud/`: `pnpm typecheck && pnpm test && pnpm build`.
 - Pass `DATABASE_URL` (and a migrated DB) for the worker integration tests.
 - API routes / jobs stay org-scoped via `auth()`; keep the trust pipeline intact.
-- CI: `cloud/ci/cloud.yml` is staged outside `.github/workflows/` until a token
-  with `workflow` scope can move it (see `cloud/ci/README.md`).
+- CI: **none for `cloud/`** until `cloud/ci/cloud.yml` is moved into
+  `.github/workflows/` by a maintainer with `workflow` scope — see the section
+  at the top of this file and `cloud/ci/README.md`.
 - Canonical product docs: `AGENTS.md`, `CLAUDE.md`, `cloud/README.md`. Root
   `README.md` should describe the cloud product; the desktop app is legacy.

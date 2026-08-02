@@ -2,6 +2,13 @@ name: cloud
 
 # CI for the Ghost Cloud SaaS (cloud/). Scoped to cloud/** so it never runs on
 # Rust-only changes and never collides with rust.yml.
+#
+# Postgres and Redis are real services rather than placeholders. Roughly 90 of
+# the suite's tests are gated on `Boolean(process.env.DATABASE_URL)`, so a
+# DATABASE_URL pointing at nothing is the worst of both worlds: the guard reads
+# "a database is available", the tests run, and they fail on connection refused.
+# Without the variable at all they silently skip, which is how a fully green
+# check can cover none of the engine.
 on:
   push:
     branches: [master, develop]
@@ -13,6 +20,13 @@ on:
       - "cloud/**"
       - ".github/workflows/cloud.yml"
 
+concurrency:
+  group: cloud-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: cloud
@@ -20,12 +34,42 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Placeholders so Prisma/Next have the vars they read. No network calls hit
-    # these at check/build time — authed pages are force-dynamic.
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ghost
+          POSTGRES_PASSWORD: ghost
+          POSTGRES_DB: ghost
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ghost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      AUTH_SECRET: build-time-placeholder-secret-value-000000
+      # The user must be `ghost`, not `postgres`: the wrong one fails with
+      # "User was denied access on the database", which reads like a missing
+      # migration and sends you looking in the wrong place.
       DATABASE_URL: postgresql://ghost:ghost@localhost:5432/ghost?schema=public
       REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-placeholder-secret-value-0000000000000000
+      APP_URL: http://localhost:3000
+      GHOST_ARTIFACT_DIR: ${{ github.workspace }}/cloud/.artifacts
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,19 +87,24 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        # The worker's driver test drives real Chromium. On CI runners there is
-        # no preinstalled browser, so install it (with OS deps) into Playwright's
-        # default cache. PLAYWRIGHT_BROWSERS_PATH is left unset, so the driver's
-        # discovery no-ops and Playwright uses that cache.
+        # The driver and engine tests drive real Chromium. Runners have none
+        # preinstalled, so install it here. PLAYWRIGHT_BROWSERS_PATH is left
+        # unset, which makes `discoverChromium` no-op and lets Playwright use
+        # its own cache — the revision then matches by construction.
         run: pnpm --filter @ghost/worker exec playwright install --with-deps chromium
 
       - name: Prisma validate
         run: pnpm db:validate
 
+      - name: Apply migrations
+        # `migrate deploy`, not `migrate dev` — the latter is interactive and
+        # will offer to reset the database.
+        run: pnpm db:migrate:deploy
+
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests
+      - name: Tests
         run: pnpm test
 
       - name: Build
