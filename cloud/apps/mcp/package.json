@@ -2,6 +2,7 @@
   "name": "@ghost/mcp",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "description": "Ghost Cloud MCP stdio bridge — agents propose; humans approve in Ghost UI.",
   "bin": {

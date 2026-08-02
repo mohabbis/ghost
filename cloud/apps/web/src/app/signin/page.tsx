@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { SOURCE_URL } from "@/lib/source-url";
 
 const githubEnabled = Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET);
 const devEnabled = process.env.NODE_ENV !== "production";
@@ -16,7 +17,7 @@ export default async function SignInPage({
   const redirectTo = from ?? "/dashboard";
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen flex-col items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardBody className="space-y-6">
           <div className="space-y-1">
@@ -69,6 +70,20 @@ export default async function SignInPage({
           )}
         </CardBody>
       </Card>
+
+      {/*
+        Also offered here, not only behind the sidebar: AGPL-3.0 section 13 covers
+        everyone interacting with this instance over the network, and someone who
+        never signs in never sees the authenticated chrome.
+      */}
+      <a
+        href={SOURCE_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-6 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+      >
+        AGPL-3.0 · Source
+      </a>
     </main>
   );
 }

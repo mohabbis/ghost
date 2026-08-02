@@ -2,6 +2,7 @@
   "name": "ghost-cloud",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "description": "Ghost Cloud — AI operator that learns business workflows and executes them across existing software (record → review → approve → replay → verify → audit).",
   "packageManager": "pnpm@10.33.0",
   "engines": {
