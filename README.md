@@ -1,6 +1,6 @@
 # Ghost
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue?style=flat-square)](LICENSE)
 
 > **Ghost is the trust runtime AI agents plug into** — teach it a business
 > workflow once; agents may propose and start runs; humans approve sensitive
@@ -86,4 +86,10 @@ desktop build notes in [`AGENTS.md`](AGENTS.md) if you need that tree.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+**GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE).
+
+In practice: use it, read it, modify it, self-host it. The one obligation that
+distinguishes AGPL from a permissive licence is [section
+13](LICENSE) — if you run a modified Ghost as a network service other people
+use, you have to offer those users the source of the version you are running.
+Running it privately, or hosting it unmodified, triggers nothing extra.

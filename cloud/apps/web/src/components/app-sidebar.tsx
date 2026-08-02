@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Workflow, PlayCircle, ShieldCheck, Settings } from "lucide-react";
+import { LayoutDashboard, Workflow, PlayCircle, ShieldCheck, Settings, Code2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { SOURCE_URL } from "@/lib/source-url";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -45,10 +46,24 @@ export function AppSidebar({ orgName }: { orgName: string }) {
         })}
       </nav>
 
-      <div className="border-t border-[var(--color-border)] p-3">
+      <div className="space-y-1.5 border-t border-[var(--color-border)] p-3">
         <div className="truncate text-xs text-[var(--color-muted)]" title={orgName}>
           {orgName}
         </div>
+        {/*
+          AGPL-3.0 section 13: users interacting with Ghost over a network must be
+          offered its Corresponding Source. A LICENSE file in the repo does not
+          reach them, so the running app has to carry the link itself.
+        */}
+        <a
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+        >
+          <Code2 className="h-3.5 w-3.5" />
+          AGPL-3.0 · Source
+        </a>
       </div>
     </aside>
   );
