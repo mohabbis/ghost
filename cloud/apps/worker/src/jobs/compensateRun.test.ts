@@ -12,7 +12,6 @@ import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 import { appendRunEvent } from "@ghost/core/audit-log";
 import { runWorkflowJob } from "./runWorkflow.js";
 import { compensateRunJob } from "./compensateRun.js";
-import { useDiscoveredChromium } from "../browser/chromium.js";
 
 /**
  * DB-backed test for compensation — reversing a run's completed side effects.
@@ -26,8 +25,6 @@ import { useDiscoveredChromium } from "../browser/chromium.js";
 const hasDb = Boolean(process.env.DATABASE_URL);
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureHtml = readFileSync(join(here, "../browser/__fixtures__/form.html"), "utf8");
-
-useDiscoveredChromium();
 
 function runJob(runId: string, orgId: string, jobId = "t"): Job<RunWorkflowJob> {
   return { data: { runId, orgId }, id: jobId } as Job<RunWorkflowJob>;

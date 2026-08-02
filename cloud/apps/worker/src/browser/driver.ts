@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { WorkflowStep } from "@ghost/core/schema/step";
+import { discoverChromium } from "./chromium.js";
 import { resolveLocator } from "./selector.js";
 import { runVerification, type VerifyResult } from "./verify.js";
 import type { RestorePlan } from "../runtime/restore.js";
@@ -17,10 +18,18 @@ export interface StepOptions {
   timeoutMs: number;
 }
 
-function launchOptions() {
-  // In this repo's environments Chromium is preinstalled; allow an explicit
+export function launchOptions() {
+  // In this repo's environments Chromium is preinstalled; resolve an explicit
   // executable path so we never trigger a download or hit a revision mismatch.
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined;
+  //
+  // The fallback belongs *here*, at the only place that launches a browser,
+  // rather than in each entrypoint. It used to be opt-in via a
+  // `useDiscoveredChromium()` call, which the four test files made and the
+  // worker's own entrypoint did not — so in exactly the environments the
+  // resolver exists for (CI runners, dev containers) the suite passed while a
+  // real run died at its first step on "Executable doesn't exist at
+  // .../chromium_headless_shell-<rev>/...". An explicit env var still wins.
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || discoverChromium();
   return { headless: true, executablePath, args: ["--no-sandbox"] };
 }
 
