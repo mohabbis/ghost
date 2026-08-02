@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardBody } from "@/components/ui/card";
@@ -26,7 +27,15 @@ export default async function WorkflowsPage() {
             Editable, versioned definitions Ghost executes step by step.
           </p>
         </div>
-        <CreateDemoButton />
+        <div className="flex shrink-0 items-center gap-2">
+          <CreateDemoButton />
+          <Link
+            href="/workflows/new"
+            className="inline-flex h-8 items-center justify-center rounded-lg bg-[var(--color-accent)] px-3 text-sm font-medium text-[var(--color-accent-fg)] transition-colors hover:opacity-90"
+          >
+            New workflow
+          </Link>
+        </div>
       </div>
 
       {workflows.length === 0 ? (
@@ -34,8 +43,8 @@ export default async function WorkflowsPage() {
           <CardBody className="py-12 text-center">
             <p className="text-sm font-medium">No workflows yet</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-muted)]">
-              Create the demo workflow to try the run → approval → verify loop. A visual
-              step editor and recording land in later slices.
+              Author one with the step editor, or create the demo workflow to try the
+              run → approval → verify loop against Ghost's own fixture page.
             </p>
           </CardBody>
         </Card>
@@ -45,7 +54,9 @@ export default async function WorkflowsPage() {
             <Card key={w.id}>
               <CardBody className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">{w.name}</div>
+                  <Link href={`/workflows/${w.id}`} className="text-sm font-medium hover:underline">
+                    {w.name}
+                  </Link>
                   {w.description && (
                     <div className="truncate text-sm text-[var(--color-muted)]">
                       {w.description}

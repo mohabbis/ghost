@@ -34,10 +34,6 @@ const fixtureHtml = readFileSync(
   "utf8",
 );
 
-// Same browser discovery the driver tests use. Without it this suite fails in
-// any image where the provisioned Chromium revision differs from the one
-// Playwright pins — which is most CI runners and dev containers.
-
 function fakeJob(runId: string, orgId: string, jobId = "test-job"): Job<RunWorkflowJob> {
   return { data: { runId, orgId }, id: jobId } as Job<RunWorkflowJob>;
 }
