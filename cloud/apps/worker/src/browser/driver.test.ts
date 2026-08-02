@@ -9,9 +9,9 @@ import {
   applyRestorePlan,
   applyRestorativeStep,
   captureSessionState,
+  launchOptions,
   runStep,
 } from "./driver.js";
-import { discoverChromium } from "./chromium.js";
 
 /**
  * Hermetic integration test: drives real Chromium against a local file fixture.
@@ -26,10 +26,9 @@ const OPTS = { timeoutMs: 15_000 };
 let session: BrowserSession;
 
 beforeAll(async () => {
-  if (!process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE) {
-    const exe = discoverChromium();
-    if (exe) process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE = exe;
-  }
+  // No browser-path setup: `launchOptions` resolves a preinstalled Chromium
+  // itself. That used to live here, which is exactly why the worker shipped
+  // without it.
   session = await BrowserSession.launch();
 });
 

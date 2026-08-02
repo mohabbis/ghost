@@ -11,8 +11,10 @@ import { join } from "node:path";
  * "Executable doesn't exist at .../chromium_headless_shell-<rev>/...". Pointing
  * at the full Chromium that *is* installed avoids the whole problem.
  *
- * Shared by the driver tests and the DB-backed engine tests: previously only
- * the former did this, so the latter failed in exactly those environments.
+ * Called from `launchOptions` in driver.ts — the single place a browser is
+ * launched — so every consumer gets it. It was previously opt-in, and the four
+ * test files opted in while the worker's entrypoint did not; the suite passed
+ * green in the very environments where a real run could not start.
  */
 export function discoverChromium(): string | undefined {
   const base = process.env.PLAYWRIGHT_BROWSERS_PATH;
@@ -24,11 +26,4 @@ export function discoverChromium(): string | undefined {
     /* fall through to Playwright's own lookup */
   }
   return undefined;
-}
-
-/** Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` from discovery unless already set. */
-export function useDiscoveredChromium(): void {
-  if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE) return;
-  const exe = discoverChromium();
-  if (exe) process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE = exe;
 }

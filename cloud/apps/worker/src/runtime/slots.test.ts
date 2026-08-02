@@ -11,7 +11,6 @@ import { QUEUE_NAMES, type RunWorkflowJob } from "@ghost/core/queue";
 import type { WorkflowSteps } from "@ghost/core/schema/step";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 import { runWorkflowJob } from "../jobs/runWorkflow.js";
-import { useDiscoveredChromium } from "../browser/chromium.js";
 import { closeQueue } from "../queue.js";
 
 /**
@@ -27,8 +26,6 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 const hasRedis = Boolean(process.env.REDIS_URL);
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureHtml = readFileSync(join(here, "../browser/__fixtures__/form.html"), "utf8");
-
-useDiscoveredChromium();
 
 function job(runId: string, orgId: string, id: string): Job<RunWorkflowJob> {
   return { data: { runId, orgId }, id } as Job<RunWorkflowJob>;

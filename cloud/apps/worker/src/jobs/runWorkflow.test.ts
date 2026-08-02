@@ -10,7 +10,6 @@ import { prisma, Prisma } from "@ghost/core/db";
 import type { RunWorkflowJob } from "@ghost/core/queue";
 import type { WorkflowSteps } from "@ghost/core/schema/step";
 import { runWorkflowJob } from "./runWorkflow.js";
-import { useDiscoveredChromium } from "../browser/chromium.js";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 import {
   appendAuditEvent,
@@ -38,7 +37,6 @@ const fixtureHtml = readFileSync(
 // Same browser discovery the driver tests use. Without it this suite fails in
 // any image where the provisioned Chromium revision differs from the one
 // Playwright pins — which is most CI runners and dev containers.
-useDiscoveredChromium();
 
 function fakeJob(runId: string, orgId: string, jobId = "test-job"): Job<RunWorkflowJob> {
   return { data: { runId, orgId }, id: jobId } as Job<RunWorkflowJob>;
