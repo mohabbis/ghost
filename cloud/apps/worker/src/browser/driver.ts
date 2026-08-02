@@ -65,6 +65,21 @@ export class BrowserSession {
 }
 
 /**
+ * Step types `applyStep` has no executor for — they fall through to `return {}`
+ * and perform nothing.
+ *
+ * Distinct from the other types that also return `{}`: `verify` and `approval`
+ * are handled elsewhere (verification in `runStep`, the gate in the state
+ * machine), so their no-op here is correct. These two are simply not built.
+ *
+ * `EDITABLE_STEP_TYPES` in @ghost/core must never include one of these, or the
+ * editor would let an author add a step that quietly does nothing while the run
+ * reports success. `editable-steps.test.ts` enforces that. Remove a type from
+ * this list when its executor lands, not before.
+ */
+export const UNIMPLEMENTED_ACTION_TYPES = ["apiCall", "sendEmail"] as const;
+
+/**
  * Apply one workflow step's browser action (no screenshot / verification).
  * `approval` and connector steps (`apiCall`/`sendEmail`) do not act on the page
  * in Phase 1 — the approval gate is handled by the state machine, and connector

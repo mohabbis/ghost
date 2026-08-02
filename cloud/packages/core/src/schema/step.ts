@@ -218,6 +218,33 @@ export type WorkflowStep = z.infer<typeof workflowStep>;
 export const workflowSteps = z.array(workflowStep);
 export type WorkflowSteps = z.infer<typeof workflowSteps>;
 
+/**
+ * Step types the editor offers an author.
+ *
+ * Deliberately narrower than `workflowStep`. `apiCall` and `sendEmail` parse,
+ * and the classifier gates them, but the executor's cases for both return `{}`
+ * — they do nothing. Offering them would let someone author a workflow that
+ * silently performs no action while reporting success, which is worse than not
+ * offering the step at all.
+ *
+ * This is a contract, not a preference: `apps/worker/src/browser/applyStep`
+ * must implement every type listed here, and
+ * `apps/worker/src/browser/editable-steps.test.ts` fails if it does not. Add a
+ * type here only once its executor exists.
+ */
+export const EDITABLE_STEP_TYPES = [
+  "navigate",
+  "click",
+  "fill",
+  "select",
+  "waitFor",
+  "extract",
+  "verify",
+  "approval",
+] as const satisfies readonly WorkflowStep["type"][];
+
+export type EditableStepType = (typeof EDITABLE_STEP_TYPES)[number];
+
 // `MUTATING_STEP_TYPES` used to live here. It was dead code — exported, never
 // imported, and its comment claimed the classifier used it when the classifier
 // has always used its own word lists. It also conflated "mutates the DOM" with
