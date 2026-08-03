@@ -29,6 +29,16 @@ The engine shape is `Capture → Review → Approve → Execute → Verify → R
 AI proposes; deterministic code executes only approved plans. The approval gate
 is a pure state machine (`classifyStep` in `@ghost/core`) — no AI in that decision.
 
+Which looks like this — a run stopped before it submits an order, with the
+reason and the evidence of every step so far:
+
+![A Ghost run halted at an approval gate, showing the reason "Clicks a submit control", Approve and Reject buttons, and a screenshot of each completed step](../docs/images/approval-gate.png)
+
+After approval the run resumes from the captured browser session rather than
+replaying, verifies the outcome, and states what it cannot reverse:
+
+![The same run after approval, status SUCCEEDED, with per-step screenshots, a verification that found "Order submitted", and a notice naming the two steps that have no compensation defined](../docs/images/run-verified.png)
+
 ## Layout
 
 ```
@@ -59,18 +69,45 @@ Agent plugin details: [`docs/AGENT_PLUGIN.md`](docs/AGENT_PLUGIN.md).
 ## Getting started
 
 ```bash
+cd cloud && pnpm demo
+```
+
+One command: writes `.env`, installs dependencies, brings up Postgres + Redis
+(reusing whatever is already listening, otherwise via Docker), applies the
+schema, installs Chromium, and starts web + worker. Idempotent — re-running it
+repairs a half-configured checkout.
+
+<details>
+<summary>Step by step, if you would rather do it yourself</summary>
+
+```bash
 cd cloud
-cp .env.example .env
-# Required edits in .env:
+cp .env.example .env            # a working local config as-is
+# Change before using against anything real:
 #   AUTH_SECRET          -> `openssl rand -base64 32`
-#   GHOST_ARTIFACT_DIR   -> ABSOLUTE path shared by web+worker, e.g. $PWD/.artifacts
-#   APP_URL              -> http://localhost:3000
+#   GHOST_SESSION_KEY    -> `openssl rand -base64 32` (must decode to 32 bytes)
+# Set to an ABSOLUTE path shared by web+worker:
+#   GHOST_ARTIFACT_DIR   -> e.g. $PWD/.artifacts
 pnpm install                    # runs `prisma generate` via core postinstall
 docker compose up -d            # Postgres :5432, Redis :6379
 pnpm db:migrate                 # apply the Prisma schema
 pnpm --filter @ghost/worker exec playwright install chromium
 pnpm dev                        # web on http://localhost:3000 + worker
 ```
+
+Two variables are load-bearing in ways their names do not advertise:
+
+- **`GHOST_ARTIFACT_DIR`** must be an absolute path both processes share. The
+  worker writes run screenshots there; the web app serves them. Point them at
+  different places and every screenshot 404s, so whoever is at an approval gate
+  decides with no evidence.
+- **`GHOST_SESSION_KEY`** must decode to exactly 32 bytes. Empty means the
+  worker skips session capture at a gate, and every approved run then ends
+  `INCIDENT` instead of `SUCCEEDED` — correct fail-safe behaviour, but it breaks
+  the demo and 16 tests. Add any new variable to `turbo.json` too, or Turbo
+  strips it from `pnpm test` / `pnpm build`.
+
+</details>
 
 `pnpm dev` runs both apps via Turborepo. To run them separately:
 
@@ -101,6 +138,11 @@ pnpm lint
 pnpm test          # includes DB-backed runWorkflow tests when DATABASE_URL is set
 pnpm build
 ```
+
+A full green run is **239 tests**. Roughly 90 of them are gated on
+`Boolean(process.env.DATABASE_URL)` and **skip silently** without it — so a
+green run with no database covers none of the execution engine. If the worker
+suite reports 45 tests rather than 90, the database is not being reached.
 
 ## Status
 

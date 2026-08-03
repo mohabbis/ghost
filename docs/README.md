@@ -22,6 +22,8 @@ If a doc contradicts this index or `cloud/README.md`, treat the cloud docs as tr
 | [`business-model.md`](business-model.md) | How we make money |
 | [`audiences.md`](audiences.md) | Who we sell to first |
 | [`trust-pipeline.md`](trust-pipeline.md) | Approval / verify / audit principles |
+| [`why-deterministic-gates.md`](why-deterministic-gates.md) | Why the gate is a pure function, not a model call — and what the audit chain does not prove |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Setup, the two env traps, trust invariants |
 | [`threat-model.md`](threat-model.md) | Cloud SaaS threats & controls |
 | [`integrations-roadmap.md`](integrations-roadmap.md) | Connectors (after recording) |
 | [`../SECURITY.md`](../SECURITY.md) | Security policy |

@@ -20,6 +20,22 @@ managers, accounting/bookkeeping firms, logistics, recruiting, financial-ops and
 healthcare-admin teams — anyone with recurring, measurable work that spans
 several systems and can't afford silent mistakes.
 
+## What that looks like
+
+A run reaches a step that submits an order — and stops. The classifier that
+decided this is a pure function over the step definition, not a model call.
+
+![A Ghost run halted at an approval gate, showing the reason "Clicks a submit control", Approve and Reject buttons, and a screenshot of each completed step](docs/images/approval-gate.png)
+
+Approve, and the run resumes from the captured browser session — no prior step
+is replayed — verifies the outcome, and reports what it could not reverse:
+
+![The same run after approval, status SUCCEEDED, with per-step screenshots, a verification that found "Order submitted", and a notice naming the two steps that have no compensation defined](docs/images/run-verified.png)
+
+Every run, approval, and mutation appends to a per-org hash chain:
+
+![The audit view showing chain integrity verified across all events, listing run.started, step.succeeded, run.awaiting_approval, approval.approved and run.succeeded entries](docs/images/audit-chain.png)
+
 ## Current product: Ghost Cloud (`cloud/`)
 
 The active product is a **cloud SaaS** in [`cloud/`](cloud/) — Next.js + Node
@@ -34,9 +50,26 @@ worker + Postgres + Redis + Playwright.
 | Log every run (screenshots, verify, audit) | **Phase 1 — built** |
 | Agent HTTP + MCP tools (no self-approve) | **built** — [`cloud/docs/AGENT_PLUGIN.md`](cloud/docs/AGENT_PLUGIN.md) |
 
+### Try it
+
+```bash
+cd cloud && pnpm demo
+```
+
+That configures `.env`, installs dependencies, brings up Postgres + Redis
+(reusing whatever is already listening, else Docker), applies the schema,
+installs Chromium, and starts the app on http://localhost:3000. It is
+idempotent — re-running it also repairs a half-configured checkout.
+
+Then: sign in with any email → **Workflows → Create demo workflow → Run** →
+approve "Submit order" → run **SUCCEEDED**.
+
+<details>
+<summary>Or set it up step by step</summary>
+
 ```bash
 cd cloud
-cp .env.example .env          # set AUTH_SECRET, GHOST_ARTIFACT_DIR, APP_URL
+cp .env.example .env          # works as-is for local dev
 pnpm install
 docker compose up -d          # Postgres + Redis
 pnpm db:migrate
@@ -44,15 +77,18 @@ pnpm --filter @ghost/worker exec playwright install chromium
 pnpm dev                      # http://localhost:3000
 ```
 
-Smoke test: sign in → **Workflows → Create demo workflow → Run** → approve
-"Submit order" → run **SUCCEEDED**.
+</details>
 
 Docs: [`cloud/README.md`](cloud/README.md) ·
 [`cloud/docs/PHASE_1_PLAN.md`](cloud/docs/PHASE_1_PLAN.md) ·
 [`cloud/docs/CURSOR_HANDOFF.md`](cloud/docs/CURSOR_HANDOFF.md) ·
 [`AGENTS.md`](AGENTS.md) · [`docs/README.md`](docs/README.md).
 
-Validate: `cd cloud && pnpm typecheck && pnpm test && pnpm build`.
+Validate: `cd cloud && pnpm typecheck && pnpm test && pnpm build` (239 tests).
+
+**Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md) — read the trust
+invariants before changing execution or approval behaviour. Changes:
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## Trust pipeline
 
@@ -67,6 +103,11 @@ Intent → Plan → Policy check → User approval → Execution → Audit log �
 - Runs append to a per-org hash-chained audit log.
 - Connectors use scoped, revocable, least-privilege credentials — never around
   the approval + audit pipeline.
+
+Why the gate is a pure function rather than a model call — worked through the
+double-payment retry clamp, the step whose outcome nobody knows, and what the
+audit chain provably does *not* catch:
+[`docs/why-deterministic-gates.md`](docs/why-deterministic-gates.md).
 
 ## Legacy desktop app (superseded, retained)
 

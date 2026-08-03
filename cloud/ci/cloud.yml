@@ -69,6 +69,14 @@ jobs:
       AUTH_SECRET: ci-placeholder-secret-value-0000000000000000
       APP_URL: http://localhost:3000
       GHOST_ARTIFACT_DIR: ${{ github.workspace }}/cloud/.artifacts
+      # Required, not optional. Without it the worker skips session capture at
+      # an approval gate, so `sessionUrl` stays null and every gated run refuses
+      # to resume — `planRestore` returns `unsafe` and the run ends INCIDENT.
+      # That is correct fail-safe behaviour in production and a broken suite
+      # here: 16 tests in compensateRun/runWorkflow/slots assert a run reaches
+      # SUCCEEDED or COMPENSATED, and they fail on the status rather than on
+      # anything naming the key. A CI-only throwaway value; never a real secret.
+      GHOST_SESSION_KEY: Z2hvc3QtY2ktdGhyb3dhd2F5LXNlc3Npb24ta2V5LTA=
 
     steps:
       - uses: actions/checkout@v4
