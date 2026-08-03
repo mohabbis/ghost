@@ -16,7 +16,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     include: {
       steps: { orderBy: { index: "asc" } },
       approvals: { orderBy: { stepIndex: "asc" } },
-      workflowVersion: { include: { workflow: { select: { name: true, maxActiveRuns: true } } } },
+      workflowVersion: {
+        include: {
+          workflow: {
+            select: { name: true, maxActiveRuns: true, requireSeparateApprover: true },
+          },
+        },
+      },
     },
   });
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -101,6 +107,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     status: run.status,
     error: run.error,
     workflowName: run.workflowVersion.workflow.name,
+    // Whether *this viewer* may approve. Computed here rather than shipping the
+    // policy and the triggerer's id to the client and asking it to decide: the
+    // route is the authority either way, and this keeps who-started-what out of
+    // a polling payload.
+    canApprove:
+      !run.workflowVersion.workflow.requireSeparateApprover ||
+      run.triggeredById === null ||
+      run.triggeredById !== session.user.id,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     // The step the run is stopped on, so an incident can offer retry/skip.

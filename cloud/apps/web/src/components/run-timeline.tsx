@@ -38,6 +38,12 @@ interface RunView {
   approvals: ApprovalView[];
   /** Set when the run is queued behind its workflow's concurrency cap. */
   throttle: { reason: string; activeRunIds: string[] } | null;
+  /**
+   * False when this workflow requires a separate approver and the viewer is the
+   * person who started the run. Advisory only — the route refuses regardless;
+   * this exists so nobody discovers the rule by having a click rejected.
+   */
+  canApprove: boolean;
 }
 interface ChainView {
   org: { intact: boolean; count: number };
@@ -235,6 +241,12 @@ export function RunTimeline({ runId }: { runId: string }) {
                   : "Approval required"}
               </span>{" "}
               — {pending.reason}
+              {!run.canApprove && (
+                <div className="mt-1.5 text-xs text-[var(--color-muted)]">
+                  You started this run. Someone else in your organization has to approve it —
+                  you can still reject it.
+                </div>
+              )}
               {pending.expiresAt && (
                 <span className="ml-2 text-xs text-[var(--color-muted)]">
                   expires {new Date(pending.expiresAt).toLocaleString()}
@@ -251,7 +263,12 @@ export function RunTimeline({ runId }: { runId: string }) {
             <div className="flex shrink-0 gap-2">
               <Button
                 size="sm"
-                disabled={busy}
+                disabled={busy || !run.canApprove}
+                title={
+                  run.canApprove
+                    ? undefined
+                    : "You started this run, and this workflow requires someone else to approve."
+                }
                 onClick={() =>
                   post(`/api/runs/${run.id}/approvals/${pending.stepIndex}`, { decision: "approve" })
                 }

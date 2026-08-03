@@ -89,6 +89,64 @@ export function ConcurrencyCap({
   );
 }
 
+/**
+ * Separation of duties: whoever triggers a run may not approve its gates.
+ *
+ * Opt-in, because an organization is created single-member on first sign-in and
+ * there is no invite flow yet — switching this on in a one-person org means
+ * nobody can approve anything and runs stop dead at their first gate. The label
+ * says so rather than leaving it to be discovered.
+ */
+export function SeparateApprover({
+  workflowId,
+  value,
+}: {
+  workflowId: string;
+  value: boolean;
+}) {
+  const router = useRouter();
+  const [on, setOn] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(next: boolean) {
+    setSaving(true);
+    setError(null);
+    setOn(next);
+    try {
+      const res = await fetch(`/api/workflows/${workflowId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ requireSeparateApprover: next }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "failed");
+      router.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+      setOn(!next);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+      <input
+        type="checkbox"
+        checked={on}
+        disabled={saving}
+        onChange={(e) => void save(e.target.checked)}
+        aria-label="Require a separate approver"
+      />
+      <span title="Whoever starts a run cannot approve its gates — someone else in the organization must. Needs at least two people.">
+        2nd approver
+      </span>
+      {error && <span className="text-[var(--color-danger)]">{error}</span>}
+    </label>
+  );
+}
+
 export function RunButton({ workflowId }: { workflowId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

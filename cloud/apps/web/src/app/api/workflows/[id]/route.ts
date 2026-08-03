@@ -19,17 +19,32 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   const orgId = session.user.orgId;
   const { id } = await context.params;
 
-  const body = (await req.json().catch(() => ({}))) as { maxActiveRuns?: unknown };
-  if (!("maxActiveRuns" in body)) {
-    return Response.json({ error: "maxActiveRuns required" }, { status: 400 });
+  const body = (await req.json().catch(() => ({}))) as {
+    maxActiveRuns?: unknown;
+    requireSeparateApprover?: unknown;
+  };
+  const setsCap = "maxActiveRuns" in body;
+  const setsApprover = "requireSeparateApprover" in body;
+  if (!setsCap && !setsApprover) {
+    return Response.json(
+      { error: "maxActiveRuns or requireSeparateApprover required" },
+      { status: 400 },
+    );
   }
 
-  let maxActiveRuns: number | null;
-  try {
-    maxActiveRuns = parseMaxActiveRuns(body.maxActiveRuns);
-  } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 400 });
+  let maxActiveRuns: number | null = null;
+  if (setsCap) {
+    try {
+      maxActiveRuns = parseMaxActiveRuns(body.maxActiveRuns);
+    } catch (err) {
+      return Response.json({ error: (err as Error).message }, { status: 400 });
+    }
   }
+
+  if (setsApprover && typeof body.requireSeparateApprover !== "boolean") {
+    return Response.json({ error: "requireSeparateApprover must be a boolean" }, { status: 400 });
+  }
+  const requireSeparateApprover = body.requireSeparateApprover as boolean | undefined;
 
   // Read, write and audit in one transaction. As separate statements, a failed
   // audit append left the setting changed with no record of who changed it, and
@@ -41,12 +56,12 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     // enough to reconfigure another tenant's workflow.
     const workflow = await tx.workflow.findFirst({
       where: { id, orgId },
-      select: { id: true, maxActiveRuns: true },
+      select: { id: true, maxActiveRuns: true, requireSeparateApprover: true },
     });
     if (!workflow) return { ok: false as const };
 
     const from = workflow.maxActiveRuns;
-    if (from !== maxActiveRuns) {
+    if (setsCap && from !== maxActiveRuns) {
       await tx.workflow.update({ where: { id }, data: { maxActiveRuns } });
       await appendAuditEvent(
         orgId,
@@ -60,6 +75,29 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
         tx,
       );
     }
+
+    // Audited separately from the cap, and under its own action. Both are
+    // governance settings but they answer different questions, and an auditor
+    // reading "who removed the requirement for a second approver" should not
+    // have to infer it from a concurrency event.
+    if (setsApprover && workflow.requireSeparateApprover !== requireSeparateApprover) {
+      await tx.workflow.update({ where: { id }, data: { requireSeparateApprover } });
+      await appendAuditEvent(
+        orgId,
+        session.user.id ?? null,
+        {
+          action: "workflow.approval_policy_changed",
+          entityType: "Workflow",
+          entityId: id,
+          metadata: {
+            from: workflow.requireSeparateApprover,
+            to: requireSeparateApprover,
+          },
+        },
+        tx,
+      );
+    }
+
     return { ok: true as const, from };
   });
 
@@ -69,14 +107,24 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   // about is not capacity: the runs already waiting would sit until each of
   // their five-minute re-checks fired. Best-effort — the setting is saved
   // either way, and the re-checks remain the backstop.
+  //
+  // Gated on `setsCap`: without it, a request that only flips the approval
+  // policy leaves `maxActiveRuns` at its `null` default here, which reads as
+  // "cap cleared" and would wake every waiting run for a cap nobody touched.
   const relaxed =
+    setsCap &&
     result.from !== maxActiveRuns &&
     (maxActiveRuns === null || (result.from !== null && maxActiveRuns > result.from));
   if (relaxed) {
     await wakeWaitingRuns(id, maxActiveRuns).catch(() => undefined);
   }
 
-  return Response.json({ id, maxActiveRuns });
+  // Report the cap that is actually stored, not the local default.
+  return Response.json({
+    id,
+    maxActiveRuns: setsCap ? maxActiveRuns : result.from,
+    ...(setsApprover ? { requireSeparateApprover } : {}),
+  });
 }
 
 /**

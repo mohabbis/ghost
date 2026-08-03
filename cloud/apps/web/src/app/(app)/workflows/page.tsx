@@ -2,7 +2,12 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardBody } from "@/components/ui/card";
-import { ConcurrencyCap, CreateDemoButton, RunButton } from "@/components/workflow-actions";
+import {
+  ConcurrencyCap,
+  CreateDemoButton,
+  RunButton,
+  SeparateApprover,
+} from "@/components/workflow-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +72,7 @@ export default async function WorkflowsPage() {
                   <span className="text-xs text-[var(--color-muted)]">
                     {w._count.versions} version{w._count.versions === 1 ? "" : "s"}
                   </span>
+                  <SeparateApprover workflowId={w.id} value={w.requireSeparateApprover} />
                   <ConcurrencyCap workflowId={w.id} value={w.maxActiveRuns} />
                   <RunButton workflowId={w.id} />
                 </div>
