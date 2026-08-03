@@ -134,9 +134,9 @@ deepens with connector/file steps in later phases.
 3. Run detail live timeline + approval resolve (web).
 4. Seed + demo + docs; wire the "Run" button end to end.
 
-Each is a small PR on top of the Phase 0 branch/merge. The `cloud/ci/cloud.yml`
-workflow (once a maintainer installs it under `.github/workflows/`) gates all of
-them; until then, run `pnpm typecheck && pnpm test && pnpm build` locally.
+Each is a small PR on top of the Phase 0 branch/merge. `.github/workflows/cloud.yml`
+now gates all of them in CI; run `pnpm typecheck && pnpm test && pnpm build`
+locally while iterating.
 
 ## Open decision still pending (Phase 2, flagged early)
 
