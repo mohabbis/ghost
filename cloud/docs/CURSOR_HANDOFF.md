@@ -240,22 +240,25 @@ changes before this is addressed, version the blob format and accept both.
 
 ## Read this before trusting a green PR
 
-**`cloud/` has no CI.** The workflows GitHub actually runs are `rust.yml`,
-`security.yml`, `release.yml` and `deploy-website.yml` — none of which touch
-`cloud/`. `rust.yml` is not path-scoped, so a PR changing only `cloud/` still
-shows ~22 green checks that compile, typecheck and test **none of the changed
-code**.
+**`cloud/` has CI** (`.github/workflows/cloud.yml`, path-scoped to `cloud/**`),
+activated in PR #393. It runs against real Postgres + Redis services, not a
+placeholder `DATABASE_URL`, so the ~90 database-gated tests actually execute
+rather than silently skipping. `rust.yml` is scoped away from `cloud/`-only
+changes as part of the same PR, so a cloud PR's green checks now mean the
+changed code compiled, typechecked, and passed tests — not ~22 unrelated Rust
+checks that never touched it.
 
-`cloud/ci/cloud.yml` is written, fixed and verified locally against a fresh
-database, but it cannot be activated by an automation token — GitHub refuses
-writes to `.github/workflows/` without the `workflow` OAuth scope. A maintainer
-signed in normally needs one command; see `cloud/ci/README.md`.
+Before #393, `cloud/ci/cloud.yml` existed but wasn't picked up by GitHub
+(workflow files outside `.github/workflows/` are never run), so this section
+used to say "no CI" and tell you to validate locally. That gap is closed; the
+docs below are historical context for why local validation still matters.
 
-Until then, validate locally **with `DATABASE_URL` set and Postgres + Redis
-running**:
+Still validate locally when iterating **with `DATABASE_URL` set and Postgres +
+Redis running** — CI catches it before merge either way, but a local loop is
+faster than waiting on a run:
 
 ```bash
-cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 220 tests
+cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 239 tests
 ```
 
 Without a database roughly 90 of those skip themselves and you learn nothing
@@ -285,8 +288,7 @@ Recording → editable workflow. Open decision: server-side remote cloud browser
 - Validate from `cloud/`: `pnpm typecheck && pnpm test && pnpm build`.
 - Pass `DATABASE_URL` (and a migrated DB) for the worker integration tests.
 - API routes / jobs stay org-scoped via `auth()`; keep the trust pipeline intact.
-- CI: **none for `cloud/`** until `cloud/ci/cloud.yml` is moved into
-  `.github/workflows/` by a maintainer with `workflow` scope — see the section
-  at the top of this file and `cloud/ci/README.md`.
+- CI: `.github/workflows/cloud.yml`, path-scoped to `cloud/**`, runs on every
+  push/PR against real Postgres + Redis services — see the section above.
 - Canonical product docs: `AGENTS.md`, `CLAUDE.md`, `cloud/README.md`. Root
   `README.md` should describe the cloud product; the desktop app is legacy.
