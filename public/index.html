@@ -64,7 +64,7 @@
       }
     </script>
   </head>
-  <body data-platform="other">
+  <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
     <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
@@ -76,7 +76,6 @@
             d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49v-1.9c-2.78.62-3.37-1.2-3.37-1.2-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"
           />
         </symbol>
-        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 4 5-4M5 21h14" /></symbol>
         <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.9-7 10-4-2.1-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></symbol>
         <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
         <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8 12l2.5 2.5L16 9" /></symbol>
@@ -84,9 +83,6 @@
         <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z" /><path d="M9 8h6M9 12h6" /></symbol>
         <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></symbol>
         <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" /></symbol>
-        <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M17.05 12.6c-.03-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.48.83-.72 0-1.83-.81-3-.79-1.55.02-2.97.9-3.77 2.28-1.6 2.79-.41 6.92 1.15 9.19.76 1.11 1.67 2.36 2.86 2.31 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.98.72 1.23-.02 2.01-1.13 2.76-2.25.87-1.29 1.23-2.54 1.25-2.6-.03-.02-2.4-.92-2.42-3.64zM14.8 5.7c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.68 1.37-.59.68-1.1 1.77-.96 2.81 1.02.08 2.06-.52 2.7-1.28z" /></symbol>
-        <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M3 5.5l7.5-1v7.2H3zM11.3 4.4L21 3v9.7h-9.7zM3 12.5h7.5v6.7L3 18.2zM11.3 12.5H21V21l-9.7-1.3z" /></symbol>
-        <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z" /><path d="M3 12l9 5 9-5M3 16l9 5 9-5" /></symbol>
       </defs>
     </svg>
 
@@ -459,8 +455,8 @@
             </a>
           </div>
           <p class="access__note">
-            Working name: Ghost (likely to change before a real go-to-market). Direction will not:
-            approval-gated execution with verification and audit.
+            Working name: Ghost — not changing it yet. What will not change regardless of name:
+            approval-gated execution, verification, and audit.
           </p>
         </div>
       </section>
@@ -470,41 +466,10 @@
           <p class="eyebrow">Archive</p>
           <h2>Legacy desktop preview (not the résumé piece).</h2>
           <p class="section__sub">
-            An earlier local-first Mac/Windows Organizer build (<strong>v2.0.3</strong>) is still
-            downloadable for reference. The active work — and what to judge — is the cloud operator
-            under <code>cloud/</code> on GitHub.
-          </p>
-        </div>
-      </section>
-
-      <section id="download" class="download reveal legacy-download">
-        <div class="download__inner">
-          <p class="pill">Legacy · optional</p>
-          <h2>Desktop preview downloads</h2>
-          <p class="download__sub" id="download-sub">v2.0.3 for macOS and Windows — superseded by the cloud build.</p>
-          <div class="download__actions">
-            <a
-              class="btn btn--lg btn--secondary"
-              id="dl-mac"
-              href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg"
-            >
-              <svg class="i"><use href="#i-apple" /></svg>
-              <span data-download-label>Download for macOS</span>
-            </a>
-            <a
-              class="btn btn--lg btn--secondary"
-              id="dl-win"
-              href="https://github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe"
-            >
-              <svg class="i"><use href="#i-windows" /></svg> Download for Windows
-            </a>
-          </div>
-          <p class="download__note">
-            macOS 12+ · Apple Silicon &amp; Intel · Windows 10/11 · v2.0.3 — macOS notarized;
-            Windows unsigned (SmartScreen may warn).
-            <a href="https://github.com/mohabbis/ghost/releases/latest">All releases →</a>
-            ·
-            <a href="https://github.com/mohabbis/ghost/releases/latest/download/SHA256SUMS.txt">SHA256SUMS</a>
+            An earlier local-first Mac/Windows Organizer build (<strong>v2.0.3</strong>) is kept in the
+            repo's <a href="https://github.com/mohabbis/ghost/releases/tag/v2.0.3">GitHub releases</a>
+            for reference. The active work — and what to judge — is the cloud operator under
+            <code>cloud/</code> on GitHub.
           </p>
         </div>
       </section>
