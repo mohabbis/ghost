@@ -37,7 +37,12 @@ export async function POST(
     return NextResponse.json({ error: "decision must be approve|reject" }, { status: 400 });
   }
 
-  const run = await prisma.run.findFirst({ where: { id, orgId } });
+  const run = await prisma.run.findFirst({
+    where: { id, orgId },
+    include: {
+      workflowVersion: { select: { workflow: { select: { requireSeparateApprover: true } } } },
+    },
+  });
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const approve = body.decision === "approve";
@@ -54,6 +59,38 @@ export async function POST(
     return NextResponse.json({ error: "no pending approval for step" }, { status: 409 });
   }
   const compensating = pending.phase === "COMPENSATION";
+
+  // Separation of duties. Checked after the pending lookup so the audited phase
+  // is the real one, and so a refusal is only recorded for a gate that actually
+  // exists rather than for any stray request.
+  //
+  // Only approval is restricted. Rejecting stops the action rather than
+  // authorizing it, and whoever started a runaway run has to be able to halt it
+  // — blocking that would be worse than the problem being solved.
+  //
+  // `triggeredById` is null for agent-started runs, and `userId` can be null
+  // too. Comparing them without the null guard would make a null-to-null match
+  // and leave an agent-triggered run unapprovable.
+  if (
+    approve &&
+    run.workflowVersion.workflow.requireSeparateApprover &&
+    run.triggeredById !== null &&
+    run.triggeredById === userId
+  ) {
+    // Audited, not merely refused. A blocked attempt at self-authorization is
+    // exactly what the audit chain exists to hold; a silent 403 leaves no
+    // evidence that the control did its job.
+    await appendAuditEvent(orgId, userId, {
+      action: "approval.self_approval_refused",
+      entityType: "Approval",
+      entityId: `${id}:${index}:${pending.phase}`,
+      metadata: { runId: id, stepIndex: index, phase: pending.phase },
+    });
+    return NextResponse.json(
+      { error: "this workflow requires someone other than the person who started the run to approve" },
+      { status: 403 },
+    );
+  }
 
   // One conditional update decides the race: a double-submitted approval
   // updates zero rows the second time and becomes a no-op, so only one resume

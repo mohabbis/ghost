@@ -107,7 +107,19 @@ migration. Prefer additive changes.
 
 No autoscaling, no multi-region, no backup policy, no log aggregation, no
 alerting, and no rate limiting on the agent API. Also worth knowing before
-putting real customer systems behind this: **approval is not yet
-role-restricted** — any member of an organization can approve any run, including
-the person who triggered it. Agents genuinely cannot approve (that is enforced),
-but separation of duties between humans is not.
+putting real customer systems behind this:
+
+**Separation of duties is available but off by default.** Turn on "2nd approver"
+per workflow and the person who triggered a run can no longer approve its gates —
+only reject them. It is opt-in because organizations are created single-member on
+first sign-in, so switching it on in a one-person org leaves nobody able to
+approve and runs stop at their first gate.
+
+**Approval is still not role-restricted.** `Membership.role` is stored and read
+by nothing; any member can approve any run they did not start. That gap is
+blocked on member management rather than on effort — there is no invite flow, so
+every organization has exactly one person and a role check would enforce a
+distinction the system cannot yet express.
+
+Agents genuinely cannot approve, and that is enforced: no POST handler on
+`/api/agent/approvals`, an explicit 403, and a forbidden-tools list.
