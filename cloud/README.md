@@ -134,10 +134,15 @@ absolute path for both processes. If Chromium won't launch, run the
 
 ```bash
 pnpm typecheck
-pnpm lint
+pnpm lint          # apps/web only — worker, mcp and core have no lint script yet
 pnpm test          # includes DB-backed runWorkflow tests when DATABASE_URL is set
 pnpm build
 ```
+
+`pnpm lint` is the weakest of these four. Only `apps/web` has an ESLint config,
+and `turbo run lint` skips packages that define no `lint` script — silently, and
+with a green summary. Treat `typecheck` as the real static gate until the other
+three packages have configs.
 
 A full green run is **239 tests**. Roughly 90 of them are gated on
 `Boolean(process.env.DATABASE_URL)` and **skip silently** without it — so a
