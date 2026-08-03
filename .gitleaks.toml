@@ -1,0 +1,39 @@
+# Gitleaks configuration for Ghost.
+#
+# security.yml runs gitleaks/gitleaks-action on every push and PR. Without this
+# file it uses the default ruleset, and the default `generic-api-key` rule flags
+# two committed placeholder values as leaked secrets, failing the check.
+#
+# Both are deliberately fake, and both have to exist:
+#
+#   cloud/.env.example    GHOST_SESSION_KEY, so `cp .env.example .env` yields a
+#                         working stack. An empty value there does not degrade
+#                         gracefully — the worker skips session capture at an
+#                         approval gate, so every approved run ends INCIDENT
+#                         instead of SUCCEEDED, and 16 worker tests fail.
+#   cloud/ci/cloud.yml    the same variable for CI, for the same reason.
+#
+# Decoded, they read "ghost-dev-only-key-not-a-secret!" and
+# "ghost-ci-throwaway-session-key-0" — they are 32 bytes of ASCII chosen to
+# satisfy the length check in `sessionKeyFromEnv`, not generated key material.
+#
+# ---------------------------------------------------------------------------
+# Scoping: this allowlist matches the two exact values, NOT the files that
+# contain them. Allowlisting `cloud/.env.example` by path would be easier and
+# strictly worse — a real credential pasted into that file later would then go
+# unreported, and a .env file is exactly where one gets pasted by accident.
+# Matching the literal strings means both files stay fully scanned.
+#
+# When rotating either placeholder, update the regex here in the same commit.
+# The check failing is the intended outcome if you forget.
+# ---------------------------------------------------------------------------
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented non-secret placeholder session keys (see comment above)"
+regexes = [
+  '''Z2hvc3QtZGV2LW9ubHkta2V5LW5vdC1hLXNlY3JldCE=''',
+  '''Z2hvc3QtY2ktdGhyb3dhd2F5LXNlc3Npb24ta2V5LTA=''',
+]
