@@ -9,6 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "demo": "bash scripts/demo.sh",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
@@ -16,13 +17,14 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
-    "db:generate": "pnpm --filter @ghost/core db:generate",
-    "db:migrate": "pnpm --filter @ghost/core db:migrate",
-    "db:validate": "pnpm --filter @ghost/core db:validate",
-    "db:migrate:deploy": "pnpm --filter @ghost/core db:migrate:deploy"
+    "db:generate": "prisma generate --schema packages/core/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema packages/core/prisma/schema.prisma",
+    "db:validate": "prisma validate --schema packages/core/prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema packages/core/prisma/schema.prisma"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
+    "prisma": "^6.1.0",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   }

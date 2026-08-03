@@ -14,6 +14,24 @@
 *.yaml  text eol=lf
 *.sh    text eol=lf
 
+# ---------------------------------------------------------------------------
+# Language reporting.
+#
+# The active product is the TypeScript cloud SaaS in cloud/. The Rust/Tauri
+# desktop app is superseded but retained in-tree for reference, and being ~4x
+# the line count it made GitHub label the whole repository "Rust" — telling
+# every visitor the wrong thing about what Ghost is.
+#
+# `linguist-vendored` excludes these paths from the language statistics only.
+# It does not affect the build, the tests, or diffs; the code is still here and
+# still maintained when the legacy app needs it.
+# ---------------------------------------------------------------------------
+src-tauri/**   linguist-vendored
+apps/macos/**  linguist-vendored
+native/**      linguist-vendored
+src/**         linguist-vendored
+docs/legacy/** linguist-documentation
+
 # Binary assets — never normalize or attempt to diff/merge.
 *.png   binary
 *.jpg   binary

@@ -55,4 +55,82 @@ describe("audit hash chain", () => {
     expect(result.intact).toBe(false);
     expect(result.firstBreakIndex).toBe(2);
   });
+
+  it("detects a deleted event in the middle of the chain", () => {
+    const chain = buildChain(payloads);
+    // Excise event 1. Event 2's prevHash now points at a hash no longer
+    // preceding it, so the break surfaces at the new index 1.
+    const tampered = [chain[0]!, chain[2]!];
+    const result = verifyAuditChain(tampered);
+    expect(result.intact).toBe(false);
+    expect(result.firstBreakIndex).toBe(1);
+  });
+
+  it("detects two events swapped into the wrong order", () => {
+    const chain = buildChain(payloads);
+    const tampered = [chain[0]!, chain[2]!, chain[1]!];
+    const result = verifyAuditChain(tampered);
+    expect(result.intact).toBe(false);
+    expect(result.firstBreakIndex).toBe(1);
+  });
+
+  it("detects a forged event spliced into the chain", () => {
+    const chain = buildChain(payloads);
+    const forged = {
+      prevHash: chain[0]!.hash,
+      hash: hashAuditEvent(chain[0]!.hash, {
+        action: "approval.approved",
+        entityType: "Approval",
+        entityId: "r1:0:FORWARD",
+      }),
+      payload: {
+        action: "approval.approved",
+        entityType: "Approval",
+        entityId: "r1:0:FORWARD",
+      } satisfies AuditPayload,
+    };
+    // The forged event hashes correctly against event 0, so it is self
+    // consistent — but it displaces event 1, whose prevHash no longer matches.
+    const tampered = [chain[0]!, forged, chain[1]!, chain[2]!];
+    const result = verifyAuditChain(tampered);
+    expect(result.intact).toBe(false);
+    expect(result.firstBreakIndex).toBe(2);
+  });
+
+  // ---------------------------------------------------------------------
+  // What the chain deliberately does NOT catch.
+  //
+  // These two tests assert `intact: true` on tampered input. That is not an
+  // oversight being enshrined — it is the boundary of what a bare hash chain
+  // can prove, pinned so nobody markets it as more. See
+  // docs/why-deterministic-gates.md ("What the audit chain does not prove").
+  // ---------------------------------------------------------------------
+
+  it("does NOT detect truncation of the tail — the chain has no end marker", () => {
+    const chain = buildChain(payloads);
+    // Drop the final event, e.g. to hide that a run ever completed. Every
+    // surviving link still verifies, because nothing commits to the length.
+    const truncated = chain.slice(0, 2);
+    expect(verifyAuditChain(truncated)).toEqual({ intact: true, firstBreakIndex: null });
+    // Mitigation for run journals: Run.journalHead stores the expected tail
+    // out-of-band, so appendRunEvent raises RunJournalIntegrityError instead of
+    // blessing a truncated journal. The org-wide AuditEvent chain has no such
+    // column, so tail truncation there is only detectable against an external
+    // anchor.
+  });
+
+  it("does NOT detect a wholesale rewrite by someone who can write every row", () => {
+    // An attacker with database write access rewrites history and recomputes
+    // every hash forward from the change. The result is a perfectly intact
+    // chain of events that never happened.
+    const rewritten = buildChain([
+      payloads[0]!,
+      { action: "step.forged", entityType: "RunStep", entityId: "r1:0" },
+      payloads[2]!,
+    ]);
+    expect(verifyAuditChain(rewritten)).toEqual({ intact: true, firstBreakIndex: null });
+    // A hash chain proves internal consistency, not authenticity. Detecting
+    // this requires an anchor the attacker cannot recompute: a signed head, a
+    // WORM/append-only replica, or periodic publication of the head hash.
+  });
 });
