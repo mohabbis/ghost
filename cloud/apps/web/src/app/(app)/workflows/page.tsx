@@ -49,7 +49,7 @@ export default async function WorkflowsPage() {
             <p className="text-sm font-medium">No workflows yet</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-muted)]">
               Author one with the step editor, or create the demo workflow to try the
-              run → approval → verify loop against Ghost's own fixture page.
+              run → approval → verify loop against Ghost&apos;s own fixture page.
             </p>
           </CardBody>
         </Card>

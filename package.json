@@ -1,5 +1,6 @@
 {
-  "name": "ghost-frontend",
+  "name": "ghost-desktop-legacy",
+  "description": "Legacy Rust/Tauri desktop app (superseded). The active product is the cloud SaaS in cloud/ — see CONTRIBUTING.md. Installing here does not get you Ghost Cloud.",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",

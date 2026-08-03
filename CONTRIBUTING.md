@@ -52,8 +52,9 @@ To validate a change:
 pnpm typecheck && pnpm test && pnpm build
 ```
 
-A full green run is **234 tests**. If you see substantially fewer, read on —
-you are almost certainly hitting one of these two traps.
+A full green run is **239 tests** (core 127, worker 90, web 21, mcp 1). If you
+see substantially fewer, read on — you are almost certainly hitting one of these
+two traps.
 
 ### Trap 1: `DATABASE_URL` decides whether ~90 tests run at all
 
