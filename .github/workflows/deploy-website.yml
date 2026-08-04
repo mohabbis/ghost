@@ -32,26 +32,6 @@ jobs:
           find public -type f | sort
           echo "Total files: $(find public -type f | wc -l)"
 
-      - name: Validate download links (live HTTP)
-        run: |
-          set -euo pipefail
-          for path in Ghost.dmg Ghost_Setup.exe; do
-            url="https://github.com/mohabbis/ghost/releases/latest/download/${path}"
-            echo "Checking ${url}"
-            # Follow redirects; require a successful final status. Releases must
-            # already publish these assets — a 404 here means the site would
-            # ship a broken download button.
-            code=$(curl -fsIL -o /dev/null -w "%{http_code}" "$url" || true)
-            if [ "$code" != "200" ]; then
-              echo "Download URL failed (HTTP ${code}): ${url}" >&2
-              exit 1
-            fi
-            echo "OK ${path} (HTTP ${code})"
-          done
-          # Markup must still point at the canonical latest URLs.
-          grep -q "github.com/mohabbis/ghost/releases/latest/download/Ghost.dmg" public/index.html
-          grep -q "github.com/mohabbis/ghost/releases/latest/download/Ghost_Setup.exe" public/index.html
-
       - name: Validate SoftwareApplication JSON-LD
         run: |
           grep -q '"@type": "SoftwareApplication"' public/index.html \
@@ -90,4 +70,3 @@ jobs:
         run: |
           echo "Deployed $(find public -type f | wc -l) files from public/"
           echo "Site: https://ghost.muharafiq.com"
-          echo "Downloads: GitHub Releases (latest)"

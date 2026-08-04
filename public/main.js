@@ -12,30 +12,6 @@ const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-/* ---------- platform detection ---------- */
-function platformDetection() {
-  const ua = navigator.userAgent || "";
-  const p = navigator.platform || "";
-  let platform = "other";
-  if (/Mac|iPhone|iPad|iPod/.test(ua) || /Mac/.test(p)) platform = "mac";
-  else if (/Win/.test(ua) || /Win/.test(p)) platform = "windows";
-  document.body.dataset.platform = platform;
-
-  const sub = $("#download-sub");
-  if (platform === "mac" && sub) {
-    sub.textContent = "Detected macOS — legacy desktop v2.0.3 (notarized). Not the current product.";
-  }
-  if (platform === "windows" && sub) {
-    sub.textContent = "Detected Windows — legacy desktop v2.0.3 (unsigned). Not the current product.";
-  }
-
-  const primaryLabel = $("[data-download-label]");
-  if (primaryLabel) {
-    if (platform === "mac") primaryLabel.textContent = "Legacy macOS v2.0.3";
-    else if (platform === "windows") primaryLabel.textContent = "Legacy Windows v2.0.3";
-  }
-}
-
 /* ---------- reveal on scroll ---------- */
 function revealOnScroll() {
   const items = $$(".reveal");
@@ -153,7 +129,6 @@ function setupStickyNav() {
 
 /* ---------- boot ---------- */
 window.addEventListener("DOMContentLoaded", () => {
-  platformDetection();
   revealOnScroll();
   setupGhostEyes();
   setupStickyNav();
