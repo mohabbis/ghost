@@ -348,8 +348,26 @@ after).
 
 ## Phase 2
 
-Recording → editable workflow. Open decision: server-side remote cloud browser
-(recommended) vs Chrome extension. Engine boundary is clean either way.
+Recording → editable workflow, split into Capture and Convert.
+
+**Convert is built.** `POST /api/recordings` uploads a raw trace (JSON event
+log, HAR, or Playwright trace .zip — whatever the capture step eventually
+produces); `POST /api/recordings/[id]/compile` sends it to a
+HarnessRouter-configured agent ("Ghost Recording Compiler",
+`apps/web/src/lib/recording-compiler.ts`) that proposes a `steps.json`;
+`GET /api/recordings/[id]/stream` pushes progress the same way run status is
+pushed (`apps/web/src/app/api/runs/[id]/stream`); the proposal is validated
+against `@ghost/core/schema/step` before it ever lands in
+`Recording.compiledSteps`, then reviewed in the same `WorkflowEditor` used for
+hand-authored workflows and published through the existing
+`POST /api/workflows` path — the AI proposal never bypasses that trust
+pipeline, it only pre-fills the editor. `HR_API_KEY` (server-only,
+`cloud/.env`) is required for this to run.
+
+**Capture is still the open decision:** server-side remote cloud browser
+(recommended) vs. Chrome extension. Engine boundary is clean either way —
+Convert only needs *a* trace file to exist, not any particular capture
+mechanism, so it slots in front of the upload step unchanged once built.
 
 ## Repo conventions
 

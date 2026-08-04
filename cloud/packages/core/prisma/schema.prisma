@@ -171,9 +171,10 @@ model Workflow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  org       Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  createdBy User?             @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  versions  WorkflowVersion[]
+  org        Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy  User?             @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions   WorkflowVersion[]
+  recordings Recording[]
 
   @@index([orgId])
 }
@@ -207,19 +208,51 @@ enum RecordingStatus {
   DISCARDED
 }
 
+// Convert half of Phase 2 (`docs/CURSOR_HANDOFF.md`): turning one uploaded
+// trace into a proposed `WorkflowStep[]` via a HarnessRouter runtime agent.
+// Separate from `RecordingStatus`, which tracks the *capture* lifecycle —
+// a STOPPED recording can be recompiled after a FAILED attempt without
+// pretending the capture itself needs to happen again.
+enum RecordingCompileStatus {
+  NONE
+  RUNNING
+  READY
+  FAILED
+}
+
 model Recording {
   id          String          @id @default(cuid())
   orgId       String
   status      RecordingStatus @default(ACTIVE)
   // S3 key of the raw captured event trace.
-  rawTraceKey String?
-  sessionMeta Json?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  rawTraceKey      String?
+  rawTraceFilename String?
+  sessionMeta      Json?
 
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // HarnessRouter compile job. `harnessSessionId` is the recovery identifier
+  // used to resume polling after a dropped connection (never start a second
+  // task on top of one already running — see apps/web/src/lib/recording-compiler.ts).
+  compileStatus     RecordingCompileStatus @default(NONE)
+  harnessResponseId String?
+  harnessSessionId  String?
+  // Proposed steps, validated against `@ghost/core/schema/step` before
+  // storage. A *proposal* a human reviews in the editor — never executed
+  // directly, never trusted the way a published WorkflowVersion is.
+  compiledSteps Json?
+  compileNotes  String?
+  compileError  String?
+
+  // Set once a human reviews the proposal and actually publishes it.
+  workflowId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workflow Workflow?    @relation(fields: [workflowId], references: [id], onDelete: SetNull)
 
   @@index([orgId])
+  @@index([workflowId])
 }
 
 // ---------------------------------------------------------------------------

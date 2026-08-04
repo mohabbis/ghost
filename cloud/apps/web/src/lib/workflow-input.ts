@@ -37,6 +37,9 @@ export const createWorkflowInput = z.object({
   name: z.string().trim().min(1, "name is required").max(200),
   description: z.string().trim().max(2_000).optional(),
   steps: authoredSteps,
+  /** Set when this workflow is being published from a compiled Recording
+   * proposal — see apps/web/src/app/api/workflows/route.ts. */
+  recordingId: z.string().min(1).optional(),
 });
 
 export const publishVersionInput = z.object({
