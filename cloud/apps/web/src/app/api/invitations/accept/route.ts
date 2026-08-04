@@ -6,6 +6,7 @@ import {
 } from "@ghost/core/invitations";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { clientKey, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * Redeem an invitation token as the signed-in user.
@@ -29,6 +30,19 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  // An invitation token is 32 random bytes, so guessing one is not a practical
+  // attack. Throttled anyway because this endpoint is a free, unauthenticated-
+  // in-effect oracle otherwise: it is the one place a caller can submit
+  // candidate tokens as fast as the database will answer, and that is worth
+  // bounding on its own terms.
+  const perUser = await rateLimit(`invite:user:${userId}`, { limit: 20, windowSeconds: 300 });
+  if (!perUser.ok) return tooManyRequests(perUser);
+  const perClient = await rateLimit(`invite:ip:${clientKey(req)}`, {
+    limit: 60,
+    windowSeconds: 300,
+  });
+  if (!perClient.ok) return tooManyRequests(perClient);
 
   const body = (await req.json().catch(() => null)) as { token?: unknown } | null;
   const token = typeof body?.token === "string" ? body.token.trim() : "";

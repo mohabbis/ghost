@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { verifyAuditChain } from "@ghost/core/audit";
 import { auditPayloadFromRow, runEventPayloadFromRow } from "@ghost/core/audit-log";
 
@@ -23,6 +24,19 @@ export async function GET(req: Request) {
   }
   const orgId = session.user.orgId;
   const runId = new URL(req.url).searchParams.get("runId");
+
+  // Verification is inherently whole-chain — a hash chain cannot be checked in
+  // pages — so this is the most expensive read in the product and it grows
+  // with the tenant's entire history. Rate limited per organization because a
+  // loop over it is a one-request-each denial of service against the web tier,
+  // and because it is a deliberate audit action rather than something a UI
+  // polls. Six a minute is generous for a human and useless as an attack.
+  //
+  // This bounds the blast radius; it does not fix the underlying cost. The
+  // unbounded findMany below is P1-1 in docs/ARCHITECTURE_DECISIONS.md and
+  // needs incremental verification with a checkpoint, not a limiter.
+  const limited = await rateLimit(`audit-verify:${orgId}`, { limit: 6, windowSeconds: 60 });
+  if (!limited.ok) return tooManyRequests(limited);
 
   const events = await prisma.auditEvent.findMany({
     where: { orgId },
