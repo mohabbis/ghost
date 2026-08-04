@@ -315,12 +315,32 @@ round-trips. No component-testing infra exists in this codebase to cover this
 with an automated test (no testing-library/jsdom in `apps/web`); typecheck and
 build are the automated coverage this has.
 
-1. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
-2. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
+Done: **SSE for the run timeline**, replacing the client's old 1.5s
+`setInterval` poll of `GET /api/runs/[id]`. `apps/web` deploys to Vercel
+serverless functions (`docs/DEPLOY.md`) with an execution-time limit — 10s
+default, nothing in this app raises it — so `GET /api/runs/[id]/stream`
+deliberately does **not** hold one connection open for a run's whole
+lifetime; it bounds each connection to an 8s segment and lets the browser's
+native `EventSource` reconnect on its own for the next one, closing for real
+only once the client observes a terminal status. Within a segment it polls
+the DB at 400ms and only pushes a frame when the serialized view actually
+changed. `buildRunView` (the ~140-line view builder) moved out of the old
+route into `apps/web/src/lib/run-view.ts` so the plain-fetch route and the
+SSE route share one implementation rather than risking two that drift.
+Verified with `stream.test.ts` (3 tests, including a deterministic
+read-then-react-to-each-frame drive through QUEUED → RUNNING → SUCCEEDED —
+not a `setTimeout` race against the poll loop, which turned out to be
+genuinely flaky here for reasons not fully run to ground) and manually
+end-to-end in a browser: watched a run's status update live via SSE with no
+page reload, confirmed the stream closes on a terminal status rather than
+reconnecting forever (5 requests total, network panel stayed flat for 8s
+after).
+
+1. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
    Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
    only); keep it that way, because the same prefix holds encrypted session
    blobs that must never be served.
-3. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
+2. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
    `requireSeparateApprover` would need (which is about who may *approve*, not
    who may *administer*); still needs its own design, and orgs are still
    auto-created single-member on first sign-in with no invite flow, so it has

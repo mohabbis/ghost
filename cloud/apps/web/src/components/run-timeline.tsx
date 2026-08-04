@@ -121,22 +121,29 @@ export function RunTimeline({ runId }: { runId: string }) {
     if (res.ok) setChain((await res.json()) as ChainView);
   }, [runId]);
 
+  // Pushed over SSE (`/api/runs/[id]/stream`) instead of polled. That route
+  // deliberately ends each connection well inside Vercel's function time
+  // limit rather than holding one open for a run's whole lifetime — see its
+  // doc comment — so a *closed* stream reconnects on its own by design.
+  // Closing here on a terminal status is what actually stops that cycle: a
+  // clean end otherwise looks identical to a dropped connection to
+  // `EventSource`, which retries either way.
   useEffect(() => {
-    let active = true;
     void load();
-    const timer = setInterval(() => {
-      if (!active) return;
-      setRun((cur) => {
-        if (cur && TERMINAL.has(cur.status)) return cur;
-        void load();
-        return cur;
-      });
-    }, 1500);
-    return () => {
-      active = false;
-      clearInterval(timer);
+
+    const source = new EventSource(`/api/runs/${runId}/stream`);
+    source.onmessage = (event) => {
+      const data = JSON.parse(event.data as string) as RunView | { notFound: true };
+      if ("notFound" in data) {
+        source.close();
+        return;
+      }
+      setRun(data);
+      if (TERMINAL.has(data.status)) source.close();
     };
-  }, [load]);
+
+    return () => source.close();
+  }, [runId, load]);
 
   // Verify the chain once the run stops changing.
   useEffect(() => {
