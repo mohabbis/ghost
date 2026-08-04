@@ -26,6 +26,9 @@ export async function GET() {
   return Response.json({ credentials });
 }
 
+/** Generous enough for a real "annual rotation" policy, tight enough to catch a typo like 36500. */
+const MAX_EXPIRES_IN_DAYS = 3650;
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user.id || !session.user.orgId) {
@@ -33,6 +36,7 @@ export async function POST(req: Request) {
   }
   const body = (await req.json().catch(() => null)) as {
     name?: unknown;
+    expiresInDays?: unknown;
   } | null;
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (!name || name.length > 80) {
@@ -41,6 +45,19 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  let expiresAt: Date | null = null;
+  if (body?.expiresInDays !== undefined && body.expiresInDays !== null) {
+    const days = Number(body.expiresInDays);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_EXPIRES_IN_DAYS) {
+      return Response.json(
+        { error: `expiresInDays must be an integer between 1 and ${MAX_EXPIRES_IN_DAYS}` },
+        { status: 400 },
+      );
+    }
+    expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
   const generated = createAgentToken();
   const credential = await prisma.agentCredential.create({
     data: {
@@ -49,8 +66,9 @@ export async function POST(req: Request) {
       name,
       tokenHash: generated.tokenHash,
       tokenHint: generated.tokenHint,
+      expiresAt,
     },
-    select: { id: true, name: true, tokenHint: true, createdAt: true },
+    select: { id: true, name: true, tokenHint: true, createdAt: true, expiresAt: true },
   });
   return Response.json({ credential, token: generated.token }, { status: 201 });
 }

@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { isOrgAdmin } from "@ghost/core/roles";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { AgentCredentials } from "@/components/settings/agent-credentials";
 
@@ -20,6 +21,9 @@ export default async function SettingsPage() {
         },
       })
     : null;
+
+  const currentMembership = org?.memberships.find((m) => m.userId === session?.user.id);
+  const isAdmin = currentMembership ? isOrgAdmin(currentMembership.role) : false;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -65,7 +69,7 @@ export default async function SettingsPage() {
         </CardBody>
       </Card>
 
-      <AgentCredentials />
+      <AgentCredentials isOrgAdmin={isAdmin} />
     </div>
   );
 }

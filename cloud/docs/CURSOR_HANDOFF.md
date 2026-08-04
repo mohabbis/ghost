@@ -287,16 +287,27 @@ not being reached.
 
 ## Remaining Phase 1 work (priority)
 
-1. **Credential hardening** — optional expiry and organization-admin inventory/revocation.
-3. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
-4. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
+Done: **credential hardening** — optional expiry (`expiresInDays` on
+`POST /api/settings/agent-credentials`) and an organization-admin inventory +
+revocation view (`GET /api/settings/agent-credentials/org`, and `DELETE
+/api/settings/agent-credentials/[id]` now permits an OWNER/ADMIN to revoke a
+colleague's credential, not only their own). `packages/core/src/roles.ts`
+(`isOrgAdmin`) is the first thing to actually read `Membership.role` — every
+existing org still has exactly one OWNER member, so this changes nothing
+observable until an org has more than one member.
+
+1. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
+2. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
    Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
    only); keep it that way, because the same prefix holds encrypted session
    blobs that must never be served.
-5. **Compensation / undo handlers** — the journal makes the saga pattern
+3. **Compensation / undo handlers** — the journal makes the saga pattern
    tractable: walk it backwards invoking each executed step's compensator.
-6. **Four-eyes approval** — needs RBAC first; `Role` is stored and never enforced,
-   and orgs are auto-created single-member on first sign-in.
+4. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
+   `requireSeparateApprover` would need (which is about who may *approve*, not
+   who may *administer*); still needs its own design, and orgs are still
+   auto-created single-member on first sign-in with no invite flow, so it has
+   no real subject to test against yet.
 
 ## Phase 2
 
