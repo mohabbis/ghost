@@ -1,6 +1,7 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
+import { assertAuthSecretUsable, devSignInAllowed, sessionMaxAgeSeconds } from "@/lib/auth-env";
 import { ensureUserOrg } from "@/lib/org";
 
 /**
@@ -15,14 +16,20 @@ import { ensureUserOrg } from "@/lib/org";
  * "Dev sign-in" provider accepts any email.
  */
 
+// Before anything else: in production, refuse to start on a session secret
+// that cannot protect a session. See lib/auth-env.ts.
+assertAuthSecretUsable();
+
 const providers: NextAuthConfig["providers"] = [];
 
 if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
   providers.push(GitHub);
 }
 
-// Dev-only email sign-in. Never enabled in production.
-if (process.env.NODE_ENV !== "production") {
+// Passwordless "any email" sign-in for local development. `devSignInAllowed`
+// requires production to be ruled out AND the instance to be loopback-only,
+// so a deployment with NODE_ENV unset does not quietly expose it.
+if (devSignInAllowed()) {
   providers.push(
     Credentials({
       id: "dev",
@@ -39,7 +46,7 @@ if (process.env.NODE_ENV !== "production") {
 
 export const authConfig: NextAuthConfig = {
   providers,
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: sessionMaxAgeSeconds() },
   pages: { signIn: "/signin" },
   callbacks: {
     async jwt({ token, user }) {
