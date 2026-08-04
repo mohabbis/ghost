@@ -9,16 +9,17 @@ name: cloud
 # "a database is available", the tests run, and they fail on connection refused.
 # Without the variable at all they silently skip, which is how a fully green
 # check can cover none of the engine.
+#
+# Path scoping lives in the `changes` job, not in `on:` — see the long comment
+# in rust.yml. Short version: a workflow skipped by a path filter never creates
+# its check runs, so requiring `build` in branch protection would leave every
+# Rust-only PR blocked on a check that can never report. A job skipped by an
+# `if:` condition does create its check run, concludes "skipped", and satisfies
+# branch protection.
 on:
   push:
     branches: [master, develop]
-    paths:
-      - "cloud/**"
-      - ".github/workflows/cloud.yml"
   pull_request:
-    paths:
-      - "cloud/**"
-      - ".github/workflows/cloud.yml"
 
 concurrency:
   group: cloud-ci-${{ github.ref }}
@@ -26,13 +27,45 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 defaults:
   run:
     working-directory: cloud
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cloud: ${{ steps.filter.outputs.cloud }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "cloud=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" \
+            --paginate --jq '.[].filename')
+
+          if printf '%s\n' "$files" \
+            | grep -qE '^cloud/|^\.github/workflows/cloud\.yml$'; then
+            echo "cloud=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cloud=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: changes
+    if: needs.changes.outputs.cloud == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
