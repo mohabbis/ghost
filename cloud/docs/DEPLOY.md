@@ -103,6 +103,35 @@ Application rollbacks are ordinary redeploys. Migrations are not: `migrate
 deploy` only rolls forward, so a schema change that has to be undone needs a new
 migration. Prefer additive changes.
 
+## HarnessRouter is a shared trust boundary
+
+Recording compilation (`cloud/apps/web/src/lib/recording-compiler.ts`) sends
+the uploaded trace to HarnessRouter and reads back the proposed steps. Two
+things about that are worth stating plainly rather than discovering later.
+
+**One key serves every tenant.** `HR_API_KEY` is process-wide. Every
+organization's traces and compile sessions therefore live in the *same*
+HarnessRouter Workspace. Ghost's own routes are org-scoped and refuse
+cross-tenant access — a recording id from another org returns 404 on detail,
+compile, continue, cancel and stream, the SSE stream reports `notFound`, and
+claiming another org's recording while publishing is refused — but that is
+Ghost enforcing isolation on its own surface. It is not isolation *inside*
+HarnessRouter: anyone holding `HR_API_KEY` can enumerate every tenant's
+sessions and files there directly.
+
+Treat `HR_API_KEY` with the same care as `DATABASE_URL`. If a customer's
+threat model does not permit their workflow traces sharing a Workspace with
+other customers', per-organization HarnessRouter credentials are the fix, and
+they do not exist yet.
+
+**A trace is customer data.** It is the recording of someone performing real
+work in their own systems, so it can contain URLs, record identifiers,
+customer names, and anything else that was on screen. The compiler agent is
+instructed never to copy a captured secret into a step (passwords, OTPs, card
+numbers become placeholders), but that is an instruction to a model, not an
+enforced guarantee — the trace itself is uploaded whole. Do not point this at
+a system whose screens carry data you are unwilling to send to HarnessRouter.
+
 ## What this does not cover
 
 No autoscaling, no multi-region, no backup policy, no log aggregation, no
