@@ -86,6 +86,16 @@ model Organization {
   slug      String   @unique
   createdAt DateTime @default(now())
 
+  // Expected tail of the org-wide append-only AuditEvent chain, mirroring
+  // Run.journalHead. appendAuditEvent updates this in the same transaction as
+  // every event, so deleting a valid suffix of AuditEvent (without also
+  // rewriting this column) is detected instead of silently verifying as an
+  // intact, merely shorter, chain. See docs/CURSOR_HANDOFF.md "Known gaps in
+  // compensation (undo)" for what this does and does not defend against — an
+  // attacker able to rewrite both AuditEvent and this column stays out of
+  // scope; that requires an anchor genuinely outside this database.
+  auditChainHead String?
+
   memberships Membership[]
   workflows   Workflow[]
   recordings  Recording[]

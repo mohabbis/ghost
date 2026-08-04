@@ -40,6 +40,21 @@ export class RunJournalIntegrityError extends Error {
 }
 
 /**
+ * Raised when an append observes a different tail from the one committed on
+ * Organization. Same shape as RunJournalIntegrityError, one level up: refusing
+ * the append preserves the evidence instead of building the org's next event
+ * on top of a chain someone deleted a suffix of.
+ */
+export class OrgAuditChainIntegrityError extends Error {
+  constructor(orgId: string, expected: string | null, actual: string | null) {
+    super(
+      `AUDIT_CHAIN_TAMPERED: org ${orgId} audit chain tail does not match its expected head (expected ${expected ?? "empty"}, actual ${actual ?? "empty"})`,
+    );
+    this.name = "OrgAuditChainIntegrityError";
+  }
+}
+
+/**
  * The exact payload shape that gets hashed.
  *
  * Writer and verifier must agree byte-for-byte, so the payload is normalized
@@ -117,6 +132,14 @@ export async function appendAuditEvent(
       orderBy: { seq: "desc" },
       select: { seq: true, hash: true },
     });
+    const expected = await client.organization.findUniqueOrThrow({
+      where: { id: orgId },
+      select: { auditChainHead: true },
+    });
+    const actualHead = head?.hash ?? null;
+    if (actualHead !== expected.auditChainHead) {
+      throw new OrgAuditChainIntegrityError(orgId, expected.auditChainHead, actualHead);
+    }
 
     const payload = normalizeAuditPayload(input);
     const prevHash = head?.hash ?? null;
@@ -136,6 +159,8 @@ export async function appendAuditEvent(
         hash,
       },
     });
+
+    await client.organization.update({ where: { id: orgId }, data: { auditChainHead: hash } });
 
     return { seq, hash };
   };

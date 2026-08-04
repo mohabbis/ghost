@@ -112,11 +112,14 @@ describe("audit hash chain", () => {
     // surviving link still verifies, because nothing commits to the length.
     const truncated = chain.slice(0, 2);
     expect(verifyAuditChain(truncated)).toEqual({ intact: true, firstBreakIndex: null });
-    // Mitigation for run journals: Run.journalHead stores the expected tail
-    // out-of-band, so appendRunEvent raises RunJournalIntegrityError instead of
-    // blessing a truncated journal. The org-wide AuditEvent chain has no such
-    // column, so tail truncation there is only detectable against an external
-    // anchor.
+    // This function only ever sees the array it's handed, so it cannot catch
+    // this by itself — the mitigation lives one layer up, in appendRunEvent /
+    // appendAuditEvent (auditLog.test.ts): Run.journalHead and
+    // Organization.auditChainHead each store the expected tail out-of-band, so
+    // the next append raises RunJournalIntegrityError / OrgAuditChainIntegrityError
+    // instead of building on a chain someone truncated. Both are still same-
+    // database columns, so an attacker able to rewrite the chain rows and that
+    // column together remains outside what either catches — see the next test.
   });
 
   it("does NOT detect a wholesale rewrite by someone who can write every row", () => {

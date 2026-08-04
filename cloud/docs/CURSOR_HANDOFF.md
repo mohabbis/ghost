@@ -159,8 +159,8 @@ submit step.
 ### Known gaps in durable execution
 
 Three findings from the review of PR #373 were deferred rather than patched
-under a merge deadline. Two are now closed on the compensation branch (#374);
-one remains.
+under a merge deadline. All three are now closed, the last (the org chain's
+missing expected-head column) partially — see below for what's still open.
 
 **Closed — session blobs are bound to their run.** `seal`/`open` take associated
 data and session state is sealed under `ghost:session:v1:<runId>:<artifactKey>`,
@@ -186,19 +186,30 @@ This protects against deletion from `RunEvent`, including deletion of the whole
 journal. Because the expected head is in the same database, an attacker able to
 rewrite both the journal and `Run.journalHead` remains outside this threat model.
 
-**The organization chain is not a stronger seal, and should not be described as
-one.** It has the same weakness the run journal had before this change: no
-expected head is persisted for it, and `/api/audit/verify` derives the org head
-from the surviving `AuditEvent` rows, so deleting a valid *suffix* of that chain
-verifies as intact. Run-boundary anchors do mean tampering with a run journal
-contradicts a value already recorded in the org chain — but only while the org
-chain's own tail is intact.
+**Closed (same-database half) — the org chain now has an expected head too.**
+`Organization.auditChainHead` mirrors `Run.journalHead`: `appendAuditEvent`
+updates it in the same transaction as every event, and refuses to append
+(`OrgAuditChainIntegrityError`) if the surviving tail doesn't match it first.
+`/api/audit/verify` reports `org.expectedHeadMatches` alongside `org.intact`,
+the same shape as the existing `run.expectedHeadMatches`. This closes the case
+where deleting a valid *suffix* of `AuditEvent` used to verify as an intact,
+merely shorter, chain. Existing orgs were backfilled from their current tail on
+migration. Covered by `packages/core/src/auditLog.test.ts`.
+
+**Still open — the org chain is not a stronger seal than that, and should not
+be described as one.** `Organization.auditChainHead` is a same-database column,
+same as `Run.journalHead` — an attacker able to rewrite both `AuditEvent` and
+that column together remains outside this threat model, exactly as rewriting
+both `RunEvent` and `Run.journalHead` does. Run-boundary anchors do mean
+tampering with a run journal contradicts a value already recorded in the org
+chain, but only while the org chain's own tail is intact by the same standard.
 
 Nothing in the system is anchored outside the database. Until something is —
 periodic export of the org head to storage the app cannot write, a countersigned
 receipt, anything — the honest scope is: this detects corruption and partial
-edits, not an attacker with write access to the whole database. Say that
-plainly rather than implying a seal that does not exist.
+edits (including, now, a deleted suffix), not an attacker with write access to
+the whole database. Say that plainly rather than implying a seal that does not
+exist.
 
 ### Known gaps in compensation (undo)
 
