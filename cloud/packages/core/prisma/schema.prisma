@@ -293,12 +293,19 @@ model Recording {
   rawTraceFilename String?
   sessionMeta      Json?
 
-  // HarnessRouter compile job. `harnessSessionId` is the recovery identifier
-  // used to resume polling after a dropped connection (never start a second
-  // task on top of one already running — see apps/web/src/lib/recording-compiler.ts).
-  compileStatus     RecordingCompileStatus @default(NONE)
-  harnessResponseId String?
-  harnessSessionId  String?
+  // Handle for an in-flight compile, opaque to Ghost. `compileSessionId` is
+  // the recovery identifier used to resume polling after a dropped connection
+  // (never start a second task on top of one already running — see
+  // apps/web/src/lib/recording-compiler.ts).
+  //
+  // Deliberately named after the *role* rather than the implementation. These
+  // columns previously carried a vendor's vocabulary, which put a replaceable
+  // authoring tool into the core data model and made it read as though
+  // customer workflows executed through it. The compiler behind them is
+  // chosen at runtime and may be absent entirely — see lib/compiler/.
+  compileStatus    RecordingCompileStatus @default(NONE)
+  compileJobId     String?
+  compileSessionId String?
   // Proposed steps, validated against `@ghost/core/schema/step` before
   // storage. A *proposal* a human reviews in the editor — never executed
   // directly, never trusted the way a published WorkflowVersion is.

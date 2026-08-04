@@ -1,13 +1,13 @@
 import { appendAuditEvent } from "@ghost/core/audit-log";
 import { auth } from "@/auth";
-import { HarnessRouterError } from "@/lib/harness-router";
+import { compilerErrorResponse } from "@/lib/compiler";
 import { prisma } from "@/lib/db";
 import { startCompile } from "@/lib/recording-compiler";
 
-/** Starts (or restarts) the HarnessRouter compile task for one recording.
+/** Starts (or restarts) the compile task for one recording.
  * Refused while a compile is already `RUNNING` — restarting on top of a run
- * that is still going would start a second runtime task for the same
- * recording, which the setup guide is explicit about never doing. */
+ * that is still going would start a second task for the same recording, which
+ * the setup guide is explicit about never doing. */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.orgId) {
@@ -29,19 +29,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return Response.json({ error: "recording has no uploaded trace" }, { status: 400 });
   }
 
-  let responseId: string;
-  let sessionId: string;
+  let job;
   try {
-    ({ responseId, sessionId } = await startCompile(recording));
+    job = await startCompile(recording);
   } catch (err) {
-    // Surfaced as-is: a 402 ("out of credits") or 401 ("bad key") is
-    // actionable by whoever owns the HarnessRouter Workspace, not a bug —
-    // an uncaught throw here would otherwise reach the client as a bare,
-    // unhelpful 500 with the message lost to Next's production error hiding.
-    if (err instanceof HarnessRouterError) {
-      const status = err.status >= 400 && err.status < 500 ? err.status : 502;
-      return Response.json({ error: err.message }, { status });
-    }
+    // 503 when no compiler is configured — the expected production state, not
+    // a bug. Upstream 4xx passes through, since "out of credits" or "bad key"
+    // is actionable by whoever runs the compiler; everything else is 502. An
+    // uncaught throw would instead reach the client as a bare 500 with the
+    // message lost to Next's production error hiding.
+    const response = compilerErrorResponse(err);
+    if (response) return response;
     throw err;
   }
 
@@ -50,8 +48,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       where: { id: recording.id },
       data: {
         compileStatus: "RUNNING",
-        harnessResponseId: responseId,
-        harnessSessionId: sessionId,
+        compileJobId: job.jobId,
+        compileSessionId: job.sessionId,
         compileError: null,
       },
     });
