@@ -22,7 +22,8 @@
     "./concurrency": "./src/runtime/concurrency.ts",
     "./agent": "./src/agent/tools.ts",
     "./agent-credentials": "./src/agent/credentials.ts",
-    "./storage/artifacts": "./src/storage/artifacts.ts"
+    "./storage/artifacts": "./src/storage/artifacts.ts",
+    "./roles": "./src/roles.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",
