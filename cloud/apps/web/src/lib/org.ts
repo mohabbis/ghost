@@ -71,18 +71,21 @@ export async function ensureUserOrg(
   email: string,
   name?: string | null,
   image?: string | null,
-): Promise<{ userId: string; orgId: string }> {
+): Promise<{ userId: string; orgId: string; mfaEnabled: boolean }> {
   const user = await prisma.user.upsert({
     where: { email },
     update: { name: name ?? undefined, image: image ?? undefined },
     create: { email, name: name ?? undefined, image: image ?? undefined },
   });
+  // Carried into the token so the Edge middleware can decide whether to
+  // challenge without a database round trip on every request.
+  const mfaEnabled = user.mfaEnabledAt !== null;
 
   const existing = await prisma.membership.findFirst({
     where: { userId: user.id },
     orderBy: { createdAt: "asc" },
   });
-  if (existing) return { userId: user.id, orgId: existing.orgId };
+  if (existing) return { userId: user.id, orgId: existing.orgId, mfaEnabled };
 
   // Someone invited here who has never used Ghost joins the inviting
   // organization instead of getting a personal one. Without this they would
@@ -95,7 +98,7 @@ export async function ensureUserOrg(
   // apply, minus the email check, which is trivially satisfied — we are
   // looking up by the address the provider just authenticated.
   const invited = await claimPendingInvitation(user.id, email);
-  if (invited) return { userId: user.id, orgId: invited };
+  if (invited) return { userId: user.id, orgId: invited, mfaEnabled };
 
   const { name: orgName, slug } = deriveOrg(email, name);
   const org = await prisma.organization.create({
@@ -105,5 +108,5 @@ export async function ensureUserOrg(
       memberships: { create: { userId: user.id, role: "OWNER" } },
     },
   });
-  return { userId: user.id, orgId: org.id };
+  return { userId: user.id, orgId: org.id, mfaEnabled };
 }

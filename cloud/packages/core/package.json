@@ -24,7 +24,9 @@
     "./agent-credentials": "./src/agent/credentials.ts",
     "./storage/artifacts": "./src/storage/artifacts.ts",
     "./roles": "./src/roles.ts",
-    "./invitations": "./src/invitations.ts"
+    "./invitations": "./src/invitations.ts",
+    "./mfa": "./src/mfa.ts",
+    "./crypto/mfa-secret": "./src/crypto/mfa-secret.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",

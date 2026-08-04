@@ -23,4 +23,17 @@ export const edgeAuthConfig: NextAuthConfig = {
   providers: [],
   session: { strategy: "jwt" },
   pages: { signIn: "/signin" },
+  callbacks: {
+    // Pure token reshaping, no I/O — the middleware needs `id` and
+    // `mfaEnabled` off the already-verified token to decide whether to
+    // challenge. The claims are *written* in `auth.ts`; this only surfaces
+    // them.
+    session({ session, token }) {
+      if (typeof token.userId === "string") session.user.id = token.userId;
+      if (typeof token.orgId === "string") session.user.orgId = token.orgId;
+      session.user.mfaEnabled = token.mfaEnabled === true;
+      if (typeof token.sid === "string") session.user.sid = token.sid;
+      return session;
+    },
+  },
 };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
@@ -52,15 +53,27 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       // Runs with `user` only on initial sign-in.
       if (user?.email) {
-        const { userId, orgId } = await ensureUserOrg(user.email, user.name, user.image);
+        const { userId, orgId, mfaEnabled } = await ensureUserOrg(user.email, user.name, user.image);
         token.userId = userId;
         token.orgId = orgId;
+        // Whether this account *requires* a second factor. Whether it has
+        // *passed* one lives in a separate signed cookie, deliberately not
+        // here — see lib/mfa-cookie.ts.
+        token.mfaEnabled = mfaEnabled;
+        // A fresh identifier for *this* sign-in. The MFA cookie is bound to
+        // it, so signing out and back in mints a new one and the old cookie
+        // stops satisfying the gate — otherwise a second factor proved once
+        // would keep being accepted for every later sign-in within the
+        // cookie's lifetime, which is exactly what MFA is supposed to prevent.
+        token.sid = randomUUID();
       }
       return token;
     },
     session({ session, token }) {
       if (typeof token.userId === "string") session.user.id = token.userId;
       if (typeof token.orgId === "string") session.user.orgId = token.orgId;
+      session.user.mfaEnabled = token.mfaEnabled === true;
+      if (typeof token.sid === "string") session.user.sid = token.sid;
       return session;
     },
   },

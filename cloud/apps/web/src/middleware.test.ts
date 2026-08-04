@@ -28,9 +28,12 @@ describe("middleware matcher", () => {
 
   const matcherEntries = (() => {
     const source = readFileSync(join(srcDir, "middleware.ts"), "utf8");
-    const block = /matcher:\s*\[([\s\S]*?)\]/.exec(source);
+    const block = /matcher:\s*\[([\s\S]*?)\n  \]/.exec(source);
     if (!block) throw new Error("could not find `matcher: [...]` in middleware.ts");
-    return [...block[1]!.matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1]!);
+    // Strip `//` comments first: an apostrophe inside one ("Auth.js's") reads
+    // as a string delimiter to the matcher below and yields nonsense entries.
+    const withoutComments = block[1]!.replace(/\/\/[^\n]*/g, "");
+    return [...withoutComments.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
   })();
 
   it("finds the authenticated route groups on disk", () => {
@@ -45,10 +48,37 @@ describe("middleware matcher", () => {
     expect(matcherEntries).toContain(`/${segment}/:path*`);
   });
 
-  it("has no matcher entry without a matching route on disk", () => {
+  it("has no page matcher entry without a matching route on disk", () => {
     const matched = matcherEntries
+      .filter((m) => !m.startsWith("/api/"))
       .map((m) => m.replace(/^\//, "").replace(/\/:path\*$/, ""))
       .sort();
     expect(matched).toEqual(routeSegments);
+  });
+
+  describe("session-authenticated API surface", () => {
+    // `/api/*` is matched so the second-factor gate reaches it. Without this
+    // entry MFA would protect the pages while leaving the same data readable
+    // by calling the API directly with the session cookie.
+    const apiEntry = matcherEntries.find((m) => m.startsWith("/api/"));
+
+    it("is covered by the matcher", () => {
+      expect(apiEntry).toBeDefined();
+    });
+
+    it.each(["auth", "agent", "mfa"])("excludes /api/%s", (excluded) => {
+      // auth  — gating it prevents signing in at all.
+      // agent — bearer-credential authenticated, has no session to check.
+      // mfa   — how the challenge is answered; gating it deadlocks the user.
+      const pattern = new RegExp(`^${apiEntry!.replace(/:path\*/, ".*")}$`);
+      expect(pattern.test(`/api/${excluded}/anything`)).toBe(false);
+    });
+
+    it("still covers ordinary API routes", () => {
+      const pattern = new RegExp(`^${apiEntry!.replace(/:path\*/, ".*")}$`);
+      for (const path of ["/api/runs/abc", "/api/workflows", "/api/recordings/x/compile"]) {
+        expect(pattern.test(path)).toBe(true);
+      }
+    });
   });
 });

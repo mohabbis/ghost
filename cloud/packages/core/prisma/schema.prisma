@@ -25,8 +25,17 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
+  // Two-factor. `mfaSecret` is an AES-256-GCM envelope (see
+  // crypto/mfa-secret.ts), never the raw TOTP secret. `mfaEnabledAt` is the
+  // authority on whether 2FA is *active*: a secret exists from the moment
+  // enrolment starts, and treating its presence as "enabled" would lock a
+  // user out the instant they opened the enrolment screen and walked away.
+  mfaSecret    String?
+  mfaEnabledAt DateTime?
+
   accounts            Account[]
   sessions            Session[]
+  mfaRecoveryCodes    MfaRecoveryCode[]
   memberships         Membership[]
   createdFlows        Workflow[]        @relation("WorkflowCreatedBy")
   triggeredRuns       Run[]             @relation("RunTriggeredBy")
@@ -158,6 +167,23 @@ model Invitation {
 
   @@index([orgId, createdAt])
   @@index([email])
+}
+
+// Single-use recovery codes for when an authenticator is lost.
+//
+// Digest-only, like every other credential here. Rows are kept after use
+// rather than deleted so "this code was already used" stays distinguishable
+// from "this code never existed" for the person reading an audit log.
+model MfaRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Membership {
