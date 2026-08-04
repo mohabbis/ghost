@@ -38,6 +38,11 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # This job never checks out, so the workflow-level `working-directory:
+    # cloud` would point bash at a directory that does not exist yet.
+    defaults:
+      run:
+        working-directory: .
     outputs:
       cloud: ${{ steps.filter.outputs.cloud }}
     steps:
@@ -65,7 +70,12 @@ jobs:
 
   build:
     needs: changes
-    if: needs.changes.outputs.cloud == 'true'
+    # Fail closed. If detection itself breaks, `needs.changes.outputs.cloud` is
+    # empty and a bare equality test would skip this job — which branch
+    # protection then accepts as satisfied, merging cloud changes with no CI at
+    # all. Run on failure instead. `!cancelled()` is required for the job to be
+    # considered at all once a dependency has failed.
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.cloud == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

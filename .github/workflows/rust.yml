@@ -80,7 +80,7 @@ jobs:
   check:
     name: Check (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -111,7 +111,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     # Windows cold `cargo test` normally finishes well under this; without a
     # cap, a stuck runner holds the queue indefinitely.
@@ -141,7 +141,7 @@ jobs:
   clippy:
     name: Clippy (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -171,7 +171,7 @@ jobs:
   fmt:
     name: Rustfmt
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -186,7 +186,7 @@ jobs:
   tauri-compile:
     name: Tauri compile smoke test (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -221,7 +221,7 @@ jobs:
   experimental:
     name: Experimental (${{ matrix.job }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -262,7 +262,7 @@ jobs:
   version-consistency:
     name: Version consistency
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -286,7 +286,7 @@ jobs:
   frontend-contract:
     name: Frontend contract tests
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
