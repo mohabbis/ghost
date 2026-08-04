@@ -1,23 +1,20 @@
-import { appendAuditEvent } from "@ghost/core/audit-log";
-import { artifactStore } from "@ghost/core/storage/artifacts";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { ingestTrace, MAX_TRACE_BYTES } from "@/lib/recording-ingest";
 
-/** Recording traces are small event/HAR/trace-zip logs, not raw video — cap
- * well under Vercel's 100MB function body limit to keep uploads fast and
- * keep an accidental video upload from tying up the compile step. */
-const MAX_TRACE_BYTES = 25 * 1024 * 1024;
-
-function sanitizeFilename(name: string): string {
-  const base = name.split(/[/\\]/).pop() || "recording-trace";
-  return base.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-200) || "recording-trace";
-}
-
-/** Upload a raw workflow-recording trace and create the `Recording` it will
- * be compiled from. The capture mechanism itself (server-side remote browser
- * vs. extension — see `docs/CURSOR_HANDOFF.md` Phase 2) is still an open
- * decision; this accepts a trace produced by whatever means already exists
- * (a JSON event log, a HAR export, a Playwright trace .zip). */
+/**
+ * Upload a workflow-recording trace and create the `Recording` it will be
+ * reviewed from.
+ *
+ * A trace produced by a Ghost recorder (`@ghost/core/recording/trace`) is
+ * compiled into typed steps deterministically, in this request — no model and
+ * no configured compiler, which is what makes recording work in a production
+ * deployment that has neither. Any other format (HAR, Playwright zip) is stored
+ * and left for whatever compiler is configured, if one is.
+ *
+ * The extension posts to `/api/agent/recordings` instead, which accepts a
+ * bearer credential; both share `ingestTrace`.
+ */
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.orgId) {
@@ -29,7 +26,7 @@ export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!file || !(file instanceof File)) {
-    return Response.json({ error: "a \"file\" upload is required" }, { status: 400 });
+    return Response.json({ error: 'a "file" upload is required' }, { status: 400 });
   }
   if (file.size === 0) {
     return Response.json({ error: "the uploaded file is empty" }, { status: 400 });
@@ -41,41 +38,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const filename = sanitizeFilename(file.name || "recording-trace");
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  const recording = await prisma.recording.create({
-    data: { orgId, status: "STOPPED" },
+  const result = await ingestTrace({
+    orgId,
+    userId,
+    filename: file.name || "recording-trace",
+    contentType: file.type,
+    buffer: Buffer.from(await file.arrayBuffer()),
   });
 
-  try {
-    const key = `recordings/${recording.id}/trace-${filename}`;
-    await artifactStore().put(key, buffer, file.type || "application/octet-stream");
-    await prisma.$transaction(async (tx) => {
-      await tx.recording.update({
-        where: { id: recording.id },
-        data: { rawTraceKey: key, rawTraceFilename: filename },
-      });
-      await appendAuditEvent(
-        orgId,
-        userId,
-        {
-          action: "recording.uploaded",
-          entityType: "Recording",
-          entityId: recording.id,
-          metadata: { filename, bytes: buffer.byteLength },
-        },
-        tx,
-      );
-    });
-  } catch (err) {
-    // Storage failed after the row was created — don't leave an unusable
-    // Recording with no trace behind for the org to trip over.
-    await prisma.recording.delete({ where: { id: recording.id } }).catch(() => undefined);
-    throw err;
-  }
-
-  return Response.json({ id: recording.id }, { status: 201 });
+  return Response.json(result, { status: 201 });
 }
 
 export async function GET() {
@@ -83,19 +54,18 @@ export async function GET() {
   if (!session?.user?.orgId) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
-
   const recordings = await prisma.recording.findMany({
     where: { orgId: session.user.orgId },
     orderBy: { createdAt: "desc" },
+    take: 50,
     select: {
       id: true,
+      createdAt: true,
       status: true,
       compileStatus: true,
       rawTraceFilename: true,
       workflowId: true,
-      createdAt: true,
     },
   });
-
   return Response.json({ recordings });
 }

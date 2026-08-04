@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Ghost Workflow Recorder",
+  "version": "0.1.0",
+  "description": "Record a business workflow once in your browser, then review and publish it in Ghost.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "action": { "default_popup": "src/popup.html", "default_title": "Ghost Workflow Recorder" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
