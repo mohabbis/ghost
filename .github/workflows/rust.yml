@@ -1,22 +1,21 @@
 name: Rust CI
 
+# Path scoping lives in the `changes` job below, NOT in `on:`. A workflow that
+# never starts because of a path filter never creates its check runs, and a
+# required check that is never created sits "Expected — Waiting for status" on
+# the PR forever: `mergeStateStatus` stays BLOCKED with nothing to click. That
+# is exactly what happened to every cloud-only PR while these fourteen contexts
+# were required and `paths-ignore: cloud/**` kept them from ever reporting.
+#
+# A job skipped by an `if:` condition is different: it *does* create a check
+# run, concludes "skipped", and branch protection counts that as satisfied. So
+# the workflow now always starts, decides once whether the Rust tree was
+# touched, and lets every job skip itself when it wasn't.
 on:
   push:
     branches: [main, master, develop]
-    paths-ignore:
-      - "cloud/**"
-      - "docs/**"
-      - "public/**"
-      - "**/*.md"
-      - ".github/workflows/cloud.yml"
   pull_request:
     branches: [main, master, develop]
-    paths-ignore:
-      - "cloud/**"
-      - "docs/**"
-      - "public/**"
-      - "**/*.md"
-      - ".github/workflows/cloud.yml"
 
 # Cancel superseded runs on the same ref so hung/queued Windows jobs from
 # already-pushed SHAs cannot starve the tip (observed 60+ min hangs with no
@@ -27,14 +26,61 @@ concurrency:
 
 permissions:
   contents: read
+  # The `changes` job reads the PR's file list through the API rather than
+  # cloning full history to diff it.
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  # Decides once whether this change touches the Rust tree. Every job below
+  # gates on it, so the fourteen required contexts always report — as real
+  # results on a Rust change, as "skipped" (which branch protection accepts)
+  # on a cloud-only or docs-only one.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # On push (post-merge) we do not try to be clever: run everything.
+          # Only pull requests need accurate skipping, and only they are gated
+          # by branch protection.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" \
+            --paginate --jq '.[].filename')
+
+          # These are the paths Rust CI has no stake in — the same list that
+          # used to live in `paths-ignore`. If every changed file matches one
+          # of them, the Rust jobs skip. An empty or unreadable file list
+          # falls through to "true", so the failure mode is running CI we did
+          # not need rather than merging without it.
+          IGNORED='^(cloud/|docs/|public/)|^\.github/workflows/cloud\.yml$|\.md$'
+
+          if printf '%s\n' "$files" | grep -qvE "$IGNORED"; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
     name: Check (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -64,6 +110,8 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     # Windows cold `cargo test` normally finishes well under this; without a
     # cap, a stuck runner holds the queue indefinitely.
@@ -92,6 +140,8 @@ jobs:
 
   clippy:
     name: Clippy (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -120,6 +170,8 @@ jobs:
 
   fmt:
     name: Rustfmt
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -133,6 +185,8 @@ jobs:
 
   tauri-compile:
     name: Tauri compile smoke test (${{ matrix.os }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -166,6 +220,8 @@ jobs:
 
   experimental:
     name: Experimental (${{ matrix.job }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -205,6 +261,8 @@ jobs:
 
   version-consistency:
     name: Version consistency
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -227,6 +285,8 @@ jobs:
 
   frontend-contract:
     name: Frontend contract tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.rust == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
