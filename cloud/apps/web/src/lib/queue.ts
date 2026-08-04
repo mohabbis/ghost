@@ -42,7 +42,7 @@ export function enqueueNoop(data: NoopJob) {
   return getQueue(QUEUE_NAMES.noop).add(QUEUE_NAMES.noop, data);
 }
 
-export function enqueueRunWorkflow(data: RunWorkflowJob) {
+export function enqueueRunWorkflow(data: RunWorkflowJob, opts?: { delayMs?: number }) {
   return getQueue(QUEUE_NAMES.runWorkflow).add(QUEUE_NAMES.runWorkflow, data, {
     jobId: runWorkflowJobId(data.runId, data.fromStepIndex, data.resumeToken),
     // Queue-level retries are only safe because re-entry is idempotent: the run
@@ -53,6 +53,9 @@ export function enqueueRunWorkflow(data: RunWorkflowJob) {
     backoff: { type: "exponential", delay: 5_000 },
     removeOnComplete: { age: 3_600 },
     removeOnFail: { age: 86_400 },
+    // Lets a caller defer this job past a run's active lease TTL — see the
+    // cancel route's use of this for the "worker still owns the lease" case.
+    ...(opts?.delayMs ? { delay: opts.delayMs } : {}),
   });
 }
 
