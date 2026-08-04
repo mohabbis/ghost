@@ -159,7 +159,29 @@ pnpm --filter @ghost/worker exec tsx src/e2e-drive.ts
 It seeds a run against `/fixtures/order`, enqueues it, waits for the gate,
 approves, and prints the journal. A healthy run shows `session.captured` at the
 gate, `session.restored` on resume, and exactly one `step.succeeded` for the
-submit step.
+submit step. Verified passing.
+
+### The crash-recovery driver
+
+```bash
+pnpm --filter @ghost/worker exec tsx src/crash-drive.ts
+```
+
+Same setup, but it spawns its own worker, waits until the submit step is
+genuinely mid-flight (`step.started`, no outcome), `SIGKILL`s the worker's
+process group, and starts a fresh one. Verified: the recovering worker does
+**not** re-click Submit — it raises `step.outcome_unknown` and ends the run
+`INCIDENT` with "step 2 started but never recorded an outcome, and its effect
+cannot safely be repeated". Zero duplicate submits.
+
+That INCIDENT is the correct outcome, not a failure of the driver. `step.started`
+is written before the effect so a crash leaves the step visibly in flight and
+the state machine can refuse to guess whether it landed.
+
+If you change this driver, keep the process-group kill and the post-kill
+liveness check. An earlier version spawned through `npx` and signalled the
+wrapper; the real worker survived, finished the step, and the driver printed
+`PASS` having tested nothing.
 
 ### Known gaps in durable execution
 
