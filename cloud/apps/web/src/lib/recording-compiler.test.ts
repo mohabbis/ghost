@@ -14,6 +14,12 @@ import { finalizeIfTerminal } from "@/lib/recording-compiler";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+// Selects the HarnessRouter adapter. Without a key `workflowCompiler()`
+// returns null and `finalizeIfTerminal` throws CompilerNotConfiguredError —
+// which is the correct production behaviour and is asserted separately in
+// `compiler/compiler-optional.test.ts`.
+process.env.HR_API_KEY ||= "sk-hr-test";
+
 const hr = vi.hoisted(() => ({
   session: { status: "done", turn_status: "done" } as { status: string; turn_status: string },
   files: [] as { path: string; file_id: string; bytes: number; media_type: string; download_url: string }[],
@@ -61,7 +67,13 @@ describe.skipIf(!hasDb)("finalizeIfTerminal (Postgres)", () => {
 
   async function running() {
     return prisma.recording.create({
-      data: { orgId, status: "STOPPED", compileStatus: "RUNNING", harnessSessionId: "sess-1" },
+      data: {
+        orgId,
+        status: "STOPPED",
+        compileStatus: "RUNNING",
+        compileJobId: "job-1",
+        compileSessionId: "sess-1",
+      },
     });
   }
 
