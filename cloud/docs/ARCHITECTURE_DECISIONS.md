@@ -403,18 +403,51 @@ criterion that can be observed rather than asserted:
 | 6 | **Credential boundary.** Org-scoped connector credentials, worker-only decryption, usage audited. | No executor ever receives a credential value from workflow JSON (closes P1-3). |
 | 7 | **Reliability layer.** Metering, per-org limits, dead-letter handling, and failure messages that say what changed and whether retry is safe. | — |
 
-### The test that matters
+### The test that matters — **run, and it passes**
 
-Against a controlled demo site: sign in with a stored credential, find a record,
-update a field, gate for approval, submit after approval, verify the saved
-value, store a screenshot, produce an audit trail. Then deliberately break it —
-kill the worker mid-run, retry a failed step, reject an approval, cancel a run,
-change a selector underneath it.
+**The workflow must recover without duplicating the mutating action.** Two
+drivers now exercise this against a real worker process, a real queue and real
+Chromium — not the vitest suite, which calls `runWorkflowJob` in-process and so
+has no process to kill, no lease to expire and no BullMQ redelivery.
 
-**The workflow must recover without duplicating the mutating action.** The
-journal, leases and restore planner were built for exactly this and have never
-been proven together under adversarial conditions. That test is worth more than
-any amount of surface area.
+**`e2e-drive.ts` — the happy path.** Navigate, fill, halt at the gate with the
+session captured, approve, resume, restore browser state, submit, verify,
+`SUCCEEDED`. Twelve journal entries; `step.succeeded` for the submit step
+appears **exactly once**; a duplicate enqueue with the same job id collapses.
+
+**`crash-drive.ts` — the adversarial path.** Spawns its own worker, waits until
+the journal shows `step.started` for the submit step with no outcome — the
+click is genuinely in flight — then `SIGKILL`s the worker's process group and
+starts a fresh one. Observed:
+
+```text
+worker exit: code=null signal=SIGKILL
+final status: INCIDENT
+  OUTCOME_UNKNOWN: step 2 started but never recorded an outcome,
+  and its effect cannot safely be repeated
+times the submit click succeeded: 0
+```
+
+The recovering worker **did not re-click Submit**. `step.started` is recorded
+before the effect precisely so a crash leaves the step visibly in flight, and
+the state machine then refuses to guess whether it landed — it raises
+`step.outcome_unknown` and quarantines the run for a human. For a payment step
+that is the only defensible behaviour: an engine that retried here would place
+the order twice, and one that assumed success would report a payment that never
+happened.
+
+A note on how nearly this was missed. The first version of `crash-drive.ts`
+spawned the worker via `npx tsx` and called `child.kill()`, which signals the
+*wrapper* — the node process running the worker is a grandchild and survived,
+finished the step normally, and the driver printed a confident `PASS` having
+tested nothing at all. The driver now spawns with `detached: true`, kills the
+process group, and **verifies the process actually died** before drawing any
+conclusion. A crash test that cannot prove it caused a crash is worse than no
+crash test, because it is believed.
+
+Still unproven, and worth doing next: retry of a failed step, rejecting an
+approval, cancelling a run mid-flight, and changing a selector underneath a
+published workflow.
 
 ### What not to build yet
 
