@@ -168,3 +168,5 @@ Temporal, Camunda, Windmill and n8n, and what it deliberately refuses.
 Authoritative handoff: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
 Phase 1 plan: [`docs/PHASE_1_PLAN.md`](docs/PHASE_1_PLAN.md).
 Prior art and design rationale: [`docs/PRIOR_ART.md`](docs/PRIOR_ART.md).
+Decisions, sequencing and the current audit:
+[`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md).

@@ -14,6 +14,11 @@ not** approve. All new work lives under `cloud/` (pnpm + Turborepo). The legacy
 Rust/Tauri desktop app at the repo root is out of scope unless explicitly
 requested.
 
+**Before starting anything new**, read
+`cloud/docs/ARCHITECTURE_DECISIONS.md`: it records the four decisions that were
+open (HarnessRouter's boundary, enterprise auth, capture, and the audit), the
+order the remaining work goes in, and what is deliberately not being built yet.
+
 Read `cloud/README.md`, `cloud/docs/PHASE_1_PLAN.md`, and
 `cloud/docs/AGENT_PLUGIN.md` first — this file is the "where we are / what to do
 next" layer on top of them.
