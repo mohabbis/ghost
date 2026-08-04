@@ -297,3 +297,42 @@ jobs:
 
       - name: Run compression-review contract tests
         run: node --test src/compression-review.test.mjs
+
+  # The single required context for this workflow.
+  #
+  # Branch protection cannot depend on the matrix jobs directly. A matrix job
+  # skipped by an `if:` condition reports its check run under the *unexpanded*
+  # name — literally "Check (${{ matrix.os }})" — because the matrix never
+  # expands for a job that does not run. So requiring "Check (ubuntu-latest)"
+  # leaves it waiting forever on a cloud-only PR, which is the same deadlock
+  # this workflow's `changes` job was introduced to fix, one level down.
+  #
+  # A non-matrix aggregator has a static name in every case. It reports failure
+  # if any gated job failed, and success when they all skipped.
+  rust-ci:
+    name: Rust CI
+    needs:
+      - check
+      - test
+      - clippy
+      - fmt
+      - tauri-compile
+      - version-consistency
+      - frontend-contract
+    # `always()` so this still reports when its dependencies skipped — the
+    # entire point. Without it, a skipped dependency skips the aggregator too
+    # and the required context never appears.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify no gated Rust job failed
+        run: |
+          set -euo pipefail
+          results='${{ join(needs.*.result, ",") }}'
+          echo "dependency results: $results"
+          case "$results" in
+            *failure*)   echo "::error::a Rust CI job failed";    exit 1 ;;
+            *cancelled*) echo "::error::a Rust CI job was cancelled"; exit 1 ;;
+          esac
+          echo "all gated Rust jobs passed or skipped"
