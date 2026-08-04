@@ -28,16 +28,31 @@ export async function GET(req: Request) {
     where: { orgId },
     orderBy: { seq: "asc" },
   });
-  const org = verifyAuditChain(
+  const chain = verifyAuditChain(
     events.map((e) => ({ prevHash: e.prevHash, hash: e.hash, payload: auditPayloadFromRow(e) })),
   );
 
+  // Internal hash links alone cannot detect deletion of a valid suffix — the
+  // surviving prefix still verifies as intact, just shorter. auditChainHead is
+  // the expected tail persisted on Organization outside AuditEvent itself (see
+  // appendAuditEvent), so a suffix deleted without also rewriting that column
+  // is caught here instead of silently accepted as "the chain that happens to
+  // exist now".
+  const orgRow = await prisma.organization.findUniqueOrThrow({
+    where: { id: orgId },
+    select: { auditChainHead: true },
+  });
+  const orgHead = events.at(-1)?.hash ?? null;
+  const orgExpectedHeadMatches = orgHead === orgRow.auditChainHead;
+
   const body: Record<string, unknown> = {
     org: {
-      intact: org.intact,
-      firstBreakIndex: org.firstBreakIndex,
+      intact: chain.intact && orgExpectedHeadMatches,
+      firstBreakIndex: chain.firstBreakIndex,
       count: events.length,
-      headHash: events.at(-1)?.hash ?? null,
+      headHash: orgHead,
+      expectedHeadHash: orgRow.auditChainHead,
+      expectedHeadMatches: orgExpectedHeadMatches,
     },
   };
 
