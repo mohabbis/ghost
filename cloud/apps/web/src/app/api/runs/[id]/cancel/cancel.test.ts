@@ -23,7 +23,9 @@ import type { WorkflowSteps } from "@ghost/core/schema/step";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-const enqueueRunWorkflow = vi.hoisted(() => vi.fn(async () => undefined));
+const enqueueRunWorkflow = vi.hoisted(() =>
+  vi.fn(async (_data: unknown, _opts?: { delayMs?: number }) => undefined),
+);
 vi.mock("@/lib/queue", () => ({
   enqueueRunWorkflow,
   enqueueCompensateRun: async () => undefined,
