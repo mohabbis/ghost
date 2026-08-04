@@ -130,6 +130,10 @@ export interface WorkflowEditorProps {
   initialSteps?: WorkflowStep[];
   /** Latest published version, shown so the author knows what they are basing on. */
   currentVersion?: number;
+  /** Set when these initial steps came from a compiled Recording proposal —
+   * on create, links the new workflow back to it (see `POST /api/workflows`)
+   * so the recording is marked COMPILED instead of staying claimable twice. */
+  recordingId?: string;
 }
 
 export function WorkflowEditor({
@@ -138,6 +142,7 @@ export function WorkflowEditor({
   initialDescription = "",
   initialSteps,
   currentVersion,
+  recordingId,
 }: WorkflowEditorProps) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -215,7 +220,7 @@ export function WorkflowEditor({
         : await fetch("/api/workflows", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ name, description, steps }),
+            body: JSON.stringify({ name, description, steps, recordingId }),
           });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error ?? `save failed (${res.status})`);

@@ -348,8 +348,40 @@ after).
 
 ## Phase 2
 
-Recording → editable workflow. Open decision: server-side remote cloud browser
-(recommended) vs Chrome extension. Engine boundary is clean either way.
+Recording → editable workflow, split into Capture and Convert.
+
+**Convert is built.** `POST /api/recordings` uploads a raw trace (JSON event
+log, HAR, or Playwright trace .zip — whatever the capture step eventually
+produces); `POST /api/recordings/[id]/compile` sends it to a
+HarnessRouter-configured agent ("Ghost Recording Compiler",
+`apps/web/src/lib/recording-compiler.ts`) that proposes a `steps.json`;
+`GET /api/recordings/[id]/stream` pushes progress the same way run status is
+pushed (`apps/web/src/app/api/runs/[id]/stream`); the proposal is validated
+against `@ghost/core/schema/step` before it ever lands in
+`Recording.compiledSteps`, then reviewed in the same `WorkflowEditor` used for
+hand-authored workflows and published through the existing
+`POST /api/workflows` path — the AI proposal never bypasses that trust
+pipeline, it only pre-fills the editor. `HR_API_KEY` (server-only,
+`cloud/.env`) is required for this to run.
+
+**HarnessRouter is development tooling, not runtime.** It is agent
+infrastructure used to build Ghost; nothing a customer executes goes through
+it. Compile is an optional authoring convenience that is unavailable when the
+key is unset, and production is expected to leave it unset — see
+`docs/DEPLOY.md`. The next change here extracts a provider-neutral
+`WorkflowCompiler` interface so the HarnessRouter client is one replaceable
+adapter rather than a dependency reaching into the recording routes. Removing
+that adapter must disable compile and nothing else.
+
+**Capture is decided: a Chrome extension for v1.** A Ghost-hosted remote
+browser is the more elegant answer — it records in the same environment the
+worker replays in, so environment drift between record and replay stops being
+a class of production defect — but running Chrome at scale is infrastructure
+engineering, and the extension gets a real capture path in front of users far
+sooner. The engine boundary is unchanged either way: Convert needs *a* trace
+to exist, not a particular producer, so the extension slots in ahead of the
+upload step and `POST /api/recordings` stays as it is. The manual upload form
+is scaffolding, not the product.
 
 ## Repo conventions
 

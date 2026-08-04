@@ -103,6 +103,51 @@ Application rollbacks are ordinary redeploys. Migrations are not: `migrate
 deploy` only rolls forward, so a schema change that has to be undone needs a new
 migration. Prefer additive changes.
 
+## HarnessRouter is development tooling — leave it unset in production
+
+HarnessRouter is agent infrastructure used to *build* Ghost. It is not part of
+what Ghost *runs*. Nothing a customer executes — no workflow, no step, no
+approval, no verification — passes through it, and production must boot and
+operate with `HR_API_KEY` absent.
+
+It backs exactly one optional authoring convenience: recording compile
+(`cloud/apps/web/src/lib/recording-compiler.ts`) turns an uploaded trace into
+proposed steps. That proposal is never executed; a human reviews it in the
+editor and publishes through the normal `POST /api/workflows` path. With the
+key unset the feature is unavailable and nothing else changes.
+
+Two reasons to keep it that way, both of which are why the boundary exists
+rather than being a matter of taste:
+
+**A trace is customer data.** It is a recording of someone doing real work in
+their own systems. HAR files and Playwright traces carry request and response
+bodies, `Cookie` and `Authorization` headers, and everything typed. The
+compiler agent is instructed never to copy a captured secret into its output —
+but that protects the *proposal*, not the *transfer*. The trace is uploaded
+whole, unredacted, to a third party your customer never contracted with.
+
+**One key would serve every tenant.** `HR_API_KEY` is process-wide, so every
+organization's traces and compile sessions would share one HarnessRouter
+Workspace. Ghost's own routes are org-scoped and refuse cross-tenant access — a
+recording id from another org returns 404 on detail, compile, continue, cancel
+and stream, and claiming another org's recording while publishing is refused —
+but that is Ghost enforcing isolation on its own surface, not isolation inside
+the vendor. Anyone holding the key could enumerate every tenant's sessions
+there.
+
+Earlier revisions of this document offered per-organization HarnessRouter
+credentials as the fix. That was the wrong frame: it would have addressed the
+second point, not the first, and bought a provisioning system for a dependency
+that should not be in the runtime at all.
+
+**A trace is customer data.** It is the recording of someone performing real
+work in their own systems, so it can contain URLs, record identifiers,
+customer names, and anything else that was on screen. The compiler agent is
+instructed never to copy a captured secret into a step (passwords, OTPs, card
+numbers become placeholders), but that is an instruction to a model, not an
+enforced guarantee — the trace itself is uploaded whole. Do not point this at
+a system whose screens carry data you are unwilling to send to HarnessRouter.
+
 ## What this does not cover
 
 No autoscaling, no multi-region, no backup policy, no log aggregation, no

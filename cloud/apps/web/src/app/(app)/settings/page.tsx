@@ -2,6 +2,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { isOrgAdmin } from "@ghost/core/roles";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Members } from "@/components/settings/members";
+import { TwoFactor } from "@/components/settings/two-factor";
 import { AgentCredentials } from "@/components/settings/agent-credentials";
 
 export const dynamic = "force-dynamic";
@@ -50,24 +52,11 @@ export default async function SettingsPage() {
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-2">
-          {(org?.memberships ?? []).map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center justify-between text-sm"
-            >
-              <span>{m.user.email ?? m.user.name ?? m.userId}</span>
-              <span className="text-xs text-[var(--color-muted)]">
-                {m.role}
-              </span>
-            </div>
-          ))}
-        </CardBody>
-      </Card>
+      {/* Replaced the read-only member list: roles are now editable and
+          invitations are issued here. */}
+      <Members isOrgAdmin={isAdmin} />
+
+      <TwoFactor />
 
       <AgentCredentials isOrgAdmin={isAdmin} />
     </div>
