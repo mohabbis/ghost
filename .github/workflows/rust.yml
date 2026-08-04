@@ -326,13 +326,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify no gated Rust job failed
+      # GitHub expressions take single-quoted string literals only. An earlier
+      # revision used join(needs.*.result, ",") with double quotes, which is a
+      # workflow-file syntax error — the whole run fails to start, no jobs are
+      # created, and the PR shows no Rust checks at all rather than a failure
+      # pointing at this line.
+      - name: Fail if any gated Rust job failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: |
-          set -euo pipefail
-          results='${{ join(needs.*.result, ",") }}'
-          echo "dependency results: $results"
-          case "$results" in
-            *failure*)   echo "::error::a Rust CI job failed";    exit 1 ;;
-            *cancelled*) echo "::error::a Rust CI job was cancelled"; exit 1 ;;
-          esac
-          echo "all gated Rust jobs passed or skipped"
+          echo "::error::a gated Rust CI job failed or was cancelled"
+          exit 1
+
+      - name: Report
+        run: echo "all gated Rust jobs passed or skipped"
