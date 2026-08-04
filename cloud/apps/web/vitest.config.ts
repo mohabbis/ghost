@@ -10,8 +10,17 @@ export default defineConfig({
     testTimeout: 30_000,
   },
   resolve: {
-    // Mirror the `@/*` path alias from tsconfig; Next resolves it at build time,
-    // vitest needs telling.
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      // Mirror the `@/*` path alias from tsconfig; Next resolves it at build
+      // time, vitest needs telling.
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // `server-only` is a Next build-time guard with no runtime module for
+      // vitest to resolve, so importing a module that declares it fails to
+      // load rather than failing an assertion. Point it at an empty stub: the
+      // guarantee is still enforced where it matters (a client component
+      // importing such a module fails the Next build), and server modules
+      // become directly testable instead of only reachable through a mock.
+      "server-only": fileURLToPath(new URL("./src/test/server-only-stub.ts", import.meta.url)),
+    },
   },
 });

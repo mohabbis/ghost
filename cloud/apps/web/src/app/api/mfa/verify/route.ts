@@ -4,6 +4,7 @@ import { appendAuditEvent } from "@ghost/core/audit-log";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { MFA_COOKIE_NAME, signMfaCookie } from "@/lib/mfa-cookie";
+import { clientKey, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * Answer the second-factor challenge for the current session.
@@ -23,6 +24,20 @@ export async function POST(req: Request): Promise<Response> {
   const userId = session.user.id;
   const sid = session.user.sid;
   if (!sid) return Response.json({ error: "session cannot be verified" }, { status: 400 });
+
+  // Throttled before the code is even read. A six-digit TOTP with a ±1-step
+  // skew window is about a million candidates; unthrottled, that is minutes of
+  // scripted requests and the second factor is decorative. Ten attempts per
+  // five minutes leaves a fat-fingered human unbothered and makes exhaustive
+  // search take centuries.
+  //
+  // Keyed on the user, not the caller's address: the account is what is under
+  // attack, and rotating source addresses is free. The address limit is a
+  // second, looser bound so one host cannot grind many accounts at once.
+  const perUser = await rateLimit(`mfa:user:${userId}`, { limit: 10, windowSeconds: 300 });
+  if (!perUser.ok) return tooManyRequests(perUser);
+  const perClient = await rateLimit(`mfa:ip:${clientKey(req)}`, { limit: 50, windowSeconds: 300 });
+  if (!perClient.ok) return tooManyRequests(perClient);
 
   const body = (await req.json().catch(() => null)) as { code?: unknown } | null;
   const submitted = typeof body?.code === "string" ? body.code.trim() : "";
