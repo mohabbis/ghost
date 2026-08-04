@@ -1,10 +1,16 @@
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { edgeAuthConfig } from "@/auth.config";
 
 /**
  * Protect the authenticated app. Anything under the matched paths requires a
  * session; unauthenticated requests are redirected to /signin.
+ *
+ * Built from `edgeAuthConfig` rather than `@/auth`: this runs in the Edge
+ * runtime, and importing the full config pulls Prisma and `node:crypto` in
+ * with it, which do not exist there. See `auth.config.ts`.
  */
+const { auth } = NextAuth(edgeAuthConfig);
 export default auth((req) => {
   if (!req.auth) {
     const url = new URL("/signin", req.nextUrl.origin);

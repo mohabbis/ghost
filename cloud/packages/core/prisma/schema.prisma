@@ -25,13 +25,15 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
-  accounts     Account[]
-  sessions     Session[]
-  memberships  Membership[]
-  createdFlows Workflow[]   @relation("WorkflowCreatedBy")
-  triggeredRuns Run[]       @relation("RunTriggeredBy")
-  resolvedApprovals Approval[] @relation("ApprovalResolvedBy")
-  agentCredentials AgentCredential[]
+  accounts            Account[]
+  sessions            Session[]
+  memberships         Membership[]
+  createdFlows        Workflow[]        @relation("WorkflowCreatedBy")
+  triggeredRuns       Run[]             @relation("RunTriggeredBy")
+  resolvedApprovals   Approval[]        @relation("ApprovalResolvedBy")
+  agentCredentials    AgentCredential[]
+  invitationsSent     Invitation[]      @relation("InvitationCreatedBy")
+  invitationsAccepted Invitation[]      @relation("InvitationAcceptedBy")
 }
 
 model Account {
@@ -96,12 +98,13 @@ model Organization {
   // scope; that requires an anchor genuinely outside this database.
   auditChainHead String?
 
-  memberships Membership[]
-  workflows   Workflow[]
-  recordings  Recording[]
-  runs        Run[]
-  auditEvents AuditEvent[]
-  connectors  Connector[]
+  memberships      Membership[]
+  invitations      Invitation[]
+  workflows        Workflow[]
+  recordings       Recording[]
+  runs             Run[]
+  auditEvents      AuditEvent[]
+  connectors       Connector[]
   agentCredentials AgentCredential[]
 }
 
@@ -126,10 +129,45 @@ model AgentCredential {
   @@index([userId])
 }
 
+// An invitation to join an organization.
+//
+// Only a SHA-256 digest of the token is stored, the same as AgentCredential —
+// the plaintext link is shown to the inviter once and is unrecoverable after.
+// A leaked link is still bounded: acceptance requires the signed-in user's
+// email to match the invited address, so holding the token is not by itself
+// enough to join an organization.
+model Invitation {
+  id        String   @id @default(cuid())
+  orgId     String
+  // Normalized to lowercase on write; acceptance compares against the
+  // signed-in user's email, so casing must not decide who may join.
+  email     String
+  role      Role     @default(MEMBER)
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  createdById  String?
+  acceptedAt   DateTime?
+  acceptedById String?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy  User?        @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedBy User?        @relation("InvitationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@index([email])
+}
+
 model Membership {
   id        String   @id @default(cuid())
   userId    String
   orgId     String
+  // Defaults to OWNER because the first membership in an org is created by
+  // `ensureUserOrg` for whoever brought the org into existence. Invited
+  // members are always created with an explicit role from their invitation —
+  // never this default.
   role      Role     @default(OWNER)
   createdAt DateTime @default(now())
 
@@ -145,17 +183,17 @@ model Membership {
 // ---------------------------------------------------------------------------
 
 model Workflow {
-  id          String   @id @default(cuid())
-  orgId       String
-  name        String
-  description String?
-  archived    Boolean  @default(false)
+  id                      String   @id @default(cuid())
+  orgId                   String
+  name                    String
+  description             String?
+  archived                Boolean  @default(false)
   // Airflow's `max_active_runs`: at most this many runs of this workflow may be
   // in flight at once; the rest wait in QUEUED. Null means no cap. Per workflow
   // rather than per version, so publishing v4 does not double the load the
   // workflow is allowed to put on the system it operates. See
   // packages/core/src/runtime/concurrency.ts for which statuses hold a slot.
-  maxActiveRuns Int?
+  maxActiveRuns           Int?
   // Separation of duties: when true, whoever triggered a run may not approve its
   // gates. Someone else in the organization must.
   //
@@ -166,10 +204,10 @@ model Workflow {
   //
   // Restricts approval only. Rejection is never restricted: it stops the action,
   // and the person who started a runaway run must be able to halt it.
-  requireSeparateApprover Boolean @default(false)
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  requireSeparateApprover Boolean  @default(false)
+  createdById             String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   org        Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdBy  User?             @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -221,9 +259,9 @@ enum RecordingCompileStatus {
 }
 
 model Recording {
-  id          String          @id @default(cuid())
-  orgId       String
-  status      RecordingStatus @default(ACTIVE)
+  id               String          @id @default(cuid())
+  orgId            String
+  status           RecordingStatus @default(ACTIVE)
   // S3 key of the raw captured event trace.
   rawTraceKey      String?
   rawTraceFilename String?
@@ -238,9 +276,9 @@ model Recording {
   // Proposed steps, validated against `@ghost/core/schema/step` before
   // storage. A *proposal* a human reviews in the editor — never executed
   // directly, never trusted the way a published WorkflowVersion is.
-  compiledSteps Json?
-  compileNotes  String?
-  compileError  String?
+  compiledSteps     Json?
+  compileNotes      String?
+  compileError      String?
 
   // Set once a human reviews the proposal and actually publishes it.
   workflowId String?
@@ -375,9 +413,9 @@ model Run {
 model RunEvent {
   id String @id @default(cuid())
 
-  runId String
+  runId     String
   /// Monotonic per run, starting at 1. The ordering key — never order by createdAt.
-  seq   Int
+  seq       Int
   /// Step index this event concerns; null for run-level events.
   stepIndex Int?
   /// See RUN_EVENT_TYPES in packages/core/src/runEvents.ts.
@@ -395,26 +433,26 @@ model RunEvent {
 }
 
 model RunStep {
-  id           String     @id @default(cuid())
-  runId        String
-  index        Int
-  type         String
-  status       StepStatus @default(PENDING)
+  id            String     @id @default(cuid())
+  runId         String
+  index         Int
+  type          String
+  status        StepStatus @default(PENDING)
   // Human-readable label copied from the step definition.
-  label        String?
+  label         String?
   // S3 key of the screenshot captured after this step.
   screenshotKey String?
   // Result of the step's verification assertion, if any.
-  verification Json?
-  logs         Json?
-  error        String?
+  verification  Json?
+  logs          Json?
+  error         String?
   // Attempts made for this step, including retries. 0 until first execution.
-  attempt      Int        @default(0)
+  attempt       Int        @default(0)
   // Named values this step produced (an `extract` step's capture), readable by
   // later steps through the expression resolver. Redacted for sensitive sources.
-  output       Json?
-  startedAt    DateTime?
-  endedAt      DateTime?
+  output        Json?
+  startedAt     DateTime?
+  endedAt       DateTime?
 
   run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
 

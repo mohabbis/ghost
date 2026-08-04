@@ -23,7 +23,8 @@
     "./agent": "./src/agent/tools.ts",
     "./agent-credentials": "./src/agent/credentials.ts",
     "./storage/artifacts": "./src/storage/artifacts.ts",
-    "./roles": "./src/roles.ts"
+    "./roles": "./src/roles.ts",
+    "./invitations": "./src/invitations.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",
