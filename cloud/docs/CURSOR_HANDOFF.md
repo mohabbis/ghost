@@ -296,14 +296,31 @@ colleague's credential, not only their own). `packages/core/src/roles.ts`
 existing org still has exactly one OWNER member, so this changes nothing
 observable until an org has more than one member.
 
+Done: **compensation / undo handlers**. This item was stale — the engine
+(`packages/core/src/runtime/compensate.ts`'s reversal planner and
+`apps/worker/src/jobs/compensateRun.ts`'s 589-line job: journal verification,
+in-flight detection, `COMPENSATION`-phase approval gating, re-entrant
+execution, incident handling, audit trail) has been complete and covered by
+`compensateRun.test.ts` since PR #374. What was actually still missing was one
+level up: a step is only reversible if its workflow definition carries a
+`compensate` block, and `workflow-editor.tsx` had no fields to author one — so
+in practice every workflow created through the product had zero reversible
+steps, engine notwithstanding. Closed by adding undo authoring (description +
+ordered actions + optional verify assertion) to the step editor for
+click/fill/select, the only editable step types with a side effect to reverse.
+Manually verified end-to-end in a browser: authored a click step's undo,
+saved, confirmed the persisted `WorkflowVersion.steps` JSON matches
+`compensationSchema` exactly, reloaded the editor and confirmed every field
+round-trips. No component-testing infra exists in this codebase to cover this
+with an automated test (no testing-library/jsdom in `apps/web`); typecheck and
+build are the automated coverage this has.
+
 1. **SSE/WebSocket** for the timeline (nice-to-have; polling works).
 2. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
    Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
    only); keep it that way, because the same prefix holds encrypted session
    blobs that must never be served.
-3. **Compensation / undo handlers** — the journal makes the saga pattern
-   tractable: walk it backwards invoking each executed step's compensator.
-4. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
+3. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
    `requireSeparateApprover` would need (which is about who may *approve*, not
    who may *administer*); still needs its own design, and orgs are still
    auto-created single-member on first sign-in with no invite flow, so it has
