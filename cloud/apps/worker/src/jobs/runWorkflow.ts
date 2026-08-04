@@ -91,6 +91,39 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     // web app. Captured browser credentials must not outlive them, so this
     // guard is also the cleanup path — web routes enqueue a job purely to
     // trigger it.
+    //
+    // A CANCELED run is the one case this guard can reach while a *different*,
+    // still-genuinely-alive worker owns the lease: the cancel route defers
+    // finalizing (appending `run.canceled` and anchoring the journal head)
+    // whenever a worker held the lease at cancel time, to avoid anchoring
+    // before an in-flight step commits — see that route's doc comment. Its
+    // delayed cleanup job lands here after the lease's TTL, by which point
+    // either the owning worker finished and finalized itself (the event below
+    // already exists, and purging/releasing here is safe) or it crashed
+    // mid-step and never got there (the lease has since expired, so it's safe
+    // to finalize, purge and release here instead). The only case this guard
+    // must not touch anything in is a lease that is *still* active — the
+    // original worker is still alive (its heartbeat keeps renewing it) and
+    // will finalize, purge and release itself the moment its current step
+    // commits; racing it here is exactly the bug this whole scheme avoids.
+    const leaseActive =
+      run.status === "CANCELED" &&
+      run.leaseOwner !== null &&
+      run.leaseExpiresAt !== null &&
+      run.leaseExpiresAt > new Date();
+    if (leaseActive) return;
+
+    if (run.status === "CANCELED") {
+      const already = await prisma.runEvent.findFirst({
+        where: { runId, type: RUN_EVENT_TYPES.runCanceled },
+        select: { id: true },
+      });
+      if (!already) {
+        await appendRunEvent(runId, { type: RUN_EVENT_TYPES.runCanceled });
+        await anchorRunChain(runId, run.orgId, run.triggeredById, "run.canceled");
+      }
+    }
+
     if (run.sessionKey) await purgeSession(runId);
     // Same for the concurrency slot: a run canceled from the web never reaches
     // the loop below, and the next run must not wait on a slot nobody holds.

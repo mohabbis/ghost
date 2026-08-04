@@ -202,8 +202,9 @@ plainly rather than implying a seal that does not exist.
 
 ### Known gaps in compensation (undo)
 
-Three findings from the review of PR #374 are deliberately open. Each needs a
-decision rather than a patch, and none of them is safe to forget.
+Three findings from the review of PR #374 were deliberately left open. One is
+now closed; the other two still need a decision rather than a patch, and
+neither is safe to forget.
 
 **A reversal runs in an unauthenticated browser.** `compensateRunJob` launches a
 fresh context with no storage state, and forward completion deliberately purges
@@ -221,14 +222,22 @@ blocked on connectors, so the first is the honest interim — but it is a
 credential-retention decision, not a code change, and it should be made
 deliberately rather than by whoever touches this file next.
 
-**Cancellation can anchor ahead of an in-flight step.** Cancelling a run whose
-current step is mid-execution lets the route read and seal the journal head
-before that step commits its `step.succeeded`. The worker then sees the existing
-`run.canceled` event and skips re-anchoring — by design, to avoid two terminal
-events — leaving the final head not matching the sealed anchor, which
-verification reports as tampering on a run that was never tampered with. Fixing
-it properly means the cancel path coordinating with the run lease rather than
-racing it. Same family as the truncated-tail gap above.
+**Closed — cancellation can no longer anchor ahead of an in-flight step.**
+Cancelling a run whose current step was mid-execution used to let the route
+read and seal the journal head before that step committed its
+`step.succeeded`, leaving the final head not matching the sealed anchor —
+which verification reported as tampering on a run that was never tampered
+with. The cancel route now checks the run's lease in the same transaction as
+the status flip: with no active lease, it finalizes (appends `run.canceled`
+and anchors) exactly as before, since nothing is executing. With an active
+lease, it flips status only and defers to the worker's own loop-top CANCELED
+check, which now finalizes after any in-flight step has actually committed —
+safe because it's the same process doing both writes in order. The route's
+cleanup re-enqueue is delayed past the lease TTL in that case, and the
+worker's terminal guard gained the matching lease check so it can safely
+finalize an abandoned (crashed-mid-step) cancellation instead of only a
+live one. Covered by
+`apps/web/src/app/api/runs/[id]/cancel/cancel.test.ts`.
 
 **The AAD change has no story for blobs sealed before it.** Session blobs are
 now sealed with associated data binding them to their run and gate. A blob
