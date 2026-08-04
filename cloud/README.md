@@ -158,7 +158,7 @@ suite reports 45 tests rather than 90, the database is not being reached.
 | 1.2 | Run trigger, live timeline, approve/reject resume | **done** |
 | 1.3 | Durable execution (run journal), timeouts/retry, incidents + cancel, audit-verify, variable store | **done** |
 | 1.x | Typed step editor | remaining |
-| 2 | Browser recording → editable steps | convert built (upload → HarnessRouter compile → review); capture mechanism still open |
+| 2 | Browser recording → editable steps | convert built (upload → compile → review), off by default; capture is next |
 
 Phase 1.3 made run position a fold over an append-only, hash-chained journal
 instead of a stored cursor, so a completed step cannot execute twice after a

@@ -103,26 +103,42 @@ Application rollbacks are ordinary redeploys. Migrations are not: `migrate
 deploy` only rolls forward, so a schema change that has to be undone needs a new
 migration. Prefer additive changes.
 
-## HarnessRouter is a shared trust boundary
+## HarnessRouter is development tooling — leave it unset in production
 
-Recording compilation (`cloud/apps/web/src/lib/recording-compiler.ts`) sends
-the uploaded trace to HarnessRouter and reads back the proposed steps. Two
-things about that are worth stating plainly rather than discovering later.
+HarnessRouter is agent infrastructure used to *build* Ghost. It is not part of
+what Ghost *runs*. Nothing a customer executes — no workflow, no step, no
+approval, no verification — passes through it, and production must boot and
+operate with `HR_API_KEY` absent.
 
-**One key serves every tenant.** `HR_API_KEY` is process-wide. Every
-organization's traces and compile sessions therefore live in the *same*
-HarnessRouter Workspace. Ghost's own routes are org-scoped and refuse
-cross-tenant access — a recording id from another org returns 404 on detail,
-compile, continue, cancel and stream, the SSE stream reports `notFound`, and
-claiming another org's recording while publishing is refused — but that is
-Ghost enforcing isolation on its own surface. It is not isolation *inside*
-HarnessRouter: anyone holding `HR_API_KEY` can enumerate every tenant's
-sessions and files there directly.
+It backs exactly one optional authoring convenience: recording compile
+(`cloud/apps/web/src/lib/recording-compiler.ts`) turns an uploaded trace into
+proposed steps. That proposal is never executed; a human reviews it in the
+editor and publishes through the normal `POST /api/workflows` path. With the
+key unset the feature is unavailable and nothing else changes.
 
-Treat `HR_API_KEY` with the same care as `DATABASE_URL`. If a customer's
-threat model does not permit their workflow traces sharing a Workspace with
-other customers', per-organization HarnessRouter credentials are the fix, and
-they do not exist yet.
+Two reasons to keep it that way, both of which are why the boundary exists
+rather than being a matter of taste:
+
+**A trace is customer data.** It is a recording of someone doing real work in
+their own systems. HAR files and Playwright traces carry request and response
+bodies, `Cookie` and `Authorization` headers, and everything typed. The
+compiler agent is instructed never to copy a captured secret into its output —
+but that protects the *proposal*, not the *transfer*. The trace is uploaded
+whole, unredacted, to a third party your customer never contracted with.
+
+**One key would serve every tenant.** `HR_API_KEY` is process-wide, so every
+organization's traces and compile sessions would share one HarnessRouter
+Workspace. Ghost's own routes are org-scoped and refuse cross-tenant access — a
+recording id from another org returns 404 on detail, compile, continue, cancel
+and stream, and claiming another org's recording while publishing is refused —
+but that is Ghost enforcing isolation on its own surface, not isolation inside
+the vendor. Anyone holding the key could enumerate every tenant's sessions
+there.
+
+Earlier revisions of this document offered per-organization HarnessRouter
+credentials as the fix. That was the wrong frame: it would have addressed the
+second point, not the first, and bought a provisioning system for a dependency
+that should not be in the runtime at all.
 
 **A trace is customer data.** It is the recording of someone performing real
 work in their own systems, so it can contain URLs, record identifiers,

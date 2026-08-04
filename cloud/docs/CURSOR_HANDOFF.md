@@ -364,10 +364,24 @@ hand-authored workflows and published through the existing
 pipeline, it only pre-fills the editor. `HR_API_KEY` (server-only,
 `cloud/.env`) is required for this to run.
 
-**Capture is still the open decision:** server-side remote cloud browser
-(recommended) vs. Chrome extension. Engine boundary is clean either way —
-Convert only needs *a* trace file to exist, not any particular capture
-mechanism, so it slots in front of the upload step unchanged once built.
+**HarnessRouter is development tooling, not runtime.** It is agent
+infrastructure used to build Ghost; nothing a customer executes goes through
+it. Compile is an optional authoring convenience that is unavailable when the
+key is unset, and production is expected to leave it unset — see
+`docs/DEPLOY.md`. The next change here extracts a provider-neutral
+`WorkflowCompiler` interface so the HarnessRouter client is one replaceable
+adapter rather than a dependency reaching into the recording routes. Removing
+that adapter must disable compile and nothing else.
+
+**Capture is decided: a Chrome extension for v1.** A Ghost-hosted remote
+browser is the more elegant answer — it records in the same environment the
+worker replays in, so environment drift between record and replay stops being
+a class of production defect — but running Chrome at scale is infrastructure
+engineering, and the extension gets a real capture path in front of users far
+sooner. The engine boundary is unchanged either way: Convert needs *a* trace
+to exist, not a particular producer, so the extension slots in ahead of the
+upload step and `POST /api/recordings` stays as it is. The manual upload form
+is scaffolding, not the product.
 
 ## Repo conventions
 
