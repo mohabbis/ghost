@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { classifyStep } from "@ghost/core/classifier";
 import { EDITABLE_STEP_TYPES } from "@ghost/core/schema/step";
-import type { EditableStepType, Selector, WorkflowStep } from "@ghost/core/schema/step";
+import type {
+  Compensation,
+  CompensationAction,
+  EditableStepType,
+  Selector,
+  Verification,
+  WorkflowStep,
+} from "@ghost/core/schema/step";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { FieldLabel, Input, Select } from "@/components/ui/input";
@@ -39,8 +46,50 @@ const TYPE_LABELS: Record<EditableStepType, string> = {
 
 const SELECTOR_TYPES = new Set<string>(["click", "fill", "select", "extract"]);
 
+/**
+ * Which editable step types can even have an undo. Matches
+ * `hasSideEffect` in `@ghost/core/compensate`: navigate/waitFor/extract/verify/
+ * approval don't mutate anything outside the browser's own view, so there is
+ * nothing for a compensation to reverse. `apiCall`/`sendEmail` also have side
+ * effects but aren't offered by this editor at all (see the file doc comment),
+ * so click/fill/select are the only step types this applies to today.
+ */
+const COMPENSATABLE_STEP_TYPES = new Set<string>(["click", "fill", "select"]);
+
+type CompensationActionType = CompensationAction["type"];
+
+const COMPENSATION_ACTION_LABELS: Record<CompensationActionType, string> = {
+  navigate: "Navigate",
+  click: "Click",
+  fill: "Fill",
+  select: "Select option",
+  waitFor: "Wait for",
+};
+const COMPENSATION_ACTION_TYPES = Object.keys(
+  COMPENSATION_ACTION_LABELS,
+) as CompensationActionType[];
+
 let seq = 0;
 const nextId = (type: string) => `${type}-${Date.now().toString(36)}-${seq++}`;
+
+function blankCompensationAction(type: CompensationActionType): CompensationAction {
+  switch (type) {
+    case "navigate":
+      return { type, url: "" };
+    case "click":
+      return { type, selector: {} };
+    case "fill":
+      return { type, selector: {}, value: "" };
+    case "select":
+      return { type, selector: {}, value: "" };
+    case "waitFor":
+      return { type, selector: {} };
+  }
+}
+
+function blankCompensation(): Compensation {
+  return { description: "", actions: [blankCompensationAction("click")] };
+}
 
 function blankStep(type: EditableStepType): WorkflowStep {
   const id = nextId(type);
@@ -124,6 +173,22 @@ export function WorkflowEditor({
   function changeType(index: number, type: EditableStepType) {
     setSteps((prev) =>
       prev.map((s, i) => (i === index ? { ...blankStep(type), label: s.label } : s)),
+    );
+  }
+
+  /**
+   * Every undo-authoring control goes through this one updater, the same way
+   * every step field goes through `update`/`updateSelector` above. Absent
+   * (`undefined`) is a real, meaningful state — "no known way to undo this" —
+   * not just an empty draft, so callers pass it back explicitly rather than an
+   * empty object.
+   */
+  function updateCompensate(
+    index: number,
+    updater: (current: Compensation | undefined) => Compensation | undefined,
+  ) {
+    setSteps((prev) =>
+      prev.map((s, i) => (i === index ? ({ ...s, compensate: updater(s.compensate) } as WorkflowStep) : s)),
     );
   }
 
@@ -251,7 +316,13 @@ export function WorkflowEditor({
                   </Button>
                 </div>
 
-                <StepFields step={step} index={i} update={update} updateSelector={updateSelector} />
+                <StepFields
+                  step={step}
+                  index={i}
+                  update={update}
+                  updateSelector={updateSelector}
+                  updateCompensate={updateCompensate}
+                />
 
                 {verdict.sensitive && (
                   <div
@@ -305,14 +376,21 @@ export function WorkflowEditor({
   );
 }
 
+/**
+ * `ariaPrefix`/`onChange` rather than `(index, updateSelector)` so this one
+ * component serves both a step's own selector and a selector nested inside
+ * one of its undo actions — the two have different addressing (a step index
+ * vs. a step index *and* an action index), and a plain callback sidesteps
+ * that instead of this component needing to know which case it's in.
+ */
 function SelectorFields({
   selector,
-  index,
-  updateSelector,
+  ariaPrefix,
+  onChange,
 }: {
   selector: Selector;
-  index: number;
-  updateSelector: (i: number, patch: Partial<Selector>) => void;
+  ariaPrefix: string;
+  onChange: (patch: Partial<Selector>) => void;
 }) {
   return (
     <div>
@@ -321,9 +399,9 @@ function SelectorFields({
         {(["role", "name", "testId", "text", "css"] as const).map((key) => (
           <Input
             key={key}
-            aria-label={`Step ${index + 1} selector ${key}`}
+            aria-label={`${ariaPrefix} ${key}`}
             value={selector[key] ?? ""}
-            onChange={(e) => updateSelector(index, { [key]: e.target.value })}
+            onChange={(e) => onChange({ [key]: e.target.value })}
             placeholder={key === "css" ? "css (last resort)" : key}
           />
         ))}
@@ -337,11 +415,16 @@ function StepFields({
   index,
   update,
   updateSelector,
+  updateCompensate,
 }: {
   step: WorkflowStep;
   index: number;
   update: (i: number, patch: Partial<WorkflowStep>) => void;
   updateSelector: (i: number, patch: Partial<Selector>) => void;
+  updateCompensate: (
+    i: number,
+    updater: (current: Compensation | undefined) => Compensation | undefined,
+  ) => void;
 }) {
   const selector = "selector" in step ? (step.selector ?? {}) : undefined;
 
@@ -360,7 +443,11 @@ function StepFields({
       )}
 
       {selector && SELECTOR_TYPES.has(step.type) && (
-        <SelectorFields selector={selector} index={index} updateSelector={updateSelector} />
+        <SelectorFields
+          selector={selector}
+          ariaPrefix={`Step ${index + 1} selector`}
+          onChange={(patch) => updateSelector(index, patch)}
+        />
       )}
 
       {(step.type === "fill" || step.type === "select") && (
@@ -404,8 +491,8 @@ function StepFields({
         <div className="grid gap-2 sm:grid-cols-2">
           <SelectorFields
             selector={step.selector ?? {}}
-            index={index}
-            updateSelector={updateSelector}
+            ariaPrefix={`Step ${index + 1} selector`}
+            onChange={(patch) => updateSelector(index, patch)}
           />
           <div>
             <FieldLabel>…or milliseconds</FieldLabel>
@@ -473,6 +560,308 @@ function StepFields({
             value={step.reason}
             onChange={(e) => update(index, { reason: e.target.value } as Partial<WorkflowStep>)}
             placeholder="Confirm the totals before sending"
+          />
+        </div>
+      )}
+
+      {COMPENSATABLE_STEP_TYPES.has(step.type) && (
+        <CompensationFields
+          stepIndex={index}
+          compensation={step.compensate}
+          updateCompensate={updateCompensate}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Author an optional undo for a step — a `Compensation`: a description shown
+ * to whoever approves the reversal, an ordered list of actions, and an
+ * optional assertion that the reversal actually took effect. The reversal
+ * engine (`compensateRunJob`) already walks the run journal backwards and
+ * executes whatever is defined here; this is the only place that plan can be
+ * authored, so a step with nothing entered here is honestly reported as
+ * irreversible rather than silently skipped.
+ */
+function CompensationFields({
+  stepIndex,
+  compensation,
+  updateCompensate,
+}: {
+  stepIndex: number;
+  compensation?: Compensation;
+  updateCompensate: (
+    i: number,
+    updater: (current: Compensation | undefined) => Compensation | undefined,
+  ) => void;
+}) {
+  if (!compensation) {
+    return (
+      <div className="rounded-lg border border-dashed border-[var(--color-border)] p-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => updateCompensate(stepIndex, () => blankCompensation())}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add undo for this step
+        </Button>
+        <p className="mt-1 text-xs text-[var(--color-muted)]">
+          No undo defined. If someone requests an undo of this run, this step
+          will be reported as unable to be reversed rather than skipped.
+        </p>
+      </div>
+    );
+  }
+
+  function setActions(actions: CompensationAction[]) {
+    updateCompensate(stepIndex, (c) => (c ? { ...c, actions } : c));
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
+      <div className="flex items-center justify-between">
+        <FieldLabel className="mb-0">Undo this step</FieldLabel>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => updateCompensate(stepIndex, () => undefined)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove undo
+        </Button>
+      </div>
+
+      <div>
+        <FieldLabel>What happens (shown to whoever approves the undo)</FieldLabel>
+        <Input
+          aria-label={`Step ${stepIndex + 1} undo description`}
+          value={compensation.description}
+          onChange={(e) =>
+            updateCompensate(stepIndex, (c) => (c ? { ...c, description: e.target.value } : c))
+          }
+          placeholder='Open the order and click "Cancel order"'
+        />
+      </div>
+
+      <div className="space-y-2">
+        {compensation.actions.map((action, j) => (
+          <div
+            key={j}
+            className="space-y-2 rounded-md border border-[var(--color-border)] p-2"
+          >
+            <div className="flex items-center gap-2">
+              <Select
+                aria-label={`Step ${stepIndex + 1} undo action ${j + 1} type`}
+                value={action.type}
+                onChange={(e) =>
+                  setActions(
+                    compensation.actions.map((a, k) =>
+                      k === j
+                        ? blankCompensationAction(e.target.value as CompensationActionType)
+                        : a,
+                    ),
+                  )
+                }
+                className="w-40"
+              >
+                {COMPENSATION_ACTION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {COMPENSATION_ACTION_LABELS[t]}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Remove undo action ${j + 1}`}
+                onClick={() => setActions(compensation.actions.filter((_, k) => k !== j))}
+                disabled={compensation.actions.length === 1}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <CompensationActionFields
+              action={action}
+              stepIndex={stepIndex}
+              actionIndex={j}
+              onChange={(patch) =>
+                setActions(
+                  compensation.actions.map((a, k) =>
+                    k === j ? ({ ...a, ...patch } as CompensationAction) : a,
+                  ),
+                )
+              }
+              onSelectorChange={(patch) =>
+                setActions(
+                  compensation.actions.map((a, k) => {
+                    if (k !== j || !("selector" in a) || !a.selector) return a;
+                    const selector = { ...a.selector, ...patch };
+                    for (const key of Object.keys(selector) as (keyof Selector)[]) {
+                      if (!selector[key]) delete selector[key];
+                    }
+                    return { ...a, selector } as CompensationAction;
+                  }),
+                )
+              }
+            />
+          </div>
+        ))}
+      </div>
+
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() => setActions([...compensation.actions, blankCompensationAction("click")])}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add undo action
+      </Button>
+
+      <div>
+        <label className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
+          <input
+            type="checkbox"
+            checked={Boolean(compensation.verify)}
+            onChange={(e) =>
+              updateCompensate(stepIndex, (c) =>
+                c
+                  ? {
+                      ...c,
+                      verify: e.target.checked ? { kind: "textPresent", expected: "" } : undefined,
+                    }
+                  : c,
+              )
+            }
+          />
+          Verify the undo took effect
+        </label>
+        {compensation.verify && (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Assertion</FieldLabel>
+              <Select
+                aria-label={`Step ${stepIndex + 1} undo assertion kind`}
+                value={compensation.verify.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as Verification["kind"];
+                  updateCompensate(stepIndex, (c) =>
+                    c
+                      ? {
+                          ...c,
+                          verify:
+                            kind === "selectorVisible" ? { kind, selector: {} } : { kind, expected: "" },
+                        }
+                      : c,
+                  );
+                }}
+              >
+                <option value="textPresent">Text is present</option>
+                <option value="url">URL matches</option>
+                <option value="selectorVisible">Element is visible</option>
+              </Select>
+            </div>
+            {compensation.verify.kind !== "selectorVisible" && (
+              <div>
+                <FieldLabel>Expected</FieldLabel>
+                <Input
+                  aria-label={`Step ${stepIndex + 1} undo expected`}
+                  value={compensation.verify.expected}
+                  onChange={(e) => {
+                    const expected = e.target.value;
+                    updateCompensate(stepIndex, (c) =>
+                      c && c.verify && c.verify.kind !== "selectorVisible"
+                        ? { ...c, verify: { ...c.verify, expected } }
+                        : c,
+                    );
+                  }}
+                  placeholder="Order canceled"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompensationActionFields({
+  action,
+  stepIndex,
+  actionIndex,
+  onChange,
+  onSelectorChange,
+}: {
+  action: CompensationAction;
+  stepIndex: number;
+  actionIndex: number;
+  onChange: (patch: Partial<CompensationAction>) => void;
+  onSelectorChange: (patch: Partial<Selector>) => void;
+}) {
+  const ariaPrefix = `Step ${stepIndex + 1} undo action ${actionIndex + 1}`;
+
+  return (
+    <div className="space-y-2">
+      {action.type === "navigate" && (
+        <div>
+          <FieldLabel>URL</FieldLabel>
+          <Input
+            aria-label={`${ariaPrefix} url`}
+            value={action.url}
+            onChange={(e) => onChange({ url: e.target.value })}
+            placeholder="https://example.com/orders"
+          />
+        </div>
+      )}
+
+      {"selector" in action && action.selector !== undefined && (
+        <SelectorFields
+          selector={action.selector}
+          ariaPrefix={`${ariaPrefix} selector`}
+          onChange={onSelectorChange}
+        />
+      )}
+
+      {(action.type === "fill" || action.type === "select") && (
+        <div>
+          <FieldLabel>Value</FieldLabel>
+          <Input
+            aria-label={`${ariaPrefix} value`}
+            value={action.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder={action.type === "fill" ? "0" : "Option label"}
+          />
+        </div>
+      )}
+
+      {action.type === "click" && (
+        <div>
+          <FieldLabel>Description (optional, shown to the approver)</FieldLabel>
+          <Input
+            aria-label={`${ariaPrefix} description`}
+            value={action.description ?? ""}
+            onChange={(e) => onChange({ description: e.target.value || undefined })}
+            placeholder="Cancel order button"
+          />
+        </div>
+      )}
+
+      {action.type === "waitFor" && (
+        <div>
+          <FieldLabel>…or milliseconds</FieldLabel>
+          <Input
+            aria-label={`${ariaPrefix} ms`}
+            type="number"
+            min={1}
+            value={action.ms ?? ""}
+            onChange={(e) => onChange({ ms: e.target.value ? Number(e.target.value) : undefined })}
+            placeholder="1000"
           />
         </div>
       )}
