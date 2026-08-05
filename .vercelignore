@@ -1,0 +1,14 @@
+# Vercel CLI deploys upload the working directory directly rather than via
+# git ls-files, so untracked-but-present local dev artifacts need their own
+# exclusion here even though most of what's inside them is already covered by
+# .gitignore. Each of these is a separate git-worktree checkout (its own full
+# node_modules/target/dist) sitting at the repo root on this machine — none of
+# it is relevant to any Vercel-deployed project, and leaving them unlisted
+# pushed a single-project deploy from tens of files to 57,896.
+.worktrees/
+.wt/
+.turbo/
+
+# Legacy desktop app build output; never relevant to a cloud/ deploy.
+src-tauri/target/
+dist/
