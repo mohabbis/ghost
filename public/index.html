@@ -3,48 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ghost — Trust runtime for AI agents (open build)</title>
-    <meta
-      name="description"
-      content="Ghost is the governed execution layer AI agents plug into: propose → human approve → execute → verify → audit. Open early-stage build by Muhammad Rafiq."
-    />
+    <title>Ghost — Governed execution for AI agents</title>
+    <meta name="description" content="Ghost records browser workflows, compiles them into reviewable steps, pauses sensitive actions for human approval, executes them, verifies outcomes, and preserves an audit trail." />
     <meta name="theme-color" content="#070a10" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://ghost.muharafiq.com/" />
     <meta name="author" content="Muhammad Rafiq" />
-
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Ghost — Trust runtime for AI agents" />
-    <meta
-      property="og:description"
-      content="Agents propose. Ghost runs with human approval on sensitive steps, verification, and a hash-chained audit log. Open build — not a landing-page mock."
-    />
+    <meta property="og:title" content="Ghost — Governed execution for AI agents" />
+    <meta property="og:description" content="Record workflows, review typed steps, require human approval for sensitive actions, execute through Playwright, verify results, and audit every run." />
     <meta property="og:url" content="https://ghost.muharafiq.com/" />
     <meta property="og:image" content="https://ghost.muharafiq.com/assets/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ghost — Trust runtime for AI agents" />
-    <meta
-      name="twitter:description"
-      content="Agent proposes → Ghost approves/executes/verifies/audits. Human gate on sensitive steps. Open build."
-    />
+    <meta name="twitter:title" content="Ghost — Governed execution for AI agents" />
+    <meta name="twitter:description" content="Capture → review → approve → execute → verify → recover." />
     <meta name="twitter:image" content="https://ghost.muharafiq.com/assets/og.png" />
-    <meta
-      name="keywords"
-      content="AI operator, workflow automation, approval-gated automation, audit log, Playwright, Next.js, portfolio project"
-    />
-
+    <meta name="keywords" content="AI workflow automation, human approval, Playwright automation, audit log, workflow recorder, MCP" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <script src="/main.js" defer></script>
-
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -53,29 +35,19 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
         "url": "https://ghost.muharafiq.com/",
-        "description": "Governed execution runtime for AI agents: propose → human approve → execute → verify → audit. Built by Muhammad Rafiq.",
-        "author": {
-          "@type": "Person",
-          "name": "Muhammad Rafiq",
-          "url": "https://github.com/mohabbis"
-        },
+        "description": "Governed execution for AI agents with workflow capture, human approval, verified execution, recovery, and audit logging.",
+        "author": { "@type": "Person", "name": "Muhammad Rafiq", "url": "https://github.com/mohabbis" },
         "codeRepository": "https://github.com/mohabbis/ghost",
-        "keywords": "AI trust runtime, agent plugin, workflow automation, approval-gated automation, audit log"
+        "keywords": "AI workflow automation, human approval, workflow recorder, Playwright, audit log, MCP"
       }
     </script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
       <defs>
-        <symbol id="i-github" viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            stroke="none"
-            d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49v-1.9c-2.78.62-3.37-1.2-3.37-1.2-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"
-          />
-        </symbol>
+        <symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49v-1.9c-2.78.62-3.37-1.2-3.37-1.2-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.42.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z" /></symbol>
         <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.9-7 10-4-2.1-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></symbol>
         <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
         <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8 12l2.5 2.5L16 9" /></symbol>
@@ -86,104 +58,44 @@
       </defs>
     </svg>
 
-    <aside class="dir-banner" role="status">
-      <strong>Honest status.</strong>
-      Ghost is an <em>independent open build</em> — a real engine in the repo, not a vapor landing page.
-      No paid customers yet. Built to become a product companies would buy; today it is also a
-      portfolio-grade systems project.
-      <a href="https://github.com/mohabbis/ghost">Read the code →</a>
-    </aside>
-
     <header class="nav" id="top">
       <a class="brand" href="#top" aria-label="Ghost home">
-        <span class="brand__mark" aria-hidden="true">
-          <img src="/assets/ghost-mark.svg" alt="" width="26" height="26" class="ghost-logo" />
-        </span>
+        <span class="brand__mark" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" width="26" height="26" class="ghost-logo" /></span>
         <span>Ghost</span>
       </a>
-
       <nav class="nav__links" id="nav-links" aria-label="Primary">
         <a href="#how">How it works</a>
-        <a href="#built">What's real</a>
+        <a href="#built">What is built</a>
         <a href="#stack">Stack</a>
-        <a href="#audience">Audience</a>
-        <a href="#about">About</a>
-        <a href="#legacy">Legacy desktop</a>
+        <a href="#audience">Use cases</a>
+        <a href="#about">Project</a>
       </nav>
-
-      <div class="nav__end">
-        <a class="btn btn--sm" href="https://github.com/mohabbis/ghost"
-          ><svg class="i"><use href="#i-github" /></svg> View source</a
-        >
-      </div>
-
-      <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
-        <span></span><span></span><span></span>
-      </button>
+      <div class="nav__end"><a class="btn btn--sm" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github" /></svg> View source</a></div>
+      <button class="nav__toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links"><span></span><span></span><span></span></button>
     </header>
 
     <main id="main">
       <div class="hero-shell">
         <section class="hero reveal">
           <div class="hero__copy">
-            <p class="hero__badge">
-              <span class="hero__badge-dot" aria-hidden="true"></span> Open build · Agent plugin · Human approve
-            </p>
-            <h1>
-              The trust runtime <span class="grad">agents</span> plug into.
-            </h1>
-            <p class="lede">
-              Ghost is not another AI agent. Claude, Cursor, and Codex may propose and start work;
-              Ghost stops for send/pay/submit, verifies outcomes, and seals a hash-chained audit log.
-              A crash mid-run cannot re-fire an approved payment — execution position is proven from
-              the journal, not remembered. Designed so a manager can trust the run, not just the demo.
-            </p>
+            <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span> Workflow capture · Human approval · Verified execution</p>
+            <h1>Let agents act without giving them <span class="grad">unchecked control.</span></h1>
+            <p class="lede">Ghost records browser workflows, compiles them into typed steps, and runs them through a controlled execution pipeline. Sensitive actions pause for a human. Completed steps are verified, logged, and recoverable when a workflow defines a reversal.</p>
             <div class="hero__actions">
-              <a class="btn btn--lg" href="https://github.com/mohabbis/ghost"
-                ><svg class="i"><use href="#i-github" /></svg> View source on GitHub</a
-              >
-              <a class="btn btn--secondary btn--lg" href="#built"
-                ><svg class="i"><use href="#i-play" /></svg> What's actually built</a
-              >
+              <a class="btn btn--lg" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github" /></svg> View source on GitHub</a>
+              <a class="btn btn--secondary btn--lg" href="#built"><svg class="i"><use href="#i-play" /></svg> See what is built</a>
             </div>
-            <p class="hero__note">
-              <svg class="i"><use href="#i-shield" /></svg>
-              Solo project by
-              <a href="https://github.com/mohabbis">Muhammad Rafiq</a>
-              · commercial intent
-            </p>
+            <p class="hero__note"><svg class="i"><use href="#i-shield" /></svg> Deterministic approval rules. Agents cannot approve their own runs.</p>
           </div>
-
           <aside class="mock" aria-hidden="true">
-            <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — live run (demo fixture)</em></div>
+            <div class="mock__bar"><span></span><span></span><span></span><em>Ghost — run timeline</em></div>
             <div class="mock__body">
-              <div class="mock__row">
-                <span class="tag tag--move"><svg class="i"><use href="#i-check-circle" /></svg> navigate</span>
-                Open order form
-              </div>
-              <div class="mock__row">
-                <span class="tag tag--rename"><svg class="i"><use href="#i-check-circle" /></svg> fill</span>
-                Customer name → Ada Lovelace
-              </div>
-              <div class="mock__row mock__row--warn">
-                <span class="tag tag--warn"><svg class="i"><use href="#i-alert" /></svg> gate</span>
-                Submit order — awaiting human approval
-              </div>
-              <div class="mock__row">
-                <span class="tag tag--new"><svg class="i"><use href="#i-check-circle" /></svg> approve</span>
-                Operator approved · run resumed
-              </div>
-              <div class="mock__row mock__row--deny">
-                <span class="tag tag--deny"><svg class="i"><use href="#i-receipt" /></svg> verify</span>
-                “Order submitted” confirmed · audit sealed
-              </div>
-              <div class="mock__foot">
-                <button class="btn btn--sm" type="button" tabindex="-1">View run</button>
-                <button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Audit log</button>
-                <span class="mock__mark">
-                  <img src="/assets/ghost-mark.svg" alt="" width="30" height="30" class="ghost-logo" />
-                </span>
-              </div>
+              <div class="mock__row"><span class="tag tag--move"><svg class="i"><use href="#i-check-circle" /></svg> navigate</span> Open order form</div>
+              <div class="mock__row"><span class="tag tag--rename"><svg class="i"><use href="#i-check-circle" /></svg> fill</span> Customer name → Ada Lovelace</div>
+              <div class="mock__row mock__row--warn"><span class="tag tag--warn"><svg class="i"><use href="#i-alert" /></svg> gate</span> Submit order — waiting for approval</div>
+              <div class="mock__row"><span class="tag tag--new"><svg class="i"><use href="#i-check-circle" /></svg> approve</span> Approved · run resumed</div>
+              <div class="mock__row mock__row--deny"><span class="tag tag--deny"><svg class="i"><use href="#i-receipt" /></svg> verify</span> Order confirmed · audit event written</div>
+              <div class="mock__foot"><button class="btn btn--sm" type="button" tabindex="-1">View run</button><button class="btn btn--ghost btn--sm" type="button" tabindex="-1">Audit log</button><span class="mock__mark"><img src="/assets/ghost-mark.svg" alt="" width="30" height="30" class="ghost-logo" /></span></div>
             </div>
           </aside>
         </section>
@@ -191,299 +103,92 @@
 
       <section id="how" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">The loop</p>
+          <p class="eyebrow">Execution flow</p>
           <h2>Capture → Review → Approve → Execute → Verify → Recover</h2>
-          <p class="section__sub">
-            Agents may propose. Deterministic code executes only approved plans. Sensitivity is decided by
-            a classifier — not a model hoping for the best. Agents never approve.
-          </p>
+          <p class="section__sub">Models can propose work. Deterministic code decides what requires approval and what the worker may execute.</p>
         </div>
         <ol class="pipeline">
-          <li>
-            <span class="pipeline__n">1</span>
-            <h3>Capture</h3>
-            <p>Demonstrate the workflow once. Compile into editable, typed steps. (Recording is the next build phase.)</p>
-          </li>
-          <li>
-            <span class="pipeline__n">2</span>
-            <h3>Review</h3>
-            <p>Inspect every step before it can run. No silent send, pay, or overwrite.</p>
-          </li>
-          <li>
-            <span class="pipeline__n">3</span>
-            <h3>Approve</h3>
-            <p>Risky steps halt. A human decides. The engine cannot skip the gate.</p>
-          </li>
-          <li>
-            <span class="pipeline__n">4</span>
-            <h3>Execute</h3>
-            <p>Replay via browser automation today; APIs/connectors next — still through the same pipeline.</p>
-          </li>
-          <li>
-            <span class="pipeline__n">5</span>
-            <h3>Verify &amp; audit</h3>
-            <p>Assertions + screenshots per step. Hash-chained audit events per organization.</p>
-          </li>
-          <li>
-            <span class="pipeline__n">6</span>
-            <h3>Recover</h3>
-            <p>
-              A broken step stops the run for a human — retry, skip, cancel — instead of killing a
-              40-invoice batch. Where a workflow defines a reversal, completed steps can be walked
-              back through the same gate.
-            </p>
-          </li>
+          <li><span class="pipeline__n">1</span><h3>Capture</h3><p>The Chrome extension records navigation, clicks, inputs, selections, submissions, and SPA route changes.</p></li>
+          <li><span class="pipeline__n">2</span><h3>Review</h3><p>A deterministic compiler converts the trace into editable, typed steps. Secret values are never recorded.</p></li>
+          <li><span class="pipeline__n">3</span><h3>Approve</h3><p>Send, pay, delete, submit, and other sensitive steps stop for a human decision.</p></li>
+          <li><span class="pipeline__n">4</span><h3>Execute</h3><p>The worker runs approved browser steps with Playwright and resumes from the execution journal after a pause or restart.</p></li>
+          <li><span class="pipeline__n">5</span><h3>Verify</h3><p>Assertions and screenshots record what happened. Run and approval events append to a per-organization hash chain.</p></li>
+          <li><span class="pipeline__n">6</span><h3>Recover</h3><p>Operators can retry, skip, cancel, or run defined compensation steps in reverse order.</p></li>
         </ol>
       </section>
 
       <section id="built" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Proof, not pitch</p>
-          <h2>What works in the repo today.</h2>
-          <p class="section__sub">
-            Phase 1 of the cloud product is runnable end-to-end against a bundled fixture:
-            navigate → fill → halt on Submit → approve → resume → verify → succeed.
-            If it isn’t in this list, don’t assume it ships.
-          </p>
+          <p class="eyebrow">Current repository</p>
+          <h2>What is implemented.</h2>
+          <p class="section__sub">The active product is the cloud application under <code>cloud/</code>, with a browser recorder under <code>apps/extension</code>.</p>
         </div>
         <ul class="proof-list">
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Playwright execution engine</strong>
-              <span>Semantic selectors, per-step screenshots, verification assertions.</span>
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Deterministic approval gate</strong>
-              <span><code>classifyStep</code> — not an LLM — decides what must wait for a human.</span>
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Durable execution</strong>
-              <span
-                >Position is folded from an append-only journal, never a stored cursor — so a crash
-                mid-run cannot re-fire an approved payment, and a redelivered job cannot repeat
-                completed work. A time-based run lease keeps two workers off the same run in the
-                ordinary case; it is not a fencing token, so a worker stalled past its lease can
-                still overlap with the one that takes over.</span
-              >
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Live run timeline</strong>
-              <span>Status, screenshots, approve/reject; resume restores browser state after the gate.</span>
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Incidents, retry and cancel</strong>
-              <span
-                >A step that failed for a reason retrying could fix waits for a person instead of
-                killing the batch. A rejected approval or a workflow that cannot resolve fails the
-                run outright — retrying those changes nothing. Runs stop between steps; a step
-                already in flight finishes, which is the honest behaviour for an action that must
-                not happen twice.</span
-              >
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Undo (compensation)</strong>
-              <span
-                >Reverses completed steps in reverse order, through the same classifier, gate and
-                journal — on a stricter bar than the forward path. A reversal is checked against its
-                own assertion where the workflow defines one; otherwise the screenshot is evidence
-                rather than proof. Effects with no defined reversal are reported, never quietly
-                skipped.</span
-              >
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Per-workflow concurrency cap</strong>
-              <span
-                >An opt-in limit on how many runs of one workflow are in flight at once — off by
-                default, and per workflow rather than per system, so it bounds a stampede rather
-                than guaranteeing Ghost works a system alone. Held-back runs say why they are
-                waiting.</span
-              >
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Hash-chained audit log — and a verifier</strong>
-              <span
-                >Per-org append-only events for run/step/gate/finish, with each run&rsquo;s head
-                anchored into the org chain. The chain can be re-checked in-product, not merely
-                written — including deletion of a journal&rsquo;s tail, which leaves every surviving
-                link valid and so needs an expected head recorded outside it.</span
-              >
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-check-circle" /></svg>
-            <div>
-              <strong>Agent HTTP + MCP tools</strong>
-              <span>List/preview/start runs from Cursor or Claude; approve stays human-only in Ghost UI.</span>
-            </div>
-          </li>
-          <li>
-            <svg class="i"><use href="#i-alert" /></svg>
-            <div>
-              <strong>Known limits of what is built</strong>
-              <span
-                >Undo runs in a fresh browser session, so it only reaches systems that do not require
-                a login. Journal tampering — edits, gaps, and deletion of the tail — is detected and
-                quarantines the run, but every expected value lives in the same database as the
-                thing it checks, and nothing is anchored anywhere outside it. So this catches
-                corruption and a partial edit; it does not withstand someone with write access to
-                the whole database. Tracked in the repo, not papered over.</span
-              >
-            </div>
-          </li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Browser recording and deterministic compilation</strong><span>Manifest V3 recorder, structured trace schema, secret redaction, and trace-to-step compilation without a required model call.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Playwright execution engine</strong><span>Semantic locators, typed steps, screenshots, assertions, and browser-session restore after approval.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Human approval controls</strong><span>A deterministic classifier gates sensitive actions. Optional separation of duties prevents the requester from approving the same run.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Durable run state</strong><span>An append-only execution journal tracks completed work so retries and worker restarts do not blindly replay prior steps.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Verification, audit, and artifacts</strong><span>Per-step evidence, hash-chained audit events, local or S3 artifact storage, presigned access, and configurable artifact retention.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Agent interfaces</strong><span>HTTP and MCP tools can list, preview, and start runs. Approval remains in Ghost.</span></div></li>
+          <li><svg class="i"><use href="#i-check-circle" /></svg><div><strong>Operational tooling</strong><span>Postgres, Redis, BullMQ, structured JSON logging, Docker deployment, and optional Sentry error reporting.</span></div></li>
+          <li><svg class="i"><use href="#i-alert" /></svg><div><strong>Still early</strong><span>Browser execution is the main path. Broader API connectors, stronger external audit anchoring, extension permission scoping, and production hardening remain active work.</span></div></li>
         </ul>
       </section>
 
       <section id="stack" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Engineering</p>
-          <h2>Stack you can actually clone.</h2>
-          <p class="section__sub">
-            Self-contained Turborepo under <code>cloud/</code>. Legacy Rust/Tauri desktop remains in-tree
-            for history — it is not the product being built.
-          </p>
+          <p class="eyebrow">Architecture</p>
+          <h2>Cloud application, worker, recorder, and agent tools.</h2>
+          <p class="section__sub">A modular stack for recording, reviewing, executing, and auditing workflows.</p>
         </div>
         <div class="stack-grid">
-          <article class="stack-card">
-            <h3>Web</h3>
-            <p>Next.js 15 · Auth.js · org-scoped API routes</p>
-          </article>
-          <article class="stack-card">
-            <h3>Worker</h3>
-            <p>BullMQ · Playwright · approval state machine</p>
-          </article>
-          <article class="stack-card">
-            <h3>Core</h3>
-            <p>Prisma · Postgres · Zod step schema · audit chain</p>
-          </article>
-          <article class="stack-card">
-            <h3>Agent</h3>
-            <p>HTTP <code>/api/agent</code> · MCP stdio · no self-approve</p>
-          </article>
-          <article class="stack-card">
-            <h3>Ops</h3>
-            <p>Redis queue · disk/S3 artifacts · Docker Compose local</p>
-          </article>
+          <article class="stack-card"><h3>Web</h3><p>Next.js · Auth.js · organization-scoped routes</p></article>
+          <article class="stack-card"><h3>Worker</h3><p>Node.js · BullMQ · Playwright · structured logging</p></article>
+          <article class="stack-card"><h3>Core</h3><p>Prisma · Postgres · Zod · execution journal · audit chain</p></article>
+          <article class="stack-card"><h3>Recorder</h3><p>Chrome Manifest V3 · accessible locators · local buffering</p></article>
+          <article class="stack-card"><h3>Agent</h3><p>HTTP API · MCP stdio · scoped tokens · no self-approval</p></article>
+          <article class="stack-card"><h3>Storage</h3><p>Redis queue · disk or S3 artifacts · retention jobs</p></article>
         </div>
       </section>
 
       <section id="audience" class="section reveal">
         <div class="section__head">
-          <p class="eyebrow">Product sense</p>
-          <h2>Who this is for — when it graduates.</h2>
-          <p class="section__sub">
-            The design target is operations-heavy SMBs (wholesale, bookkeeping, property admin,
-            logistics) that re-key work between ugly systems and cannot accept unsupervised agents.
-            That ICP guides the build even before the first paid pilot.
-          </p>
+          <p class="eyebrow">Use cases</p>
+          <h2>Repeated work where mistakes have a cost.</h2>
+          <p class="section__sub">Ghost is designed for operations teams moving structured work across browser-based systems.</p>
         </div>
         <div class="niche-grid">
-          <article class="niche-card">
-            <h3>Cross-app grunt work</h3>
-            <p>Reporting, reconciliation, document processing — repetitive and measurable.</p>
-          </article>
-          <article class="niche-card">
-            <h3>Human on the sensitive step</h3>
-            <p>Send, pay, delete, submit must stop. That constraint is the product, not a bug.</p>
-          </article>
-          <article class="niche-card">
-            <h3>Proof afterward</h3>
-            <p>Screenshots, verification, audit chain — something a manager can review.</p>
-          </article>
+          <article class="niche-card"><h3>Cross-system operations</h3><p>Order entry, reconciliation, reporting, document processing, and administrative workflows.</p></article>
+          <article class="niche-card"><h3>Sensitive actions</h3><p>Workflows that can prepare a submission or payment but must stop before committing it.</p></article>
+          <article class="niche-card"><h3>Reviewable evidence</h3><p>Teams that need screenshots, assertions, approvals, and a clear event history after a run.</p></article>
         </div>
       </section>
 
       <section class="section reveal">
-        <div class="section__head">
-          <p class="eyebrow">Positioning</p>
-          <h2>What this is not.</h2>
-        </div>
+        <div class="section__head"><p class="eyebrow">Boundaries</p><h2>What Ghost is not.</h2></div>
         <div class="never-row">
           <span><svg class="i"><use href="#i-ban" /></svg> Not a chatbot wrapper</span>
-          <span><svg class="i"><use href="#i-ban" /></svg> Not a Zapier clone</span>
-          <span><svg class="i"><use href="#i-ban" /></svg> Not unsupervised “agentic” magic</span>
+          <span><svg class="i"><use href="#i-ban" /></svg> Not a blind macro recorder</span>
+          <span><svg class="i"><use href="#i-ban" /></svg> Not unsupervised execution</span>
           <span><svg class="i"><use href="#i-ban" /></svg> Not agent self-approval</span>
         </div>
       </section>
 
       <section id="about" class="access reveal">
         <div class="access__inner">
-          <h2>Built in public. Aimed at a real business.</h2>
-          <p class="access__sub">
-            I’m building Ghost as a serious systems project — trust pipeline, tests, and a runnable
-            cloud engine — with the long-term goal of selling implementation + seats to ops teams.
-            Today:
-            <a href="https://github.com/mohabbis/ghost/blob/master/LICENSE">open source (AGPL-3.0)</a>,
-            early, no logos. If you hire for product engineering or want to follow the build, the
-            repo is the résumé.
-          </p>
+          <h2>Open source.</h2>
+          <p class="access__sub">Ghost is available under AGPL-3.0. The repository includes the cloud app, worker, browser recorder, tests, deployment documentation, and trust invariants.</p>
           <div class="access__actions">
-            <a class="btn btn--lg" href="https://github.com/mohabbis/ghost">
-              <svg class="i"><use href="#i-github" /></svg> github.com/mohabbis/ghost
-            </a>
-            <a class="btn btn--secondary btn--lg" href="https://github.com/mohabbis">
-              <svg class="i"><use href="#i-arrow-right" /></svg> @mohabbis
-            </a>
+            <a class="btn btn--lg" href="https://github.com/mohabbis/ghost"><svg class="i"><use href="#i-github" /></svg> View repository</a>
           </div>
-        </div>
-      </section>
-
-      <section id="legacy" class="section reveal legacy">
-        <div class="section__head">
-          <p class="eyebrow">Archive</p>
-          <h2>Legacy desktop preview (not the résumé piece).</h2>
-          <p class="section__sub">
-            An earlier local-first Mac/Windows Organizer build (<strong>v2.0.3</strong>) is kept in the
-            repo's <a href="https://github.com/mohabbis/ghost/releases/tag/v2.0.3">GitHub releases</a>
-            for reference. The active work — and what to judge — is the cloud operator under
-            <code>cloud/</code> on GitHub.
-          </p>
         </div>
       </section>
     </main>
 
     <footer class="footer">
-      <div class="footer__brand">
-        <span class="brand"
-          ><span class="brand__mark" aria-hidden="true"
-            ><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span
-          >
-          Ghost</span
-        >
-        <p>Capture → Review → Approve → Execute → Verify → Recover.</p>
-      </div>
-      <nav class="footer__links" aria-label="Footer">
-        <a href="#how">How it works</a>
-        <a href="#built">What's real</a>
-        <a href="#stack">Stack</a>
-        <a href="#about">About</a>
-        <a href="https://github.com/mohabbis/ghost">GitHub</a>
-        <a href="https://github.com/mohabbis">Muhammad Rafiq</a>
-      </nav>
-      <p class="footer__fine">
-        Independent open build · AGPL-3.0 · no customers claimed · © 2026 Muhammad Rafiq
-      </p>
+      <div class="footer__brand"><span class="brand"><span class="brand__mark" aria-hidden="true"><img src="/assets/ghost-mark.svg" alt="" class="ghost-logo" /></span> Ghost</span><p>Capture → Review → Approve → Execute → Verify → Recover.</p></div>
+      <nav class="footer__links" aria-label="Footer"><a href="#how">How it works</a><a href="#built">What is built</a><a href="#stack">Stack</a><a href="#about">Project</a><a href="https://github.com/mohabbis/ghost">GitHub</a></nav>
+      <p class="footer__fine">Open source · AGPL-3.0 · © 2026 Muhammad Rafiq</p>
     </footer>
   </body>
 </html>
