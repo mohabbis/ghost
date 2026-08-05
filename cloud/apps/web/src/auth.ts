@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
+import Google from "next-auth/providers/google";
 import { assertAuthSecretUsable, devSignInAllowed, sessionMaxAgeSeconds } from "@/lib/auth-env";
 import { ensureUserOrg } from "@/lib/org";
 
@@ -13,8 +14,10 @@ import { ensureUserOrg } from "@/lib/org";
  * (`ensureUserOrg`) and stamp `userId`/`orgId` into the token, so every request
  * is scoped to a tenant.
  *
- * GitHub OAuth is enabled only when its env vars are present. Locally, the
- * "Dev sign-in" provider accepts any email.
+ * GitHub and Google OAuth are each enabled only when their own env vars are
+ * present — a deployment can offer one, both, or neither (falling back to the
+ * dev-only provider below). Locally, the "Dev sign-in" provider accepts any
+ * email.
  */
 
 // Before anything else: in production, refuse to start on a session secret
@@ -25,6 +28,10 @@ const providers: NextAuthConfig["providers"] = [];
 
 if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
   providers.push(GitHub);
+}
+
+if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
+  providers.push(Google);
 }
 
 // Passwordless "any email" sign-in for local development. `devSignInAllowed`
