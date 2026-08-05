@@ -305,7 +305,7 @@ Redis running** — CI catches it before merge either way, but a local loop is
 faster than waiting on a run:
 
 ```bash
-cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 239 tests
+cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 398 tests
 ```
 
 Without a database roughly 90 of those skip themselves and you learn nothing
@@ -363,15 +363,28 @@ page reload, confirmed the stream closes on a terminal status rather than
 reconnecting forever (5 requests total, network panel stayed flat for 8s
 after).
 
-1. **S3 serve path** — disk store works in dev; wire presigned URLs when S3 is on.
-   Note the artifact route is now a positive allow-list (`step-`/`restore-` PNGs
-   only); keep it that way, because the same prefix holds encrypted session
-   blobs that must never be served.
-2. **Four-eyes approval** — `isOrgAdmin` above is a role check, not the RBAC
-   `requireSeparateApprover` would need (which is about who may *approve*, not
-   who may *administer*); still needs its own design, and orgs are still
-   auto-created single-member on first sign-in with no invite flow, so it has
-   no real subject to test against yet.
+Done: **S3 serve path**. `packages/core/src/storage/artifacts.ts` has a real
+`S3ArtifactStore` (put/get/delete/deletePrefix/presigned `signedUrl`) alongside
+the disk fallback; `artifactStore()` switches on `S3_BUCKET` +
+`S3_ACCESS_KEY_ID` + `S3_SECRET_ACCESS_KEY` being set, and `docs/DEPLOY.md`
+documents the silent-fallback failure mode. The artifact route is a positive
+allow-list (`step-`/`restore-` PNGs only) — keep it that way; the same prefix
+holds encrypted session blobs that must never be served. What's still actually
+missing is a retention/cleanup policy: nothing expires or purges old run
+artifacts, on disk or in the bucket, so storage grows unbounded over the life
+of an org. Not started.
+
+Done: **four-eyes approval**. `isOrgAdmin` above undersold this — a full
+membership model shipped alongside it: `Membership`/`Role`
+(`OWNER`/`ADMIN`/`MEMBER`) and `Invitation` in the schema, invite/accept routes
+under `app/api/invitations` and `app/api/settings/members`
+(email-match-enforced acceptance, not just token possession — see
+`checkInvitationRedeemable`), and `Organization.requireSeparateApprover`
+enforcing `requester_user_id !== approver_user_id` server-side when a workflow
+opts in. Covered end-to-end by
+`apps/web/src/app/api/runs/separation-of-duties.test.ts` (5 tests) and
+`apps/web/src/app/api/settings/members/members.test.ts` (9 tests) against a
+real Postgres. Nothing on this item is a gap anymore.
 
 ## Phase 2
 
@@ -395,10 +408,18 @@ pipeline, it only pre-fills the editor. `HR_API_KEY` (server-only,
 infrastructure used to build Ghost; nothing a customer executes goes through
 it. Compile is an optional authoring convenience that is unavailable when the
 key is unset, and production is expected to leave it unset — see
-`docs/DEPLOY.md`. The next change here extracts a provider-neutral
-`WorkflowCompiler` interface so the HarnessRouter client is one replaceable
-adapter rather than a dependency reaching into the recording routes. Removing
-that adapter must disable compile and nothing else.
+`docs/DEPLOY.md`.
+
+Done: **the provider-neutral `WorkflowCompiler` boundary** (PR #406). The
+interface, its `HarnessRouterWorkflowCompiler` implementation, and the
+`workflowCompiler()`/`requireWorkflowCompiler()`/`compilerConfigured()`
+accessors live in `apps/web/src/lib/compiler/{types,index,harness-router-compiler}.ts`.
+`recording-compiler.ts` depends only on `WorkflowCompiler`; HarnessRouter-specific
+types stay inside `harness-router-compiler.ts` and never leak into it. Errors
+normalize to Ghost-owned `CompilerNotConfiguredError`/`CompilerRequestError`,
+and `compiler-optional.test.ts` swaps in a fake for tests. Adding a second
+adapter needs no change to the recording routes — only a new file and a branch
+in `workflowCompiler()`.
 
 **Capture is decided: a Chrome extension for v1.** A Ghost-hosted remote
 browser is the more elegant answer — it records in the same environment the
@@ -409,6 +430,59 @@ sooner. The engine boundary is unchanged either way: Convert needs *a* trace
 to exist, not a particular producer, so the extension slots in ahead of the
 upload step and `POST /api/recordings` stays as it is. The manual upload form
 is scaffolding, not the product.
+
+**Capture is also built, not just decided.** `cloud/apps/extension` is a
+working Chrome extension (records clicks/typing/selects/submits/navigation via
+accessible role+name, redacts secret-shaped fields at capture, uploads to
+`POST /api/agent/recordings` with a revocable bearer token) — see its own
+`README.md` for the trust boundary. It lands on `feat/browser-recording-extension`,
+not yet merged, so `README.md`'s Phase 2 status line ("capture is next") is
+correct as of `master` but stale the moment this branch merges. Update it in
+the same PR.
+
+## Worker container: built, but had never actually run
+
+Audited 2026-08-05, prompted by a stale roadmap in this very document (the S3
+and four-eyes items above, both already shipped). While verifying what was
+*actually* left, `docker build -f apps/worker/Dockerfile .` was run for the
+first time since this file's own "no deployment of Ghost exists yet" caveat
+in `docs/DEPLOY.md` was written — and it failed, then failed differently, then
+crashed on boot. Two independent bugs, both now fixed:
+
+1. The `deps` stage only `COPY`'d `packages/core/package.json`, not
+   `packages/core/prisma`. `@ghost/core`'s `postinstall` runs a bare `prisma
+   generate`, which resolves the schema at the default `./prisma/schema.prisma`
+   path — absent at that point in the build — so `pnpm install` itself failed
+   before the `build` stage (which does copy the rest of `packages/core`) ever
+   ran. Same root cause silently dropped `tsconfig.base.json`, so
+   `apps/worker/tsconfig.json`'s `extends` also failed (non-fatally — tsup
+   warned and fell back to its own defaults). Fixed by copying both ahead of
+   `pnpm install`.
+2. With the image building, the container crashed immediately on boot:
+   `Error: Dynamic require of "fs" is not supported`. `tsup.config.ts`'s
+   `noExternal: [/^@ghost\//]` bundles `@ghost/core` into the worker's ESM
+   output, which transitively pulled in `@prisma/client`'s generated CJS
+   runtime (it dynamically `require()`s native query-engine files) — esbuild's
+   CJS→ESM interop can't represent that and throws at the first call. Fixed by
+   marking `@prisma/client`/`.prisma/client` `external` in `tsup.config.ts`,
+   and adding `@prisma/client` as a direct dependency of `@ghost/worker`
+   (pnpm's strict linking won't resolve a transitive dep at the worker's own
+   require path otherwise).
+
+Verified by rebuilding the image and running it against a real Postgres +
+Redis with `docker run --network host`, confirming the `[worker] Ghost worker
+started...` log line rather than a crash. `.github/workflows/cloud.yml` now
+builds and boot-smoke-tests the image on every PR (`Build worker container
+image` / `Smoke-test worker container boots`) — before this, CI's `pnpm build`
+only ran `tsup` at the workspace level, which neither exercised the
+Dockerfile's own `COPY` list nor ever executed the bundled `dist/index.js`, so
+both bugs shipped invisibly across several PRs.
+
+This does not mean a deployment now exists — `docs/DEPLOY.md`'s runbook is
+still unexecuted against a real host, and the sign-in trap and domain trap it
+documents are still open. It means the one artifact that runbook assumed
+worked, and that a first deploy attempt would have discovered the hard way,
+now actually does.
 
 ## Repo conventions
 

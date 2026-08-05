@@ -144,7 +144,7 @@ and `turbo run lint` skips packages that define no `lint` script — silently, a
 with a green summary. Treat `typecheck` as the real static gate until the other
 three packages have configs.
 
-A full green run is **239 tests**. Roughly 90 of them are gated on
+A full green run is **398 tests**. Roughly 90 of them are gated on
 `Boolean(process.env.DATABASE_URL)` and **skip silently** without it — so a
 green run with no database covers none of the execution engine. If the worker
 suite reports 45 tests rather than 90, the database is not being reached.
@@ -157,7 +157,7 @@ suite reports 45 tests rather than 90, the database is not being reached.
 | 1.1 | Playwright engine, approval state machine, artifacts, hash-chained audit | **done** |
 | 1.2 | Run trigger, live timeline, approve/reject resume | **done** |
 | 1.3 | Durable execution (run journal), timeouts/retry, incidents + cancel, audit-verify, variable store | **done** |
-| 1.x | Typed step editor | remaining |
+| 1.x | Typed step editor | **done** (`workflow-editor.tsx`: type/selector/value, reorder, delete, validation, undo authoring) |
 | 2 | Browser recording → editable steps | convert built (upload → compile → review), off by default; capture is next |
 
 Phase 1.3 made run position a fold over an append-only, hash-chained journal
