@@ -4,11 +4,16 @@ Ghost is four processes: a Next.js web app, a worker that drives a real browser,
 Postgres, and Redis. Plus object storage once web and worker are on separate
 hosts.
 
-This document is a runbook, not a record — **no deployment of Ghost exists
-yet**, and nothing here has been executed against a real host. It was written
-alongside the code that makes it possible, and the container image has not been
-built (Docker was unavailable in the environment that wrote it). Treat the first
-deploy as the test of this file.
+**Update:** `apps/web` has now actually been deployed — Vercel project
+`ghost-app`, Neon Postgres, Upstash Redis, migrations applied, `/signin`
+verified live. The bugs that first deploy found (a stale root `vercel.json`
+silently winning over the app's own build config, the CLI uploading untracked
+worktree directories, Vercel's own SSO wall blocking every page) are folded
+into the steps below rather than left as a separate war story. **The worker
+has not been deployed** — no container host is wired up yet, and object
+storage was deliberately skipped (screenshots fall back to local disk, which
+does not survive being served from a separate worker host). Treat both of
+those as still-open parts of a first real deploy.
 
 ## Shape
 
@@ -147,16 +152,36 @@ concrete:
 1. Create a **new, second** Vercel project. Do not add `cloud/apps/web` to
    whatever project already serves the repo root's `public/` marketing site —
    they cannot share one project or one `vercel.json`.
-2. Set its **Root Directory** to `cloud/apps/web` in Project Settings. Vercel's
-   Turborepo/pnpm-workspace detection then infers the install command and
-   build filter on its own — no `vercel.json` is needed inside `cloud/apps/web`
-   for this (confirmed against Vercel's own monorepo docs; see the audit that
-   produced this checklist for why one was deliberately not added).
-3. Give it its own hostname (e.g. `app.<your-domain>`, distinct from the
+2. Set its **Root Directory** to `cloud/apps/web` in Project Settings.
+3. **`cloud/apps/web/vercel.json` must exist**, at minimum `{"framework":
+   "nextjs"}`. Contrary to what this file previously said here: with the repo
+   root's own `vercel.json` present (the marketing site's static-build config),
+   an empty Root Directory at build time falls back to that root config
+   instead of auto-detecting Next.js — even though Root Directory is correctly
+   set on the project and even though the uploaded source is scoped correctly.
+   Vercel's own build output prints "The vercel.json file should be inside of
+   the provided root directory" as a warning, not a hard error, and then uses
+   it anyway. Confirmed by deploying without one first: the build ran the
+   marketing site's `echo` install/build commands against `cloud/apps/web`'s
+   uploaded files and failed looking for a `public/` output directory that
+   doesn't exist there. A local `vercel.json` closes the gap outright.
+4. If deploying via the CLI rather than Git integration, also add a
+   `.vercelignore` at the **repo root** excluding any local worktree/build
+   directories that sit untracked next to the actual source (`.worktrees/`,
+   `.wt/`, `.turbo/` in this repo, `src-tauri/target/`, `dist/`) — `vercel
+   deploy` uploads the working directory as-is, not `git ls-files`, so
+   untracked local dev artifacts get swept in too. Without it, a deploy from
+   this repo's root uploaded 57,896 files instead of ~700.
+5. Give it its own hostname (e.g. `app.<your-domain>`, distinct from the
    marketing site's).
-4. Set every `web`-column environment variable from the table above on this
+6. Set every `web`-column environment variable from the table above on this
    project (`DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`/
    `AUTH_GITHUB_SECRET`, the `S3_*` set, `APP_URL`).
+7. **Disable Vercel's own Deployment Protection (SSO/Vercel Authentication)**
+   for this project, or it gates every page — including `/signin` — behind a
+   Vercel-account login wall on top of Ghost's own auth, blocking real users
+   entirely. New projects on a team plan often have this on by default for
+   `*.vercel.app` URLs.
 
 **Container host for the worker** (Fly.io, Railway, Render, or any host that
 runs a Docker image — pick one; none of this repo's code prefers one over
