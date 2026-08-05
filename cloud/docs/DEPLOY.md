@@ -51,7 +51,8 @@ B2, or MinIO.
 | `DATABASE_URL` | ● | ● | nothing works |
 | `REDIS_URL` | ● | ● | runs queue and never execute |
 | `AUTH_SECRET` | ● | | sessions cannot be signed |
-| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | ● | | **no way to sign in at all** — see below |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | ● | | one fewer sign-in option; **no way to sign in at all** if Google is also unset — see below |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | ● | | same as above, independently — offer either, both, or neither |
 | `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | ● | ● | silent fallback to local disk; artifacts lost |
 | `S3_REGION`, `S3_ENDPOINT` | ○ | ○ | needed for non-AWS S3-compatible stores |
 | `GHOST_SESSION_KEY` | | ● | gated runs cannot resume after approval |
@@ -67,10 +68,15 @@ reason to hold that power.
 ### The sign-in trap
 
 `apps/web/src/app/signin/page.tsx` shows the dev email form only when
-`NODE_ENV !== "production"`, and the GitHub button only when both GitHub
-variables are set. In production with neither configured, the page renders with
-**no way to sign in**. Configure the GitHub OAuth app before the first deploy,
-with its callback at `https://<your-app-domain>/api/auth/callback/github`.
+`NODE_ENV !== "production"`, the GitHub button only when both GitHub
+variables are set, and the Google button only when both Google variables are
+set — each provider is independent. In production with all three unset, the
+page renders an explicit "no sign-in method is configured" error rather than
+silently showing nothing (see `signin/page.tsx`'s `misconfigured` check), but
+that is a diagnostic, not a fix: configure at least one real OAuth app before
+the first deploy, with its callback at
+`https://<your-app-domain>/api/auth/callback/github` or
+`https://<your-app-domain>/api/auth/callback/google`.
 
 ### The domain trap
 
@@ -147,6 +153,19 @@ only one side gets them.
   `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`. See "The sign-in trap" above for
   what happens if you skip this.
 
+**Google OAuth client** (console.cloud.google.com/apis/credentials → Create
+Credentials → OAuth client ID → Web application) — do this too, not instead
+of GitHub: GitHub-only sign-in excludes anyone in Ghost's actual target
+market (ops-heavy SMBs) who doesn't have or want a GitHub account:
+- Authorized redirect URI: `https://<your-app-domain>/api/auth/callback/google`
+  — same exact-match rule as GitHub's callback.
+- The OAuth consent screen needs to exist first (Google requires basic app
+  info — name, support email — before it issues credentials); "Testing" mode
+  is fine until you need non-allowlisted users to sign in, at which point it
+  needs Google's verification review.
+- Note the Client ID and Client Secret; these become `AUTH_GOOGLE_ID` /
+  `AUTH_GOOGLE_SECRET`.
+
 **Vercel project for `cloud/apps/web`** — this is "The domain trap" above made
 concrete:
 1. Create a **new, second** Vercel project. Do not add `cloud/apps/web` to
@@ -176,7 +195,8 @@ concrete:
    marketing site's).
 6. Set every `web`-column environment variable from the table above on this
    project (`DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`/
-   `AUTH_GITHUB_SECRET`, the `S3_*` set, `APP_URL`).
+   `AUTH_GITHUB_SECRET`, `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`, the `S3_*`
+   set, `APP_URL`).
 7. **Disable Vercel's own Deployment Protection (SSO/Vercel Authentication)**
    for this project, or it gates every page — including `/signin` — behind a
    Vercel-account login wall on top of Ghost's own auth, blocking real users

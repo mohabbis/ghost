@@ -5,13 +5,15 @@ import { Card, CardBody } from "@/components/ui/card";
 import { SOURCE_URL } from "@/lib/source-url";
 
 const githubEnabled = Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET);
+const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 const devEnabled = process.env.NODE_ENV !== "production";
-// Both false means production with no OAuth provider configured: no form
-// below has anything to render, and a card with a title and no buttons looks
-// like a bug rather than a missing deploy step. Whoever hits this is more
-// likely to be the person standing up the deployment than an end user, so
-// name the exact fix rather than failing silently. See docs/DEPLOY.md's "sign-in trap".
-const misconfigured = !githubEnabled && !devEnabled;
+// All three false means production with no OAuth provider configured: no
+// form below has anything to render, and a card with a title and no buttons
+// looks like a bug rather than a missing deploy step. Whoever hits this is
+// more likely to be the person standing up the deployment than an end user,
+// so name the exact fix rather than failing silently. See docs/DEPLOY.md's
+// "sign-in trap".
+const misconfigured = !githubEnabled && !googleEnabled && !devEnabled;
 
 export default async function SignInPage({
   searchParams,
@@ -42,12 +44,13 @@ export default async function SignInPage({
                 No sign-in method is configured
               </p>
               <p className="text-[var(--color-muted)]">
-                This deployment has <code>NODE_ENV=production</code> and no GitHub OAuth
-                app configured, so there is no way to sign in. Set{" "}
-                <code>AUTH_GITHUB_ID</code> and <code>AUTH_GITHUB_SECRET</code>, with the
+                This deployment has <code>NODE_ENV=production</code> and no OAuth app
+                configured, so there is no way to sign in. Set either{" "}
+                <code>AUTH_GITHUB_ID</code>/<code>AUTH_GITHUB_SECRET</code> or{" "}
+                <code>AUTH_GOOGLE_ID</code>/<code>AUTH_GOOGLE_SECRET</code>, with the
                 app&apos;s callback at{" "}
-                <code>https://&lt;this-domain&gt;/api/auth/callback/github</code>. See
-                docs/DEPLOY.md.
+                <code>https://&lt;this-domain&gt;/api/auth/callback/&lt;github|google&gt;</code>.
+                See docs/DEPLOY.md.
               </p>
             </div>
           )}
@@ -61,6 +64,19 @@ export default async function SignInPage({
             >
               <Button type="submit" variant="secondary" className="w-full">
                 Continue with GitHub
+              </Button>
+            </form>
+          )}
+
+          {googleEnabled && (
+            <form
+              action={async () => {
+                "use server";
+                await signIn("google", { redirectTo });
+              }}
+            >
+              <Button type="submit" variant="secondary" className="w-full">
+                Continue with Google
               </Button>
             </form>
           )}
