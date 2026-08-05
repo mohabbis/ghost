@@ -27,8 +27,13 @@ WORKDIR /app
 # ---- dependencies -----------------------------------------------------------
 FROM base AS deps
 # Manifests first so a code-only change does not re-resolve the dependency graph.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
+# packages/core's postinstall runs a bare `prisma generate`, which resolves
+# the schema at the default `./prisma/schema.prisma` path relative to the
+# package. Without it here, `pnpm install` fails inside this stage before the
+# build stage (which copies the rest of packages/core) ever runs.
+COPY packages/core/prisma packages/core/prisma
 COPY apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile --filter @ghost/worker...
 
