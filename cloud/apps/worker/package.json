@@ -14,6 +14,7 @@
   "dependencies": {
     "@ghost/core": "workspace:*",
     "@prisma/client": "^6.1.0",
+    "@sentry/node": "^10.69.0",
     "bullmq": "^5.34.4",
     "ioredis": "^5.4.2",
     "playwright": "^1.55.0"

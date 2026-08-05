@@ -10,6 +10,10 @@ export const QUEUE_NAMES = {
   runWorkflow: "run-workflow",
   /** Reverses a run's completed side effects (BPMN compensation). */
   compensateRun: "compensate-run",
+  /** Deletes artifact prefixes for runs past the retention window. Scheduled
+   * as a repeatable job (see apps/worker/src/index.ts); never enqueued by the
+   * web app. */
+  purgeArtifacts: "purge-artifacts",
   /** Phase 0 wiring smoke test. */
   noop: "noop",
 } as const;
@@ -121,6 +125,12 @@ export interface NoopJob {
   message: string;
   requestedAt: string;
 }
+
+/** Payload for a `purgeArtifacts` run. Empty: the job re-derives everything
+ * it needs (the retention window, which runs are eligible) at execution
+ * time rather than trusting a scheduled-at snapshot, since a purge cycle can
+ * be delayed behind other work. */
+export type PurgeArtifactsJob = Record<string, never>;
 
 export function redisConnectionFromEnv(): { url: string } {
   const url = process.env.REDIS_URL;

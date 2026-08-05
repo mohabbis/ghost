@@ -144,7 +144,7 @@ and `turbo run lint` skips packages that define no `lint` script — silently, a
 with a green summary. Treat `typecheck` as the real static gate until the other
 three packages have configs.
 
-A full green run is **398 tests**. Roughly 90 of them are gated on
+A full green run is **424 tests**. Roughly 90 of them are gated on
 `Boolean(process.env.DATABASE_URL)` and **skip silently** without it — so a
 green run with no database covers none of the execution engine. If the worker
 suite reports 45 tests rather than 90, the database is not being reached.

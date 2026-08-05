@@ -28,7 +28,10 @@
     "./mfa": "./src/mfa.ts",
     "./crypto/mfa-secret": "./src/crypto/mfa-secret.ts",
     "./recording/trace": "./src/recording/trace.ts",
-    "./recording/compile": "./src/recording/compile.ts"
+    "./recording/compile": "./src/recording/compile.ts",
+    "./retention": "./src/retention.ts",
+    "./logger": "./src/logger.ts",
+    "./sentry": "./src/sentry.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",
@@ -46,7 +49,8 @@
     "@prisma/client": "^6.1.0",
     "zod": "^3.24.1",
     "@aws-sdk/client-s3": "3.1101.0",
-    "@aws-sdk/s3-request-presigner": "3.1101.0"
+    "@aws-sdk/s3-request-presigner": "3.1101.0",
+    "@sentry/node": "^10.69.0"
   },
   "devDependencies": {
     "prisma": "^6.1.0",

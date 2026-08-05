@@ -414,6 +414,14 @@ model Run {
   // make an already-completed action reachable again.
   journalHead String?
 
+  // Set once the retention job has deleted this run's artifact prefix
+  // (screenshots + any residual session blobs) from the store. Null means
+  // either the run has not ended, or it has but is not old enough yet — see
+  // packages/core/src/retention.ts. Distinct from `endedAt` being null: a run
+  // can be long finished and still have this null while it waits out the
+  // retention window.
+  artifactsPurgedAt DateTime?
+
   org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
@@ -427,6 +435,8 @@ model Run {
   // Admission counts a workflow's in-flight runs on every start and resume.
   @@index([workflowVersionId, status])
   @@index([workflowVersionId, slotHeldAt])
+  // The retention job's own query: ended runs it has not yet purged.
+  @@index([endedAt, artifactsPurgedAt])
 }
 
 // ---------------------------------------------------------------------------
