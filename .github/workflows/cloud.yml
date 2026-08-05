@@ -160,3 +160,48 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build worker container image
+        # `pnpm build` above only bundles the worker with tsup — it never
+        # exercises the Dockerfile's own multi-stage COPY list, and it never
+        # runs the resulting dist/index.js in an isolated, workspace-filtered
+        # node_modules the way the image's `pnpm install --filter
+        # @ghost/worker...` does. Both gaps let a genuinely broken image ship
+        # silently before: a missing `packages/core/prisma` COPY failed
+        # `pnpm install` inside the image, and bundling @prisma/client's CJS
+        # runtime into the ESM output crashed the container on boot with
+        # "Dynamic require of 'fs' is not supported". Build it here so a
+        # regression in either fails CI instead of surfacing at deploy time.
+        run: docker build -f apps/worker/Dockerfile -t ghost-worker-ci .
+
+      - name: Smoke-test worker container boots
+        # A build succeeding is not the same as the entrypoint running. Boot
+        # it against the same Postgres/Redis service containers this job
+        # already has and require the worker's own startup log line — not just
+        # "container still alive", which a crash-loop with a restart policy
+        # would also satisfy.
+        run: |
+          set -euo pipefail
+          container_id=$(docker run -d --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e REDIS_URL="$REDIS_URL" \
+            -e GHOST_SESSION_KEY="$GHOST_SESSION_KEY" \
+            ghost-worker-ci)
+          trap 'docker logs "$container_id" || true; docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+
+          ok=""
+          for _ in $(seq 1 15); do
+            if docker logs "$container_id" 2>&1 | grep -q "Ghost worker started"; then
+              ok=1
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$container_id")" != "true" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$ok" ]; then
+            echo "worker container did not report startup within 15s" >&2
+            exit 1
+          fi

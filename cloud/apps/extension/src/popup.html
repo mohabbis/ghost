@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 13px/1.5 system-ui, -apple-system, sans-serif;
+        margin: 0;
+        padding: 14px;
+        width: 300px;
+      }
+      h1 { font-size: 13px; margin: 0 0 10px; letter-spacing: .02em; }
+      button {
+        width: 100%;
+        padding: 8px;
+        font: inherit;
+        font-weight: 600;
+        border-radius: 6px;
+        border: 1px solid currentColor;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:disabled { opacity: .5; cursor: default; }
+      .rec { border-color: #b91c1c; color: #b91c1c; }
+      label { display: block; margin-top: 10px; font-size: 11px; opacity: .75; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px;
+        font: inherit;
+        border-radius: 5px;
+        border: 1px solid rgba(128, 128, 128, .5);
+        background: transparent;
+        color: inherit;
+      }
+      #status { margin-top: 10px; font-size: 12px; min-height: 2.4em; }
+      a { color: inherit; }
+      details { margin-top: 12px; }
+      summary { font-size: 11px; opacity: .75; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Ghost Workflow Recorder</h1>
+
+    <button id="toggle">Start recording</button>
+    <div id="status"></div>
+
+    <details id="settings">
+      <summary>Connection</summary>
+      <label for="url">Ghost URL</label>
+      <input id="url" type="url" placeholder="https://app.example.com" />
+      <label for="token">API token</label>
+      <input id="token" type="password" placeholder="ghost_agent_…" />
+      <p style="font-size: 11px; opacity: .7">
+        Create a revocable token in Ghost under Settings → Agent credentials.
+      </p>
+    </details>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
