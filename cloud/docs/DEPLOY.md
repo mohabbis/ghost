@@ -52,6 +52,8 @@ B2, or MinIO.
 | `GHOST_SESSION_KEY` | | ● | gated runs cannot resume after approval |
 | `APP_URL` | ● | ● | the demo fixture is unreachable from the worker |
 | `NEXT_PUBLIC_SOURCE_URL` | ○ | | AGPL §13 link points at upstream, not your fork |
+| `ARTIFACT_RETENTION_DAYS` | | ○ | defaults to 90; the `purge-artifacts` job (scheduled by the worker itself, see `apps/worker/src/index.ts`) deletes a run's screenshots once it ended this many days ago |
+| `SENTRY_DSN` | | ○ | **worker only.** Error tracking stays off without it, matching `HR_API_KEY`/`S3_BUCKET` (see `@ghost/core/sentry`). `apps/web` is not wired to this — `@sentry/node`'s auto-instrumentation cannot be webpack-bundled (tried, broke `pnpm build`); wiring web needs `@sentry/nextjs` via `npx @sentry/wizard@latest -i nextjs` against a real Sentry project |
 
 `GHOST_SESSION_KEY` is **worker-only** by design. It decrypts captured browser
 sessions — live cookies for the customer's systems — and the web app has no
@@ -96,6 +98,89 @@ hostname, e.g. `app.ghost.muharafiq.com`.
    the approval must render** — that is the one check that proves object storage
    is wired correctly on both sides, and it is exactly what a disk fallback
    breaks.
+
+## Provisioning checklist — accounts and dashboards only you can create
+
+Nothing above can be automated further: each step below needs a real account,
+billing, or a browser session with your organization's credentials, so this
+codebase can prepare the code but not take the step for you. Grouped by
+provider rather than by step, since you likely do these once, in whatever
+order your accounts allow.
+
+**Postgres + Redis** — any managed provider works; nothing here is
+provider-specific. Note the connection strings for `DATABASE_URL` and
+`REDIS_URL`. If the provider requires TLS, confirm the Prisma/ioredis
+connection strings encode that (`?sslmode=require`, `rediss://`) — untested
+here, since no deployment exists yet.
+
+**Object storage (S3-compatible)** — AWS S3, Cloudflare R2, or Backblaze B2 all
+work (`S3_ENDPOINT` selects a non-AWS one). Create one bucket, one set of
+credentials, and scope the credentials' policy to that bucket only rather than
+reusing an account-wide key — a credential leaked from either process should
+not be able to reach anything else in the account. A minimal AWS IAM policy:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
+    "Resource": ["arn:aws:s3:::your-bucket-name", "arn:aws:s3:::your-bucket-name/*"]
+  }]
+}
+```
+Set the same `S3_*` variables on **both** the Vercel project and the container
+host — see "Object storage is not optional here" above for what happens if
+only one side gets them.
+
+**GitHub OAuth app** (github.com → Settings → Developer settings → OAuth Apps
+→ New OAuth App):
+- Homepage URL: your web app's eventual domain (see the Vercel project below).
+- Authorization callback URL: `https://<your-app-domain>/api/auth/callback/github`
+  — exact match, including the path; NextAuth rejects a mismatch rather than
+  redirecting somewhere unexpected.
+- Note the Client ID and generate a Client Secret; these become
+  `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`. See "The sign-in trap" above for
+  what happens if you skip this.
+
+**Vercel project for `cloud/apps/web`** — this is "The domain trap" above made
+concrete:
+1. Create a **new, second** Vercel project. Do not add `cloud/apps/web` to
+   whatever project already serves the repo root's `public/` marketing site —
+   they cannot share one project or one `vercel.json`.
+2. Set its **Root Directory** to `cloud/apps/web` in Project Settings. Vercel's
+   Turborepo/pnpm-workspace detection then infers the install command and
+   build filter on its own — no `vercel.json` is needed inside `cloud/apps/web`
+   for this (confirmed against Vercel's own monorepo docs; see the audit that
+   produced this checklist for why one was deliberately not added).
+3. Give it its own hostname (e.g. `app.<your-domain>`, distinct from the
+   marketing site's).
+4. Set every `web`-column environment variable from the table above on this
+   project (`DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`/
+   `AUTH_GITHUB_SECRET`, the `S3_*` set, `APP_URL`).
+
+**Container host for the worker** (Fly.io, Railway, Render, or any host that
+runs a Docker image — pick one; none of this repo's code prefers one over
+another):
+1. Point it at `apps/worker/Dockerfile`, built with `cloud/` as the build
+   context (see step 5 above — the workspace layout requires this).
+2. Set every `worker`-column environment variable from the table above,
+   **plus** `GHOST_SESSION_KEY` (worker-only) and, optionally,
+   `ARTIFACT_RETENTION_DAYS`/`SENTRY_DSN`.
+3. Most of these hosts expect a process that stays up and reads its port/health
+   check from an env var they inject — the worker has no HTTP server and needs
+   none (it is a queue consumer), so skip any "web service" health-check
+   requirement the host's UI assumes by default and configure it as a
+   background worker / long-running process instead.
+
+**Sentry (optional)** — create a project, generate a DSN, and set
+`SENTRY_DSN` on the container host only; this alone gives the worker error
+tracking, since `apps/worker` is already wired against `@ghost/core/sentry`
+(see that file for why the wrapper doesn't try to also cover `apps/web`).
+Wiring `apps/web` needs `@sentry/nextjs`, not this env var — run
+`npx @sentry/wizard@latest -i nextjs` against the same Sentry project once the
+Vercel project above exists, since the wizard needs a real project to
+configure against and writes files (`instrumentation-client.ts`,
+`sentry.server.config.ts`, a `next.config.ts` wrapper) this repo does not ship.
 
 ## Rolling back
 
@@ -160,11 +245,15 @@ only reject them. It is opt-in because organizations are created single-member o
 first sign-in, so switching it on in a one-person org leaves nobody able to
 approve and runs stop at their first gate.
 
-**Approval is still not role-restricted.** `Membership.role` is stored and read
-by nothing; any member can approve any run they did not start. That gap is
-blocked on member management rather than on effort — there is no invite flow, so
-every organization has exactly one person and a role check would enforce a
-distinction the system cannot yet express.
+**Approval is still not role-restricted.** Membership, invitations, and roles
+(`OWNER`/`ADMIN`/`MEMBER`) are real and tested — `app/api/settings/members`,
+`app/api/invitations`, and `packages/core/src/roles.ts`'s `isOrgAdmin` already
+gate admin-only actions like revoking a colleague's credential. What is
+missing is narrower: `POST /api/runs/[id]/approvals/[stepIndex]` checks org
+membership and `requireSeparateApprover` (requester ≠ approver) but reads
+`Membership.role` not at all, so any member — `MEMBER` included — can approve
+a run they did not start. Fixing it is a role check at one call site, not a
+membership model that needs building first.
 
 Agents genuinely cannot approve, and that is enforced: no POST handler on
 `/api/agent/approvals`, an explicit 403, and a forbidden-tools list.

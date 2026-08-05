@@ -305,7 +305,7 @@ Redis running** — CI catches it before merge either way, but a local loop is
 faster than waiting on a run:
 
 ```bash
-cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 398 tests
+cd cloud && pnpm typecheck && pnpm test && pnpm build   # expect 424 tests
 ```
 
 Without a database roughly 90 of those skip themselves and you learn nothing
