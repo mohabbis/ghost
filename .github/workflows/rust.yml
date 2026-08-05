@@ -278,10 +278,19 @@ jobs:
           for f in src-tauri/Cargo.toml src-tauri/tauri.conf.json; do
             grep -q "$SRC" "$f" || { echo "Source version $SRC missing from $f"; exit 1; }
           done
+          # public/index.html is the cloud-pivoted marketing site; it no longer
+          # advertises a specific desktop release (the legacy download CTA was
+          # deliberately dropped, see #396 and the site copy rewrite that
+          # followed). README.md still names the published desktop tag as
+          # historical reference. Only cross-check the two when the site
+          # actually mentions a version — its absence is not drift to catch,
+          # it's the current, intended state of a page that stopped talking
+          # about desktop releases at all.
           REL=$(grep -oE 'v2\.[0-9]+\.[0-9]+' public/index.html | head -1)
-          echo "Advertised release: $REL"
-          [ -n "$REL" ] || { echo "No vX.Y.Z release in public/index.html"; exit 1; }
-          grep -q "$REL" README.md || { echo "Advertised release $REL missing from README.md"; exit 1; }
+          echo "Advertised release: ${REL:-<none>}"
+          if [ -n "$REL" ]; then
+            grep -q "$REL" README.md || { echo "Advertised release $REL missing from README.md"; exit 1; }
+          fi
 
   frontend-contract:
     name: Frontend contract tests
