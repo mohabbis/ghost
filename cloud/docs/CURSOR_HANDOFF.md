@@ -435,10 +435,46 @@ is scaffolding, not the product.
 working Chrome extension (records clicks/typing/selects/submits/navigation via
 accessible role+name, redacts secret-shaped fields at capture, uploads to
 `POST /api/agent/recordings` with a revocable bearer token) — see its own
-`README.md` for the trust boundary. It lands on `feat/browser-recording-extension`,
-not yet merged, so `README.md`'s Phase 2 status line ("capture is next") is
-correct as of `master` but stale the moment this branch merges. Update it in
-the same PR.
+`README.md` for the trust boundary. **Merged to `master` in PR #409** (this
+paragraph previously said "not yet merged" — that was stale the moment the PR
+landed; `README.md`'s Phase 2 status line needs the same correction if it
+still says "capture is next").
+
+The Capture → Convert pipeline is real and wired end-to-end: extension records
+→ `POST /api/agent/recordings` → compile (HarnessRouter, optional) → review in
+`WorkflowEditor` → `POST /api/workflows` → the normal approve/execute/verify
+loop. What has never happened is anyone actually *using* it to produce a
+workflow worth showing someone — see "Make Ghost demo-able" below.
+
+## Make Ghost demo-able (do this next)
+
+As of 2026-08-05 `ghost.muharafiq.com` is a real, working deployment: three
+sign-in methods (GitHub/Google/email magic link), a public landing page
+instead of a forced auth wall, real Postgres/Redis/worker infra. None of that
+is the gap anymore. The gap is that nothing on the live site *shows* the trust
+loop running. The only workflow ever exercised end-to-end is the seeded
+`fixtures/order` demo, and it is not reachable or visible from the public
+landing page — a visitor who signs in sees an empty dashboard with a bullet
+list describing what Ghost does, not something doing it.
+
+Ghost is genuinely early-stage. The fix is not to fabricate a fake "real
+customer workflow" to look further along than it is — it's to make the
+capability that already exists **visible and walkable**, honestly labeled as
+a demo:
+
+- A demo entry point (linked from the landing page and/or dashboard) that runs
+  `fixtures/order` — or an equally simple, self-contained workflow purpose-built
+  for showing the loop — through Capture/Author → Review → Approve →
+  Execute → Verify → Audit, with each stage visible as it happens rather than
+  requiring someone to already know where `/runs/[id]` or `/audit` live.
+- Consider recording *this* workflow through the now-merged Chrome extension
+  instead of hand-authoring it, as a way of exercising Capture → Convert with
+  something real before the next customer does.
+- The approval gate should be genuinely clickable by whoever's watching, not
+  narrated — that's the entire point of the product being demoed.
+- Keep it honestly scoped: a labeled demo, not a claim that this is a live
+  customer integration. Marketing/docs must not promise capabilities the app
+  cannot support (Engineering rule 10 in the root `CLAUDE.md`).
 
 ## Worker container: built, but had never actually run
 
