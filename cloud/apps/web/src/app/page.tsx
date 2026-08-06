@@ -25,11 +25,68 @@ import { PIPELINE } from "@/lib/demo-narrative";
 export const metadata: Metadata = {
   title: "Ghost — it does the clicking, you approve what matters",
   description:
-    "Show Ghost a task once. It repeats it in a real browser — opening pages, filling forms, moving data between systems — and stops for your approval before it submits, sends, pays, or deletes.",
+    "Ghost runs business workflows across the systems you already use, and gates the consequential parts on a human. People, scripts, and AI agents can all propose a run; only a person can approve one. Durable execution, verified outcomes, and a tamper-evident audit log.",
 };
 
 /** Actions that always stop and wait. Deliberately the plainest possible words. */
 const ALWAYS_STOPS = ["Submit", "Send", "Pay", "Delete", "Overwrite"];
+
+/**
+ * Who asks Ghost to do the work.
+ *
+ * This section exists because the page previously described the mechanism so
+ * concretely — opens pages, fills forms, clicks buttons — that it read as
+ * "Playwright with a confirm dialog". The browser is the current execution
+ * surface, not the product. What is actually being sold is the layer between
+ * something wanting to act and the action landing in a real system, and the
+ * agent row is the sharpest illustration of it.
+ */
+const CALLERS = [
+  {
+    who: "A person",
+    how: "Clicks Run in the UI, or puts the workflow on a schedule.",
+  },
+  {
+    who: "Another system",
+    how: "A script, a cron job, or a webhook, over the HTTP API with a scoped, revocable credential.",
+  },
+  {
+    who: "An AI agent",
+    how: "Over HTTP or MCP. It can propose a run and read what happened. It cannot approve one — there is no endpoint for it, and the attempt returns 403. That is how an agent gets real reach into a business system without unchecked authority over it.",
+    emphasis: true,
+  },
+];
+
+/**
+ * Engine properties that separate this from a script runner. Every one is real
+ * in the schema and the worker runtime — see packages/core/src/runtime/.
+ */
+const ENGINE = [
+  {
+    title: "Versioned, immutable definitions",
+    body: "A run executes the exact version it started with. Editing a workflow never rewrites what a past run did, so the audit trail keeps meaning something a year later.",
+  },
+  {
+    title: "Resumes without re-acting",
+    body: "Every run keeps an append-only, hash-chained journal of what completed. A worker that dies is replaced by one that reads the journal and continues after the last finished step — it does not re-submit an order that already went through.",
+  },
+  {
+    title: "Undo is a phase, not a cleanup script",
+    body: "Reversing a completed run is modelled as its own direction of travel, with its own approval gate and its own events. A reversed step reads as reversed, not as one that never happened.",
+  },
+  {
+    title: "Ambiguity becomes an incident",
+    body: "When a step's effect genuinely cannot be known — the worker died mid-payment — the step is marked unknown and the run raises an incident. Retry risks double-charging, skipping risks a silent no-op, and neither is Ghost's call to make.",
+  },
+  {
+    title: "Concurrency caps",
+    body: "Limit how many runs of a workflow may touch a system at once. A workflow triggered by every inbound email should not put ten browser sessions into the same ERP.",
+  },
+  {
+    title: "Separation of duties",
+    body: "Per workflow, the person who triggered a run can be barred from approving it. Rejecting is never restricted — anyone watching a runaway run must be able to stop it.",
+  },
+];
 
 const BUILT = [
   {
@@ -105,9 +162,10 @@ export default async function Home() {
               </h1>
 
               <p className="mt-6 max-w-xl text-base leading-relaxed text-[var(--color-muted)]">
-                Show it a task once. It repeats it in a real browser — opening pages, filling
-                forms, moving data between systems that don&rsquo;t talk to each other. Before it
-                submits, sends, pays, or deletes, it stops and waits for you.
+                Show it a task once and it runs on its own — opening pages, filling forms, moving
+                data between systems that don&rsquo;t talk to each other. What makes it different
+                from a script: it stops before anything irreversible, proves each step actually
+                worked, and leaves a record nobody can quietly edit.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -166,6 +224,82 @@ export default async function Home() {
                 You click Approve. It saves, confirms the total on screen matches, files the
                 PDF, and writes down everything it touched.
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Answering "isn't this just browser automation?" head on.          */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              So is this just browser automation?
+            </h2>
+            <div className="mt-4 max-w-3xl space-y-4 text-sm leading-relaxed text-[var(--color-muted)]">
+              <p>
+                No. Driving a browser is the easy part — Playwright and Selenium have done it for
+                years, and a dozen no-code tools wrap them. The browser is simply how Ghost
+                reaches a system, and it is the <em>least</em> preferred way. Where a real API
+                exists that is the better path, and the same controls sit on top of it unchanged.
+                Ghost leads with the browser because the systems this work actually lives in —
+                supplier portals, ERPs, insurer sites, internal admin panels — mostly have no API,
+                or have one nobody has integrated.
+              </p>
+              <p className="text-[var(--color-fg)]">
+                What Ghost is, is the layer between something <em>wanting</em> to act and the
+                action landing in a real business system.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-3 md:grid-cols-3">
+              {CALLERS.map(({ who, how, emphasis }) => (
+                <div
+                  key={who}
+                  className={
+                    emphasis
+                      ? "rounded-xl border border-[var(--color-accent)]/50 bg-[var(--color-accent)]/[0.06] p-5"
+                      : "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5"
+                  }
+                >
+                  <h3 className="text-sm font-medium">{who}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{how}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-6 max-w-3xl text-sm leading-relaxed text-[var(--color-muted)]">
+              All three come in through the same gates. Proposing a run and approving one are
+              separate powers, and only a human holds the second.
+            </p>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* The engine underneath                                            */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="border-y border-[var(--color-border)] bg-[var(--color-surface)]/50 px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Built like a workflow engine, not a script runner
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--color-muted)]">
+              A script that crashes halfway leaves you guessing whether it half-worked. That is
+              tolerable for a data pipeline and not tolerable for something that moves money and
+              places orders, so the parts below are the actual substrate rather than features
+              layered on later.
+            </p>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {ENGINE.map(({ title, body }) => (
+                <div
+                  key={title}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-5"
+                >
+                  <h3 className="text-sm font-medium">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{body}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
