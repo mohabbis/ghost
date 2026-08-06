@@ -19,8 +19,23 @@
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* Dark overrides.
+ *
+ * Plain `:root` inside the media query, NOT a nested `@theme` block. Tailwind
+ * v4 collects every `@theme` at build time and emits them together into
+ * `@layer theme` — it does not preserve the `@media` wrapper around one. The
+ * nested version here therefore compiled to an unconditional second copy of
+ * these variables that overwrote the light values above, and the built CSS
+ * contained no `prefers-color-scheme` rule at all: the app was permanently
+ * dark and the light palette on lines 5-20 was dead code.
+ *
+ * Written outside any `@layer`, so it wins over the layered `@theme` output
+ * regardless of source order — unlayered styles beat layered ones in the
+ * cascade. Only the variables that actually differ are repeated; everything
+ * else (danger/success/warning, radii, fonts) is shared and stays defined once.
+ */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root {
     --color-bg: #0b0b0f;
     --color-surface: #141419;
     --color-border: #26262e;
@@ -28,6 +43,11 @@
     --color-muted: #9a9aa5;
     --color-accent: #7c74ff;
     --color-accent-fg: #0b0b0f;
+    /* Lifted for legibility on a dark surface; the light values above are
+       tuned against white and read muddy here. */
+    --color-danger: #f87171;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
   }
 }
 
