@@ -238,13 +238,25 @@ export default async function Home() {
             </h2>
             <div className="mt-4 max-w-3xl space-y-4 text-sm leading-relaxed text-[var(--color-muted)]">
               <p>
-                No. Driving a browser is the easy part — Playwright and Selenium have done it for
-                years, and a dozen no-code tools wrap them. The browser is simply how Ghost
-                reaches a system, and it is the <em>least</em> preferred way. Where a real API
-                exists that is the better path, and the same controls sit on top of it unchanged.
-                Ghost leads with the browser because the systems this work actually lives in —
-                supplier portals, ERPs, insurer sites, internal admin panels — mostly have no API,
-                or have one nobody has integrated.
+                Driving a browser is the easy part — Playwright and Selenium have done it for
+                years, and a dozen no-code tools wrap them. The browser is how Ghost reaches a
+                system, not what Ghost is.
+              </p>
+              <p>
+                Being exact about it: <strong className="font-medium text-[var(--color-fg)]">
+                today every step runs through a browser</strong>. Calling a system&rsquo;s API
+                directly is the better path where one exists, and the pieces for it are designed
+                in — an <code className="font-mono text-xs">apiCall</code> step type, the
+                connector model, and the rules that decide an API action is sensitive all exist
+                already. The executor behind them is not written yet, so Ghost does not call
+                external APIs on your behalf. The step is deliberately not offered in the editor
+                until it does, because a step that silently does nothing while the run reports
+                success is worse than no step at all.
+              </p>
+              <p>
+                Which matters less than it sounds, because the systems this work actually lives
+                in — supplier portals, ERPs, insurer sites, internal admin panels — mostly have no
+                API, or have one nobody has integrated. The browser is what reaches them all.
               </p>
               <p className="text-[var(--color-fg)]">
                 What Ghost is, is the layer between something <em>wanting</em> to act and the
