@@ -32,8 +32,8 @@ export default async function RecordingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold">Recordings</h1>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             Uploaded workflow traces and the editable steps Ghost compiled from them.
@@ -62,7 +62,7 @@ export default async function RecordingsPage() {
           {recordings.map((r) => (
             <Card key={r.id}>
               <CardBody className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <Link href={`/recordings/${r.id}`} className="text-sm font-medium hover:underline">
                     {r.rawTraceFilename ?? r.id}
                   </Link>

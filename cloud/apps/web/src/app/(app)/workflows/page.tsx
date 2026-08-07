@@ -25,8 +25,8 @@ export default async function WorkflowsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold">Workflows</h1>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             Editable, versioned definitions Ghost executes step by step.
@@ -58,7 +58,7 @@ export default async function WorkflowsPage() {
           {workflows.map((w) => (
             <Card key={w.id}>
               <CardBody className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <Link href={`/workflows/${w.id}`} className="text-sm font-medium hover:underline">
                     {w.name}
                   </Link>
