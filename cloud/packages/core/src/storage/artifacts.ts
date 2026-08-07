@@ -9,6 +9,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { put, get as blobGet, del as blobDel, list as blobList } from "@vercel/blob";
 
 /**
  * Storage for run artifacts. Returns a stable key stored on the run row; the
@@ -161,17 +162,80 @@ class S3ArtifactStore implements ArtifactStore {
   }
 }
 
+/**
+ * Vercel Blob-backed store, for Vercel deployments with no S3-compatible
+ * bucket. The store is private: `put`/`get`/`del` all require the read-write
+ * token, so an object's URL alone (unlike S3's presigned links) grants no
+ * access. That means `signedUrl` cannot produce a browser-fetchable link —
+ * same as `DiskArtifactStore`, every read goes through the app's own artifact
+ * route, which calls `get()` server-side and streams the bytes back.
+ */
+class VercelBlobArtifactStore implements ArtifactStore {
+  constructor(private readonly token: string) {}
+
+  async put(key: string, body: Buffer, contentType: string): Promise<string> {
+    await put(key, body, {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType,
+      token: this.token,
+    });
+    return key;
+  }
+
+  async get(key: string): Promise<Buffer> {
+    const result = await blobGet(key, { access: "private", token: this.token });
+    if (!result) throw new Error(`artifact ${key} not found`);
+    const chunks: Buffer[] = [];
+    for await (const chunk of result.stream) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  async delete(key: string): Promise<void> {
+    await blobDel(key, { token: this.token });
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let cursor: string | undefined;
+    do {
+      const listed = await blobList({
+        prefix: prefix.endsWith("/") ? prefix : `${prefix}/`,
+        cursor,
+        token: this.token,
+      });
+      if (listed.blobs.length > 0) {
+        await blobDel(
+          listed.blobs.map((b) => b.pathname),
+          { token: this.token },
+        );
+      }
+      cursor = listed.hasMore ? listed.cursor : undefined;
+    } while (cursor);
+  }
+
+  /** Private-store URLs need the read-write token; nothing is safe to hand a browser. */
+  async signedUrl(): Promise<string | null> {
+    return null;
+  }
+}
+
 let store: ArtifactStore | undefined;
 
 export function artifactStore(): ArtifactStore {
   if (store) return store;
   const bucket = process.env.S3_BUCKET;
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (bucket && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY) {
     store = new S3ArtifactStore(
       bucket,
       process.env.S3_REGION ?? "auto",
       process.env.S3_ENDPOINT || undefined,
     );
+  } else if (blobToken) {
+    store = new VercelBlobArtifactStore(blobToken);
   } else {
     const dir = process.env.GHOST_ARTIFACT_DIR ?? resolve(process.cwd(), ".artifacts");
     store = new DiskArtifactStore(dir);

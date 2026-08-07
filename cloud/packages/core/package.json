@@ -51,6 +51,7 @@
     "zod": "^3.24.1",
     "@aws-sdk/client-s3": "3.1101.0",
     "@aws-sdk/s3-request-presigner": "3.1101.0",
+    "@vercel/blob": "^2.7.0",
     "@sentry/node": "^10.69.0",
     "dotenv": "^16.4.7"
   },
