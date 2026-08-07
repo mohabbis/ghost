@@ -122,7 +122,12 @@ reclaimTimer.unref();
 // through to demonstrate a workflow. Hosted here rather than in apps/web
 // because a capture session outlives any serverless request, and because the
 // Playwright this process already carries for replay is the same Playwright.
-// Returns null and listens on nothing when GHOST_CAPTURE_KEY is unset.
+//
+// This binds a port unconditionally — serving `/health` even with capture
+// switched off — so the same one service can be a host's *web* service, which
+// is the only kind that accepts an inbound socket. A worker that bound a port
+// only when a feature flag was set would fail its deploy the moment that flag
+// was cleared, taking replay down with it.
 const captureServer = startCaptureServer();
 
 log.info("Ghost worker started", { queues: Object.values(QUEUE_NAMES) });

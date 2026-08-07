@@ -33,14 +33,41 @@ const log = createLogger("capture-server");
  * authenticated within `authTimeoutMs` is dropped, and an unauthenticated
  * socket can do nothing else at all — there is no state for it to touch.
  *
- * With no `GHOST_CAPTURE_KEY` set, this server does not listen. That is the
- * whole feature switch: not "capture but unauthenticated", which is a browser
- * anyone who can reach the port may drive.
+ * With no `GHOST_CAPTURE_KEY` set, the `/capture` endpoint does not exist. That
+ * is the whole feature switch: not "capture but unauthenticated", which is a
+ * browser anyone who can reach the port may drive.
+ *
+ * ## Why the HTTP server starts either way
+ *
+ * The port is bound even when capture is off, which looks redundant and is not.
+ * A container host that runs this as a web service — the only kind of service
+ * that can accept an inbound WebSocket at all — decides a deploy has failed when
+ * no port is open. Binding only when a feature flag happens to be set would mean
+ * turning capture off takes the worker down with it, and takes replay down with
+ * the worker. The health endpoint is worth having on its own terms anyway: a
+ * process nothing can probe gets restarted by its scheduler at the worst
+ * possible moment.
  */
 
 export interface CaptureServer {
   port: number;
+  /** Whether `/capture` is mounted. False when no key is configured. */
+  captureEnabled: boolean;
   close(): Promise<void>;
+}
+
+/**
+ * The port to bind.
+ *
+ * `PORT` is what container hosts (Render, Railway, Fly) inject, and honouring it
+ * is what lets the existing worker service accept the capture socket instead of
+ * needing a second service alongside it. An explicit `GHOST_CAPTURE_PORT` still
+ * wins, for a host that injects `PORT` for something else.
+ */
+function capturePort(): number {
+  const configured = process.env.GHOST_CAPTURE_PORT || process.env.PORT;
+  const port = Number(configured);
+  return Number.isFinite(port) && port > 0 ? port : 8787;
 }
 
 /** Sessions currently holding a browser. Bounded by `maxConcurrentSessions`. */
@@ -52,42 +79,59 @@ export function liveCaptureSessions(): number {
   return live.size;
 }
 
-export function startCaptureServer(): CaptureServer | null {
-  if (!captureConfigured()) {
-    log.info("remote capture disabled (GHOST_CAPTURE_KEY not set)");
-    return null;
-  }
+export function startCaptureServer(): CaptureServer {
+  const captureEnabled = captureConfigured();
+  const port = capturePort();
 
-  const port = Number(process.env.GHOST_CAPTURE_PORT ?? 8787);
   const http = createServer((req, res) => {
-    // A health endpoint, because a container that cannot be probed gets
-    // restarted by its scheduler at the worst possible moment.
-    if (req.url === "/health") {
+    const path = (req.url ?? "/").split("?")[0];
+    // `/` as well as `/health`, because a host's default health check probes
+    // the root and a worker that 404s there is reported as unhealthy and
+    // restarted — on a loop, forever.
+    if (path === "/health" || path === "/") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, sessions: live.size, max: CAPTURE_LIMITS.maxConcurrentSessions }));
+      res.end(
+        JSON.stringify({
+          ok: true,
+          capture: captureEnabled,
+          sessions: live.size,
+          max: CAPTURE_LIMITS.maxConcurrentSessions,
+        }),
+      );
       return;
     }
     res.writeHead(404).end();
   });
 
-  const wss = new WebSocketServer({
-    server: http,
-    path: "/capture",
-    // Input messages are small; the ceiling exists so a malformed or hostile
-    // client cannot hand the worker a 100MB string to parse.
-    maxPayload: 256 * 1024,
-  });
+  // Mounted only when a key is configured. With none, `/capture` does not
+  // exist and a connection to it is refused by the HTTP server itself — the
+  // browser never reaches any of this file's code.
+  const wss = captureEnabled
+    ? new WebSocketServer({
+        server: http,
+        path: "/capture",
+        // Input messages are small; the ceiling exists so a malformed or
+        // hostile client cannot hand the worker a 100MB string to parse.
+        maxPayload: 256 * 1024,
+      })
+    : null;
 
-  wss.on("connection", (socket) => void accept(socket));
-  http.listen(port, () => log.info("capture server listening", { port }));
+  wss?.on("connection", (socket) => void accept(socket));
+  http.listen(port, () =>
+    log.info("worker http server listening", { port, capture: captureEnabled }),
+  );
+  if (!captureEnabled) {
+    log.info("remote capture disabled (GHOST_CAPTURE_KEY not set); /health still served");
+  }
 
   return {
     port,
+    captureEnabled,
     close: async () => {
       // End sessions before closing the server: each holds a browser process,
       // and a container that exits without closing them leaks them.
       await Promise.all([...live].map((s) => s.finish("disconnected").catch(() => undefined)));
-      wss.close();
+      wss?.close();
       await new Promise<void>((resolve) => http.close(() => resolve()));
     },
   };

@@ -17,7 +17,7 @@ import { normalizeUrl } from "./session.js";
 const KEY = "test-capture-key-not-a-secret-0123456789";
 const PORT = 18787;
 
-let server: CaptureServer | null = null;
+let server: CaptureServer;
 
 beforeAll(() => {
   process.env.GHOST_CAPTURE_KEY = KEY;
@@ -53,14 +53,22 @@ function firstMessage(send: unknown): Promise<CaptureServerMessage> {
 }
 
 describe("capture server", () => {
-  it("listens when a key is configured", () => {
-    expect(server).not.toBeNull();
+  it("mounts capture when a key is configured", () => {
+    expect(server.captureEnabled).toBe(true);
   });
 
   it("reports health without a session", async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/health`);
     expect(res.ok).toBe(true);
-    expect(await res.json()).toMatchObject({ ok: true, sessions: 0 });
+    expect(await res.json()).toMatchObject({ ok: true, capture: true, sessions: 0 });
+  });
+
+  it("answers the root path too", async () => {
+    // A host's default health check probes `/`. Answering only `/health`
+    // means the platform reports the worker unhealthy and restarts it in a
+    // loop, which reads as a crashing worker rather than a missing setting.
+    const res = await fetch(`http://127.0.0.1:${PORT}/`);
+    expect(res.ok).toBe(true);
   });
 
   it("refuses input from a socket that has not authenticated", async () => {
@@ -113,13 +121,54 @@ describe("capture server", () => {
 });
 
 describe("startCaptureServer without a key", () => {
-  it("does not listen at all", () => {
-    // Off means off: no port, rather than a port that accepts anyone. The
-    // feature switch and the authentication are the same thing on purpose.
+  it("still binds a port, but mounts no capture endpoint", async () => {
+    // Two separate things, deliberately. The port must exist or a host that
+    // runs this as a web service — the only kind that can accept an inbound
+    // socket — fails the deploy and takes replay down with it. The capture
+    // endpoint must NOT exist, because a reachable one with no key to check
+    // is a browser anyone can drive.
     const key = process.env.GHOST_CAPTURE_KEY;
     delete process.env.GHOST_CAPTURE_KEY;
-    expect(startCaptureServer()).toBeNull();
-    process.env.GHOST_CAPTURE_KEY = key;
+    process.env.GHOST_CAPTURE_PORT = String(PORT + 1);
+
+    const off = startCaptureServer();
+    try {
+      expect(off.captureEnabled).toBe(false);
+      const res = await fetch(`http://127.0.0.1:${PORT + 1}/health`);
+      expect(await res.json()).toMatchObject({ ok: true, capture: false });
+
+      // `/capture` is not routed, so the upgrade is refused outright.
+      await expect(
+        new Promise((resolve, reject) => {
+          const socket = new WebSocket(`ws://127.0.0.1:${PORT + 1}/capture`);
+          socket.on("open", () => resolve("connected"));
+          socket.on("error", reject);
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await off.close();
+      process.env.GHOST_CAPTURE_KEY = key;
+      process.env.GHOST_CAPTURE_PORT = String(PORT);
+    }
+  });
+});
+
+describe("port selection", () => {
+  it("falls back to the host-injected PORT", async () => {
+    // What lets one existing service host both the queue consumer and the
+    // capture socket: Render, Railway and Fly all inject `PORT`.
+    const configured = process.env.GHOST_CAPTURE_PORT;
+    delete process.env.GHOST_CAPTURE_PORT;
+    process.env.PORT = String(PORT + 2);
+
+    const injected = startCaptureServer();
+    try {
+      expect(injected.port).toBe(PORT + 2);
+    } finally {
+      await injected.close();
+      delete process.env.PORT;
+      process.env.GHOST_CAPTURE_PORT = configured;
+    }
   });
 });
 
