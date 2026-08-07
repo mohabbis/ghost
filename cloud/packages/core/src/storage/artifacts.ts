@@ -1,5 +1,7 @@
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { Readable } from "node:stream";
+import type { ReadableStream as NodeWebReadableStream } from "node:stream/web";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   PutObjectCommand,
@@ -188,7 +190,7 @@ class VercelBlobArtifactStore implements ArtifactStore {
     const result = await blobGet(key, { access: "private", token: this.token });
     if (!result?.stream) throw new Error(`artifact ${key} not found`);
     const chunks: Buffer[] = [];
-    for await (const chunk of result.stream) {
+    for await (const chunk of Readable.fromWeb(result.stream as unknown as NodeWebReadableStream<Uint8Array>)) {
       chunks.push(Buffer.from(chunk));
     }
     return Buffer.concat(chunks);
