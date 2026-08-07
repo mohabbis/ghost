@@ -1,11 +1,14 @@
+# NOTE: automatic triggering is disabled — see DEPLOYMENT.md "Marketing site".
+# The ghost-app Vercel project (VERCEL_PROJECT_ID below) currently has its Root
+# Directory overridden to cloud/apps/web, which now serves the live cloud SaaS
+# app at ghost.muharafiq.com. Because that override applies regardless of what
+# changed in the push, running this workflow as-is would redeploy cloud/apps/web
+# again, not public/, no matter what the steps below claim. Do not re-enable the
+# push trigger or run this via workflow_dispatch until public/ has its own
+# Vercel project (or domain) pointed at this directory, or is retired.
 name: Deploy Website
 
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - "public/**"
-      - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +16,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to Vercel (ghost.muharafiq.com)
+    name: Deploy to Vercel (public/ — target currently misconfigured, see note above)
     runs-on: ubuntu-latest
 
     steps:
@@ -62,11 +65,10 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
+          echo "::warning::VERCEL_PROJECT_ID's Root Directory is overridden to cloud/apps/web, so this will deploy the cloud app, not public/. See the note at the top of this workflow file."
           echo "Deploying public/ to Vercel…"
           vercel deploy --prod --token="${VERCEL_TOKEN}" --yes
-          echo "Live: https://ghost.muharafiq.com"
 
       - name: Deployment summary
         run: |
-          echo "Deployed $(find public -type f | wc -l) files from public/"
-          echo "Site: https://ghost.muharafiq.com"
+          echo "Deployed $(find public -type f | wc -l) files from public/ (see the warning above about where this actually landed)"
