@@ -26,12 +26,28 @@ Production sketch:
 Cloud CI workflow is staged at `cloud/ci/cloud.yml` until installed under
 `.github/workflows/`.
 
+**Live today:** the production domain **`ghost.muharafiq.com`** points at the
+`ghost-app` Vercel project with its Root Directory set to `cloud/apps/web` — it
+serves the cloud SaaS app directly (deployed manually today via
+`vercel --prod --scope muharafiq --cwd cloud/apps/web`, not by a checked-in CI
+workflow). This is a deliberate change from the domain's original use as the
+static marketing site — see "Marketing site" below.
+
 Details: `cloud/README.md`, `cloud/docs/CURSOR_HANDOFF.md`.
 
-## Marketing site
+## Marketing site (currently not deployed anywhere)
 
-Static files in `public/` deploy via `.github/workflows/deploy-website.yml` to Vercel.
-This is the public marketing surface — keep it aligned with the cloud product.
+`public/` is a separate static site (vanilla JS, ships the legacy desktop
+Ghost.dmg/Ghost_Setup.exe installers) for the superseded desktop product, not
+the cloud SaaS. `.github/workflows/deploy-website.yml` still exists to deploy
+it, but it targets the same `ghost-app` Vercel project that now serves
+`cloud/apps/web` above — because Vercel's Root Directory override applies
+regardless of which files actually changed, running this workflow today would
+redeploy the cloud app again, not `public/`, despite its build log claiming
+otherwise. Its automatic trigger is disabled for that reason (see the workflow
+file). Before re-enabling it: either point it at a separate Vercel
+project/domain for the legacy site, or retire `public/` outright if the legacy
+desktop product no longer needs a public download page.
 
 ## Legacy desktop
 

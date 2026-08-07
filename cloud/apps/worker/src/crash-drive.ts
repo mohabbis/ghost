@@ -40,6 +40,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import "@ghost/core/env";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { prisma, Prisma } from "@ghost/core/db";

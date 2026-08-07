@@ -32,7 +32,7 @@ export default async function RecordingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Recordings</h1>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
@@ -61,8 +61,8 @@ export default async function RecordingsPage() {
         <div className="space-y-2">
           {recordings.map((r) => (
             <Card key={r.id}>
-              <CardBody className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
+              <CardBody className="flex flex-wrap items-center justify-between gap-4">
+                <div className="max-w-md truncate">
                   <Link href={`/recordings/${r.id}`} className="text-sm font-medium hover:underline">
                     {r.rawTraceFilename ?? r.id}
                   </Link>

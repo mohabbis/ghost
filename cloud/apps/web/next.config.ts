@@ -1,3 +1,7 @@
+// Loads cloud/.env before Next reads anything. Next only looks for .env in its
+// own project directory (apps/web), so the workspace-root file the README tells
+// people to create was never picked up — see packages/core/src/env.ts.
+import "@ghost/core/env";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

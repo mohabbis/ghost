@@ -6,14 +6,15 @@ import { SOURCE_URL } from "@/lib/source-url";
 
 const githubEnabled = Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET);
 const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+const resendEnabled = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_EMAIL_DOMAIN);
 const devEnabled = process.env.NODE_ENV !== "production";
-// All three false means production with no OAuth provider configured: no
+// All four false means production with no sign-in method configured: no
 // form below has anything to render, and a card with a title and no buttons
 // looks like a bug rather than a missing deploy step. Whoever hits this is
 // more likely to be the person standing up the deployment than an end user,
 // so name the exact fix rather than failing silently. See docs/DEPLOY.md's
 // "sign-in trap".
-const misconfigured = !githubEnabled && !googleEnabled && !devEnabled;
+const misconfigured = !githubEnabled && !googleEnabled && !resendEnabled && !devEnabled;
 
 export default async function SignInPage({
   searchParams,
@@ -44,11 +45,11 @@ export default async function SignInPage({
                 No sign-in method is configured
               </p>
               <p className="text-[var(--color-muted)]">
-                This deployment has <code>NODE_ENV=production</code> and no OAuth app
-                configured, so there is no way to sign in. Set either{" "}
-                <code>AUTH_GITHUB_ID</code>/<code>AUTH_GITHUB_SECRET</code> or{" "}
-                <code>AUTH_GOOGLE_ID</code>/<code>AUTH_GOOGLE_SECRET</code>, with the
-                app&apos;s callback at{" "}
+                This deployment has <code>NODE_ENV=production</code> and no sign-in method
+                configured. Set <code>AUTH_GITHUB_ID</code>/<code>AUTH_GITHUB_SECRET</code>,{" "}
+                <code>AUTH_GOOGLE_ID</code>/<code>AUTH_GOOGLE_SECRET</code>, or{" "}
+                <code>RESEND_API_KEY</code>/<code>RESEND_EMAIL_DOMAIN</code> for email
+                magic links. OAuth apps need their callback at{" "}
                 <code>https://&lt;this-domain&gt;/api/auth/callback/&lt;github|google&gt;</code>.
                 See docs/DEPLOY.md.
               </p>
@@ -77,6 +78,35 @@ export default async function SignInPage({
             >
               <Button type="submit" variant="secondary" className="w-full">
                 Continue with Google
+              </Button>
+            </form>
+          )}
+
+          {resendEnabled && (
+            <form
+              action={async (formData: FormData) => {
+                "use server";
+                await signIn("resend", {
+                  email: String(formData.get("email") ?? ""),
+                  redirectTo,
+                });
+              }}
+              className="space-y-3"
+            >
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-[var(--color-muted)]">
+                  Email me a sign-in link
+                </span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-sm outline-none focus-visible:border-[var(--color-accent)]"
+                />
+              </label>
+              <Button type="submit" variant="secondary" className="w-full">
+                Continue with email
               </Button>
             </form>
           )}

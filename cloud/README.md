@@ -90,6 +90,8 @@ cp .env.example .env            # a working local config as-is
 #   GHOST_ARTIFACT_DIR   -> e.g. $PWD/.artifacts
 pnpm install                    # runs `prisma generate` via core postinstall
 docker compose up -d            # Postgres :5432, Redis :6379
+                                # (set GHOST_PG_PORT / GHOST_REDIS_PORT if
+                                #  those ports are already taken)
 pnpm db:migrate                 # apply the Prisma schema
 pnpm --filter @ghost/worker exec playwright install chromium
 pnpm dev                        # web on http://localhost:3000 + worker
@@ -115,6 +117,34 @@ Two variables are load-bearing in ways their names do not advertise:
 pnpm --filter @ghost/web dev
 pnpm --filter @ghost/worker dev
 ```
+
+Both read `cloud/.env` directly (`packages/core/src/env.ts`), so either one
+works on its own. A real environment variable always wins over the file, and in
+deployment there is no `.env` at all.
+
+## When something is wrong
+
+```bash
+pnpm check
+```
+
+Read-only; it names the problem rather than leaving you to infer it. Ghost
+fails locally in two ways that look like nothing at all:
+
+- **No worker running.** The UI is fine, "Run" appears to work, and the run sits
+  there forever, because the process that executes runs is not up. `pnpm dev`
+  starts both; `pnpm --filter @ghost/worker dev` starts just the worker.
+- **`DATABASE_URL` pointing at the wrong Postgres.** A Postgres that is merely
+  *listening* on 5432 is not Ghost's — Homebrew's, Postgres.app's, another
+  project's container will all accept the connection and deny the user. `pnpm
+  demo` probes with real credentials, moves to a free port if it must, and
+  repairs `.env`.
+
+A stalled run is no longer permanent either: the worker reclaims runs whose
+lease expired (`apps/worker/src/jobs/reclaimRuns.ts`) on boot and every minute,
+so a crash or a redeploy mid-run resumes from the journal instead of leaving a
+row `RUNNING` forever. After five failed restarts it becomes an `INCIDENT` for a
+human, rather than looping.
 
 ## Smoke test (Phase 1)
 
@@ -144,7 +174,7 @@ and `turbo run lint` skips packages that define no `lint` script — silently, a
 with a green summary. Treat `typecheck` as the real static gate until the other
 three packages have configs.
 
-A full green run is **424 tests**. Roughly 90 of them are gated on
+A full green run is **430 tests**. Roughly 90 of them are gated on
 `Boolean(process.env.DATABASE_URL)` and **skip silently** without it — so a
 green run with no database covers none of the execution engine. If the worker
 suite reports 45 tests rather than 90, the database is not being reached.

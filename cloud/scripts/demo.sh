@@ -15,11 +15,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
-bold()  { printf '\033[1m%s\033[0m\n' "$1"; }
-info()  { printf '  \033[36m→\033[0m %s\n' "$1"; }
-ok()    { printf '  \033[32m✓\033[0m %s\n' "$1"; }
-warn()  { printf '  \033[33m!\033[0m %s\n' "$1"; }
-die()   { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; exit 1; }
+# shellcheck source=scripts/lib.sh
+source "$ROOT/scripts/lib.sh"
 
 bold "Ghost Cloud demo"
 echo
@@ -36,7 +33,7 @@ ok "node $(node -v), pnpm $(pnpm -v)"
 # Without that key every approved run ends INCIDENT instead of SUCCEEDED, which
 # is precisely the flow this demo exists to show.
 if [ -f .env ]; then
-  ok ".env already present (left untouched)"
+  ok ".env already present"
 else
   cp .env.example .env
   ok "created .env from .env.example"
@@ -56,32 +53,18 @@ if grep -q '^GHOST_ARTIFACT_DIR=""' .env 2>/dev/null; then
 fi
 mkdir -p "$ROOT/.artifacts"
 
-# --- 3. Data plane ----------------------------------------------------------
-# Reuse whatever is already listening; only reach for Docker if nothing is.
-port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1; }
-
-if port_open 5432 && port_open 6379; then
-  ok "Postgres :5432 and Redis :6379 already reachable"
-elif command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-  info "starting Postgres + Redis via docker compose"
-  docker compose up -d
-  for _ in $(seq 1 30); do
-    port_open 5432 && port_open 6379 && break
-    sleep 1
-  done
-  port_open 5432 || die "Postgres did not come up on :5432. Check: docker compose logs postgres"
-  port_open 6379 || die "Redis did not come up on :6379. Check: docker compose logs redis"
-  ok "Postgres and Redis are up"
-else
-  die "Need Postgres on :5432 and Redis on :6379.
-     Either start Docker and re-run, or point DATABASE_URL and REDIS_URL in
-     cloud/.env at instances you already have."
-fi
-
-# --- 4. Dependencies, schema, browser ---------------------------------------
+# --- 3. Dependencies --------------------------------------------------------
+# Before the data plane: probing Postgres runs the Prisma CLI, which has to be
+# installed first.
 info "installing dependencies"
 pnpm install --silent
 ok "dependencies installed"
+
+# --- 4. Data plane, schema, browser -----------------------------------------
+# `ensure_data_plane` reuses a Postgres/Redis that genuinely answers, starts
+# Docker otherwise, and repairs .env to match. It never trusts an open port —
+# see scripts/lib.sh.
+ensure_data_plane
 
 info "applying database schema"
 # `migrate deploy`, not `migrate dev` — the latter is interactive and will offer

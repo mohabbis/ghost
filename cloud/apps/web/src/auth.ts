@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
+import Resend from "next-auth/providers/resend";
 import { assertAuthSecretUsable, devSignInAllowed, sessionMaxAgeSeconds } from "@/lib/auth-env";
+import { prisma } from "@/lib/db";
 import { ensureUserOrg } from "@/lib/org";
 
 /**
@@ -14,24 +17,52 @@ import { ensureUserOrg } from "@/lib/org";
  * (`ensureUserOrg`) and stamp `userId`/`orgId` into the token, so every request
  * is scoped to a tenant.
  *
- * GitHub and Google OAuth are each enabled only when their own env vars are
- * present — a deployment can offer one, both, or neither (falling back to the
- * dev-only provider below). Locally, the "Dev sign-in" provider accepts any
- * email.
+ * GitHub, Google, and Resend (email magic link) are each enabled only when
+ * their own env vars are present — a deployment can offer any combination
+ * (falling back to the dev-only provider below). Locally, the "Dev sign-in"
+ * provider accepts any email.
  */
 
 // Before anything else: in production, refuse to start on a session secret
 // that cannot protect a session. See lib/auth-env.ts.
 assertAuthSecretUsable();
 
+// The Email/magic-link provider is the only one that needs a database
+// adapter (Auth.js stores the one-time token via it) — GitHub/Google/dev
+// sign-in all work adapter-less today via `ensureUserOrg`'s manual upsert.
+// Only wire the adapter in when Resend is actually configured, so a
+// deployment without it is byte-for-byte the same as before this provider
+// existed.
+const resendEnabled = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_EMAIL_DOMAIN);
+
 const providers: NextAuthConfig["providers"] = [];
 
 if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
-  providers.push(GitHub);
+  providers.push(
+    GitHub({
+      // Once the adapter above is present, Auth.js refuses an OAuth sign-in
+      // whose email already belongs to a different provider's account,
+      // unless a provider opts in here. `ensureUserOrg` has always merged
+      // accounts by email with no such check, so this keeps that existing
+      // behavior instead of silently locking out a user who e.g. signed up
+      // with GitHub and later tries Google. Inert (and unread) when the
+      // adapter isn't wired.
+      allowDangerousEmailAccountLinking: true,
+    }),
+  );
 }
 
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
-  providers.push(Google);
+  providers.push(Google({ allowDangerousEmailAccountLinking: true }));
+}
+
+if (resendEnabled) {
+  providers.push(
+    Resend({
+      apiKey: process.env.RESEND_API_KEY,
+      from: `Ghost <noreply@${process.env.RESEND_EMAIL_DOMAIN}>`,
+    }),
+  );
 }
 
 // Passwordless "any email" sign-in for local development. `devSignInAllowed`
@@ -53,9 +84,12 @@ if (devSignInAllowed()) {
 }
 
 export const authConfig: NextAuthConfig = {
+  adapter: resendEnabled ? PrismaAdapter(prisma) : undefined,
   providers,
   session: { strategy: "jwt", maxAge: sessionMaxAgeSeconds() },
-  pages: { signIn: "/signin" },
+  // `signOut` keeps `/api/auth/signout` off Auth.js's unstyled built-in
+  // confirmation page — see app/signout/page.tsx.
+  pages: { signIn: "/signin", signOut: "/signout" },
   callbacks: {
     async jwt({ token, user }) {
       // Runs with `user` only on initial sign-in.

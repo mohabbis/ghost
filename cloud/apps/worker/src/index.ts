@@ -1,3 +1,6 @@
+// First, before anything reads process.env: load cloud/.env. The worker runs
+// from apps/worker and nothing else puts that file into its environment.
+import "@ghost/core/env";
 import { Queue, Worker } from "bullmq";
 import {
   QUEUE_NAMES,
@@ -12,6 +15,8 @@ import { createRedisConnection } from "./redis.js";
 import { runWorkflowJob } from "./jobs/runWorkflow.js";
 import { compensateRunJob } from "./jobs/compensateRun.js";
 import { purgeArtifactsJob } from "./jobs/purgeArtifacts.js";
+import { reclaimStalledRuns, RECLAIM_INTERVAL_MS } from "./jobs/reclaimRuns.js";
+import { startCaptureServer } from "./capture/server.js";
 
 /**
  * Ghost worker entrypoint.
@@ -91,11 +96,45 @@ await purgeQueue.upsertJobScheduler(
   { name: "purge-artifacts", data: {} },
 );
 
+// Pick up runs whose worker died. Immediately on boot — a redeploy is the
+// commonest way to orphan a run, and the new process is standing right where
+// the old one fell — and then on an interval for crashes that happen while
+// this process is up. Safe to run in every replica: the job id is derived from
+// the expired lease, so concurrent sweeps collapse into one job, and the run
+// lease still admits exactly one executor.
+const reclaimQueue = new Queue<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, { connection });
+const sweepStalledRuns = async (): Promise<void> => {
+  try {
+    await reclaimStalledRuns(reclaimQueue);
+  } catch (err) {
+    // A failed sweep must never take the worker down with it: the queues above
+    // are still executing real runs.
+    log.error("reclaim sweep failed", serializeError(err));
+    captureException(err, { queue: QUEUE_NAMES.runWorkflow, phase: "reclaim" });
+  }
+};
+await sweepStalledRuns();
+const reclaimTimer = setInterval(() => void sweepStalledRuns(), RECLAIM_INTERVAL_MS);
+// Do not hold the process open on this timer alone.
+reclaimTimer.unref();
+
+// The remote capture browser: a WebSocket the user drives a real browser
+// through to demonstrate a workflow. Hosted here rather than in apps/web
+// because a capture session outlives any serverless request, and because the
+// Playwright this process already carries for replay is the same Playwright.
+// Returns null and listens on nothing when GHOST_CAPTURE_KEY is unset.
+const captureServer = startCaptureServer();
+
 log.info("Ghost worker started", { queues: Object.values(QUEUE_NAMES) });
 
 async function shutdown(signal: string): Promise<void> {
   log.info("shutting down", { signal });
+  clearInterval(reclaimTimer);
+  // First, so in-flight capture sessions release their browsers instead of
+  // being orphaned by the exit below.
+  await captureServer?.close().catch(() => undefined);
   await Promise.all([
+    reclaimQueue.close(),
     noopWorker.close(),
     runWorker.close(),
     compensateWorker.close(),
