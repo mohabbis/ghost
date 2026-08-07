@@ -186,7 +186,7 @@ class VercelBlobArtifactStore implements ArtifactStore {
 
   async get(key: string): Promise<Buffer> {
     const result = await blobGet(key, { access: "private", token: this.token });
-    if (!result) throw new Error(`artifact ${key} not found`);
+    if (!result?.stream) throw new Error(`artifact ${key} not found`);
     const chunks: Buffer[] = [];
     for await (const chunk of result.stream) {
       chunks.push(Buffer.from(chunk));
