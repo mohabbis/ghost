@@ -21,7 +21,11 @@
     "APP_URL",
     "NODE_ENV",
     "GHOST_ACCESS_TOKEN",
-    "GHOST_API_URL"
+    "GHOST_API_URL",
+    "GHOST_CAPTURE_KEY",
+    "GHOST_CAPTURE_PORT",
+    "GHOST_CAPTURE_MAX_SESSIONS",
+    "NEXT_PUBLIC_GHOST_CAPTURE_URL"
   ],
   "globalPassThroughEnv": [
     "PLAYWRIGHT_BROWSERS_PATH",
@@ -31,21 +35,33 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
     }
   }
 }

@@ -16,6 +16,7 @@ import { runWorkflowJob } from "./jobs/runWorkflow.js";
 import { compensateRunJob } from "./jobs/compensateRun.js";
 import { purgeArtifactsJob } from "./jobs/purgeArtifacts.js";
 import { reclaimStalledRuns, RECLAIM_INTERVAL_MS } from "./jobs/reclaimRuns.js";
+import { startCaptureServer } from "./capture/server.js";
 
 /**
  * Ghost worker entrypoint.
@@ -117,11 +118,21 @@ const reclaimTimer = setInterval(() => void sweepStalledRuns(), RECLAIM_INTERVAL
 // Do not hold the process open on this timer alone.
 reclaimTimer.unref();
 
+// The remote capture browser: a WebSocket the user drives a real browser
+// through to demonstrate a workflow. Hosted here rather than in apps/web
+// because a capture session outlives any serverless request, and because the
+// Playwright this process already carries for replay is the same Playwright.
+// Returns null and listens on nothing when GHOST_CAPTURE_KEY is unset.
+const captureServer = startCaptureServer();
+
 log.info("Ghost worker started", { queues: Object.values(QUEUE_NAMES) });
 
 async function shutdown(signal: string): Promise<void> {
   log.info("shutting down", { signal });
   clearInterval(reclaimTimer);
+  // First, so in-flight capture sessions release their browsers instead of
+  // being orphaned by the exit below.
+  await captureServer?.close().catch(() => undefined);
   await Promise.all([
     reclaimQueue.close(),
     noopWorker.close(),

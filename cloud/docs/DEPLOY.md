@@ -83,10 +83,57 @@ domain verified — see "Resend (email magic link)" below.
 
 ### The domain trap
 
-The repository's root `vercel.json` builds `public/` — the static marketing site
-on `ghost.muharafiq.com`. The app cannot share that project. Create a **second**
-Vercel project with root directory `cloud/apps/web` and give it its own
-hostname, e.g. `app.ghost.muharafiq.com`.
+The repository's root `vercel.json` builds `public/` — a static marketing site.
+The app cannot share that project: create a **second** Vercel project with root
+directory `cloud/apps/web`.
+
+**How the domains actually resolve today**, which is the reverse of what this
+section used to advise:
+
+| Hostname | Vercel project | Serves |
+| --- | --- | --- |
+| `ghost.muharafiq.com` | `ghost-app` | `cloud/apps/web` — the Next.js app |
+| `www.ghost.muharafiq.com` | `ghost` | 308-redirects to the apex |
+
+The apex belongs to the **app**, not the marketing site, and `www` only
+redirects to it. That combination is what made the site look broken for a
+while: `apps/web`'s `/` was a bare `redirect()` to `/signin`, so every visitor
+to the apex hit a login card on a dark background, and `public/index.html` —
+which has the whole product story in it — was unreachable from any hostname.
+Its `<link rel="canonical">` still points at `ghost.muharafiq.com/`, a URL that
+never served it.
+
+`apps/web` now owns the front door properly: `/` is a public landing page and
+`/demo` is a public walkthrough, both outside the middleware matcher, with
+sign-in as a call to action rather than a wall. **No DNS change is needed** —
+the app was already on the right hostname; it just had nothing to show there.
+
+That leaves the static site in `public/` redundant rather than broken. It is
+still built and deployed by `.github/workflows/deploy-website.yml` to a project
+whose only hostname redirects away. Retiring it is a separate decision (it is
+the legacy desktop product's marketing surface as much as the cloud one's), so
+nothing here deletes it — but do not treat it as the public face of Ghost Cloud
+any more, and do not "fix" the landing page by editing it.
+
+### Deploy from git, not from a working tree
+
+Every production deployment of `ghost-app` up to this point carried
+`gitDirty: 1`, and the live one was built from a commit
+(`5bbc5e0` — *"fix(web): stop forcing every visitor through the sign-in wall"*)
+that **does not exist in this repository**. `git cat-file` cannot find it.
+
+So the fix for the sign-in wall was written, deployed straight from someone's
+laptop, and never committed. The repo could not reproduce production, and the
+difference was not cosmetic: the deployed build had grown an Auth.js email
+magic-link provider that `auth.ts` has never contained, which is where the
+`UnknownAction: Cannot handle action: verify-request` errors in the runtime log
+came from (see `apps/web/src/auth-providers.test.ts` for why that provider
+cannot work against this config at all).
+
+Deploy production from the Git integration on a pushed commit. A `vercel deploy`
+from a dirty tree produces a build nobody can check out, review, or roll back
+to, and the next person to look at the repository will be debugging code that
+is not running.
 
 ## Order of operations
 

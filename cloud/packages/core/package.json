@@ -29,6 +29,9 @@
     "./crypto/mfa-secret": "./src/crypto/mfa-secret.ts",
     "./recording/trace": "./src/recording/trace.ts",
     "./recording/compile": "./src/recording/compile.ts",
+    "./recording/capture": "./src/recording/capture.ts",
+    "./recording/recorder": "./src/recording/recorder.ts",
+    "./recording/ingest": "./src/recording/ingest.ts",
     "./retention": "./src/retention.ts",
     "./logger": "./src/logger.ts",
     "./sentry": "./src/sentry.ts",
@@ -47,13 +50,13 @@
     "db:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0",
-    "zod": "^3.24.1",
     "@aws-sdk/client-s3": "3.1101.0",
     "@aws-sdk/s3-request-presigner": "3.1101.0",
-    "@vercel/blob": "^2.7.0",
+    "@prisma/client": "^6.1.0",
     "@sentry/node": "^10.69.0",
-    "dotenv": "^16.4.7"
+    "@vercel/blob": "^2.7.0",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "prisma": "^6.1.0",

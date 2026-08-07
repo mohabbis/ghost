@@ -1,269 +1,507 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { ArrowRight, Check, Minus } from "lucide-react";
 import { auth } from "@/auth";
-import { SOURCE_URL } from "@/lib/source-url";
+import { MarketingNav, MarketingFooter } from "@/components/marketing/chrome";
+import { RunPreview } from "@/components/marketing/run-preview";
+import { PIPELINE } from "@/lib/demo-narrative";
 
 /**
- * Public landing page. Signed-in visitors go straight to their dashboard;
- * everyone else sees what Ghost actually does — and why — before being
- * asked to sign in.
+ * The public front door.
  *
- * Every claim here is scoped to what the product currently does (the
- * record → review → approve → execute → verify → audit loop, verified
- * end-to-end against the seeded demo workflow). No fabricated logos,
- * customer counts, or capabilities ahead of what's built — see Engineering
- * rule 10 in the root CLAUDE.md.
+ * This route used to be five lines that `redirect()`ed every visitor to
+ * `/signin`, which meant the only thing anyone could ever see of Ghost was a
+ * login card on a dark background. A product nobody can look at reads as a
+ * broken one. Everything here is public and static; the app itself stays
+ * behind auth, unchanged.
+ *
+ * Copy rule for this file (CLAUDE.md rule 10, plus a note from the owner):
+ * describe the mechanism, not the posture. Say "it stops before clicking
+ * Submit", not "governed execution with deny-by-default policy". If a sentence
+ * would survive being pasted onto a different product's homepage, it is not
+ * specific enough to be here.
  */
 
-const PIPELINE = [
-  {
-    stage: "Capture",
-    detail:
-      "Record a workflow once in the browser — clicks, typed values, selects, and navigation, captured by role and name rather than brittle coordinates.",
-  },
-  {
-    stage: "Review",
-    detail:
-      "The recording compiles into typed, editable steps. Nothing runs until a human has read the plan.",
-  },
-  {
-    stage: "Approve",
-    detail:
-      "Sends, payments, deletes, submits — anything sensitive halts and waits for an explicit approval. Deny by default; AI never grants its own request.",
-  },
-  {
-    stage: "Execute",
-    detail: "Deterministic code replays the approved plan, step by step, against the real target.",
-  },
-  {
-    stage: "Verify",
-    detail:
-      "Each step's outcome is checked against what it was supposed to do — a screenshot and an assertion, not an assumption.",
-  },
-  {
-    stage: "Audit",
-    detail:
-      "Every run, approval, and mutation is appended to a hash-chained log, so tampering with the history is detectable, not just discouraged.",
-  },
-  {
-    stage: "Recover",
-    detail:
-      "Reversible steps carry their own undo. A run that fails partway leaves a record of exactly what already happened — never a guess.",
-  },
-] as const;
+export const metadata: Metadata = {
+  title: "Ghost — it does the clicking, you approve what matters",
+  description:
+    "Ghost runs business workflows across the systems you already use, and gates the consequential parts on a human. People, scripts, and AI agents can all propose a run; only a person can approve one. Durable execution, verified outcomes, and a tamper-evident audit log.",
+};
 
-const NOT_LIST = [
-  "Another chatbot",
-  "A no-code automation builder",
-  "A macro recorder",
-  "A generic AI assistant",
+/** Actions that always stop and wait. Deliberately the plainest possible words. */
+const ALWAYS_STOPS = ["Submit", "Send", "Pay", "Delete", "Overwrite"];
+
+/**
+ * Who asks Ghost to do the work.
+ *
+ * This section exists because the page previously described the mechanism so
+ * concretely — opens pages, fills forms, clicks buttons — that it read as
+ * "Playwright with a confirm dialog". The browser is the current execution
+ * surface, not the product. What is actually being sold is the layer between
+ * something wanting to act and the action landing in a real system, and the
+ * agent row is the sharpest illustration of it.
+ */
+const CALLERS = [
+  {
+    who: "A person",
+    how: "Clicks Run in the UI, or puts the workflow on a schedule.",
+  },
+  {
+    who: "Another system",
+    how: "A script, a cron job, or a webhook, over the HTTP API with a scoped, revocable credential.",
+  },
+  {
+    who: "An AI agent",
+    how: "Over HTTP or MCP. It can propose a run and read what happened. It cannot approve one — there is no endpoint for it, and the attempt returns 403. That is how an agent gets real reach into a business system without unchecked authority over it.",
+    emphasis: true,
+  },
 ];
 
-const VERTICALS = [
-  "Wholesale distribution",
-  "Property management",
-  "Accounting & bookkeeping",
-  "Logistics",
-  "Recruiting",
-  "Financial operations",
-  "Healthcare admin",
+/**
+ * Engine properties that separate this from a script runner. Every one is real
+ * in the schema and the worker runtime — see packages/core/src/runtime/.
+ */
+const ENGINE = [
+  {
+    title: "Versioned, immutable definitions",
+    body: "A run executes the exact version it started with. Editing a workflow never rewrites what a past run did, so the audit trail keeps meaning something a year later.",
+  },
+  {
+    title: "Resumes without re-acting",
+    body: "Every run keeps an append-only, hash-chained journal of what completed. A worker that dies is replaced by one that reads the journal and continues after the last finished step — it does not re-submit an order that already went through.",
+  },
+  {
+    title: "Undo is a phase, not a cleanup script",
+    body: "Reversing a completed run is modelled as its own direction of travel, with its own approval gate and its own events. A reversed step reads as reversed, not as one that never happened.",
+  },
+  {
+    title: "Ambiguity becomes an incident",
+    body: "When a step's effect genuinely cannot be known — the worker died mid-payment — the step is marked unknown and the run raises an incident. Retry risks double-charging, skipping risks a silent no-op, and neither is Ghost's call to make.",
+  },
+  {
+    title: "Concurrency caps",
+    body: "Limit how many runs of a workflow may touch a system at once. A workflow triggered by every inbound email should not put ten browser sessions into the same ERP.",
+  },
+  {
+    title: "Separation of duties",
+    body: "Per workflow, the person who triggered a run can be barred from approving it. Rejecting is never restricted — anyone watching a runaway run must be able to stop it.",
+  },
+];
+
+const BUILT = [
+  {
+    title: "Runs steps in a real browser",
+    body: "A server-side Chrome opens pages, fills fields, and clicks buttons — finding them by their visible label, so a redesigned page doesn't silently break the run.",
+  },
+  {
+    title: "Stops for approval",
+    body: "Anything that submits, sends, pays, or deletes halts the run. A person clicks Approve or Reject. Which actions count is a fixed rule in code — no model decides it.",
+  },
+  {
+    title: "Checks its own work",
+    body: "A step can assert what should be true afterwards. If the page doesn't say what it should, the run fails instead of reporting success.",
+  },
+  {
+    title: "Screenshots every step",
+    body: "You can see exactly what the browser was looking at when it did each thing, and what it looked like after.",
+  },
+  {
+    title: "Keeps a log you can't quietly edit",
+    body: "Each entry is hashed together with the one before it. Change or delete an old entry and the chain stops matching — the Audit page checks this and tells you where it broke.",
+  },
+  {
+    title: "Survives crashes without redoing work",
+    body: "Each run keeps a journal of what already finished. If a worker dies mid-run, the next one reads the journal and picks up after the last completed step — it won't re-submit an order that already went through.",
+  },
+  {
+    title: "Takes work from other programs",
+    body: "An HTTP and MCP surface lets an agent or script propose a run. It still can't skip the approval step — proposing and executing are separate.",
+  },
+];
+
+const NEXT_UP = [
+  {
+    title: "Recording your screen",
+    body: "The browser extension that captures a session exists; turning a raw capture into a clean step list is the piece still being built. Today you write or edit the steps directly.",
+  },
+  {
+    title: "Direct connections to other apps",
+    body: "Gmail, Salesforce, QuickBooks and the like, so Ghost can use their APIs instead of clicking through their websites. The database schema is in place; none are wired up yet.",
+  },
 ];
 
 export default async function Home() {
   const session = await auth();
-  if (session) redirect("/dashboard");
+  const signedIn = Boolean(session?.user);
 
   return (
-    <main className="relative overflow-hidden">
-      {/* Faint schematic grid — atmosphere for a product whose entire premise
-          is precision, without spending any real color on it. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.05]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, var(--color-fg) 1px, transparent 1px), linear-gradient(to bottom, var(--color-fg) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
+    <>
+      <MarketingNav signedIn={signedIn} />
 
-      {/* ---------- Nav ---------- */}
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
-        <span className="text-sm font-medium tracking-tight">Ghost</span>
-        <Link
-          href="/signin"
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-[var(--color-border)] px-3 text-sm font-medium transition-colors hover:bg-[var(--color-surface)]"
-        >
-          Sign in
-        </Link>
-      </header>
+      <main>
+        {/* ---------------------------------------------------------------- */}
+        {/* Hero                                                             */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="relative overflow-hidden px-5 pt-16 pb-20 sm:pt-24">
+          {/* Soft accent wash. Pointer-events-none so it never eats a click. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(60%_100%_at_50%_0%,var(--color-accent)/8%,transparent_75%)]"
+          />
+          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1fr_1.05fr]">
+            <div>
+              {/* No hardcoded <br>: the column is narrower than the copy at
+                  this size, so manual breaks stacked on top of the natural
+                  wrap and stranded single words on their own lines. Let it
+                  wrap and let `text-balance` even out the ragged edge. */}
+              <h1 className="text-4xl leading-[1.1] font-semibold tracking-tight text-balance sm:text-[2.75rem] lg:text-5xl">
+                Ghost does the clicking. You approve{" "}
+                <span className="text-[var(--color-accent)]">
+                  anything that can&rsquo;t be undone.
+                </span>
+              </h1>
 
-      {/* ---------- Hero ---------- */}
-      <section className="mx-auto max-w-3xl px-6 pt-16 pb-20 text-center sm:pt-24 sm:pb-28">
-        <p
-          className="animate-[fade-up_0.6s_ease-out_both] text-xs font-medium tracking-[0.2em] text-[var(--color-accent)] uppercase"
-          style={{ fontFamily: "var(--font-technical)" }}
-        >
-          Governed execution for AI agents
-        </p>
-        <h1
-          className="mt-5 animate-[fade-up_0.6s_ease-out_0.08s_both] text-4xl leading-[1.1] font-normal text-balance sm:text-6xl"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          Teach Ghost a workflow <em className="italic">once.</em>
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl animate-[fade-up_0.6s_ease-out_0.16s_both] text-base text-[var(--color-muted)] sm:text-lg">
-          It executes reliably, pauses for approval on sensitive steps, verifies the outcome, and
-          logs exactly what changed — an AI operator that runs across the software you already
-          use, not another app that replaces it.
-        </p>
-        <div className="mt-9 flex animate-[fade-up_0.6s_ease-out_0.24s_both] flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/signin"
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-accent)] px-6 text-sm font-medium text-[var(--color-accent-fg)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-          >
-            Get started
-          </Link>
-          <a
-            href="#pipeline"
-            className="inline-flex h-11 items-center justify-center rounded-lg px-6 text-sm font-medium text-[var(--color-muted)] transition-colors hover:text-[var(--color-fg)]"
-          >
-            See how it works ↓
-          </a>
-        </div>
-      </section>
+              <p className="mt-6 max-w-xl text-base leading-relaxed text-[var(--color-muted)]">
+                Show it a task once and it runs on its own — opening pages, filling forms, moving
+                data between systems that don&rsquo;t talk to each other. What makes it different
+                from a script: it stops before anything irreversible, proves each step actually
+                worked, and leaves a record nobody can quietly edit.
+              </p>
 
-      {/* ---------- Problem ---------- */}
-      <section className="mx-auto max-w-3xl px-6 pb-20 sm:pb-28">
-        <p className="text-center text-lg text-[var(--color-fg)] sm:text-xl">
-          Operations-heavy businesses move information by hand between disconnected systems —
-          email, PDFs, Excel, ERPs, CRMs, web portals, legacy desktop apps.
-        </p>
-        <p className="mt-3 text-center text-lg text-[var(--color-muted)] sm:text-xl">
-          That work is repetitive, error-prone, and expensive. Ghost automates it with controls a
-          regulated business will actually accept.
-        </p>
-      </section>
-
-      {/* ---------- Pipeline ---------- */}
-      <section id="pipeline" className="mx-auto max-w-2xl scroll-mt-10 px-6 pb-20 sm:pb-28">
-        <h2
-          className="text-center text-2xl sm:text-3xl"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          One engine, seven checkpoints.
-        </h2>
-        <p className="mx-auto mt-3 max-w-md text-center text-sm text-[var(--color-muted)]">
-          The same trust pipeline runs every workflow, from the first recorded click to the last
-          audited byte.
-        </p>
-
-        <ol className="mt-14 space-y-0">
-          {PIPELINE.map((step, i) => (
-            <li key={step.stage} className="relative flex gap-5 pb-10 last:pb-0">
-              {i < PIPELINE.length - 1 && (
-                <span
-                  aria-hidden
-                  className="absolute top-8 left-[15px] h-full w-px bg-[var(--color-border)]"
-                />
-              )}
-              <span
-                className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] text-xs text-[var(--color-muted)]"
-                style={{ fontFamily: "var(--font-technical)" }}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div className="pt-0.5">
-                <div
-                  className="text-base font-medium"
-                  style={{ fontFamily: "var(--font-technical)" }}
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link
+                  href="/demo"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-fg)] transition-opacity hover:opacity-90"
                 >
-                  {step.stage}
-                </div>
-                <p className="mt-1 max-w-md text-sm text-[var(--color-muted)]">{step.detail}</p>
+                  See it step by step
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href={signedIn ? "/dashboard" : "/signin"}
+                  className="inline-flex h-10 items-center rounded-lg border border-[var(--color-border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface)]"
+                >
+                  {signedIn ? "Open dashboard" : "Sign in"}
+                </Link>
               </div>
-            </li>
-          ))}
-        </ol>
-      </section>
 
-      {/* ---------- Positioning ---------- */}
-      <section className="mx-auto max-w-3xl px-6 pb-20 sm:pb-28">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div className="rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/[0.06] p-6">
-            <div
-              className="text-xs tracking-[0.15em] text-[var(--color-accent)] uppercase"
-              style={{ fontFamily: "var(--font-technical)" }}
-            >
-              Ghost is
+              <p className="mt-5 text-xs text-[var(--color-muted)]">
+                Early stage and openly so — the execution engine works end to end. Screen
+                recording is still being built. Nothing below claims otherwise.
+              </p>
             </div>
-            <p className="mt-3 text-lg" style={{ fontFamily: "var(--font-display)" }}>
-              An execution platform. An AI operator.
-            </p>
-            <p className="mt-2 text-sm text-[var(--color-muted)]">
-              Demonstrate a real process once; Ghost executes, adapts, verifies, and escalates
-              exceptions.
-            </p>
+
+            <RunPreview />
           </div>
-          <div className="rounded-lg border border-[var(--color-border)] p-6">
-            <div
-              className="text-xs tracking-[0.15em] text-[var(--color-muted)] uppercase"
-              style={{ fontFamily: "var(--font-technical)" }}
-            >
-              Ghost is not
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* The concrete problem                                             */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="border-y border-[var(--color-border)] bg-[var(--color-surface)]/50 px-5 py-16">
+          <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-2">
+            <div>
+              <h2 className="text-xs font-medium tracking-widest text-[var(--color-muted)] uppercase">
+                The work this replaces
+              </h2>
+              <p className="mt-4 text-lg leading-relaxed">
+                A purchase order arrives as a PDF. Someone opens it, retypes twelve line items
+                into the ERP, checks the total matches, saves it, and files the PDF in the right
+                folder.
+              </p>
+              <p className="mt-3 text-lg leading-relaxed text-[var(--color-muted)]">
+                Then does it again. Forty times a day.
+              </p>
             </div>
-            <ul className="mt-3 space-y-1.5 text-sm text-[var(--color-muted)]">
-              {NOT_LIST.map((item) => (
-                <li key={item}>{item}</li>
+            <div>
+              <h2 className="text-xs font-medium tracking-widest text-[var(--color-muted)] uppercase">
+                What Ghost does with it
+              </h2>
+              <p className="mt-4 text-lg leading-relaxed">
+                Ghost does the retyping. It stops before saving, shows you the twelve lines it
+                is about to write and the screenshot of where it will write them, and waits.
+              </p>
+              <p className="mt-3 text-lg leading-relaxed text-[var(--color-muted)]">
+                You click Approve. It saves, confirms the total on screen matches, files the
+                PDF, and writes down everything it touched.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Answering "isn't this just browser automation?" head on.          */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              So is this just browser automation?
+            </h2>
+            <div className="mt-4 max-w-3xl space-y-4 text-sm leading-relaxed text-[var(--color-muted)]">
+              <p>
+                Driving a browser is the easy part — Playwright and Selenium have done it for
+                years, and a dozen no-code tools wrap them. The browser is how Ghost reaches a
+                system, not what Ghost is.
+              </p>
+              <p>
+                Being exact about it: <strong className="font-medium text-[var(--color-fg)]">
+                today every step runs through a browser</strong>. Calling a system&rsquo;s API
+                directly is the better path where one exists, and the pieces for it are designed
+                in — an <code className="font-mono text-xs">apiCall</code> step type, the
+                connector model, and the rules that decide an API action is sensitive all exist
+                already. The executor behind them is not written yet, so Ghost does not call
+                external APIs on your behalf. The step is deliberately not offered in the editor
+                until it does, because a step that silently does nothing while the run reports
+                success is worse than no step at all.
+              </p>
+              <p>
+                Which matters less than it sounds, because the systems this work actually lives
+                in — supplier portals, ERPs, insurer sites, internal admin panels — mostly have no
+                API, or have one nobody has integrated. The browser is what reaches them all.
+              </p>
+              <p className="text-[var(--color-fg)]">
+                What Ghost is, is the layer between something <em>wanting</em> to act and the
+                action landing in a real business system.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-3 md:grid-cols-3">
+              {CALLERS.map(({ who, how, emphasis }) => (
+                <div
+                  key={who}
+                  className={
+                    emphasis
+                      ? "rounded-xl border border-[var(--color-accent)]/50 bg-[var(--color-accent)]/[0.06] p-5"
+                      : "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5"
+                  }
+                >
+                  <h3 className="text-sm font-medium">{who}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{how}</p>
+                </div>
               ))}
-            </ul>
+            </div>
+
+            <p className="mt-6 max-w-3xl text-sm leading-relaxed text-[var(--color-muted)]">
+              All three come in through the same gates. Proposing a run and approving one are
+              separate powers, and only a human holds the second.
+            </p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ---------- Who it's for ---------- */}
-      <section className="mx-auto max-w-3xl px-6 pb-24 text-center sm:pb-32">
-        <p className="text-sm text-[var(--color-muted)]">Built for operations-heavy teams —</p>
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {VERTICALS.map((v) => (
-            <span
-              key={v}
-              className="rounded-full border border-[var(--color-border)] px-3 py-1 text-xs text-[var(--color-muted)]"
-            >
-              {v}
-            </span>
-          ))}
-        </div>
-      </section>
+        {/* ---------------------------------------------------------------- */}
+        {/* The engine underneath                                            */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="border-y border-[var(--color-border)] bg-[var(--color-surface)]/50 px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Built like a workflow engine, not a script runner
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--color-muted)]">
+              A script that crashes halfway leaves you guessing whether it half-worked. That is
+              tolerable for a data pipeline and not tolerable for something that moves money and
+              places orders, so the parts below are the actual substrate rather than features
+              layered on later.
+            </p>
 
-      {/* ---------- Final CTA ---------- */}
-      <section className="mx-auto max-w-3xl px-6 pb-24 text-center sm:pb-32">
-        <p className="text-2xl sm:text-3xl" style={{ fontFamily: "var(--font-display)" }}>
-          Recurring, measurable, reversible work — <em className="italic">handled.</em>
-        </p>
-        <Link
-          href="/signin"
-          className="mt-8 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-accent)] px-6 text-sm font-medium text-[var(--color-accent-fg)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {ENGINE.map(({ title, body }) => (
+                <div
+                  key={title}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-5"
+                >
+                  <h3 className="text-sm font-medium">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* How it works                                                     */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="pipeline" className="scroll-mt-16 px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+              Seven things happen to every workflow, in this order.
+            </p>
+
+            <ol className="mt-10 space-y-px overflow-hidden rounded-xl border border-[var(--color-border)]">
+              {PIPELINE.map((stage, i) => (
+                <li
+                  key={stage.name}
+                  className="flex flex-col gap-1 bg-[var(--color-surface)] px-5 py-4 sm:flex-row sm:items-baseline sm:gap-6"
+                >
+                  <span className="w-6 shrink-0 font-mono text-xs text-[var(--color-muted)]">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="w-full shrink-0 text-sm font-medium sm:w-64">
+                    {stage.name}
+                    {!stage.built && (
+                      <span className="ml-2 rounded bg-[var(--color-bg)] px-1.5 py-0.5 align-middle font-mono text-[10px] font-normal text-[var(--color-muted)]">
+                        being built
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm leading-relaxed text-[var(--color-muted)]">
+                    {stage.blurb}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Approvals                                                        */}
+        {/* ---------------------------------------------------------------- */}
+        <section
+          id="trust"
+          className="scroll-mt-16 border-y border-[var(--color-border)] bg-[var(--color-surface)]/50 px-5 py-20"
         >
-          Get started
-        </Link>
-      </section>
+          <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                What it will never do on its own
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-[var(--color-muted)]">
+                Ghost runs unattended right up until an action it can&rsquo;t take back. Then it
+                stops. The list of actions that stop it is written in code as a fixed rule — an
+                AI model never decides whether something is safe enough to skip asking you.
+              </p>
 
-      {/*
-        Also offered here, not only behind the sidebar: AGPL-3.0 section 13 covers
-        everyone interacting with this instance over the network, and someone who
-        never signs in never sees the authenticated chrome.
-      */}
-      <footer className="mx-auto max-w-3xl px-6 pb-16 text-center">
-        <a
-          href={SOURCE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)]"
-        >
-          AGPL-3.0 · Source
-        </a>
-      </footer>
-    </main>
+              <ul className="mt-6 flex flex-wrap gap-2">
+                {ALWAYS_STOPS.map((word) => (
+                  <li
+                    key={word}
+                    className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 px-3 py-1.5 text-sm font-medium"
+                  >
+                    {word}
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-6 text-sm leading-relaxed text-[var(--color-muted)]">
+                A run that&rsquo;s waiting stays waiting. It doesn&rsquo;t time out into
+                proceeding, and an approval that sits too long expires rather than firing a
+                payment days later.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  q: "What if it clicks the wrong thing?",
+                  a: "It finds buttons by their visible label, not by screen position, so a moved button is still found and a renamed one fails loudly instead of clicking whatever is now in that spot.",
+                },
+                {
+                  q: "What if the server dies mid-run?",
+                  a: "Each run keeps a journal of completed steps. The next worker reads it and resumes after the last one that finished. Where it genuinely can't tell whether an action landed, it stops and asks rather than risking a double-submit.",
+                },
+                {
+                  q: "Can someone edit the history?",
+                  a: "Each log entry is hashed together with the previous one. Editing or deleting an old entry breaks the chain, and the Audit page recomputes it and points at where it broke.",
+                },
+                {
+                  q: "Can it be undone?",
+                  a: "Reversible steps can be walked back on request, and the log records the reversal as its own event rather than pretending the original never happened.",
+                },
+              ].map(({ q, a }) => (
+                <div
+                  key={q}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-5 py-4"
+                >
+                  <h3 className="text-sm font-medium">{q}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-muted)]">{a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Honest status                                                    */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="status" className="scroll-mt-16 px-5 py-20">
+          <div className="mx-auto max-w-6xl">
+            <h2 className="text-2xl font-semibold tracking-tight">What&rsquo;s actually built</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+              Working today, and what isn&rsquo;t yet. Listed plainly so nothing here has to be
+              walked back later.
+            </p>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {BUILT.map(({ title, body }) => (
+                <div
+                  key={title}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-[var(--color-success)]/15 text-[var(--color-success)]">
+                      <Check className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                    <h3 className="text-sm font-medium">{title}</h3>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{body}</p>
+                </div>
+              ))}
+
+              {NEXT_UP.map(({ title, body }) => (
+                <div
+                  key={title}
+                  className="rounded-xl border border-dashed border-[var(--color-border)] p-5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-[var(--color-muted)]/15 text-[var(--color-muted)]">
+                      <Minus className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                    <h3 className="text-sm font-medium text-[var(--color-muted)]">
+                      {title} — not yet
+                    </h3>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">{body}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-8 font-mono text-xs text-[var(--color-muted)]">
+              Next.js · Node worker · Postgres · Redis · Playwright · AGPL-3.0
+            </p>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Closing CTA                                                      */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="border-t border-[var(--color-border)] px-5 py-20">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Watch a run stop at its approval
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--color-muted)]">
+              The walkthrough follows the bundled demo workflow one step at a time — including
+              the moment it refuses to click Submit.
+            </p>
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <Link
+                href="/demo"
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 text-sm font-medium text-[var(--color-accent-fg)] transition-opacity hover:opacity-90"
+              >
+                See it step by step
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                href={signedIn ? "/dashboard" : "/signin"}
+                className="inline-flex h-10 items-center rounded-lg border border-[var(--color-border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface)]"
+              >
+                {signedIn ? "Open dashboard" : "Sign in"}
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <MarketingFooter />
+    </>
   );
 }
