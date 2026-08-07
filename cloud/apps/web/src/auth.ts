@@ -87,7 +87,9 @@ export const authConfig: NextAuthConfig = {
   adapter: resendEnabled ? PrismaAdapter(prisma) : undefined,
   providers,
   session: { strategy: "jwt", maxAge: sessionMaxAgeSeconds() },
-  pages: { signIn: "/signin" },
+  // `signOut` keeps `/api/auth/signout` off Auth.js's unstyled built-in
+  // confirmation page — see app/signout/page.tsx.
+  pages: { signIn: "/signin", signOut: "/signout" },
   callbacks: {
     async jwt({ token, user }) {
       // Runs with `user` only on initial sign-in.

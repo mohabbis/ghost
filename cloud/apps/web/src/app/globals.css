@@ -17,6 +17,13 @@
   --radius-lg: 0.75rem;
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Marketing-page-only accents — the authenticated app stays on --font-sans.
+     Fraunces gives the landing page's headline actual typographic character;
+     the mono face echoes the monospace run/step ids already used in the
+     Runs and Audit views, so "Ghost logs everything precisely" shows up in
+     the marketing page's own typography, not just its copy. */
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-technical: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,4 +48,23 @@ body {
 
 * {
   border-color: var(--color-border);
+}
+
+/* Landing-page hero entrance — a single staggered reveal, not scattered
+   micro-interactions. Respects reduced-motion by simply not animating. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[fade-up"] {
+    animation: none !important;
+  }
 }

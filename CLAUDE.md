@@ -106,8 +106,11 @@ Build the five-part MVP in `cloud/`, in order:
 Built so far (Phase 1): the execution engine, the deterministic approval gate,
 per-step screenshots + verification, the hash-chained audit log, the run →
 approval → verify UI, and the agent HTTP/MCP surface (agents propose; humans
-approve — `cloud/docs/AGENT_PLUGIN.md`). Recording (steps 1–2) is next. See
-`cloud/docs/PHASE_1_PLAN.md` and `cloud/docs/CURSOR_HANDOFF.md`.
+approve — `cloud/docs/AGENT_PLUGIN.md`). Phase 2 (recording → editable steps) is
+in progress: the convert side (upload → deterministic compile → review) is
+built and off by default; a Chrome extension (`cloud/apps/extension`) captures
+the browser session. See `cloud/docs/PHASE_1_PLAN.md` and
+`cloud/docs/CURSOR_HANDOFF.md` for current status.
 
 Required behavior (unchanged in spirit from the desktop trust pipeline):
 
@@ -116,6 +119,49 @@ Required behavior (unchanged in spirit from the desktop trust pipeline):
 - require explicit approval before a sensitive action;
 - verify each step's outcome;
 - write audit events (hash-chained) for every run and step.
+
+### Cloud workspace layout & commands
+
+`cloud/` is a self-contained pnpm + Turborepo workspace — it does not share
+tooling with the repo root. `cd cloud` before running anything below.
+
+```text
+cloud/
+  apps/
+    web/        Next.js 15 (App Router) — UI + API + /api/agent/*  → deployed to Vercel
+    worker/     Node worker: BullMQ consumers + Playwright execution → deployed as a container
+    mcp/        Stdio MCP bridge for Cursor/Claude (no approve tools)
+    extension/  Chrome extension — records a browser session for Phase 2 capture
+  packages/
+    core/       Prisma schema, Zod step types, classifyStep (approval gate), audit chain, agent catalog
+```
+
+Quickstart: `cd cloud && pnpm demo` (writes `.env`, brings up Postgres/Redis,
+migrates, installs Chromium, starts web + worker — idempotent, safe to rerun).
+Manual steps and the two load-bearing env vars (`GHOST_ARTIFACT_DIR` must be an
+absolute path shared by web+worker; `GHOST_SESSION_KEY` must decode to 32 bytes)
+are in `cloud/README.md`.
+
+Validation from inside `cloud/`:
+
+```bash
+pnpm typecheck   # the real static gate — run this even if lint is clean
+pnpm lint        # apps/web only; worker/mcp/core have no lint script yet
+pnpm test        # ~90 of ~239 tests need DATABASE_URL set or they skip silently
+pnpm build
+```
+
+`pnpm test` also needs `REDIS_URL` and `GHOST_SESSION_KEY` set (not just
+`DATABASE_URL`) or the DB-gated tests run instead of skipping and fail on
+status rather than on anything naming the missing var: without `REDIS_URL`,
+rate-limited routes (e.g. invite acceptance) fail closed with 429; without
+`GHOST_SESSION_KEY`, the worker skips session capture at an approval gate, so
+every gated run refuses to resume and ends `INCIDENT`. Both read like product
+bugs and are actually a missing local env var — `.github/workflows/cloud.yml`
+sets all three for exactly this reason.
+
+Don't reach for the root-level `cargo`/`make` commands when working in `cloud/`
+— they build the unrelated legacy desktop app.
 
 ## Engineering rules
 
@@ -211,7 +257,7 @@ Current structure:
 src/                    # Tauri desktop frontend (ES-module JS/HTML/CSS, bundled by Vite; main.js holds most UI logic; compression-review.js/.css is the split-out event-review timeline; src/public/ holds pass-through static assets)
 apps/macos/             # Ghost 2.0 native macOS app (SwiftUI): App/, Views/, Features/, Services/, RustBridge/, AppKitBridge/ — UI only; all trust decisions stay in the Rust core over a JSON stdin/stdout bridge (docs/legacy/native-macos-preview.md)
 native/macos/           # GhostAXHelper.swift — read-only macOS Accessibility helper (list_matches op)
-public/                 # marketing/download site (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/; auto-deployed to Vercel by deploy-website.yml)
+public/                 # marketing/download site for the legacy desktop app (static vanilla JS with in-browser demos; ships Ghost.dmg / Ghost_Setup.exe under downloads/); NOT currently deployed anywhere — deploy-website.yml's auto-trigger is disabled because the Vercel project it targets now serves cloud/apps/web at ghost.muharafiq.com instead (see DEPLOYMENT.md)
 src-tauri/              # Rust backend
 docs/                   # planning and technical docs
 .github/workflows/      # CI (rust.yml), release (release.yml), site deploy (deploy-website.yml)
