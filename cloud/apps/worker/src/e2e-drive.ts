@@ -6,6 +6,7 @@
  *
  * Run with: pnpm --filter @ghost/worker exec tsx src/e2e-drive.ts
  */
+import "@ghost/core/env";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { prisma, Prisma } from "@ghost/core/db";

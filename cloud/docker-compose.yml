@@ -1,6 +1,11 @@
 # Local development dependencies for Ghost Cloud.
 #   docker compose up -d
-# Brings up Postgres (5432) and Redis (6379) matching cloud/.env.example.
+#
+# Host ports are overridable because 5432 and 6379 are frequently already taken
+# by an unrelated Postgres or Redis on a developer machine. `scripts/lib.sh`
+# probes for a port that genuinely answers as the ghost user and sets these,
+# rather than assuming an open port is ours — see the comment at the top of that
+# file for the failure that caused.
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,7 +16,7 @@ services:
       POSTGRES_PASSWORD: ghost
       POSTGRES_DB: ghost
     ports:
-      - "5432:5432"
+      - "${GHOST_PG_PORT:-5432}:5432"
     volumes:
       - ghost-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +30,7 @@ services:
     container_name: ghost-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${GHOST_REDIS_PORT:-6379}:6379"
     volumes:
       - ghost-redis-data:/data
     healthcheck:
