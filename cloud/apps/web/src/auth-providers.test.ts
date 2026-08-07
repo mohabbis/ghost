@@ -70,8 +70,12 @@ describe("auth providers", () => {
       ["GitHub", "AUTH_GITHUB_ID"],
       ["Google", "AUTH_GOOGLE_ID"],
     ] as const) {
+      // `providers.push(GitHub)` (bare reference) and `providers.push(GitHub({ ... }))`
+      // (invoked with options, e.g. `allowDangerousEmailAccountLinking`) are both a
+      // provider gated on its own env var — only match on the provider name, not on
+      // whether it's called.
       const registration = new RegExp(
-        `process\\.env\\.${envVar}[\\s\\S]{0,120}?providers\\.push\\(${provider}\\)`,
+        `process\\.env\\.${envVar}[\\s\\S]{0,120}?providers\\.push\\(\\s*${provider}\\b`,
       );
       expect(
         registration.test(CODE),
