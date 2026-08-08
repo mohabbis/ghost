@@ -60,7 +60,9 @@ B2, or MinIO.
 | `APP_URL` | ● | ● | the demo fixture is unreachable from the worker |
 | `NEXT_PUBLIC_SOURCE_URL` | ○ | | AGPL §13 link points at upstream, not your fork |
 | `ARTIFACT_RETENTION_DAYS` | | ○ | defaults to 90; the `purge-artifacts` job (scheduled by the worker itself, see `apps/worker/src/index.ts`) deletes a run's screenshots once it ended this many days ago |
-| `SENTRY_DSN` | | ○ | **worker only.** Error tracking stays off without it, matching `HR_API_KEY`/`S3_BUCKET` (see `@ghost/core/sentry`). `apps/web` is not wired to this — `@sentry/node`'s auto-instrumentation cannot be webpack-bundled (tried, broke `pnpm build`); wiring web needs `@sentry/nextjs` via `npx @sentry/wizard@latest -i nextjs` against a real Sentry project |
+| `SENTRY_DSN` | ○ | ○ | Error tracking + tracing stay off without it, matching `HR_API_KEY`/`S3_BUCKET`. Worker: `@ghost/core/sentry` (`@sentry/node`). Web (server + edge runtimes): `sentry.server.config.ts` / `sentry.edge.config.ts` (`@sentry/nextjs`) |
+| `NEXT_PUBLIC_SENTRY_DSN` | ○ | | **web only**, browser runtime (`instrumentation-client.ts`). Usually the same DSN as `SENTRY_DSN`; a separate var because it's inlined into the client bundle at build time |
+| `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | ○ | | **build-time, web only.** Enables source map upload during `next build` (`next.config.ts`'s `withSentryConfig`) so production stack traces show real source instead of minified output; unset just skips the upload |
 
 `GHOST_SESSION_KEY` is **worker-only** by design. It decrypts captured browser
 sessions — live cookies for the customer's systems — and the web app has no
@@ -288,15 +290,20 @@ another):
    requirement the host's UI assumes by default and configure it as a
    background worker / long-running process instead.
 
-**Sentry (optional)** — create a project, generate a DSN, and set
-`SENTRY_DSN` on the container host only; this alone gives the worker error
-tracking, since `apps/worker` is already wired against `@ghost/core/sentry`
-(see that file for why the wrapper doesn't try to also cover `apps/web`).
-Wiring `apps/web` needs `@sentry/nextjs`, not this env var — run
-`npx @sentry/wizard@latest -i nextjs` against the same Sentry project once the
-Vercel project above exists, since the wizard needs a real project to
-configure against and writes files (`instrumentation-client.ts`,
-`sentry.server.config.ts`, a `next.config.ts` wrapper) this repo does not ship.
+**Sentry (optional)** — create a project, generate a DSN, and set `SENTRY_DSN`
+on both hosts: the worker reads it via `@ghost/core/sentry`
+(`apps/worker/src/index.ts`), and `apps/web`'s server + edge runtimes read it
+via `sentry.server.config.ts` / `sentry.edge.config.ts`. Also set
+`NEXT_PUBLIC_SENTRY_DSN` (usually the same value) on the web host for
+`instrumentation-client.ts`, the browser runtime — it's inlined into the
+client bundle at build time, so setting it only at runtime on the host has no
+effect. For readable production stack traces, set `SENTRY_AUTH_TOKEN`,
+`SENTRY_ORG`, and `SENTRY_PROJECT` at **build time** on the web host so
+`next.config.ts`'s `withSentryConfig` uploads source maps on `next build`; any
+of the three absent just skips the upload. Alternatively, run
+`npx @sentry/wizard@latest -i nextjs` against the same Sentry project — it can
+reconfigure these files interactively and wire up the Vercel integration for
+you, but isn't required since the wiring already ships in this repo.
 
 ## Rolling back
 

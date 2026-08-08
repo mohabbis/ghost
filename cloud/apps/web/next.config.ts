@@ -3,6 +3,7 @@
 // people to create was never picked up — see packages/core/src/env.ts.
 import "@ghost/core/env";
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // @ghost/core ships TS source via subpath exports; Next transpiles it.
@@ -28,4 +29,14 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// org/project fall back to the SENTRY_ORG/SENTRY_PROJECT env vars when unset
+// here, and authToken to nothing — matching the rest of this file's
+// opt-in-via-env-var pattern (see @ghost/core/sentry for the same contract on
+// the worker side). Without SENTRY_AUTH_TOKEN the plugin skips source map
+// upload rather than failing the build.
+export default withSentryConfig(nextConfig, {
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  widenClientFileUpload: true,
+  tunnelRoute: "/monitoring",
+  silent: !process.env.CI,
+});

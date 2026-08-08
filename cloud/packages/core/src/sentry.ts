@@ -9,7 +9,7 @@ import * as Sentry from "@sentry/node";
  * a capability and nothing else changes when it is unset. A deployment is not
  * required to have a Sentry account to boot or run correctly.
  *
- * `apps/web` is NOT wired to this module. `@sentry/node`'s auto-instrumentation
+ * `apps/web` does NOT use this module. `@sentry/node`'s auto-instrumentation
  * (`import-in-the-middle`, `@sentry/node-core`) needs `node:child_process` and
  * `require('module')` at module-load time, which Next.js's webpack build
  * cannot bundle even with the package marked `serverExternalPackages` — this
@@ -17,10 +17,13 @@ import * as Sentry from "@sentry/node";
  * `node:child_process` reached from `instrumentation.ts`). The worker has no
  * such constraint: `apps/worker/tsup.config.ts` marks `@sentry/node` fully
  * external, so Node resolves it normally from `node_modules` at runtime
- * instead of webpack trying to statically bundle it. Wiring Sentry into
- * `apps/web` needs `@sentry/nextjs` (its own webpack/turbopack plugin exists
- * specifically to handle this), set up via `npx @sentry/wizard@latest -i
- * nextjs` against a real Sentry project — see the deploy checklist.
+ * instead of webpack trying to statically bundle it. `apps/web` instead has
+ * its own, separate `@sentry/nextjs` setup (its webpack/turbopack plugin
+ * exists specifically to handle this): `instrumentation.ts`,
+ * `sentry.server.config.ts`, `sentry.edge.config.ts`,
+ * `instrumentation-client.ts`, and the `withSentryConfig` wrap in
+ * `next.config.ts`, all reading the same `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN`
+ * env vars — see `docs/DEPLOY.md`.
  */
 
 let initialized = false;
