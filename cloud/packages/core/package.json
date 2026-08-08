@@ -30,6 +30,7 @@
     "./recording/trace": "./src/recording/trace.ts",
     "./recording/compile": "./src/recording/compile.ts",
     "./recording/capture": "./src/recording/capture.ts",
+    "./recording/capture-protocol": "./src/recording/capture-protocol.ts",
     "./recording/recorder": "./src/recording/recorder.ts",
     "./recording/ingest": "./src/recording/ingest.ts",
     "./retention": "./src/retention.ts",

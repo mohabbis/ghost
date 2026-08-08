@@ -282,11 +282,45 @@ another):
 2. Set every `worker`-column environment variable from the table above,
    **plus** `GHOST_SESSION_KEY` (worker-only) and, optionally,
    `ARTIFACT_RETENTION_DAYS`/`SENTRY_DSN`.
-3. Most of these hosts expect a process that stays up and reads its port/health
-   check from an env var they inject — the worker has no HTTP server and needs
-   none (it is a queue consumer), so skip any "web service" health-check
-   requirement the host's UI assumes by default and configure it as a
-   background worker / long-running process instead.
+3. The worker binds an HTTP port and serves `/health` (and `/`). It reads
+   `PORT` — the variable every one of these hosts injects — or
+   `GHOST_CAPTURE_PORT` if you set one explicitly.
+
+### Which service type, and why it matters
+
+**Configure the worker as the host's *web service* type, not its background
+worker type**, even though it is mostly a queue consumer.
+
+This is the one deployment choice that is hard to undo, because most hosts
+(Render included) cannot change a service's type after it is created — you have
+to make a new service and delete the old one. It costs nothing extra: these
+hosts price by instance size, and a web service and a background worker of the
+same size cost the same. Pick web.
+
+The reason is recording. A background worker on Render (and Fly's equivalent,
+and Railway's) is outbound-only: no public hostname, no port, nothing can
+connect *to* it. That is fine for executing runs, which the worker pulls from
+Redis. It is fatal for **recording in a cloud browser**, where the user's
+browser opens a WebSocket to `wss://<worker-host>/capture` and drives a real
+browser inside this container. There is no way around it from the application
+side: the browser has to reach the process holding the browser, and only a web
+service can be reached.
+
+Choosing web service costs you nothing if you never enable recording — the
+worker serves a health endpoint and behaves identically otherwise. Choosing
+background worker costs you the ability to turn recording on later without
+rebuilding the service.
+
+Then, to actually enable recording (see `.env.example` for the full notes):
+
+- `GHOST_CAPTURE_KEY` — the **same value** on the web app and the worker. Unset
+  means recording is off: the UI does not offer it and the worker mounts no
+  `/capture` endpoint.
+- `NEXT_PUBLIC_GHOST_CAPTURE_URL` on the web app — `wss://<worker-host>/capture`.
+  It is public because the user's browser opens this socket directly.
+- `GHOST_CAPTURE_MAX_SESSIONS` (default 3) — each session holds its own browser
+  in the same container that is executing runs. Raise it against memory, not
+  against demand.
 
 **Sentry (optional)** — create a project, generate a DSN, and set
 `SENTRY_DSN` on the container host only; this alone gives the worker error

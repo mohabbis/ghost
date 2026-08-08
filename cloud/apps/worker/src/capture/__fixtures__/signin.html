@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ghost fixture — sign in</title>
+  </head>
+  <body>
+    <h1>Sign in</h1>
+    <form id="signin" onsubmit="event.preventDefault()">
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" />
+
+      <!-- The reason this fixture exists. A recorder that captures this value
+           has leaked a credential into a trace, and no amount of downstream
+           handling can un-leak it. -->
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" />
+
+      <!-- Named rather than typed as a secret: redaction must key off what the
+           field is called too, not just type="password". -->
+      <label for="otp">One-time code</label>
+      <input id="otp" name="otp" type="text" />
+
+      <label for="plan">Plan</label>
+      <select id="plan" name="plan">
+        <option value="starter">Starter</option>
+        <option value="pro">Pro</option>
+      </select>
+
+      <button id="submit" type="submit" data-testid="signin-submit">Sign in</button>
+    </form>
+  </body>
+</html>

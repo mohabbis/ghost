@@ -1,13 +1,5 @@
-/// <reference lib="dom" />
 /**
  * The page-side recorder, as a function that can be shipped into a page.
- *
- * The `dom` lib reference above belongs in this file rather than in a
- * `tsconfig`: this is the only file in `@ghost/core` that is browser code, and
- * every package that imports from core type-checks core's *sources*. Putting
- * DOM in core's compiler options would have fixed core's own build and left
- * the worker's failing on `document` — and would have handed every other
- * server-side file in this package a `window` it must never touch.
  *
  * This is the same job `apps/extension/src/content.js` does for the Chrome
  * extension, written so a Playwright context can inject it with
@@ -37,6 +29,64 @@
  *    element that cannot be named is reported as unidentifiable rather than
  *    approximated by its position.
  */
+
+// --- browser globals, declared locally ------------------------------------
+//
+// This is the only browser file in a package of server code, and TypeScript's
+// `lib` setting has no per-file scope: adding `dom` — in a tsconfig or via a
+// `/// <reference lib="dom" />` — pulls `lib.dom.d.ts` into the whole program.
+// That is not a style preference. It re-typed `ReadableStream` in
+// `src/storage/artifacts.ts` to the browser's, breaking a file that reads
+// Vercel Blob streams and has nothing to do with any of this, and it would
+// hand every other file here a `document` it must never touch.
+//
+// So the handful of globals this recorder actually uses are declared here
+// instead. `declare` inside a module is module-scoped, so nothing escapes the
+// file, and the surface is small enough to be worth the honesty: what follows
+// is exactly the browser API the recorder depends on.
+
+interface RecorderElement {
+  readonly tagName: string;
+  readonly id: string;
+  /** 1 for an element; guards against text and comment nodes. */
+  readonly nodeType: number;
+  readonly textContent: string | null;
+  readonly parentElement: RecorderElement | null;
+  readonly children: ArrayLike<RecorderElement>;
+  getAttribute(name: string): string | null;
+  hasAttribute(name: string): boolean;
+  closest(selectors: string): RecorderElement | null;
+}
+
+/** Both a type and a value: `instanceof Element` needs the constructor. */
+type Element = RecorderElement;
+declare const Element: { prototype: RecorderElement; new (): RecorderElement };
+
+/** Only `.value` is read off these, and never on a secret field. */
+type HTMLInputElement = RecorderElement & { value: string };
+type HTMLSelectElement = RecorderElement & { value: string };
+
+declare const document: {
+  getElementById(id: string): RecorderElement | null;
+  querySelector(selectors: string): RecorderElement | null;
+  addEventListener(
+    type: string,
+    listener: (event: { target: unknown }) => void,
+    capture?: boolean,
+  ): void;
+};
+
+declare const window: {
+  readonly top: unknown;
+  readonly self: unknown;
+  readonly history: unknown;
+  addEventListener(type: string, listener: () => void): void;
+};
+
+declare const location: { readonly href: string };
+
+/** `CSS.escape`, so an id with a colon in it cannot break out of a selector. */
+declare const CSS: { escape(value: string): string };
 
 /** Name of the Playwright binding the recorder emits through. */
 export const CAPTURE_BINDING = "__ghostCaptureEmit";

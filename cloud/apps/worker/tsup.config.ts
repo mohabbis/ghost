@@ -17,6 +17,13 @@ export default defineConfig({
   // (dynamic requires for auto-instrumenting Node built-ins, optional native
   // profiling modules) for the same reason — Sentry's own docs say not to
   // bundle it, so it gets the same treatment rather than waiting to discover
-  // the same crash a second time.
-  external: ["@prisma/client", ".prisma/client", "@sentry/node"],
+  // the same crash a second time. `dotenv` (pulled in transitively through
+  // `@ghost/core/env`, which is `noExternal` above) hits the identical
+  // "Dynamic require of 'fs'" crash via its own internal `require("fs")`.
+  // `@vercel/blob` (used by the artifact store's Vercel Blob backend) pulls in
+  // `@vercel/oidc` -> `jose`'s CJS build, which does the same dynamic
+  // `require("buffer")` — same crash, one dependency further down. `pnpm
+  // install --filter @ghost/worker...` in the Dockerfile puts all of these in
+  // node_modules regardless, so externalizing costs nothing at runtime.
+  external: ["@prisma/client", ".prisma/client", "@sentry/node", "dotenv", "@vercel/blob"],
 });
