@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WorkflowStep } from "@ghost/core/schema/step";
@@ -14,18 +14,32 @@ import {
 } from "./driver.js";
 
 /**
- * Hermetic integration test: drives real Chromium against a local file fixture.
- * No database, no network — exercises selector resolution, actions, screenshots,
- * and verification end to end.
+ * Hermetic integration test: drives real Chromium against a local HTTP fixture.
+ * No database — exercises selector resolution, actions, screenshots, and
+ * verification end to end. Served over loopback http (not `file:`) so the
+ * navigate URL policy matches production.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const fixtureUrl = "file://" + join(here, "__fixtures__", "form.html");
+const fixtureHtml = readFileSync(join(here, "__fixtures__", "form.html"), "utf8");
 const OPTS = { timeoutMs: 15_000 };
 
 let session: BrowserSession;
+let server: Server;
+let fixtureUrl: string;
 
 beforeAll(async () => {
+  server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(fixtureHtml);
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw new Error("no listen address");
+  fixtureUrl = `http://127.0.0.1:${addr.port}/`;
+
   // No browser-path setup: `launchOptions` resolves a preinstalled Chromium
   // itself. That used to live here, which is exactly why the worker shipped
   // without it.
@@ -34,6 +48,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await session?.close();
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
 });
 
 async function submitCount(page: BrowserSession["page"]): Promise<number> {
@@ -57,7 +74,21 @@ describe("Playwright driver", () => {
       } satisfies WorkflowStep,
       OPTS,
     );
-    expect(fill.screenshot.length).toBeGreaterThan(0);
+    expect(fill.screenshot).not.toBeNull();
+    expect(fill.screenshot!.length).toBeGreaterThan(0);
+
+    const sensitive = await runStep(
+      page,
+      {
+        id: "2b",
+        type: "fill",
+        selector: { role: "textbox", name: "Full name" },
+        value: "4111111111111111",
+        sensitive: true,
+      } satisfies WorkflowStep,
+      OPTS,
+    );
+    expect(sensitive.screenshot).toBeNull();
 
     await runStep(
       page,

@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { handlers } from "@/auth";
 import { clientKey, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
@@ -19,8 +20,8 @@ import { clientKey, rateLimit, tooManyRequests } from "@/lib/rate-limit";
  */
 
 async function limited(
-  req: Request,
-  handle: (req: Request) => Promise<Response>,
+  req: NextRequest,
+  handle: (req: NextRequest) => Promise<Response>,
   { limit, windowSeconds, key }: { limit: number; windowSeconds: number; key: string },
 ): Promise<Response> {
   const result = await rateLimit(`${key}:${clientKey(req)}`, { limit, windowSeconds });
@@ -28,10 +29,10 @@ async function limited(
   return handle(req);
 }
 
-export async function GET(req: Request): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   return limited(req, handlers.GET, { limit: 120, windowSeconds: 60, key: "auth:get" });
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
   return limited(req, handlers.POST, { limit: 20, windowSeconds: 60, key: "auth:post" });
 }

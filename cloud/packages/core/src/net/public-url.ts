@@ -48,12 +48,15 @@ function isPrivateNonLoopback(host: string): boolean {
   if (host.endsWith(".local")) return true;
   const ipv4 = parseIpv4(host);
   if (ipv4 !== null) {
+    // Bitwise ops in JS are signed int32; `>>> 0` keeps comparisons unsigned
+    // so 192.168/16 and 172.16/12 (high bit set) match correctly.
+    const u = (mask: number, expect: number) => ((ipv4 & mask) >>> 0) === expect;
     // 0.0.0.0/8, 10.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16
-    if ((ipv4 & 0xff000000) === 0x00000000) return true;
-    if ((ipv4 & 0xff000000) === 0x0a000000) return true;
-    if ((ipv4 & 0xffff0000) === 0xa9fe0000) return true;
-    if ((ipv4 & 0xfff00000) === 0xac100000) return true;
-    if ((ipv4 & 0xffff0000) === 0xc0a80000) return true;
+    if (u(0xff000000, 0x00000000)) return true;
+    if (u(0xff000000, 0x0a000000)) return true;
+    if (u(0xffff0000, 0xa9fe0000)) return true;
+    if (u(0xfff00000, 0xac100000)) return true;
+    if (u(0xffff0000, 0xc0a80000)) return true;
   }
   if (host.includes(":")) {
     const h = host.toLowerCase();
