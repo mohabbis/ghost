@@ -1,12 +1,18 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { WorkflowStep } from "@ghost/core/schema/step";
+import { assertPublicHttpUrl } from "@ghost/core/net/public-url";
 import { discoverChromium } from "./chromium.js";
 import { resolveLocator } from "./selector.js";
 import { runVerification, type VerifyResult } from "./verify.js";
 import type { RestorePlan } from "../runtime/restore.js";
 
 export interface StepResult {
-  screenshot: Buffer;
+  /**
+   * PNG bytes, or `null` when the step must not be captured (sensitive fills).
+   * The caller skips the artifact store when this is null so OTP/card pixels
+   * never land in the blob store.
+   */
+  screenshot: Buffer | null;
   verification: VerifyResult | null;
   /** Values this step captured, by name. Only `extract` produces any. */
   outputs: Record<string, string>;
@@ -94,6 +100,10 @@ export async function applyStep(
 
   switch (step.type) {
     case "navigate":
+      // Defense in depth: schema already rejects private hosts at author time,
+      // but a version written before that check — or a hand-edited row — must
+      // still not reach metadata endpoints from the worker.
+      assertPublicHttpUrl(step.url);
       await page.goto(step.url, { waitUntil: "domcontentloaded", timeout });
       return {};
     case "click":
@@ -218,6 +228,11 @@ export async function verifyStep(page: Page, step: WorkflowStep): Promise<Verify
  * preceded it. Re-clicking "Submit" to find out whether the first click worked
  * is exactly the double-send this engine exists to prevent.
  */
+/** True when capturing the page would retain secret-shaped pixels. */
+export function shouldCaptureScreenshot(step: WorkflowStep): boolean {
+  return !(step.type === "fill" && step.sensitive);
+}
+
 export async function runStep(
   page: Page,
   step: WorkflowStep,
@@ -225,6 +240,10 @@ export async function runStep(
 ): Promise<StepResult> {
   const outputs = await applyStep(page, step, opts);
   const verification = await verifyStep(page, step);
-  const screenshot = await page.screenshot();
+  // Sensitive fills (OTP, card, password-shaped) leave secret pixels on the
+  // page. Capturing them would put cardholder data into the artifact store
+  // behind a positive allow-list of `step-*.png` keys. Skip the capture
+  // entirely rather than store-and-redact — there is nothing safe to show.
+  const screenshot = shouldCaptureScreenshot(step) ? await page.screenshot() : null;
   return { screenshot, verification, outputs, url: page.url() };
 }

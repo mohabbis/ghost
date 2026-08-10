@@ -1,15 +1,15 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createAgentToken } from "@ghost/core/agent-credentials";
 import { prisma } from "@ghost/core/db";
 
 /**
- * Agent credential hardening: optional expiry at creation, and org-admin
- * inventory/revocation.
+ * Agent credential hardening: optional expiry at creation, org-admin
+ * inventory/revocation, and admin-only minting.
  *
  * Revocation and expiry *enforcement* already existed (`resolveAgentPrincipal`
- * in `@/lib/agent-auth` already rejected a revoked or expired credential) —
- * what was missing was any way to actually set an expiry, and any way for an
- * org admin to see or revoke a credential that isn't their own. `Role` has
- * been stored on `Membership` since Phase 0 but nothing read it until now.
+ * rejects a revoked or expired credential). Minting is now OWNER/ADMIN only —
+ * a MEMBER must not expand the agent attack surface by creating keys that can
+ * start runs.
  *
  * Requires DATABASE_URL; skips cleanly without one.
  */
@@ -46,7 +46,8 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
   });
 
   beforeEach(() => {
-    session.current = { user: { id: member, orgId } };
+    // Minting is admin-only; most create tests run as OWNER.
+    session.current = { user: { id: owner, orgId } };
   });
 
   async function create(body: Record<string, unknown>) {
@@ -72,6 +73,21 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
     return GET();
   }
 
+  /** Seed a credential owned by `userId` without going through the HTTP mint gate. */
+  async function seedCredential(userId: string, name: string) {
+    const generated = createAgentToken();
+    return prisma.agentCredential.create({
+      data: {
+        orgId,
+        userId,
+        name,
+        tokenHash: generated.tokenHash,
+        tokenHint: generated.tokenHint,
+      },
+      select: { id: true },
+    });
+  }
+
   it("creates a credential with no expiry by default", async () => {
     const res = await create({ name: "no-expiry" });
     expect(res.status).toBe(201);
@@ -85,7 +101,6 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { credential: { expiresAt: string } };
     const expiresAt = new Date(body.credential.expiresAt).getTime();
-    // ~30 days out, generous window for test execution time.
     expect(expiresAt).toBeGreaterThan(before + 29 * 86_400_000);
     expect(expiresAt).toBeLessThan(before + 31 * 86_400_000);
   });
@@ -100,23 +115,25 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
     },
   );
 
+  it("refuses minting to a non-admin MEMBER", async () => {
+    session.current = { user: { id: member, orgId } };
+    const res = await create({ name: "member-mint" });
+    expect(res.status).toBe(403);
+    const created = await prisma.agentCredential.findFirst({ where: { orgId, name: "member-mint" } });
+    expect(created).toBeNull();
+  });
+
   it("lets a member revoke their own credential but not a colleague's", async () => {
-    session.current = { user: { id: owner, orgId } };
-    const ownerCred = (
-      (await (await create({ name: "owner-cred" })).json()) as { credential: { id: string } }
-    ).credential;
+    const ownerCred = (await (await create({ name: "owner-cred" })).json() as {
+      credential: { id: string };
+    }).credential;
+
+    const memberCred = await seedCredential(member, "member-cred");
 
     session.current = { user: { id: member, orgId } };
-    const memberCred = (
-      (await (await create({ name: "member-cred" })).json()) as { credential: { id: string } }
-    ).credential;
-
-    // Member revoking their own credential succeeds.
     const ownRevoke = await revoke(memberCred.id);
     expect(ownRevoke.status).toBe(200);
 
-    // Member revoking the owner's credential does not — same 404 shape as a
-    // nonexistent id, so a non-admin cannot even confirm it exists.
     const otherRevoke = await revoke(ownerCred.id);
     expect(otherRevoke.status).toBe(404);
     const stillActive = await prisma.agentCredential.findUniqueOrThrow({
@@ -126,10 +143,7 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
   });
 
   it("lets an OWNER revoke a member's credential", async () => {
-    session.current = { user: { id: member, orgId } };
-    const memberCred = (
-      (await (await create({ name: "revoke-me" })).json()) as { credential: { id: string } }
-    ).credential;
+    const memberCred = await seedCredential(member, "revoke-me");
 
     session.current = { user: { id: owner, orgId } };
     const res = await revoke(memberCred.id);
@@ -145,8 +159,7 @@ describe.skipIf(!hasDb)("agent credential hardening (Postgres)", () => {
   });
 
   it("shows an OWNER every active credential in the org, across members", async () => {
-    session.current = { user: { id: member, orgId } };
-    await create({ name: "member-visible-to-owner" });
+    await seedCredential(member, "member-visible-to-owner");
 
     session.current = { user: { id: owner, orgId } };
     const res = await orgList();

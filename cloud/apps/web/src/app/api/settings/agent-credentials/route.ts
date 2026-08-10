@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { createAgentToken } from "@ghost/core/agent-credentials";
+import { isOrgAdmin } from "@ghost/core/roles";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
@@ -34,6 +35,20 @@ export async function POST(req: Request) {
   if (!session?.user.id || !session.user.orgId) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  // Minting a credential that can start runs is an org-admin action. A MEMBER
+  // can still *use* a key an admin handed them (or revoke their own), but they
+  // cannot expand the attack surface by creating more.
+  const membership = await prisma.membership.findUnique({
+    where: {
+      userId_orgId: { userId: session.user.id, orgId: session.user.orgId },
+    },
+    select: { role: true },
+  });
+  if (!membership || !isOrgAdmin(membership.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const body = (await req.json().catch(() => null)) as {
     name?: unknown;
     expiresInDays?: unknown;

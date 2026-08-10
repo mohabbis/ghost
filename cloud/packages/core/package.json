@@ -36,7 +36,8 @@
     "./retention": "./src/retention.ts",
     "./logger": "./src/logger.ts",
     "./sentry": "./src/sentry.ts",
-    "./env": "./src/env.ts"
+    "./env": "./src/env.ts",
+    "./net/public-url": "./src/net/public-url.ts"
   },
   "scripts": {
     "build": "prisma generate && tsc --noEmit",
