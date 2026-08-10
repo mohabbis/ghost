@@ -42,6 +42,8 @@ describe.skipIf(!hasDb)("workflow authoring routes (Postgres)", () => {
   let userA: string;
   const slug = `authoring-${Date.now()}`;
 
+  let memberA: string;
+
   beforeAll(async () => {
     const a = await prisma.organization.create({ data: { name: "A", slug: `${slug}-a` } });
     const b = await prisma.organization.create({ data: { name: "B", slug: `${slug}-b` } });
@@ -50,16 +52,30 @@ describe.skipIf(!hasDb)("workflow authoring routes (Postgres)", () => {
     const u = await prisma.user.create({
       data: {
         email: `${slug}@example.com`,
-        memberships: { create: { orgId: orgA, role: "OWNER" } },
+        memberships: {
+          create: [
+            { orgId: orgA, role: "OWNER" },
+            // Membership in B so the cross-tenant publish attempt is a real
+            // authz miss (404) rather than "not a member of the session org".
+            { orgId: orgB, role: "OWNER" },
+          ],
+        },
       },
     });
     userA = u.id;
+    const m = await prisma.user.create({
+      data: {
+        email: `${slug}-member@example.com`,
+        memberships: { create: { orgId: orgA, role: "MEMBER" } },
+      },
+    });
+    memberA = m.id;
     session.current = { user: { id: userA, orgId: orgA } };
   });
 
   afterAll(async () => {
     await prisma.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
-    await prisma.user.deleteMany({ where: { id: userA } });
+    await prisma.user.deleteMany({ where: { id: { in: [userA, memberA] } } });
   });
 
   async function post(body: unknown) {
@@ -152,6 +168,24 @@ describe.skipIf(!hasDb)("workflow authoring routes (Postgres)", () => {
     session.current = null;
     const res = await post({ name: "Nope", steps });
     expect(res.status).toBe(401);
+    session.current = { user: { id: userA, orgId: orgA } };
+  });
+
+  it("refuses a MEMBER who tries to create or publish", async () => {
+    session.current = { user: { id: memberA, orgId: orgA } };
+    const create = await post({ name: "Member draft", steps });
+    expect(create.status).toBe(403);
+
+    // Seed a workflow as OWNER, then switch back to MEMBER for publish.
+    session.current = { user: { id: userA, orgId: orgA } };
+    const seeded = await post({ name: "Seed", steps });
+    const { workflowId } = (await seeded.json()) as { workflowId: string };
+
+    session.current = { user: { id: memberA, orgId: orgA } };
+    const pub = await publish(workflowId, { steps });
+    expect(pub.status).toBe(403);
+    expect(await prisma.workflowVersion.count({ where: { workflowId } })).toBe(1);
+
     session.current = { user: { id: userA, orgId: orgA } };
   });
 });

@@ -3,12 +3,12 @@ import { prisma } from "@ghost/core/db";
 import type { WorkflowSteps } from "@ghost/core/schema/step";
 
 /**
- * Separation of duties on the approval gate.
+ * Separation of duties + admin-only approval on the approval gate.
  *
  * Ghost's central claim is human approval on sensitive actions. Without this,
  * "human approval" means "somebody with a login clicked yes" — including the
- * same person who started the run. These tests pin the rule and, just as
- * importantly, pin what it deliberately does *not* restrict.
+ * same person who started the run, or any MEMBER. Approving is now
+ * OWNER/ADMIN only; rejecting stays open to every member.
  *
  * Requires DATABASE_URL; skips cleanly without one.
  */
@@ -32,30 +32,35 @@ const steps: WorkflowSteps = [
 
 describe.skipIf(!hasDb)("approval separation of duties (Postgres)", () => {
   let orgId: string;
-  let triggerer: string;
-  let colleague: string;
+  let owner: string;
+  let admin: string;
+  let member: string;
   const slug = `sod-${Date.now()}`;
 
   beforeAll(async () => {
     const org = await prisma.organization.create({ data: { name: "SoD", slug } });
     orgId = org.id;
     const a = await prisma.user.create({
-      data: { email: `${slug}-a@example.com`, memberships: { create: { orgId, role: "OWNER" } } },
+      data: { email: `${slug}-owner@example.com`, memberships: { create: { orgId, role: "OWNER" } } },
     });
     const b = await prisma.user.create({
-      data: { email: `${slug}-b@example.com`, memberships: { create: { orgId, role: "MEMBER" } } },
+      data: { email: `${slug}-admin@example.com`, memberships: { create: { orgId, role: "ADMIN" } } },
     });
-    triggerer = a.id;
-    colleague = b.id;
+    const c = await prisma.user.create({
+      data: { email: `${slug}-member@example.com`, memberships: { create: { orgId, role: "MEMBER" } } },
+    });
+    owner = a.id;
+    admin = b.id;
+    member = c.id;
   });
 
   afterAll(async () => {
     await prisma.organization.delete({ where: { id: orgId } }).catch(() => undefined);
-    await prisma.user.deleteMany({ where: { id: { in: [triggerer, colleague] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [owner, admin, member] } } });
   });
 
   beforeEach(() => {
-    session.current = { user: { id: triggerer, orgId } };
+    session.current = { user: { id: owner, orgId } };
   });
 
   /** A workflow + a run halted at a gate, with the policy set as given. */
@@ -96,22 +101,17 @@ describe.skipIf(!hasDb)("approval separation of duties (Postgres)", () => {
   }
 
   it("refuses the triggerer's own approval, and records the refusal", async () => {
-    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: triggerer });
+    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: owner });
 
     const res = await decide(runId, "approve");
     expect(res.status).toBe(403);
 
-    // The gate must still be closed — a refused approval that resolved anything
-    // would be worse than no control at all.
     const approval = await prisma.approval.findFirstOrThrow({ where: { runId } });
     expect(approval.status).toBe("PENDING");
     const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
     expect(run.status).toBe("AWAITING_APPROVAL");
-    // Nothing entered the run journal: no decision was made.
     expect(await prisma.runEvent.count({ where: { runId } })).toBe(0);
 
-    // …but the attempt is on the record. A silent 403 would leave no evidence
-    // the control did its job.
     const audit = await prisma.auditEvent.findFirst({
       where: { orgId, action: "approval.self_approval_refused" },
       orderBy: { seq: "desc" },
@@ -119,22 +119,31 @@ describe.skipIf(!hasDb)("approval separation of duties (Postgres)", () => {
     expect(audit?.metadata).toMatchObject({ runId, stepIndex: 1 });
   });
 
-  it("lets a different member approve the same gate", async () => {
-    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: triggerer });
+  it("lets a different ADMIN approve the same gate", async () => {
+    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: owner });
 
-    session.current = { user: { id: colleague, orgId } };
+    session.current = { user: { id: admin, orgId } };
     const res = await decide(runId, "approve");
 
     expect(res.status).toBe(200);
     const approval = await prisma.approval.findFirstOrThrow({ where: { runId } });
     expect(approval.status).toBe("APPROVED");
-    expect(approval.resolvedById).toBe(colleague);
+    expect(approval.resolvedById).toBe(admin);
+  });
+
+  it("refuses a MEMBER who tries to approve", async () => {
+    const runId = await gatedRun({ requireSeparateApprover: false, triggeredById: owner });
+
+    session.current = { user: { id: member, orgId } };
+    const res = await decide(runId, "approve");
+
+    expect(res.status).toBe(403);
+    const approval = await prisma.approval.findFirstOrThrow({ where: { runId } });
+    expect(approval.status).toBe("PENDING");
   });
 
   it("still lets the triggerer REJECT their own run", async () => {
-    // Rejecting stops the action rather than authorizing it. Blocking it would
-    // leave whoever started a runaway run unable to halt it.
-    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: triggerer });
+    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: owner });
 
     const res = await decide(runId, "reject");
 
@@ -143,9 +152,19 @@ describe.skipIf(!hasDb)("approval separation of duties (Postgres)", () => {
     expect(approval.status).toBe("REJECTED");
   });
 
-  it("does not restrict anything when the policy is off", async () => {
-    // The default, and what every existing workflow has: behaviour unchanged.
-    const runId = await gatedRun({ requireSeparateApprover: false, triggeredById: triggerer });
+  it("still lets a MEMBER reject (halting is not authorizing)", async () => {
+    const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: owner });
+
+    session.current = { user: { id: member, orgId } };
+    const res = await decide(runId, "reject");
+
+    expect(res.status).toBe(200);
+    const approval = await prisma.approval.findFirstOrThrow({ where: { runId } });
+    expect(approval.status).toBe("REJECTED");
+  });
+
+  it("does not restrict self-approval when the SoD policy is off", async () => {
+    const runId = await gatedRun({ requireSeparateApprover: false, triggeredById: owner });
 
     const res = await decide(runId, "approve");
 
@@ -155,8 +174,6 @@ describe.skipIf(!hasDb)("approval separation of duties (Postgres)", () => {
   });
 
   it("does not lock out an agent-started run whose triggerer is null", async () => {
-    // `triggeredById` is null for agent-started runs. Comparing null to a null
-    // user id would match and make the run unapprovable by anyone.
     const runId = await gatedRun({ requireSeparateApprover: true, triggeredById: null });
 
     const res = await decide(runId, "approve");

@@ -1,22 +1,29 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { loadActor } from "@/lib/members";
 import { appendAuditEvent } from "@ghost/core/audit-log";
 import { parseMaxActiveRuns } from "@ghost/core/concurrency";
+import { canPublishWorkflow } from "@ghost/core/roles";
 import { enqueueCompensateRun, enqueueRunWorkflow } from "@/lib/queue";
 
 /**
- * Update a workflow's settings. Currently only its concurrency cap.
+ * Update a workflow's settings. Currently its concurrency cap and four-eyes
+ * toggle.
  *
  * The cap is a governance control — it decides how much load Ghost is allowed
  * to put on a customer's system — so changing it is audited like any other
- * configuration change, with the old and new values recorded.
+ * configuration change, with the old and new values recorded. OWNER/ADMIN only.
  */
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.orgId) {
+  if (!session?.user?.orgId || !session.user.id) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const orgId = session.user.orgId;
+  const actor = await loadActor(orgId, session.user.id);
+  if (!actor || !canPublishWorkflow(actor.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
   const { id } = await context.params;
 
   const body = (await req.json().catch(() => ({}))) as {

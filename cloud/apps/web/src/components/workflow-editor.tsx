@@ -460,9 +460,11 @@ function StepFields({
           <FieldLabel>Value</FieldLabel>
           <Input
             aria-label={`Step ${index + 1} value`}
+            type={step.type === "fill" && step.sensitive ? "password" : undefined}
             value={step.value}
             onChange={(e) => update(index, { value: e.target.value } as Partial<WorkflowStep>)}
             placeholder={step.type === "fill" ? "Ada Lovelace" : "Option label"}
+            autoComplete={step.type === "fill" && step.sensitive ? "off" : undefined}
           />
         </div>
       )}

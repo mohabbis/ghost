@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
+import { canApproveRun } from "@ghost/core/roles";
 import { throttleReason } from "@ghost/core/concurrency";
+import { loadActor } from "@/lib/members";
 
 /**
  * Build the run detail view: status, ordered steps, pending approvals, and
@@ -62,6 +64,11 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
     }
   }
 
+  // Role is re-read from the DB (not the JWT) so a demotion takes effect on
+  // the next poll rather than lasting until the session expires.
+  const actor = await loadActor(orgId, viewerId);
+  const roleAllowsApprove = actor !== null && canApproveRun(actor.role);
+
   // "Queued" alone does not say whether Ghost is busy, broken, or deliberately
   // holding this run back behind its workflow's concurrency cap.
   //
@@ -109,11 +116,12 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
     // Whether *this viewer* may approve. Computed here rather than shipping the
     // policy and the triggerer's id to the client and asking it to decide: the
     // route is the authority either way, and this keeps who-started-what out of
-    // a polling payload.
+    // a polling payload. OWNER/ADMIN only, plus SoD when the workflow opts in.
     canApprove:
-      !run.workflowVersion.workflow.requireSeparateApprover ||
-      run.triggeredById === null ||
-      run.triggeredById !== viewerId,
+      roleAllowsApprove &&
+      (!run.workflowVersion.workflow.requireSeparateApprover ||
+        run.triggeredById === null ||
+        run.triggeredById !== viewerId),
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     // The step the run is stopped on, so an incident can offer retry/skip.
@@ -129,7 +137,10 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
       verification: s.verification,
       error: s.error,
       attempt: s.attempt,
-      output: s.output,
+      // Extract values stay in the run journal (needed for {{ }} refs) but are
+      // not shipped to the browser — cleartext PII/extracted secrets must not
+      // sit in every poll of the timeline (P1-4 mitigation).
+      output: null,
     })),
     approvals: run.approvals.map((a) => ({
       stepIndex: a.stepIndex,
