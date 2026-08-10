@@ -338,11 +338,11 @@ plus a small number of real defects. Ordered by business impact.
 
 | # | Finding | Why it matters | Status |
 |---|---|---|---|
-| P1-1 | `/api/audit/verify` loads the entire org chain with no pagination. | The "prove your audit log is intact" feature is the first thing that breaks at scale, and it takes the web tier with it. | Open — rate-limited; needs checkpointed verify, not just pagination. |
-| P1-2 | Screenshots are captured after every step, including `fill` steps marked `sensitive`, and `step-*.png` is on the servable allow-list. OTP and card fields are `type="text"`, so nothing masks them. | Cardholder data at rest in the blob store. | **Partial.** Worker skips screenshot capture for `fill`+`sensitive` (`shouldCaptureScreenshot` in `driver.ts`); editor password-input and secret-reference design still open. |
+| P1-1 | `/api/audit/verify` loads the entire org chain with no pagination. | The "prove your audit log is intact" feature is the first thing that breaks at scale, and it takes the web tier with it. | **Partial.** Default `mode=head` (expected-tail check); `mode=full` capped by `GHOST_AUDIT_VERIFY_MAX_EVENTS` (413 over cap). Audit page no longer loads the full chain. Durable checkpointed walk still open. |
+| P1-2 | Screenshots are captured after every step, including `fill` steps marked `sensitive`, and `step-*.png` is on the servable allow-list. OTP and card fields are `type="text"`, so nothing masks them. | Cardholder data at rest in the blob store. | **Partial.** Worker skips screenshots when `fill.sensitive` **or** `classifyStep` gates the fill; editor uses `type="password"` for sensitive fills. Next-step bleed / secret references still open. |
 | P1-3 | Secret values are stored in plaintext in the workflow definition; `sensitive` is a label. There is no secret-reference mechanism. | A database dump is every customer credential. The values also leave via the agent API, which returns `latestVersion.steps` verbatim. | Open — blocked on connector credentials (§5 step 6). |
-| P1-4 | `extract` outputs are written into the hash-chained journal in cleartext. | A GDPR erasure request against an intentionally immutable chain is unresolvable. Fix the shape before there is data in it. | Open — needs journal payload allow-list / redaction design. |
-| P1-5 | **No RBAC on any business operation.** A `MEMBER` can publish workflows, start runs, approve sensitive steps, and mint agent keys. Separation of duties is enforced (approver ≠ triggerer) but any two colleagues satisfy it. | "Human approval" currently means "anyone with a login." | **Partial.** Minting agent credentials is now OWNER/ADMIN only. Publish / start-run / approve still any member; VIEWER/APPROVER roles not added yet. |
+| P1-4 | `extract` outputs are written into the hash-chained journal in cleartext. | A GDPR erasure request against an intentionally immutable chain is unresolvable. Fix the shape before there is data in it. | **Partial.** Org audit never carried extract text; run timeline no longer ships `RunStep.output` to the browser. Journal payload allow-list / erasable side store still open. |
+| P1-5 | **No RBAC on any business operation.** A `MEMBER` can publish workflows, start runs, approve sensitive steps, and mint agent keys. Separation of duties is enforced (approver ≠ triggerer) but any two colleagues satisfy it. | "Human approval" currently means "anyone with a login." | **Partial.** Mint / publish / create / approve are OWNER/ADMIN only; start + reject stay open to MEMBER. VIEWER/APPROVER roles not added yet. |
 | P1-6 | SSRF: `navigate` accepts any URL, the worker runs `--no-sandbox`, and there is no private-IP denylist. Cloud metadata endpoints are reachable, and `extract` reads the result back out. | Credential theft by any authenticated user. | **Partial.** `checkPublicHttpUrl` blocks cloud metadata + RFC1918 (loopback allowed for fixtures; other private hosts only if they match `APP_URL`). Enforced at schema author time and again in `applyStep`. `--no-sandbox` and DNS-rebinding still open. |
 | P1-7 | Three BullMQ workers share one Redis connection, which BullMQ uses for blocking reads. | Intermittent stalls that will look like engine bugs. | **Closed.** Each Worker gets its own Redis connection (`apps/worker/src/index.ts`). |
 | P1-8 | No wall-clock run timeout. The lease heartbeat renews unconditionally for as long as the process lives. | Two pathological runs wedge a worker pod for every tenant. | **Closed.** `GHOST_RUN_TIMEOUT_MS` (default 30m); heartbeat stops renewing past the deadline and the loop raises `RUN_TIMEOUT` incident. |
@@ -371,13 +371,12 @@ as P1-11 — green output that covers less than it appears to:
 
 1. ~~P0-1 — reject session auth on the agent surface.~~ Done.
 2. ~~P0-3 — rate limits on the four named endpoints.~~ Done (incl. Auth.js).
-3. P1-5 — finish RBAC on approve / publish / start-run. `isOrgAdmin` already
-   exists; minting is gated; the role vocabulary still needs `VIEWER` and
-   `APPROVER`.
-4. P1-2, P1-3, P1-4 — the secret-handling triad. Screenshot skip for sensitive
-   fills is in; secret references, editor masking, journal payload allow-list
-   remain.
-5. P1-6 remainder (DNS-rebinding / sandbox), P1-1 checkpointed verify.
+3. ~~P1-5 — RBAC on approve / publish / mint.~~ Done for the three-role matrix;
+   VIEWER/APPROVER vocabulary still open.
+4. P1-2, P1-3, P1-4 — the secret-handling triad. Screenshot skip + editor
+   password mask + UI output redaction are in; secret references and journal
+   payload allow-list remain.
+5. P1-6 remainder (DNS-rebinding / sandbox); P1-1 durable checkpointed verify.
 6. ~~P1-10 — reject unimplemented step types at the API boundary.~~ Done.
 7. ~~P1-11 — make local `pnpm test` fail loudly when `DATABASE_URL` is unset.~~ Done.
 

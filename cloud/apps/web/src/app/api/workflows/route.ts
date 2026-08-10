@@ -1,7 +1,9 @@
 import { Prisma } from "@ghost/core/db";
 import { appendAuditEvent } from "@ghost/core/audit-log";
+import { canPublishWorkflow } from "@ghost/core/roles";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { loadActor } from "@/lib/members";
 import { createWorkflowInput, formatIssues } from "@/lib/workflow-input";
 
 /** Thrown inside the creation transaction to abort it without committing —
@@ -18,11 +20,18 @@ class RecordingNotClaimableError extends Error {}
  */
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user?.orgId) {
+  if (!session?.user?.orgId || !session.user.id) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const orgId = session.user.orgId;
-  const userId = session.user.id ?? null;
+  const userId = session.user.id;
+  // Creating a workflow publishes its first version — same privilege as
+  // `POST /versions`. Re-read the role from the DB; the JWT is minted at
+  // sign-in and says nothing about a demotion since.
+  const actor = await loadActor(orgId, userId);
+  if (!actor || !canPublishWorkflow(actor.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const parsed = createWorkflowInput.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

@@ -1,47 +1,39 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardBody } from "@/components/ui/card";
-import { verifyAuditChain } from "@ghost/core/audit";
-import { auditPayloadFromRow } from "@ghost/core/audit-log";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The organization's tamper-evident ledger, and whether it still verifies.
+ * The organization's tamper-evident ledger, and whether its expected head
+ * still matches.
  *
- * The hash chain existed from Phase 1 but nothing ever checked it — a log
- * nobody can verify is just a log. This page answers the question a customer's
- * auditor actually asks: has anything in this history been altered since it was
- * written?
+ * Full mid-chain re-hashing of unbounded history is an API concern
+ * (`GET /api/audit/verify?mode=full`) and is capped. This page used to load
+ * the entire chain on every render (P1-1) — the integrity badge now uses the
+ * cheap expected-head check, which still catches suffix deletion.
  */
 export default async function AuditPage() {
   const session = await auth();
   const orgId = session?.user.orgId;
 
-  // Verification must walk the chain from its real first event. Verifying a
-  // truncated window would report every healthy chain past the page size as
-  // "broken at #0", because the oldest row in that window has a non-null
-  // `prevHash` while the walk expects the first link's predecessor to be null —
-  // a false alarm in the one feature whose entire job is trustworthy
-  // verification.
-  const [events, allForChain] = orgId
+  const [events, orgRow, count, tail] = orgId
     ? await Promise.all([
         prisma.auditEvent.findMany({ where: { orgId }, orderBy: { seq: "desc" }, take: 200 }),
-        prisma.auditEvent.findMany({
+        prisma.organization.findUniqueOrThrow({
+          where: { id: orgId },
+          select: { auditChainHead: true },
+        }),
+        prisma.auditEvent.count({ where: { orgId } }),
+        prisma.auditEvent.findFirst({
           where: { orgId },
-          orderBy: { seq: "asc" },
-          select: { action: true, entityType: true, entityId: true, metadata: true, prevHash: true, hash: true },
+          orderBy: { seq: "desc" },
+          select: { hash: true },
         }),
       ])
-    : [[], []];
+    : [[], null, 0, null];
 
-  const chain = verifyAuditChain(
-    allForChain.map((e) => ({
-      prevHash: e.prevHash,
-      hash: e.hash,
-      payload: auditPayloadFromRow(e),
-    })),
-  );
+  const headMatches = (tail?.hash ?? null) === (orgRow?.auditChainHead ?? null);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -57,23 +49,19 @@ export default async function AuditPage() {
           <div className="text-sm">
             <span className="font-medium">Chain integrity</span>
             <p className="mt-1 text-xs text-[var(--color-muted)]">
-              {allForChain.length === 0
+              {count === 0
                 ? "No events recorded yet."
-                : `Full chain verified — all ${allForChain.length} events${
-                    allForChain.length > events.length ? `, showing the most recent ${events.length}` : ""
-                  }.`}
+                : `Expected head check across ${count} events${
+                    count > events.length ? `, showing the most recent ${events.length}` : ""
+                  }. Full mid-chain verify: GET /api/audit/verify?mode=full.`}
             </p>
           </div>
           <span
             className={`text-sm font-medium ${
-              chain.intact ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"
+              headMatches ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"
             }`}
           >
-            {allForChain.length === 0
-              ? "—"
-              : chain.intact
-                ? "Intact"
-                : `Broken at #${(chain.firstBreakIndex ?? 0) + 1}`}
+            {count === 0 ? "—" : headMatches ? "Intact" : "Head mismatch"}
           </span>
         </CardBody>
       </Card>

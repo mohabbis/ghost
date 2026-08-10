@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { WorkflowStep } from "@ghost/core/schema/step";
+import { classifyStep } from "@ghost/core/classifier";
 import { assertPublicHttpUrl } from "@ghost/core/net/public-url";
 import { discoverChromium } from "./chromium.js";
 import { resolveLocator } from "./selector.js";
@@ -228,9 +229,17 @@ export async function verifyStep(page: Page, step: WorkflowStep): Promise<Verify
  * preceded it. Re-clicking "Submit" to find out whether the first click worked
  * is exactly the double-send this engine exists to prevent.
  */
-/** True when capturing the page would retain secret-shaped pixels. */
+/**
+ * True when capturing the page would retain secret-shaped pixels.
+ *
+ * Aligns with `classifyStep`: a fill whose selector looks like password/OTP/card
+ * is gated even when the author forgot to tick `sensitive`, and those pixels
+ * must not land in the artifact store either.
+ */
 export function shouldCaptureScreenshot(step: WorkflowStep): boolean {
-  return !(step.type === "fill" && step.sensitive);
+  if (step.type !== "fill") return true;
+  if (step.sensitive) return false;
+  return !classifyStep(step).sensitive;
 }
 
 export async function runStep(

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { loadActor } from "@/lib/members";
 import { enqueueCompensateRun, enqueueRunWorkflow } from "@/lib/queue";
 import { appendAuditEvent, appendRunEvent } from "@ghost/core/audit-log";
+import { canApproveRun } from "@ghost/core/roles";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 
 /**
@@ -21,11 +23,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string; stepIndex: string }> },
 ) {
   const session = await auth();
-  if (!session?.user?.orgId) {
+  if (!session?.user?.orgId || !session.user.id) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const orgId = session.user.orgId;
-  const userId = session.user.id ?? null;
+  const userId = session.user.id;
   const { id, stepIndex } = await params;
   const index = Number(stepIndex);
   if (!Number.isInteger(index) || index < 0) {
@@ -46,6 +48,14 @@ export async function POST(
   if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const approve = body.decision === "approve";
+  // Approving authorizes a sensitive mutation — OWNER/ADMIN only. Rejecting
+  // stops the action and stays open to every member (see canApproveRun).
+  if (approve) {
+    const actor = await loadActor(orgId, userId);
+    if (!actor || !canApproveRun(actor.role)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
   const now = new Date();
 
   // Which direction of the run is waiting. A gate opened while reversing the

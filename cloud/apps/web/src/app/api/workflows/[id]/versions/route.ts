@@ -1,7 +1,9 @@
 import { Prisma } from "@ghost/core/db";
 import { appendAuditEvent } from "@ghost/core/audit-log";
+import { canPublishWorkflow } from "@ghost/core/roles";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { loadActor } from "@/lib/members";
 import { formatIssues, publishVersionInput } from "@/lib/workflow-input";
 import type { WorkflowSteps } from "@ghost/core/schema/step";
 
@@ -13,14 +15,21 @@ import type { WorkflowSteps } from "@ghost/core/schema/step";
  * definition it started with while an edit lands — the alternative is changing
  * the steps out from under a run that is halfway through a customer's system,
  * possibly while it waits at an approval gate a human is still reading.
+ *
+ * OWNER/ADMIN only. A MEMBER must not rewrite what Ghost will do to a
+ * customer's system — that is the publish side of P1-5.
  */
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.orgId) {
+  if (!session?.user?.orgId || !session.user.id) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   const orgId = session.user.orgId;
-  const userId = session.user.id ?? null;
+  const userId = session.user.id;
+  const actor = await loadActor(orgId, userId);
+  if (!actor || !canPublishWorkflow(actor.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
   const { id } = await context.params;
 
   const parsed = publishVersionInput.safeParse(await req.json().catch(() => null));
