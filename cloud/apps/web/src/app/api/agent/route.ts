@@ -4,7 +4,7 @@ import { resolveAgentPrincipal } from "@/lib/agent-auth";
 
 /**
  * Agent surface catalog.
- * GET /api/agent — tool list + human-approval contract (session or Ghost credential).
+ * GET /api/agent — tool list + human-approval contract (Ghost credential).
  */
 export async function GET(req: Request) {
   const authz = await resolveAgentPrincipal(req);

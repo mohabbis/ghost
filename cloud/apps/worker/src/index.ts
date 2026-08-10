@@ -23,15 +23,26 @@ import { startCaptureServer } from "./capture/server.js";
  *
  * `noop` proves the web ↔ Redis ↔ worker wiring (Phase 0). `run-workflow`
  * executes a workflow run via Playwright, halting at approval gates (Phase 1).
- * Each queue gets its own Worker so failures stay isolated.
+ * Each queue gets its own Worker so failures stay isolated — and each Worker
+ * gets its own Redis connection. BullMQ uses blocking reads on the connection
+ * it is given; sharing one across three workers produced intermittent stalls
+ * that looked like engine bugs.
  */
 
 initSentry("worker");
 const log = createLogger("worker");
-const connection = createRedisConnection();
+
+const runConnection = createRedisConnection();
+const compensateConnection = createRedisConnection();
+const noopConnection = createRedisConnection();
+const purgeConnection = createRedisConnection();
+// Queues that only enqueue (schedulers / reclaim) can share — they do not
+// block. Keep them separate from the Worker connections anyway so a Worker
+// close cannot take the scheduler's connection with it.
+const schedulerConnection = createRedisConnection();
 
 const runWorker = new Worker<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, runWorkflowJob, {
-  connection,
+  connection: runConnection,
   // A run holds a browser, so concurrency is memory-bound rather than
   // CPU-bound; keep it small and explicit rather than relying on the default.
   concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
@@ -51,7 +62,13 @@ runWorker.on("failed", (job, err) => {
 const compensateWorker = new Worker<CompensateRunJob>(
   QUEUE_NAMES.compensateRun,
   compensateRunJob,
-  { connection, concurrency: 1, lockDuration: 60_000, stalledInterval: 30_000, maxStalledCount: 1 },
+  {
+    connection: compensateConnection,
+    concurrency: 1,
+    lockDuration: 60_000,
+    stalledInterval: 30_000,
+    maxStalledCount: 1,
+  },
 );
 compensateWorker.on("failed", (job, err) => {
   log.error("compensate-run job failed", { runId: job?.data.runId, ...serializeError(err) });
@@ -64,7 +81,7 @@ const noopWorker = new Worker<NoopJob>(
     log.info("noop job received", { jobId: job.id, message: job.data.message, requestedAt: job.data.requestedAt });
     return { ok: true, handledAt: new Date().toISOString() };
   },
-  { connection },
+  { connection: noopConnection },
 );
 
 noopWorker.on("completed", (job) => {
@@ -77,7 +94,7 @@ noopWorker.on("failed", (job, err) => {
 const purgeWorker = new Worker<PurgeArtifactsJob>(
   QUEUE_NAMES.purgeArtifacts,
   purgeArtifactsJob,
-  { connection, concurrency: 1 },
+  { connection: purgeConnection, concurrency: 1 },
 );
 purgeWorker.on("failed", (job, err) => {
   log.error("purge-artifacts job failed", { jobId: job?.id, ...serializeError(err) });
@@ -89,7 +106,9 @@ purgeWorker.on("failed", (job, err) => {
 // so every boot (including a redeploy) re-asserts the same daily schedule
 // instead of accumulating a duplicate one — this line runs on every worker
 // start, not just the first.
-const purgeQueue = new Queue<PurgeArtifactsJob>(QUEUE_NAMES.purgeArtifacts, { connection });
+const purgeQueue = new Queue<PurgeArtifactsJob>(QUEUE_NAMES.purgeArtifacts, {
+  connection: schedulerConnection,
+});
 await purgeQueue.upsertJobScheduler(
   "purge-artifacts-daily",
   { every: 24 * 60 * 60 * 1000 },
@@ -102,7 +121,9 @@ await purgeQueue.upsertJobScheduler(
 // this process is up. Safe to run in every replica: the job id is derived from
 // the expired lease, so concurrent sweeps collapse into one job, and the run
 // lease still admits exactly one executor.
-const reclaimQueue = new Queue<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, { connection });
+const reclaimQueue = new Queue<RunWorkflowJob>(QUEUE_NAMES.runWorkflow, {
+  connection: schedulerConnection,
+});
 const sweepStalledRuns = async (): Promise<void> => {
   try {
     await reclaimStalledRuns(reclaimQueue);
@@ -146,7 +167,13 @@ async function shutdown(signal: string): Promise<void> {
     purgeWorker.close(),
     purgeQueue.close(),
   ]);
-  await connection.quit();
+  await Promise.all([
+    runConnection.quit(),
+    compensateConnection.quit(),
+    noopConnection.quit(),
+    purgeConnection.quit(),
+    schedulerConnection.quit(),
+  ]);
   process.exit(0);
 }
 

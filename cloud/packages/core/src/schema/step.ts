@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checkPublicHttpUrl } from "../net/public-url.js";
 
 /**
  * The workflow step schema.
@@ -121,12 +122,22 @@ const base = {
 };
 
 
-export const navigateStep = z.object({
-  ...base,
-  type: z.literal("navigate"),
-  url: z.string().url(),
-  verify: verificationSchema.optional(),
-});
+export const navigateStep = z
+  .object({
+    ...base,
+    type: z.literal("navigate"),
+    url: z.string().url(),
+    verify: verificationSchema.optional(),
+  })
+  .superRefine((step, ctx) => {
+    const result = checkPublicHttpUrl(step.url);
+    if (result.ok) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["url"],
+      message: result.reason,
+    });
+  });
 
 export const clickStep = z.object({
   ...base,

@@ -15,8 +15,8 @@ import { ingestTrace, MAX_TRACE_BYTES } from "@/lib/recording-ingest";
  * human reviews the steps in the editor and publishes through
  * `POST /api/workflows`, which revalidates them.
  *
- * `resolveAgentPrincipal` accepts a session too, and enforces the second
- * factor on that path — see `lib/agent-auth.ts`.
+ * `resolveAgentPrincipal` requires a bearer credential (session cookies are
+ * refused) — see `lib/agent-auth.ts`.
  *
  * Body is JSON rather than multipart: the extension builds the trace in
  * memory and has no file to attach.

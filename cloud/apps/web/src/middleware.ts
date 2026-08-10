@@ -78,13 +78,10 @@ export const config = {
     // Session-authenticated API surface, so the second-factor gate above
     // applies to it too. Three exclusions, each load-bearing:
     //   auth  — Auth.js's own endpoints; gating them prevents signing in.
-    //   agent — may be authenticated by a bearer agent credential, which has
-    //           no session at all, so a session gate here would reject every
-    //           legitimate MCP/agent client. That surface also accepts a
-    //           session, and `resolveAgentPrincipal` runs the same
-    //           second-factor check this middleware would have — see
-    //           lib/agent-auth.ts. Do not rely on this exclusion meaning
-    //           "unauthenticated": it means "authenticated elsewhere".
+    //   agent — bearer-credential authenticated only (no session). A session
+    //           gate here would reject every legitimate MCP/agent client;
+    //           `resolveAgentPrincipal` refuses cookies and requires a minted
+    //           API key — see lib/agent-auth.ts.
     //   mfa   — how the challenge is answered; gating it deadlocks the user.
     "/api/((?!auth|agent|mfa).*)",
   ],

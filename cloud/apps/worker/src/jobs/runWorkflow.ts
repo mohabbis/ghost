@@ -64,6 +64,12 @@ import {
 const LEASE_MS = 60_000;
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELED"]);
 
+/** Wall-clock budget for one run. Default 30 minutes; override with GHOST_RUN_TIMEOUT_MS. */
+function runTimeoutMs(): number {
+  const fromEnv = Number(process.env.GHOST_RUN_TIMEOUT_MS);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 30 * 60_000;
+}
+
 export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
   const { runId } = job.data;
 
@@ -150,7 +156,15 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
   });
   if (leased.count !== 1) return;
 
+  // Wall-clock deadline for this attempt. The lease heartbeat below renews
+  // unconditionally for as long as the process lives — without a separate
+  // deadline, two pathological runs can wedge a worker pod forever. Checked
+  // at the top of every loop iteration; once exceeded we stop renewing and
+  // raise an incident rather than leaving the run RUNNING with no owner.
+  const runDeadline = Date.now() + runTimeoutMs();
+
   const heartbeat = setInterval(() => {
+    if (Date.now() >= runDeadline) return;
     void prisma.run
       .updateMany({
         where: { id: runId, leaseOwner: owner },
@@ -273,6 +287,17 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
     const mutableOutputs = scope.steps as Record<string, Record<string, string>>;
 
     for (;;) {
+      if (Date.now() >= runDeadline) {
+        await raiseIncident(
+          runId,
+          run.orgId,
+          run.triggeredById,
+          run.cursor,
+          `RUN_TIMEOUT: exceeded wall-clock budget of ${runTimeoutMs()}ms`,
+        );
+        return;
+      }
+
       const fresh = await prisma.run.findUnique({
         where: { id: runId },
         select: { status: true },
@@ -552,11 +577,13 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
         }
 
         const result = await runStep(session.page, step, { timeoutMs });
-        screenshotRef = await artifactStore().put(
-          screenshotKey(runId, index),
-          result.screenshot,
-          "image/png",
-        );
+        if (result.screenshot) {
+          screenshotRef = await artifactStore().put(
+            screenshotKey(runId, index),
+            result.screenshot,
+            "image/png",
+          );
+        }
         verification = result.verification;
         outputs = result.outputs;
         url = result.url;

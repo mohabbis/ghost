@@ -328,27 +328,27 @@ plus a small number of real defects. Ordered by business impact.
 
 ### P0 — before this is pointed at anything real
 
-| # | Finding | Why it matters |
-|---|---|---|
-| P0-1 | **MFA is bypassable on `/api/agent/*`.** The middleware matcher excludes `/api/agent`, and `resolveAgentPrincipal` accepts a session cookie in addition to a bearer token. `POST /api/agent/runs` starts a real run. | The second factor does not cover the action that moves money. A stolen session cookie executes workflows; the same action through `/api/runs` is correctly blocked. |
-| P0-2 | **Raw traces shipped to a third party.** | Closed by §1. |
-| P0-3 | **No rate limiting anywhere.** `/api/mfa/verify` accepts unlimited attempts against a six-digit code with a skew window. Also sign-in, `/api/invitations/accept`, `/api/audit/verify`. | An unthrottled TOTP endpoint is not a second factor. |
+| # | Finding | Why it matters | Status |
+|---|---|---|---|
+| P0-1 | **MFA is bypassable on `/api/agent/*`.** The middleware matcher excludes `/api/agent`, and `resolveAgentPrincipal` accepted a session cookie in addition to a bearer token. `POST /api/agent/runs` starts a real run. | The second factor did not cover the action that moves money. | **Closed.** `resolveAgentPrincipal` now refuses session cookies entirely — bearer credential only (`apps/web/src/lib/agent-auth.ts`). Humans use `/api/runs`; agents mint a key in Settings. |
+| P0-2 | **Raw traces shipped to a third party.** | Closed by §1. | Closed |
+| P0-3 | **No rate limiting anywhere.** `/api/mfa/verify` accepts unlimited attempts against a six-digit code with a skew window. Also sign-in, `/api/invitations/accept`, `/api/audit/verify`. | An unthrottled TOTP endpoint is not a second factor. | **Closed.** Redis fixed-window limiter (`apps/web/src/lib/rate-limit.ts`) on MFA verify, invite accept, audit verify, and Auth.js GET/POST (`/api/auth/[...nextauth]`). Fail-closed on Redis outage. |
 
 ### P1 — before real customers
 
-| # | Finding | Why it matters |
-|---|---|---|
-| P1-1 | `/api/audit/verify` loads the entire org chain with no pagination. | The "prove your audit log is intact" feature is the first thing that breaks at scale, and it takes the web tier with it. |
-| P1-2 | Screenshots are captured after every step, including `fill` steps marked `sensitive`, and `step-*.png` is on the servable allow-list. OTP and card fields are `type="text"`, so nothing masks them. | Cardholder data at rest in the blob store. |
-| P1-3 | Secret values are stored in plaintext in the workflow definition; `sensitive` is a label. There is no secret-reference mechanism. | A database dump is every customer credential. The values also leave via the agent API, which returns `latestVersion.steps` verbatim. |
-| P1-4 | `extract` outputs are written into the hash-chained journal in cleartext. | A GDPR erasure request against an intentionally immutable chain is unresolvable. Fix the shape before there is data in it. |
-| P1-5 | **No RBAC on any business operation.** A `MEMBER` can publish workflows, start runs, approve sensitive steps, and mint agent keys. Separation of duties is enforced (approver ≠ triggerer) but any two colleagues satisfy it. | "Human approval" currently means "anyone with a login." This is the first control an auditor asks about. |
-| P1-6 | SSRF: `navigate` accepts any URL, the worker runs `--no-sandbox`, and there is no private-IP denylist. Cloud metadata endpoints are reachable, and `extract` reads the result back out. | Credential theft by any authenticated user. |
-| P1-7 | Three BullMQ workers share one Redis connection, which BullMQ uses for blocking reads. | Intermittent stalls that will look like engine bugs. |
-| P1-8 | No wall-clock run timeout. The lease heartbeat renews unconditionally for as long as the process lives. | Two pathological runs wedge a worker pod for every tenant. |
-| P1-9 | Concurrency is per-workflow only; the queue is a single global FIFO with no per-org fairness. | One tenant starves all others. No per-tenant SLA is possible. |
-| P1-10 | `apiCall` and `sendEmail` parse, classify, gate — and execute nothing. The editor refuses them; the API does not. | A human approves "send this invoice," nothing is sent, and the run reports SUCCEEDED. The one unfinished feature that produces a wrong business outcome. |
-| P1-11 | Local `pnpm test` exits 0 while skipping ~100 DB-gated tests, including every test of the run/approval/verify loop. | The safety-critical half of the product has no pre-push signal on a developer machine. |
+| # | Finding | Why it matters | Status |
+|---|---|---|---|
+| P1-1 | `/api/audit/verify` loads the entire org chain with no pagination. | The "prove your audit log is intact" feature is the first thing that breaks at scale, and it takes the web tier with it. | Open — rate-limited; needs checkpointed verify, not just pagination. |
+| P1-2 | Screenshots are captured after every step, including `fill` steps marked `sensitive`, and `step-*.png` is on the servable allow-list. OTP and card fields are `type="text"`, so nothing masks them. | Cardholder data at rest in the blob store. | **Partial.** Worker skips screenshot capture for `fill`+`sensitive` (`shouldCaptureScreenshot` in `driver.ts`); editor password-input and secret-reference design still open. |
+| P1-3 | Secret values are stored in plaintext in the workflow definition; `sensitive` is a label. There is no secret-reference mechanism. | A database dump is every customer credential. The values also leave via the agent API, which returns `latestVersion.steps` verbatim. | Open — blocked on connector credentials (§5 step 6). |
+| P1-4 | `extract` outputs are written into the hash-chained journal in cleartext. | A GDPR erasure request against an intentionally immutable chain is unresolvable. Fix the shape before there is data in it. | Open — needs journal payload allow-list / redaction design. |
+| P1-5 | **No RBAC on any business operation.** A `MEMBER` can publish workflows, start runs, approve sensitive steps, and mint agent keys. Separation of duties is enforced (approver ≠ triggerer) but any two colleagues satisfy it. | "Human approval" currently means "anyone with a login." | **Partial.** Minting agent credentials is now OWNER/ADMIN only. Publish / start-run / approve still any member; VIEWER/APPROVER roles not added yet. |
+| P1-6 | SSRF: `navigate` accepts any URL, the worker runs `--no-sandbox`, and there is no private-IP denylist. Cloud metadata endpoints are reachable, and `extract` reads the result back out. | Credential theft by any authenticated user. | **Partial.** `checkPublicHttpUrl` denylist (private/link-local/metadata) enforced at schema author time and again in `applyStep`. `--no-sandbox` and DNS-rebinding still open. |
+| P1-7 | Three BullMQ workers share one Redis connection, which BullMQ uses for blocking reads. | Intermittent stalls that will look like engine bugs. | **Closed.** Each Worker gets its own Redis connection (`apps/worker/src/index.ts`). |
+| P1-8 | No wall-clock run timeout. The lease heartbeat renews unconditionally for as long as the process lives. | Two pathological runs wedge a worker pod for every tenant. | **Closed.** `GHOST_RUN_TIMEOUT_MS` (default 30m); heartbeat stops renewing past the deadline and the loop raises `RUN_TIMEOUT` incident. |
+| P1-9 | Concurrency is per-workflow only; the queue is a single global FIFO with no per-org fairness. | One tenant starves all others. No per-tenant SLA is possible. | Open — product/capacity model. |
+| P1-10 | `apiCall` and `sendEmail` parse, classify, gate — and execute nothing. The editor refuses them; the API does not. | A human approves "send this invoice," nothing is sent, and the run reports SUCCEEDED. | **Closed.** `authoredSteps` rejects non-`EDITABLE_STEP_TYPES` at the API boundary. |
+| P1-11 | Local `pnpm test` exits 0 while skipping ~100 DB-gated tests, including every test of the run/approval/verify loop. | The safety-critical half of the product has no pre-push signal on a developer machine. | **Closed.** `scripts/require-test-env.mjs` refuses `pnpm test` without `DATABASE_URL`/`REDIS_URL`/`GHOST_SESSION_KEY` (escape hatch: `GHOST_ALLOW_SKIP_DB_TESTS=1`). `@ghost/core`'s `test` now depends on its own `build` so prisma generate races are gone. |
 
 ### P2 — real, not urgent
 
@@ -363,24 +363,23 @@ given 256-bit random input, but unpeppered); Chromium runs `--no-sandbox`.
 Two build-system defects found while running the suite, both in the same family
 as P1-11 — green output that covers less than it appears to:
 
-- `turbo.json` omits `GHOST_MFA_KEY` from `globalEnv`, so Turbo strips it from
-  `pnpm test` and `pnpm build`.
-- `test` depends on `^build` (dependencies' builds) but not on a package's own
-  `build`, so `@ghost/core`'s tests race its own `prisma generate`. This fails
-  intermittently with `Cannot find module '.prisma/client/index.js'`.
+- ~~`turbo.json` omits `GHOST_MFA_KEY` from `globalEnv`~~ — closed; present in root `turbo.json`.
+- ~~`test` depends on `^build` but not on a package's own `build`~~ — closed for
+  `@ghost/core` (`packages/core/turbo.json` makes `test` depend on `build`).
 
 ### Recommended order
 
-1. P0-1 — reject session auth on the agent surface. Hours.
-2. P0-3 — rate limits on the four named endpoints. A day.
-3. P1-5 — RBAC on approve / publish / start-run / mint-key. `isOrgAdmin` already
-   exists; the role vocabulary needs `VIEWER` and `APPROVER` first.
-4. P1-2, P1-3, P1-4 — the secret-handling triad. One design (secret references,
-   screenshot suppression, journal payload allow-list), three call sites.
-5. P1-6 URL allow-list, P1-8 run timeout, P1-1 pagination.
-6. P1-10 — reject the unimplemented step types at the API boundary, not only in
-   the editor.
-7. P1-11 — make local `pnpm test` fail loudly when `DATABASE_URL` is unset.
+1. ~~P0-1 — reject session auth on the agent surface.~~ Done.
+2. ~~P0-3 — rate limits on the four named endpoints.~~ Done (incl. Auth.js).
+3. P1-5 — finish RBAC on approve / publish / start-run. `isOrgAdmin` already
+   exists; minting is gated; the role vocabulary still needs `VIEWER` and
+   `APPROVER`.
+4. P1-2, P1-3, P1-4 — the secret-handling triad. Screenshot skip for sensitive
+   fills is in; secret references, editor masking, journal payload allow-list
+   remain.
+5. P1-6 remainder (DNS-rebinding / sandbox), P1-1 checkpointed verify.
+6. ~~P1-10 — reject unimplemented step types at the API boundary.~~ Done.
+7. ~~P1-11 — make local `pnpm test` fail loudly when `DATABASE_URL` is unset.~~ Done.
 
 ---
 
