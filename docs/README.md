@@ -21,6 +21,7 @@ If a doc contradicts this index or `cloud/README.md`, treat the cloud docs as tr
 | [`product-direction.md`](product-direction.md) | Category, ICP, non-goals |
 | [`business-model.md`](business-model.md) | How we make money |
 | [`audiences.md`](audiences.md) | Who we sell to first |
+| [`competitive-landscape.md`](competitive-landscape.md) | Commercial competitors — who's adjacent, what to adopt and refuse |
 | [`trust-pipeline.md`](trust-pipeline.md) | Approval / verify / audit principles |
 | [`why-deterministic-gates.md`](why-deterministic-gates.md) | Why the gate is a pure function, not a model call — and what the audit chain does not prove |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Setup, the two env traps, trust invariants |
