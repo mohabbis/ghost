@@ -219,9 +219,9 @@ changing it.
 product, adjacent buyer, and `product-direction.md` already lists "not a chatbot or 'AI
 coworker'" as a non-goal.
 
-**macOS-native as the primary surface.** Ghost executes against browsers and APIs on
-servers. Desktop automation stays where the strategy puts it: after browser, before
-vision.
+**macOS-native as the primary surface.** Ghost executes in the cloud, against browsers
+today and APIs once `apiCall` is implemented. Desktop automation stays where the
+strategy puts it: after browser, before vision.
 
 ---
 

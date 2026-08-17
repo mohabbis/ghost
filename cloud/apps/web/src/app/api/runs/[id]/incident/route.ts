@@ -51,6 +51,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     action?: string;
     assigneeId?: string | null;
     acknowledgeDuplicateRisk?: boolean;
+    // Identity of the incident the caller was looking at when they confirmed.
+    // See the acknowledgement check below.
+    expectStepIndex?: number;
+    expectIncidentRaisedAt?: string;
   };
   if (body.action !== "retry" && body.action !== "skip" && body.action !== "assign") {
     return NextResponse.json({ error: "action must be retry|skip|assign" }, { status: 400 });
@@ -95,6 +99,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // would leave the queue showing an owner with no audit trail explaining how
     // they got it, while the caller was told the request failed. Either both
     // land or neither does. `appendAuditEvent` takes the tx for exactly this.
+    // Both the membership check and the run state are re-verified *inside* the
+    // transaction below. The lookup above is only an early, friendly 404: member
+    // removal runs its own unassignment cleanup in a transaction of its own, and
+    // between that read and this write the membership can vanish — the foreign
+    // key references `User`, not `Membership`, so the write would still succeed
+    // and re-attach a non-member to this org's queue.
+    //
     // Conditional on the run still being an INCIDENT, inside the transaction.
     // The `findFirst` above is a read: a retry, skip, cancel or undo can resolve
     // the incident between it and this write, and an id-only update would then
@@ -103,6 +114,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // incident.
     let assigned = 0;
     await prisma.$transaction(async (tx) => {
+      if (assigneeId !== null) {
+        const stillMember = await tx.membership.findFirst({
+          where: { orgId, userId: assigneeId },
+          select: { userId: true },
+        });
+        if (!stillMember) return;
+      }
       const res = await tx.run.updateMany({
         where: { id, orgId, status: "INCIDENT" },
         data: { incidentAssigneeId: assigneeId },
@@ -123,7 +141,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
     if (assigned !== 1) {
       return NextResponse.json(
-        { error: "this run is no longer an open exception" },
+        {
+          error:
+            "could not assign: the run is no longer an open exception, or that " +
+            "person is no longer a member of this organization",
+        },
         { status: 409 },
       );
     }
@@ -161,9 +183,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // up. The journal sequence is already monotonic per run, so it distinguishes
   // them without inventing a second counter.
   let resumeSeq = 0;
-  // Whether this resolution retried a step whose effect may already have
-  // happened. Hoisted so the audit event below can record the decision.
-  let acknowledgedDuplicateRisk = false;
 
   if (body.action === "skip") {
     if (classifyStep(step).sensitive) {
@@ -215,6 +234,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         tx,
       );
       resumeSeq = seq;
+      // Same atomicity as the retry branch: the state change, the journal
+      // event and the org audit record commit together or not at all.
+      await appendAuditEvent(
+        orgId,
+        userId,
+        {
+          action: "run.incident_skipped",
+          entityType: "Run",
+          entityId: id,
+          metadata: { stepIndex: index, kind: run.incidentKind },
+        },
+        tx,
+      );
     });
   } else {
     // Retrying a step whose effect may already have happened is a decision the
@@ -266,6 +298,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       step,
     });
 
+    // An acknowledgement has to be *about something*. A bare boolean can
+    // outlive the incident it was shown for: if another operator resolves this
+    // incident while the confirmation is open and the run then parks on a new
+    // risky step, the still-open dialog would acknowledge a step its clicker
+    // never looked at. So the caller states which incident it was shown — step
+    // index and raised-at — and a mismatch is refused. Same principle as
+    // approving the *resolved* action rather than the template: the human must
+    // be confirming the thing that actually runs.
+    if (mayDuplicate && body.acknowledgeDuplicateRisk === true) {
+      const sameStep =
+        body.expectStepIndex === undefined || body.expectStepIndex === index;
+      const sameIncident =
+        body.expectIncidentRaisedAt === undefined ||
+        (run.incidentRaisedAt !== null &&
+          new Date(body.expectIncidentRaisedAt).getTime() === run.incidentRaisedAt.getTime());
+      if (!sameStep || !sameIncident) {
+        return NextResponse.json(
+          {
+            error:
+              "this run has stopped on a different step since that confirmation was shown. " +
+              "Re-read the current exception before retrying.",
+            requiresAcknowledgement: true,
+            staleAcknowledgement: true,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     if (mayDuplicate && body.acknowledgeDuplicateRisk !== true) {
       return NextResponse.json(
         {
@@ -279,8 +340,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 409 },
       );
     }
-    acknowledgedDuplicateRisk = mayDuplicate;
-
     // Retry: clear the recorded failure so the journal fold stops reporting it.
     // The step's own `step.started`/`step.failed` history stays in the chain —
     // this appends, it never rewrites.
@@ -318,19 +377,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         tx,
       );
       resumeSeq = seq;
+      // Inside the transaction, with the state change and the journal event.
+      // Appended after them so it is ordered last in the chain, but committed
+      // atomically: if this were left outside and failed, the run would already
+      // have left INCIDENT carrying an acknowledgement recorded only in the run
+      // journal, and the stalled-run reclaimer could later drive the retry with
+      // no org-level audit record of who accepted the duplicate risk.
+      await appendAuditEvent(
+        orgId,
+        userId,
+        {
+          action: "run.incident_retried",
+          entityType: "Run",
+          entityId: id,
+          metadata: {
+            stepIndex: index,
+            kind: run.incidentKind,
+            ...(mayDuplicate ? { acknowledgedDuplicateRisk: true } : {}),
+          },
+        },
+        tx,
+      );
     });
   }
-
-  await appendAuditEvent(orgId, userId, {
-    action: body.action === "skip" ? "run.incident_skipped" : "run.incident_retried",
-    entityType: "Run",
-    entityId: id,
-    metadata: {
-      stepIndex: index,
-      kind: run.incidentKind,
-      ...(acknowledgedDuplicateRisk ? { acknowledgedDuplicateRisk: true } : {}),
-    },
-  });
 
   await enqueueRunWorkflow({
     runId: id,

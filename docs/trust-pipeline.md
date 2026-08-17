@@ -69,8 +69,14 @@ bucket, because a confidently wrong label defeats the purpose of routing.
 
 Two properties carry the trust weight:
 
-- **Classification never changes control flow.** It decides what a human is
-  *shown* and where the work lands. The state transition is identical either way.
+- **Classification never changes how a run *stops*.** The worker's transition
+  into `INCIDENT` is identical whatever the verdict — the kind decides what a
+  human is shown and whose desk the work lands on, not whether the run halts.
+  It does, deliberately, shape *recovery*: the disposition feeds
+  `duplicateRiskFor`, which is what makes the route below refuse an
+  unacknowledged retry. Naming that plainly matters, because a reader who
+  believed classification were inert would not think to check it when a retry
+  is refused.
 - **`OUTCOME_UNKNOWN` retries require acknowledgement.** A step that started and
   never reported back may already have taken effect. The engine still lets a
   human retry it — only a person can check the target system — but the route

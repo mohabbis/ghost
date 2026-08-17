@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { enqueueCompensateRun } from "@/lib/queue";
 import { appendAuditEvent } from "@ghost/core/audit-log";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
+import { duplicateRiskFor } from "@ghost/core/classifier/exception";
 import { describeActions, planCompensation, remainingEntries } from "@ghost/core/compensate";
 import { journalFromEvents, journalFromLegacyRunSteps } from "@ghost/core/journal";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
@@ -96,7 +97,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
 }
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.orgId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -104,6 +105,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const orgId = session.user.orgId;
   const userId = session.user.id ?? null;
   const { id } = await params;
+
+  // Undo took no body until the duplicate-risk gate below needed one. Tolerant
+  // of an absent or malformed body so an existing caller that sends nothing
+  // still works — it simply will not be treated as having acknowledged.
+  const body = (await req.json().catch(() => ({}))) as {
+    acknowledgeDuplicateRisk?: boolean;
+  };
 
   const loaded = await loadPlan(id, orgId);
   if (!loaded) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -145,6 +153,38 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // to give the claim back if scheduling fails, and a run returned to INCIDENT
   // without its classification and owner has silently lost work — the exception
   // reappears in the queue unassigned and labelled "Unclassified failure".
+  // A reversal that already failed indeterminately must not be re-scheduled on
+  // a single click.
+  //
+  // `compensateRun` records OUTCOME_UNKNOWN when a reversal action was in
+  // flight — a Cancel or Refund that timed out may well have reached the target.
+  // Storing that classification is worthless without an enforcement path, and
+  // this route was the gap: it accepted the resulting INCIDENT and rescheduled
+  // the same remaining reversal, under a compensation approval that is still
+  // APPROVED, with no acknowledgement. That is the forward gate's exact failure
+  // mode reached from the reversal side, so it gets the same treatment.
+  //
+  // The step is not passed to `duplicateRiskFor` deliberately: the risky effect
+  // here is the *reversal's* action, not the forward step at this cursor, and
+  // omitting it fails closed.
+  if (
+    run.status === "INCIDENT" &&
+    duplicateRiskFor({ storedKind: run.incidentKind }) &&
+    body.acknowledgeDuplicateRisk !== true
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "the previous reversal of this run may already have taken effect before it failed, " +
+          "so reversing again could repeat it. Confirm in the target system first, then retry " +
+          "with acknowledgeDuplicateRisk: true.",
+        kind: run.incidentKind,
+        requiresAcknowledgement: true,
+      },
+      { status: 409 },
+    );
+  }
+
   const priorRouting = {
     incidentKind: run.incidentKind,
     incidentAssigneeId: run.incidentAssigneeId,

@@ -52,6 +52,8 @@ interface RunView {
     guidance: string;
     retryUseful: boolean;
     retryMayDuplicate: boolean;
+    /** When this incident was raised — echoed back to bind the confirmation. */
+    raisedAt: string | null;
   } | null;
 }
 interface ChainView {
@@ -115,9 +117,17 @@ export function RunTimeline({ runId }: { runId: string }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Two-step confirmation for a retry whose effect may already have happened.
-  // Local to the panel; the route is the authority and refuses an
-  // unacknowledged risky retry regardless.
-  const [confirmRetry, setConfirmRetry] = useState(false);
+  //
+  // Holds the *identity* of the incident it was opened for, not just a boolean.
+  // The page is fed by SSE, so `run` changes underneath an open dialog: if
+  // another operator resolves this incident and the run then parks on a new
+  // risky step, a bare flag would let the still-open button acknowledge a step
+  // its clicker never read. The route refuses a mismatch; this keeps the UI
+  // honest too, by closing the dialog the moment it stops describing what is
+  // actually on screen.
+  const [confirmRetry, setConfirmRetry] = useState<
+    { stepIndex: number; raisedAt: string | null } | null
+  >(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
@@ -357,7 +367,9 @@ export function RunTimeline({ runId }: { runId: string }) {
               decision the server will demand anyway, not a client-side guard
               standing in for one.
             */}
-            {confirmRetry ? (
+            {confirmRetry &&
+            confirmRetry.stepIndex === run.cursor &&
+            confirmRetry.raisedAt === (run.exception?.raisedAt ?? null) ? (
               <div className="space-y-2 rounded border border-[var(--color-danger)] p-2">
                 <p className="text-xs font-medium text-[var(--color-danger)]">
                   Retry anyway? This step may already have taken effect, and retrying could repeat
@@ -369,10 +381,18 @@ export function RunTimeline({ runId }: { runId: string }) {
                     variant="danger"
                     disabled={busy}
                     onClick={() => {
-                      setConfirmRetry(false);
+                      const confirmed = confirmRetry;
+                      setConfirmRetry(null);
                       void post(`/api/runs/${run.id}/incident`, {
                         action: "retry",
                         acknowledgeDuplicateRisk: true,
+                        // What the human actually read. The route rejects the
+                        // acknowledgement if the run has since stopped
+                        // somewhere else.
+                        expectStepIndex: confirmed.stepIndex,
+                        ...(confirmed.raisedAt
+                          ? { expectIncidentRaisedAt: confirmed.raisedAt }
+                          : {}),
                       });
                     }}
                   >
@@ -382,7 +402,7 @@ export function RunTimeline({ runId }: { runId: string }) {
                     size="sm"
                     variant="ghost"
                     disabled={busy}
-                    onClick={() => setConfirmRetry(false)}
+                    onClick={() => setConfirmRetry(null)}
                   >
                     Cancel
                   </Button>
@@ -396,7 +416,10 @@ export function RunTimeline({ runId }: { runId: string }) {
                   disabled={busy}
                   onClick={() => {
                     if (run.exception?.retryMayDuplicate) {
-                      setConfirmRetry(true);
+                      setConfirmRetry({
+                        stepIndex: run.cursor,
+                        raisedAt: run.exception.raisedAt ?? null,
+                      });
                       return;
                     }
                     void post(`/api/runs/${run.id}/incident`, { action: "retry" });

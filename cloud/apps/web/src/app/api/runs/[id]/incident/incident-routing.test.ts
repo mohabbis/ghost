@@ -385,6 +385,84 @@ describe.skipIf(!hasDb)("incident routing (Postgres)", () => {
     expect(after?.incidentRaisedAt).toBeNull();
   });
 
+  it("refuses an acknowledgement raised for a different incident", async () => {
+    // The confirmation must be about the incident the human actually read. If
+    // someone else resolves it and the run parks on a new risky step, a stale
+    // open dialog must not be able to acknowledge the new one.
+    const runId = await incidentRun({
+      stepStatus: "UNKNOWN",
+      error: "OUTCOME_UNKNOWN: step 1 may or may not have taken effect",
+    });
+
+    const stale = await post(runId, {
+      action: "retry",
+      acknowledgeDuplicateRisk: true,
+      expectStepIndex: 0, // the run is parked on step 1
+    });
+    expect(stale.status).toBe(409);
+    const body = (await stale.json()) as { staleAcknowledgement?: boolean };
+    expect(body.staleAcknowledgement).toBe(true);
+    expect(enqueueRunWorkflow).not.toHaveBeenCalled();
+
+    // The same call naming the incident actually on screen is accepted.
+    const run = await prisma.run.findUnique({ where: { id: runId } });
+    const ok = await post(runId, {
+      action: "retry",
+      acknowledgeDuplicateRisk: true,
+      expectStepIndex: 1,
+      expectIncidentRaisedAt: run!.incidentRaisedAt!.toISOString(),
+    });
+    expect(ok.status).toBe(200);
+  });
+
+  it("refuses an acknowledgement whose incident timestamp has moved on", async () => {
+    const runId = await incidentRun({
+      stepStatus: "UNKNOWN",
+      error: "OUTCOME_UNKNOWN: step 1 may or may not have taken effect",
+    });
+
+    const res = await post(runId, {
+      action: "retry",
+      acknowledgeDuplicateRisk: true,
+      expectStepIndex: 1,
+      expectIncidentRaisedAt: new Date(Date.now() - 86_400_000).toISOString(),
+    });
+    expect(res.status).toBe(409);
+    expect(enqueueRunWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("records the retry audit in the same transaction as the state change", async () => {
+    const runId = await incidentRun({
+      stepStatus: "FAILED",
+      error: "net::ERR_CONNECTION_RESET",
+      incidentKind: "TRANSIENT",
+    });
+    await post(runId, { action: "retry" });
+
+    // Both must exist together: a run that left INCIDENT with no org audit
+    // record would let the reclaimer drive the retry unaccounted for.
+    const run = await prisma.run.findUnique({ where: { id: runId } });
+    expect(run?.status).toBe("QUEUED");
+    const audit = await prisma.auditEvent.findFirst({
+      where: { orgId, entityId: runId, action: "run.incident_retried" },
+    });
+    expect(audit).not.toBeNull();
+  });
+
+  it("still audits a skip", async () => {
+    const runId = await incidentRun({ stepStatus: "FAILED", error: "boom" });
+    // Step 1 is a click on "Pay invoice" — sensitive, so skip is refused. Use
+    // step 0 (navigate) instead by parking the run there.
+    await prisma.run.update({ where: { id: runId }, data: { cursor: 0 } });
+
+    const res = await post(runId, { action: "skip" });
+    expect(res.status).toBe(200);
+    const audit = await prisma.auditEvent.findFirst({
+      where: { orgId, entityId: runId, action: "run.incident_skipped" },
+    });
+    expect(audit).not.toBeNull();
+  });
+
   it("rejects an unknown action", async () => {
     const runId = await incidentRun({ stepStatus: "FAILED", error: "boom" });
     const res = await post(runId, { action: "resolve" });

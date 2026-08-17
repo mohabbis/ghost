@@ -130,6 +130,7 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
     guidance: string;
     retryUseful: boolean;
     retryMayDuplicate: boolean;
+    raisedAt: string | null;
   } | null = null;
 
   if (run.status === "INCIDENT") {
@@ -160,6 +161,9 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
       // kind or recorded status is UNKNOWN also fired it for an indeterminate
       // `verify` or `extract`, which are reads that cost nothing to repeat. The
       // confirmation prompt has to stay rare to stay meaningful.
+      // Identity of this incident, echoed back by the confirm dialog so the
+      // server can refuse an acknowledgement raised for a different one.
+      raisedAt: run.incidentRaisedAt?.toISOString() ?? null,
       retryMayDuplicate: duplicateRiskFor({
         disposition: d,
         storedKind: kind,

@@ -91,6 +91,16 @@ export async function reclaimStalledRuns(
             "Ghost stopped restarting it automatically. Retry, skip the failing step, or cancel.",
           leaseOwner: null,
           leaseExpiresAt: null,
+          // Route it like any other exception. Without these the run lands in
+          // the queue with a null kind and a null raised-at — and because
+          // Postgres sorts nulls last in ASC, it would be pushed past the row
+          // cap and become invisible once an org has enough timestamped
+          // incidents. UNKNOWN rather than a guess: a run that stalled
+          // repeatedly may have had a step in flight, so its effect is not
+          // something this path can assert.
+          incidentKind: "UNKNOWN",
+          incidentAssigneeId: null,
+          incidentRaisedAt: new Date(),
         },
       });
       if (moved.count === 1) {

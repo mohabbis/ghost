@@ -216,7 +216,20 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
           : "JOURNAL_TAMPERED: run journal tail does not match its expected head";
         // Appending here would move journalHead to the forged tail and erase
         // the evidence. Quarantine the run and use the independent org chain.
-        await prisma.run.update({ where: { id: runId }, data: { status: "INCIDENT", error: reason } });
+        await prisma.run.update({
+          where: { id: runId },
+          // Stamped like every other incident transition, so a quarantined run
+          // is visible in the exception queue rather than sorted past the cap
+          // by a null timestamp. UNKNOWN: a broken journal is not a step
+          // failure and none of the kinds names it.
+          data: {
+            status: "INCIDENT",
+            error: reason,
+            incidentKind: "UNKNOWN",
+            incidentAssigneeId: null,
+            incidentRaisedAt: new Date(),
+          },
+        });
         await appendAuditEvent(run.orgId, run.triggeredById, {
           action: "run.journal_tampered",
           entityType: "Run",

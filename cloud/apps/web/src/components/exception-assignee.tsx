@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 interface Member {
@@ -33,10 +33,19 @@ export function ExceptionAssignee({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [value, setValue] = useState(assignee?.id ?? "");
+  // `pending` from useTransition only becomes true *after* the fetch resolves,
+  // so it leaves the select enabled for the whole request. Two quick changes
+  // then race, and the slower one can win on the server while the control shows
+  // the faster one. This tracks the request itself, and a version counter makes
+  // a superseded response a no-op rather than something that rewrites state.
+  const [sending, setSending] = useState(false);
+  const latest = useRef(0);
 
   async function assign(next: string) {
+    const ticket = ++latest.current;
     setError(null);
     setValue(next);
+    setSending(true);
     const res = await fetch(`/api/runs/${runId}/incident`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -45,8 +54,14 @@ export function ExceptionAssignee({
         assigneeId: next === "" ? null : next,
       }),
     });
+    // A response that has been overtaken must not touch state at all — not the
+    // value, not the error.
+    if (ticket !== latest.current) return;
+    setSending(false);
+
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (ticket !== latest.current) return;
       setError(body.error ?? "could not assign");
       // Put the control back to the truth, so it never shows an assignment the
       // server rejected.
@@ -67,7 +82,7 @@ export function ExceptionAssignee({
       <select
         id={`assignee-${runId}`}
         value={value}
-        disabled={pending}
+        disabled={pending || sending}
         onChange={(e) => void assign(e.target.value)}
         className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 text-xs"
       >
