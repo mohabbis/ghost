@@ -6,7 +6,7 @@ import { appendAuditEvent, appendRunEvent } from "@ghost/core/audit-log";
 import { RUN_EVENT_TYPES } from "@ghost/core/run-events";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import { classifyStep } from "@ghost/core/classifier";
-import { classifyException } from "@ghost/core/classifier/exception";
+import { classifyException, duplicateRiskFor } from "@ghost/core/classifier/exception";
 
 /**
  * Resolve an incident: retry the failed step, or skip it.
@@ -91,12 +91,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       assigneeId = member.userId;
     }
 
-    await prisma.run.update({ where: { id }, data: { incidentAssigneeId: assigneeId } });
-    await appendAuditEvent(orgId, userId, {
-      action: assigneeId ? "run.incident_assigned" : "run.incident_unassigned",
-      entityType: "Run",
-      entityId: id,
-      metadata: { stepIndex: run.cursor, assigneeId },
+    // One transaction: a routing mutation that applied but was never recorded
+    // would leave the queue showing an owner with no audit trail explaining how
+    // they got it, while the caller was told the request failed. Either both
+    // land or neither does. `appendAuditEvent` takes the tx for exactly this.
+    await prisma.$transaction(async (tx) => {
+      await tx.run.update({ where: { id }, data: { incidentAssigneeId: assigneeId } });
+      await appendAuditEvent(
+        orgId,
+        userId,
+        {
+          action: assigneeId ? "run.incident_assigned" : "run.incident_unassigned",
+          entityType: "Run",
+          entityId: id,
+          metadata: { stepIndex: run.cursor, assigneeId },
+        },
+        tx,
+      );
     });
     return NextResponse.json({ ok: true, assigneeId });
   }
@@ -173,6 +184,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           cursor: index + 1,
           incidentKind: null,
           incidentAssigneeId: null,
+          incidentRaisedAt: null,
         },
       });
       const { seq } = await appendRunEvent(
@@ -197,9 +209,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // before, for any caller that says it understands the risk. What changes is
     // that it cannot happen *accidentally*, and the record shows the warning was
     // shown.
-    const recorded = await prisma.runStep
-      .findUnique({ where: { runId_index: { runId: id, index } }, select: { status: true } })
-      .catch(() => null);
+    // Deliberately NOT `.catch(() => null)`. The recorded outcome is the signal
+    // that decides whether this retry needs an acknowledgement, so swallowing a
+    // transient database error would turn "I could not find out" into "there is
+    // nothing to worry about" — the least restrictive answer available, on the
+    // one query where being wrong repeats a payment. A lookup failure means the
+    // gate cannot be evaluated, so the retry is refused rather than allowed.
+    let recorded: { status: string } | null;
+    try {
+      recorded = await prisma.runStep.findUnique({
+        where: { runId_index: { runId: id, index } },
+        select: { status: true },
+      });
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "could not determine whether this step's effect is known, so the retry was refused. " +
+            "This is a transient storage error — try again.",
+        },
+        { status: 503 },
+      );
+    }
+
     const disposition = classifyException({
       reason: run.error ?? "",
       step,
@@ -207,7 +239,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         recorded?.status === "UNKNOWN" ? "UNKNOWN" : recorded?.status === "FAILED" ? "FAILED" : null,
     });
 
-    if (disposition.retryMayDuplicate && body.acknowledgeDuplicateRisk !== true) {
+    // Union of the live verdict and the stored label, still gated on the step
+    // actually reaching outside the browser. See duplicateRiskFor.
+    const mayDuplicate = duplicateRiskFor({
+      disposition,
+      storedKind: run.incidentKind,
+      recordedOutcome: recorded?.status === "UNKNOWN" ? "UNKNOWN" : null,
+      step,
+    });
+
+    if (mayDuplicate && body.acknowledgeDuplicateRisk !== true) {
       return NextResponse.json(
         {
           error:
@@ -220,7 +261,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 409 },
       );
     }
-    acknowledgedDuplicateRisk = disposition.retryMayDuplicate;
+    acknowledgedDuplicateRisk = mayDuplicate;
 
     // Retry: clear the recorded failure so the journal fold stops reporting it.
     // The step's own `step.started`/`step.failed` history stays in the chain —
@@ -233,7 +274,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await tx.run.update({
         where: { id },
         // See the skip branch: leaving INCIDENT clears the routing fields.
-        data: { status: "QUEUED", error: null, incidentKind: null, incidentAssigneeId: null },
+        data: {
+          status: "QUEUED",
+          error: null,
+          incidentKind: null,
+          incidentAssigneeId: null,
+          incidentRaisedAt: null,
+        },
       });
       const { seq } = await appendRunEvent(
         id,
@@ -247,7 +294,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             // Present only when the retry carried duplicate risk, so its
             // presence in the chain is itself the evidence of an informed
             // decision rather than a flag that is always there.
-            ...(disposition.retryMayDuplicate ? { acknowledgedDuplicateRisk: true } : {}),
+            ...(mayDuplicate ? { acknowledgedDuplicateRisk: true } : {}),
           },
         },
         tx,

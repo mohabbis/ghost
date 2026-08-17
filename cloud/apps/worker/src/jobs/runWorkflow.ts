@@ -973,7 +973,13 @@ async function raiseIncident(
 
   await prisma.run.update({
     where: { id: runId },
-    data: { status: "INCIDENT", error: reason, cursor: index, incidentKind: disposition.kind },
+    data: {
+      status: "INCIDENT",
+      error: reason,
+      cursor: index,
+      incidentKind: disposition.kind,
+      incidentRaisedAt: new Date(),
+    },
   });
   await appendAuditEvent(orgId, actorId, {
     action: "run.incident",

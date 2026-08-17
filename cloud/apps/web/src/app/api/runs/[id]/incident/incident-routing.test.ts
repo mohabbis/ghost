@@ -123,6 +123,7 @@ describe.skipIf(!hasDb)("incident routing (Postgres)", () => {
         cursor: 1,
         error: opts.error,
         incidentKind: opts.incidentKind,
+        incidentRaisedAt: new Date(),
         triggeredById: userId,
         steps: {
           create: {
@@ -316,6 +317,72 @@ describe.skipIf(!hasDb)("incident routing (Postgres)", () => {
     expect(res.status).toBe(404);
     const run = await prisma.run.findUnique({ where: { id: runId } });
     expect(run?.incidentAssigneeId).toBeNull();
+  });
+
+  it("does not warn about duplicate effects for an indeterminate read", async () => {
+    // A `verify` whose outcome is unknown is a read: repeating it costs nothing.
+    // Demanding acknowledgement here would train operators to click through the
+    // prompt that exists for payments.
+    const wf = await prisma.workflow.create({
+      data: {
+        orgId,
+        name: `wf-${Math.random().toString(36).slice(2, 8)}`,
+        versions: {
+          create: {
+            version: 1,
+            steps: [
+              { id: "nav", type: "navigate", url: "https://example.com" },
+              {
+                id: "chk",
+                type: "verify",
+                assertion: { kind: "textPresent", expected: "Paid" },
+              },
+            ] as never,
+          },
+        },
+      },
+      include: { versions: true },
+    });
+    const run = await prisma.run.create({
+      data: {
+        orgId,
+        workflowVersionId: wf.versions[0]!.id,
+        status: "INCIDENT",
+        cursor: 1,
+        error: "OUTCOME_UNKNOWN: step 1 may or may not have taken effect",
+        incidentKind: "OUTCOME_UNKNOWN",
+        incidentRaisedAt: new Date(),
+        triggeredById: userId,
+        steps: {
+          create: {
+            index: 1,
+            type: "verify",
+            status: "UNKNOWN",
+            label: "Paid?",
+          },
+        },
+      },
+    });
+
+    const res = await post(run.id, { action: "retry" });
+    expect(res.status).toBe(200);
+  });
+
+  it("clears incidentRaisedAt when the incident resolves", async () => {
+    const runId = await incidentRun({
+      stepStatus: "FAILED",
+      error: "net::ERR_CONNECTION_RESET",
+      incidentKind: "TRANSIENT",
+    });
+    const before = await prisma.run.findUnique({ where: { id: runId } });
+    expect(before?.incidentRaisedAt).not.toBeNull();
+
+    await post(runId, { action: "retry" });
+
+    // Leaving INCIDENT clears the parked-since stamp, or the next incident on
+    // this run would inherit an age from the previous one.
+    const after = await prisma.run.findUnique({ where: { id: runId } });
+    expect(after?.incidentRaisedAt).toBeNull();
   });
 
   it("rejects an unknown action", async () => {

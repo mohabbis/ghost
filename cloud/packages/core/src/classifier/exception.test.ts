@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   EXCEPTION_KINDS,
   classifyException,
+  duplicateRiskFor,
+  kindsForOwner,
   needsAuthoring,
   type ExceptionKind,
 } from "./exception.js";
@@ -105,6 +107,97 @@ describe("classifyException — best-effort text rules", () => {
 
   it("falls back to a bare generic timeout as transient", () => {
     expect(kindOf("Timeout 5000ms exceeded")).toBe("TRANSIENT");
+  });
+});
+
+describe("semantic Playwright locators route to the author, not to retry", () => {
+  // apps/worker/src/browser/selector.ts resolves every *preferred* selector
+  // through getByRole/getByTestId/getByText, and Playwright's call log then says
+  // "waiting for getByRole(...)" — the word "locator" never appears. Matching
+  // only /locator|selector/ missed exactly the selectors Ghost prefers and
+  // routed a changed page to an operator as a transient blip.
+  it.each([
+    ['Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole(\'button\', { name: \'Pay\' })', "getByRole"],
+    ['Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByTestId(\'submit\')', "getByTestId"],
+    ['Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByText(\'Continue\')', "getByText"],
+    ['Timeout 5000ms exceeded.\nCall log:\n  - waiting for getByLabel(\'Amount\')', "getByLabel"],
+    ['Timeout 5000ms exceeded.\nCall log:\n  - waiting for getByPlaceholder(\'Search\')', "getByPlaceholder"],
+  ])("files a %s timeout as TARGET_MISSING", (reason) => {
+    expect(kindOf(reason, click)).toBe("TARGET_MISSING");
+  });
+
+  it("routes those to the author rather than telling an operator to retry", () => {
+    const d = classifyException({
+      reason: "Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button')",
+      step: click,
+    });
+    expect(d.owner).toBe("author");
+    expect(d.retryUseful).toBe(false);
+  });
+});
+
+describe("duplicateRiskFor", () => {
+  it("is false when nothing is indeterminate", () => {
+    expect(
+      duplicateRiskFor({
+        disposition: classifyException({ reason: "net::ERR_CONNECTION_RESET", step: click }),
+        storedKind: "TRANSIENT",
+        recordedOutcome: "FAILED",
+        step: click,
+      }),
+    ).toBe(false);
+  });
+
+  it("is true for an indeterminate mutating step", () => {
+    expect(
+      duplicateRiskFor({ storedKind: "OUTCOME_UNKNOWN", step: click }),
+    ).toBe(true);
+  });
+
+  it("stays FALSE for an indeterminate read, however the signal arrives", () => {
+    // The regression this helper exists for: three call sites each wrote
+    // `kind === "OUTCOME_UNKNOWN" || recorded === "UNKNOWN"`, which forced the
+    // duplicate-effect prompt on for a `verify` — a read that costs nothing to
+    // repeat. A prompt that fires on reads gets clicked through.
+    expect(duplicateRiskFor({ storedKind: "OUTCOME_UNKNOWN", step: verify })).toBe(false);
+    expect(duplicateRiskFor({ recordedOutcome: "UNKNOWN", step: verify })).toBe(false);
+    expect(
+      duplicateRiskFor({
+        disposition: classifyException({ reason: "OUTCOME_UNKNOWN: ?", step: verify }),
+        step: verify,
+      }),
+    ).toBe(false);
+  });
+
+  it("lets a stale stored kind raise, but never lower, the risk", () => {
+    // Stored label says benign, recorded outcome says indeterminate: the union
+    // must still warn.
+    expect(
+      duplicateRiskFor({ storedKind: "TRANSIENT", recordedOutcome: "UNKNOWN", step: click }),
+    ).toBe(true);
+    // And the reverse — a stale OUTCOME_UNKNOWN label on a read stays quiet,
+    // because the step, not the label, decides whether an effect could repeat.
+    expect(
+      duplicateRiskFor({ storedKind: "OUTCOME_UNKNOWN", recordedOutcome: "FAILED", step: verify }),
+    ).toBe(false);
+  });
+
+  it("assumes risk when the step is unknown", () => {
+    expect(duplicateRiskFor({ storedKind: "OUTCOME_UNKNOWN" })).toBe(true);
+  });
+});
+
+describe("kindsForOwner", () => {
+  it("partitions every kind across the three desks exactly once", () => {
+    const all = (["operator", "author", "administrator"] as const).flatMap((o) => kindsForOwner(o));
+    expect(all.sort()).toEqual([...EXCEPTION_KINDS].sort());
+  });
+
+  it("puts target changes on the author's desk", () => {
+    expect(kindsForOwner("author")).toContain("TARGET_MISSING");
+    expect(kindsForOwner("administrator")).toEqual(
+      expect.arrayContaining(["AUTH", "APPROVAL_EXPIRED"]),
+    );
   });
 });
 

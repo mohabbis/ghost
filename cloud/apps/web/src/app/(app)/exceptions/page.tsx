@@ -5,6 +5,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import {
   classifyException,
+  duplicateRiskFor,
   type ExceptionKind,
   type ExceptionOwner,
 } from "@ghost/core/classifier/exception";
@@ -72,8 +73,9 @@ export default async function ExceptionsPage() {
   const runs = orgId
     ? await prisma.run.findMany({
         where: { orgId, status: "INCIDENT" },
-        // Oldest first: a parked run goes stale, it does not improve with age.
-        orderBy: { createdAt: "asc" },
+        // Longest-parked first, on when the incident was raised — a run's own age
+        // says nothing about how long it has been waiting for someone.
+        orderBy: [{ incidentRaisedAt: "asc" }, { createdAt: "asc" }],
         take: 200,
         include: {
           workflowVersion: {
@@ -140,14 +142,16 @@ export default async function ExceptionsPage() {
       owner: disposition.owner,
       headline: disposition.headline,
       guidance: disposition.guidance,
-      retryMayDuplicate:
-        disposition.retryMayDuplicate ||
-        kind === "OUTCOME_UNKNOWN" ||
-        recorded?.status === "UNKNOWN",
+      retryMayDuplicate: duplicateRiskFor({
+        disposition,
+        storedKind: kind,
+        recordedOutcome: recorded?.status === "UNKNOWN" ? "UNKNOWN" : null,
+        step,
+      }),
       stepLabel: recorded?.label ?? step?.label ?? step?.type ?? null,
-      // When it stopped, from the step — `Run.endedAt` stays null for an
-      // INCIDENT because the run is not terminal.
-      stoppedAt: recorded?.endedAt ?? run.createdAt,
+      // When the incident was raised. `Run.endedAt` stays null for an INCIDENT
+      // (it is not terminal), and `createdAt` is the run's age, not its wait.
+      stoppedAt: run.incidentRaisedAt ?? recorded?.endedAt ?? run.createdAt,
     };
   });
 

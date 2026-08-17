@@ -124,6 +124,43 @@ hash-chained `AuditEvent`.
 - MCP: `pnpm --filter @ghost/mcp exec tsx src/index.ts`
 - Doc: `cloud/docs/AGENT_PLUGIN.md`
 
+## Exception routing (done)
+
+Incidents are now a product surface, not just a status. `classifyException`
+(`packages/core/src/classifier/exception.ts`) is a third deterministic classifier
+alongside `sensitive.ts` and `replay.ts`; `raiseIncident` runs it when the
+incident is raised and stores the verdict on `Run.incidentKind`, with
+`Run.incidentRaisedAt` recording when the run parked and `Run.incidentAssigneeId`
+its owner.
+
+- **Queue:** `GET /api/exceptions` (read-only) and `/exceptions`. Query params
+  `mine=1`, `kind=`, `owner=`. Both filters are pushed into SQL — `owner`
+  translates to an `incidentKind IN (…)` list via `kindsForOwner`, since owner is
+  a pure function of kind — and both admit `incidentKind: null` so rows predating
+  the column still classify on read. Ordered by `incidentRaisedAt`, **not**
+  `createdAt`: a week-old run that fails now has been parked for a minute.
+- **Resolution:** unchanged route, `POST /api/runs/[id]/incident`, now taking
+  `assign` (with `assigneeId`, tenant-checked, audited in one transaction with
+  the state change) alongside `retry` / `skip`.
+- **Risky retry:** a retry whose effect may already have happened is refused with
+  **409** unless the caller passes `acknowledgeDuplicateRisk: true`; the
+  acknowledgement lands in the run journal and the audit log. The outcome lookup
+  that decides this deliberately does **not** swallow database errors — a failed
+  lookup returns 503 rather than defaulting to the permissive answer.
+- **Duplicate risk** is `duplicateRiskFor`, shared by all three read paths. It
+  unions the live verdict with the stored label *and* requires the step to be
+  mutating per `replaySafety`, so an indeterminate `verify`/`extract` is not
+  flagged.
+- **Lifecycle:** routing fields clear whenever a run leaves `INCIDENT` (retry,
+  skip, undo). A failed reversal is re-routed from scratch in `compensateRun` —
+  it must not inherit the forward incident's kind, owner or wait time. Removing a
+  member unassigns their open exceptions (the FK's `SET NULL` fires only on
+  *account* deletion, not membership removal).
+
+Not built: any notification. The queue is pull-only, so nobody is told an
+exception arrived — see "Remaining Phase 1 work". `DATA` exceptions are named but
+not fixable; retry re-sends the same rejected value.
+
 ## Phase 1.3 — durable execution (done)
 
 Run position is now a fold over an append-only, hash-chained `RunEvent` journal

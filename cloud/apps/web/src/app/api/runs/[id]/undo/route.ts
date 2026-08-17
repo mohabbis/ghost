@@ -144,7 +144,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // Conditional update: a double-clicked Undo enqueues once.
   const { count } = await prisma.run.updateMany({
     where: { id, orgId, status: { in: [...REVERSIBLE_STATES] as never } },
-    data: { status: "COMPENSATING", error: null, endedAt: null },
+    // Clear the exception routing along with the error. A run reversing is no
+    // longer an open exception, so it must leave the queue; and if the reversal
+    // itself later fails, compensateRun raises a *fresh* incident with its own
+    // kind, owner and timestamp rather than silently inheriting these.
+    data: {
+      status: "COMPENSATING",
+      error: null,
+      endedAt: null,
+      incidentKind: null,
+      incidentAssigneeId: null,
+      incidentRaisedAt: null,
+    },
   });
   if (count !== 1) {
     return NextResponse.json({ error: "run is already being reversed" }, { status: 409 });

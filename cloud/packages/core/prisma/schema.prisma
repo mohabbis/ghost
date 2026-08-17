@@ -440,6 +440,19 @@ model Run {
   incidentKind       String?
   incidentAssigneeId String?
 
+  // When this run entered INCIDENT.
+  //
+  // The queue orders by this, NOT by `createdAt`: those differ, and the
+  // difference is the whole point of the ordering. A run created a week ago that
+  // fails in the last minute has been *parked* for a minute, and sorting it
+  // ahead of yesterday's stuck run — which is what `createdAt` does — buries
+  // exactly the row that has been waiting. It is also what the UI's "stopped Nm
+  // ago" reads, so an age of "6d" no longer means "this run is 6 days old."
+  //
+  // Rewritten on every fresh incident, including one raised by a failed
+  // reversal, so an inherited timestamp cannot make new work look stale.
+  incidentRaisedAt   DateTime?
+
   org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
@@ -453,8 +466,9 @@ model Run {
   @@index([orgId])
   @@index([workflowVersionId])
   @@index([status, leaseExpiresAt])
-  // The exception queue's own query: this org's open incidents, oldest first.
-  @@index([orgId, status, createdAt])
+  // The exception queue's own query: this org's open incidents, longest-parked
+  // first. Ordered on incidentRaisedAt, not createdAt — see that field.
+  @@index([orgId, status, incidentRaisedAt])
   @@index([incidentAssigneeId])
   // Admission counts a workflow's in-flight runs on every start and resume.
   @@index([workflowVersionId, status])

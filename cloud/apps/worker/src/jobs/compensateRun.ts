@@ -21,6 +21,37 @@ import { resolveStep, ExpressionError, type ExpressionScope } from "@ghost/core/
 import { BrowserSession, applyStep, verifyStep } from "../browser/driver.js";
 import { artifactStore, compensationScreenshotKey } from "../storage/artifacts.js";
 import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
+import { classifyException, type ExceptionKind } from "@ghost/core/classifier/exception";
+
+/**
+ * Routing fields for an incident raised by a *failed reversal*.
+ *
+ * A reversal that stops is a new exception, and the run may already be carrying
+ * `incidentKind` / `incidentAssigneeId` from whatever stopped it in the forward
+ * direction. Without overwriting all three fields here, the failed undo inherits
+ * that classification and owner — so "refusing to reverse a run whose journal is
+ * broken" could land in the queue labelled as a changed selector, on the desk of
+ * whoever happened to own the earlier problem, with a "parked since" time from
+ * hours ago.
+ *
+ * The assignee is deliberately cleared rather than kept: a reversal failure is a
+ * different problem from the one that person accepted, so it goes back to the
+ * unassigned queue to be triaged on its own terms.
+ *
+ * No step is passed to the classifier. These reasons are Ghost's own prose about
+ * the reversal itself, not a driver error about a step, and duplicate risk for
+ * the one indeterminate case is asserted by passing `OUTCOME_UNKNOWN` directly
+ * at the call site.
+ */
+function freshIncidentRouting(
+  input: { kind: ExceptionKind } | { reason: string },
+): { incidentKind: string; incidentAssigneeId: null; incidentRaisedAt: Date } {
+  return {
+    incidentKind: "kind" in input ? input.kind : classifyException({ reason: input.reason }).kind,
+    incidentAssigneeId: null,
+    incidentRaisedAt: new Date(),
+  };
+}
 
 /**
  * Reverse a run's completed side effects — the BPMN saga, over the run journal.
@@ -120,6 +151,15 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
           error: !chain.intact
             ? `JOURNAL_TAMPERED: refusing to reverse a run whose journal is broken at event ${chain.firstBreakIndex}`
             : "JOURNAL_TAMPERED: refusing to reverse a run whose journal tail does not match its expected head",
+          // A failed reversal is a fresh exception, not a continuation of
+          // whatever stopped the run first. Re-route it from scratch: inheriting
+          // the forward incident's kind and assignee would file "the journal is
+          // broken" under, say, a changed selector, on the desk of whoever
+          // happened to own that.
+          // A broken journal is not a step failure and none of the nine kinds names
+          // it. UNKNOWN routes it to a human for judgement rather than inventing a
+          // classification, which is the fail-closed default by design.
+          ...freshIncidentRouting({ kind: "UNKNOWN" }),
         },
       });
       await releaseSlot(runId).catch(() => undefined);
@@ -143,6 +183,9 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
       data: {
         status: "INCIDENT",
         error: `cannot reverse while step ${plan.inFlight[0]} is still in flight`,
+        // Retrying the undo once the step lands really does work, which is what
+        // TRANSIENT means here.
+        ...freshIncidentRouting({ kind: "TRANSIENT" }),
       },
     });
     await releaseSlot(runId).catch(() => undefined);
@@ -189,6 +232,9 @@ export async function compensateRunJob(job: Job<CompensateRunJob>): Promise<void
         status: "INCIDENT",
         cursor: started[0]!,
         error: `reversal of step ${started[0]} started but never reported an outcome — check the target system before retrying`,
+        // The reversal's own effect is indeterminate, which is the one kind that
+        // carries duplicate risk.
+        ...freshIncidentRouting({ kind: "OUTCOME_UNKNOWN" }),
       },
     });
     await appendAuditEvent(run.orgId, actorFor(job, run.triggeredById), {
@@ -531,6 +577,7 @@ async function reverseOne({
         status: "INCIDENT",
         cursor: entry.stepIndex,
         error: `reversal of step ${entry.stepIndex} failed: ${message}`,
+        ...freshIncidentRouting({ reason: message }),
       },
     });
     await appendAuditEvent(orgId, actorId, {

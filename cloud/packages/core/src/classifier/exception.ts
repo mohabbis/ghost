@@ -118,8 +118,18 @@ const TEXT_RULES: ReadonlyArray<readonly [RegExp, ExceptionKind]> = [
   // Playwright's locator failures. "strict mode violation" is the opposite
   // problem — too many matches — but lands on the same desk: the selector no
   // longer identifies one thing, so the workflow needs re-authoring.
+  //
+  // The `getBy*` forms are not optional extras: apps/worker/src/browser/selector.ts
+  // resolves every *preferred* selector through `getByRole`/`getByTestId`/
+  // `getByText`, and Playwright's call log then reads "waiting for
+  // getByRole(...)" — the word "locator" never appears. Matching only
+  // `locator|selector` therefore missed exactly the selectors Ghost prefers,
+  // dropping them through to the generic timeout rule below and routing a
+  // changed page to an operator as a transient blip to retry forever. The rest
+  // of the family is listed too, so a workflow that starts using them is not a
+  // silent regression.
   [
-    /waiting for (?:locator|selector)|strict mode violation|no element matches/i,
+    /waiting for (?:locator|selector|getBy(?:Role|TestId|Text|Label|Placeholder|AltText|Title))|strict mode violation|no element matches/i,
     "TARGET_MISSING",
   ],
   [
@@ -294,6 +304,44 @@ function classifyKind(input: ClassifyExceptionInput): ExceptionKind {
   return "UNKNOWN";
 }
 
+/**
+ * Duplicate-effect risk for a stopped step, as a standalone decision.
+ *
+ * Exported because three read paths (the retry gate, the run timeline, and the
+ * exception queue) all need it, and each had been re-deriving it as
+ * `disposition.retryMayDuplicate || kind === "OUTCOME_UNKNOWN" || recorded ===
+ * "UNKNOWN"`. That looked like belt-and-braces caution and was actually a bug:
+ * it forced the warning on for an indeterminate **read** — a `verify` or
+ * `extract` — which `classifyException` deliberately reports as safe, because
+ * repeating a read costs nothing. A confirmation prompt that fires on reads is
+ * one operators learn to click through, which is precisely how the prompt stops
+ * protecting the payment it exists for.
+ *
+ * The caution those callers wanted is real, though: a *stored* `incidentKind`
+ * must never be able to talk the risk down. So this takes the union of the
+ * live verdict and the stored label, and then — the part the callers dropped —
+ * still requires the step to actually reach outside the browser.
+ *
+ * Fails closed: an unknown step is assumed mutating.
+ */
+export function duplicateRiskFor(input: {
+  /** Live classifier verdict, when already computed. */
+  disposition?: ExceptionDisposition;
+  /** The stored `Run.incidentKind`, which may be stale or absent. */
+  storedKind?: ExceptionKind | string | null;
+  /** Recorded outcome of the stopped step. */
+  recordedOutcome?: "UNKNOWN" | "FAILED" | null;
+  /** The stopped-on step, when known. */
+  step?: WorkflowStep;
+}): boolean {
+  const indeterminate =
+    input.disposition?.kind === "OUTCOME_UNKNOWN" ||
+    input.storedKind === "OUTCOME_UNKNOWN" ||
+    input.recordedOutcome === "UNKNOWN";
+  if (!indeterminate) return false;
+  return input.step ? replaySafety(input.step) === "mutating" : true;
+}
+
 /** Every kind, for exhaustive UI rendering and tests. */
 export const EXCEPTION_KINDS = Object.keys(
   DISPOSITIONS,
@@ -302,4 +350,16 @@ export const EXCEPTION_KINDS = Object.keys(
 /** True when this kind is a defect in the workflow rather than in the world. */
 export function needsAuthoring(kind: ExceptionKind): boolean {
   return DISPOSITIONS[kind].owner === "author";
+}
+
+/**
+ * Every kind that routes to a given desk.
+ *
+ * `owner` is a pure function of `kind`, so an owner filter can be pushed into
+ * SQL as `incidentKind IN (...)` instead of being applied to an
+ * already-capped page of rows — which silently returned "no author-owned
+ * exceptions" whenever the oldest N happened to be operator-owned.
+ */
+export function kindsForOwner(owner: ExceptionOwner): ExceptionKind[] {
+  return EXCEPTION_KINDS.filter((k) => DISPOSITIONS[k].owner === owner);
 }

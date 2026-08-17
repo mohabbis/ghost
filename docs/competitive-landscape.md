@@ -70,7 +70,7 @@ Set against Ghost's pipeline, the overlap is thin and the gap is structural:
 | Persistent work memory + Q&A | **Yes**, local | No |
 | Scheduled recurring prompts | **Yes** ("Routines") | **No trigger surface at all** |
 | Records a demonstrated workflow | Observes, doesn't compile to steps | Yes — Phase 2 Chrome extension → typed steps |
-| Executes multi-step work across apps | Limited, via email/calendar connectors | **Yes** — browser + API, typed steps |
+| Executes multi-step work across apps | Limited, via email/calendar connectors | **Browser only** — typed steps; `apiCall`/`sendEmail` are declared but unimplemented ([`driver.ts`](../cloud/apps/worker/src/browser/driver.ts) `UNIMPLEMENTED_ACTION_TYPES`) |
 | Deny-by-default gate on send/pay/delete | Not evidenced | **Yes** — deterministic `classifyStep` |
 | Human approval before sensitive actions | Not evidenced | **Yes**, with expiry, single-use |
 | Per-step outcome verification | No | **Yes** |
@@ -79,11 +79,21 @@ Set against Ghost's pipeline, the overlap is thin and the gap is structural:
 | Multi-tenant org isolation, RBAC | Single-user Mac app | **Yes** |
 | SOC 2 | **Yes** | **No** |
 | Self-serve free tier | **Yes** | **No** — implementation-led |
-| Platform | macOS only | Cloud (browser + API) |
+| Platform | macOS only | Cloud (browser; API execution is future work) |
 
 Ghost wins every row that describes *doing the work under controls*. Littlebird wins
 every row that describes *knowing about the work* — plus, notably, the two rows that are
 about being a real company you can buy from today: SOC 2 and a free tier.
+
+One correction to Ghost's own column, because rule 10 cuts both ways. Ghost's execution
+surface today is **the browser only**. `apiCall` and `sendEmail` exist in the step schema,
+are classified by the approval gate, and are classified for replay safety — but their
+executors are no-ops listed in `UNIMPLEMENTED_ACTION_TYPES`, and a guard keeps them out
+of the step editor so nobody can author a step that silently does nothing. So Ghost
+cannot currently send an email or call an API, and the strategy's "APIs first, then
+browser" ordering describes the intended preference, not shipped behavior. That gap is
+the single largest one in this comparison, and it is not in Littlebird's favour — it is
+in the favour of any connector-backed automation platform.
 
 They are also not competing for the same dollar. $17/mo personal productivity versus
 $500–2,000/mo team plus $2.5k–15k implementation are different budgets, different

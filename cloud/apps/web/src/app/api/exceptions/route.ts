@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import {
   classifyException,
+  duplicateRiskFor,
+  kindsForOwner,
+  EXCEPTION_KINDS,
   type ExceptionKind,
   type ExceptionOwner,
 } from "@ghost/core/classifier/exception";
@@ -70,7 +73,27 @@ export async function GET(req: Request) {
   // `mine=1` narrows to the caller's own assignments — the "my work" view.
   const mine = url.searchParams.get("mine") === "1";
   const kindFilter = url.searchParams.get("kind");
-  const ownerFilter = url.searchParams.get("owner");
+  const ownerFilter = url.searchParams.get("owner") as ExceptionOwner | null;
+
+  // Both filters are pushed into SQL, and both must admit `incidentKind: null`.
+  //
+  // Two bugs live here otherwise. Filtering `incidentKind = 'X'` in SQL silently
+  // drops every incident whose kind was never stored — rows from before the
+  // column existed — so those never reach the fallback classification below and
+  // `?kind=UNKNOWN` omits exactly the incidents it should return. And applying an
+  // *owner* filter after `take` means the cap selects the 200 longest-parked
+  // incidents first: if those are all operator-owned, `?owner=author` returns
+  // nothing while author-owned exceptions sit just past the cap, reporting a
+  // `total` of 0 that reads as "none exist".
+  //
+  // `owner` is a pure function of `kind` (see kindsForOwner), so it becomes an IN
+  // list rather than needing a stored owner column. Null-kind rows are admitted
+  // here and filtered after classification.
+  const wantedKinds: ExceptionKind[] | null = ownerFilter
+    ? kindsForOwner(ownerFilter).filter((k) => !kindFilter || k === kindFilter)
+    : kindFilter && (EXCEPTION_KINDS as readonly string[]).includes(kindFilter)
+      ? [kindFilter as ExceptionKind]
+      : null;
 
   const runs = await prisma.run.findMany({
     where: {
@@ -79,10 +102,13 @@ export async function GET(req: Request) {
       ...(mine && session.user.id
         ? { incidentAssigneeId: session.user.id }
         : {}),
-      ...(kindFilter ? { incidentKind: kindFilter } : {}),
+      ...(wantedKinds
+        ? { OR: [{ incidentKind: { in: wantedKinds } }, { incidentKind: null }] }
+        : {}),
     },
-    // Oldest first — see the module comment.
-    orderBy: { createdAt: "asc" },
+    // Longest-parked first, on when the incident was raised rather than when the
+    // run was created — see the module comment.
+    orderBy: [{ incidentRaisedAt: "asc" }, { createdAt: "asc" }],
     take: MAX_ROWS,
     include: {
       workflowVersion: { include: { workflow: { select: { name: true } } } },
@@ -144,15 +170,18 @@ export async function GET(req: Request) {
             : null,
     });
 
-    // Trust the stored kind for the label, but take the *safety* flag from the
-    // live computation. If the two ever disagree about duplicate risk, the
-    // cautious answer wins: a stale stored kind must not be able to downgrade a
-    // warning that the current classifier would raise.
+    // Trust the stored kind for the label — it is what the engine decided when
+    // the run stopped. Duplicate risk comes from the shared helper, which unions
+    // the live verdict with the stored label and then still requires the step to
+    // reach outside the browser, so an indeterminate *read* is not flagged as a
+    // possibly-repeated effect.
     kind = kind ?? disposition.kind;
-    const retryMayDuplicate =
-      disposition.retryMayDuplicate ||
-      kind === "OUTCOME_UNKNOWN" ||
-      recorded?.status === "UNKNOWN";
+    const retryMayDuplicate = duplicateRiskFor({
+      disposition,
+      storedKind: kind,
+      recordedOutcome: recorded?.status === "UNKNOWN" ? "UNKNOWN" : null,
+      step,
+    });
 
     const shaped: ExceptionRow = {
       runId: run.id,
@@ -167,7 +196,13 @@ export async function GET(req: Request) {
       retryUseful: disposition.retryUseful,
       retryMayDuplicate,
       error: run.error,
-      stoppedAt: (recorded?.endedAt ?? run.createdAt).toISOString(),
+      // Prefer the recorded incident time; fall back to the step's end, then the
+      // run's creation for rows predating `incidentRaisedAt`.
+      stoppedAt: (
+        run.incidentRaisedAt ??
+        recorded?.endedAt ??
+        run.createdAt
+      ).toISOString(),
       assignee: run.incidentAssignee
         ? {
             id: run.incidentAssignee.id,
@@ -180,7 +215,10 @@ export async function GET(req: Request) {
         : null,
     };
 
+    // Post-filter, needed only for the null-kind rows admitted above: their kind
+    // — and therefore their owner — is not known until classification.
     if (ownerFilter && shaped.owner !== ownerFilter) continue;
+    if (kindFilter && shaped.kind !== kindFilter) continue;
     rows.push(shaped);
   }
 

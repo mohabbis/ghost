@@ -3,7 +3,11 @@ import { canApproveRun } from "@ghost/core/roles";
 import { throttleReason } from "@ghost/core/concurrency";
 import { loadActor } from "@/lib/members";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
-import { classifyException, type ExceptionKind } from "@ghost/core/classifier/exception";
+import {
+  classifyException,
+  duplicateRiskFor,
+  type ExceptionKind,
+} from "@ghost/core/classifier/exception";
 
 /**
  * Build the run detail view: status, ordered steps, pending approvals, and
@@ -148,8 +152,16 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
       headline: d.headline,
       guidance: d.guidance,
       retryUseful: d.retryUseful,
-      retryMayDuplicate:
-        d.retryMayDuplicate || kind === "OUTCOME_UNKNOWN" || recorded?.status === "UNKNOWN",
+      // Shared helper rather than an inline OR: forcing this true whenever the
+      // kind or recorded status is UNKNOWN also fired it for an indeterminate
+      // `verify` or `extract`, which are reads that cost nothing to repeat. The
+      // confirmation prompt has to stay rare to stay meaningful.
+      retryMayDuplicate: duplicateRiskFor({
+        disposition: d,
+        storedKind: kind,
+        recordedOutcome: recorded?.status === "UNKNOWN" ? "UNKNOWN" : null,
+        step: stoppedStep,
+      }),
     };
   }
 

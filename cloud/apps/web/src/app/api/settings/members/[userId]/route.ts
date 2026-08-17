@@ -124,6 +124,16 @@ export async function DELETE(_req: Request, { params }: Params): Promise<Respons
     }
 
     await tx.membership.deleteMany({ where: { orgId, userId: targetUserId } });
+    // Hand back any exceptions they owned. `Run.incidentAssigneeId` references
+    // `User`, so its ON DELETE SET NULL fires only when the *account* is deleted
+    // — not when someone is removed from this organization. Without this, their
+    // open exceptions would stay assigned to a non-member: still in the queue,
+    // but absent from every current member's "mine" view and showing an owner
+    // who can no longer act on it.
+    await tx.run.updateMany({
+      where: { orgId, incidentAssigneeId: targetUserId },
+      data: { incidentAssigneeId: null },
+    });
     await appendAuditEvent(
       orgId,
       actor.userId,

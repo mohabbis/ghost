@@ -48,6 +48,45 @@ Compensation has known gaps, listed in `cloud/docs/CURSOR_HANDOFF.md` under
 "Known gaps in compensation". The one that limits what it is useful for today:
 reversals run in a fresh, unauthenticated browser context.
 
+## Exception routing
+
+A run that stops does not just sit in `INCIDENT` waiting to be found by run id.
+The stop is **classified when it is raised** by a third deterministic classifier,
+`classifyException` — sibling to `classifyStep` (must a human approve this?) and
+`replaySafety` (is it safe to re-apply silently?). It answers a different
+question: *this stopped — whose desk, and is retrying safe?*
+
+Nine kinds each route to one **owner**, and the owner is the point: a changed
+selector (`TARGET_MISSING`) belongs to whoever maintains the workflow, an expired
+credential (`AUTH`) or a lapsed gate (`APPROVAL_EXPIRED`) to an administrator, a
+rejected value (`DATA`) or a wrong outcome (`VERIFICATION`) to the operator
+running the work. "A run stopped" is not actionable; "the portal changed and step
+4 needs re-recording" is.
+
+Like its siblings it is a rule table, not a model call, and it fails closed: an
+unrecognized reason stays `UNKNOWN` rather than being forced into the nearest
+bucket, because a confidently wrong label defeats the purpose of routing.
+
+Two properties carry the trust weight:
+
+- **Classification never changes control flow.** It decides what a human is
+  *shown* and where the work lands. The state transition is identical either way.
+- **`OUTCOME_UNKNOWN` retries require acknowledgement.** A step that started and
+  never reported back may already have taken effect. The engine still lets a
+  human retry it — only a person can check the target system — but the route
+  refuses an unacknowledged retry and records the acknowledgement in the run
+  journal and the audit log. Duplicate risk additionally requires the step to
+  reach *outside the browser*: an indeterminate `verify` is a read, and a prompt
+  that fires on reads is one operators learn to click through.
+
+Resolution (`retry` / `skip` / `assign`) stays on the run's own incident route
+under its own authorization; the queue at `/exceptions` and `GET /api/exceptions`
+is read-only. Assignment is open to any member — deciding who looks at a problem
+is not authorizing the action that caused it — and is tenant-scoped to members of
+the org that owns the run. Routing fields are cleared whenever a run leaves
+`INCIDENT`, and a failed *reversal* is re-routed from scratch rather than
+inheriting the forward incident's kind, owner, or waiting time.
+
 ## Execution limits
 
 A workflow may cap how many of its runs are in flight at once
