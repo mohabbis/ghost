@@ -24,6 +24,7 @@ import {
 import { planRestore, type ExecutedRecord } from "../runtime/restore.js";
 import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
 import { classifyError } from "../runtime/errors.js";
+import { classifyException } from "@ghost/core/classifier/exception";
 import { effectiveRetry, effectiveTimeout, backoffFor } from "../runtime/policy.js";
 import {
   BrowserSession,
@@ -346,7 +347,14 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
         // approval or a broken expression is not recoverable — retrying cannot
         // change either — so those stay terminal.
         if (action.recoverable) {
-          await raiseIncident(runId, run.orgId, run.triggeredById, action.index, action.reason);
+          await raiseIncident(
+            runId,
+            run.orgId,
+            run.triggeredById,
+            action.index,
+            action.reason,
+            steps[action.index],
+          );
         } else {
           await failRun(runId, run.orgId, run.triggeredById, action.index, action.reason);
         }
@@ -381,6 +389,7 @@ export async function runWorkflowJob(job: Job<RunWorkflowJob>): Promise<void> {
           run.triggeredById,
           action.index,
           `OUTCOME_UNKNOWN: ${action.reason}`,
+          action.step,
         );
         return;
       }
@@ -572,6 +581,7 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
             actorId,
             index,
             `RESTORE_UNSAFE: ${restored.reason}`,
+            step,
           );
           return { kind: "halt" };
         }
@@ -663,7 +673,14 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
       });
 
       if (!passed) {
-        await raiseIncident(runId, orgId, actorId, index, `verification failed at step ${index}`);
+        await raiseIncident(
+          runId,
+          orgId,
+          actorId,
+          index,
+          `verification failed at step ${index}`,
+          step,
+        );
         return { kind: "halt" };
       }
 
@@ -691,6 +708,7 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
           actorId,
           index,
           `OUTCOME_UNKNOWN: step ${index} may or may not have taken effect — ${message}`,
+          step,
         );
         return { kind: "halt" };
       }
@@ -720,12 +738,19 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
         entityId: `${runId}:${index}`,
         metadata: { error: message },
       });
-      await raiseIncident(runId, orgId, actorId, index, message);
+      await raiseIncident(runId, orgId, actorId, index, message, step);
       return { kind: "halt" };
     }
   }
 
-  await raiseIncident(runId, orgId, actorId, index, lastError || "step exhausted its retries");
+  await raiseIncident(
+    runId,
+    orgId,
+    actorId,
+    index,
+    lastError || "step exhausted its retries",
+    step,
+  );
   return { kind: "halt" };
 }
 
@@ -916,6 +941,17 @@ async function failRun(
  * A failed or unresumable step stops the run and waits for a human, rather than
  * killing it. Borrowed from Camunda incidents: an ops person watching a
  * 40-invoice batch wants to fix the one broken step, not restart the batch.
+ *
+ * The incident is *classified* here, when it is raised, rather than on read. Two
+ * reasons: the queue can then filter and sort in SQL instead of re-classifying
+ * every open incident on every page load, and `Run.error` can be overwritten by
+ * a later failure on the same run — so a disposition computed on read might not
+ * be the one the engine actually stopped on. The audit event records the
+ * classification next to the reason, which is what lets someone later ask "what
+ * did Ghost think this was at the time?" and get an answer that cannot drift.
+ *
+ * Classification never changes control flow. It decides what a human is *shown*
+ * and whose desk the work lands on; the state transition is identical either way.
  */
 async function raiseIncident(
   runId: string,
@@ -923,16 +959,34 @@ async function raiseIncident(
   actorId: string | null,
   index: number,
   reason: string,
+  step?: WorkflowStep,
 ): Promise<void> {
+  // The recorded step outcome outranks the reason text: `UNKNOWN` is written
+  // only after the engine has decided an effect is genuinely indeterminate, and
+  // that judgement must survive a reason string that reads like a plain timeout.
+  const recorded = await prisma.runStep
+    .findUnique({ where: { runId_index: { runId, index } }, select: { status: true } })
+    .catch(() => null);
+  const recordedOutcome =
+    recorded?.status === "UNKNOWN" ? "UNKNOWN" : recorded?.status === "FAILED" ? "FAILED" : null;
+  const disposition = classifyException({ reason, step, recordedOutcome });
+
   await prisma.run.update({
     where: { id: runId },
-    data: { status: "INCIDENT", error: reason, cursor: index },
+    data: { status: "INCIDENT", error: reason, cursor: index, incidentKind: disposition.kind },
   });
   await appendAuditEvent(orgId, actorId, {
     action: "run.incident",
     entityType: "Run",
     entityId: runId,
-    metadata: { stepIndex: index, reason, runChainHead: await runChainHead(runId) },
+    metadata: {
+      stepIndex: index,
+      reason,
+      kind: disposition.kind,
+      owner: disposition.owner,
+      retryMayDuplicate: disposition.retryMayDuplicate,
+      runChainHead: await runChainHead(runId),
+    },
   });
 }
 

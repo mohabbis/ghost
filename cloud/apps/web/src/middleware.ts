@@ -71,6 +71,7 @@ export const config = {
   matcher: [
     "/audit/:path*",
     "/dashboard/:path*",
+    "/exceptions/:path*",
     "/recordings/:path*",
     "/runs/:path*",
     "/settings/:path*",

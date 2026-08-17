@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { canApproveRun } from "@ghost/core/roles";
 import { throttleReason } from "@ghost/core/concurrency";
 import { loadActor } from "@/lib/members";
+import { parseWorkflowSteps } from "@ghost/core/schema/step";
+import { classifyException, type ExceptionKind } from "@ghost/core/classifier/exception";
 
 /**
  * Build the run detail view: status, ordered steps, pending approvals, and
@@ -107,8 +109,53 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
     }
   }
 
+  // Exception disposition, for an INCIDENT run only. Computed here so the
+  // timeline can lead with what kind of problem this is and whether retrying
+  // risks repeating an effect, instead of a raw driver error and two
+  // equal-weight buttons.
+  //
+  // The stored `incidentKind` is what the engine decided when it stopped and is
+  // what an auditor should see; the live computation supplies the guidance text
+  // and — always — the cautious answer on duplicate risk, so a stale stored
+  // label can never downgrade a warning.
+  let exception: {
+    kind: ExceptionKind;
+    owner: string;
+    headline: string;
+    guidance: string;
+    retryUseful: boolean;
+    retryMayDuplicate: boolean;
+  } | null = null;
+
+  if (run.status === "INCIDENT") {
+    let stoppedStep;
+    try {
+      stoppedStep = parseWorkflowSteps(run.workflowVersion.steps)[run.cursor];
+    } catch {
+      stoppedStep = undefined;
+    }
+    const recorded = run.steps.find((s) => s.index === run.cursor);
+    const d = classifyException({
+      reason: run.error ?? "",
+      step: stoppedStep,
+      recordedOutcome:
+        recorded?.status === "UNKNOWN" ? "UNKNOWN" : recorded?.status === "FAILED" ? "FAILED" : null,
+    });
+    const kind = (run.incidentKind as ExceptionKind | null) ?? d.kind;
+    exception = {
+      kind,
+      owner: d.owner,
+      headline: d.headline,
+      guidance: d.guidance,
+      retryUseful: d.retryUseful,
+      retryMayDuplicate:
+        d.retryMayDuplicate || kind === "OUTCOME_UNKNOWN" || recorded?.status === "UNKNOWN",
+    };
+  }
+
   return {
     throttle,
+    exception,
     id: run.id,
     status: run.status,
     error: run.error,
