@@ -198,7 +198,7 @@ const DISPOSITIONS: Record<
     owner: "operator",
     headline: "Outcome did not match expectation",
     guidance:
-      "The action ran but the result was not what the workflow asserted. Check the target system: if the outcome is actually acceptable, skip the check; if not, the run did the wrong thing and should be reversed.",
+      "The action ran but the result was not what the workflow asserted — so the effect has already happened, and retrying re-runs the action rather than just the check. Confirm in the target system: if the outcome is acceptable, skip the check; if not, reverse the run.",
     retryUseful: false,
   },
   OUTCOME_UNKNOWN: {
@@ -324,6 +324,24 @@ function classifyKind(input: ClassifyExceptionInput): ExceptionKind {
  *
  * Fails closed: an unknown step is assumed mutating.
  */
+/**
+ * Kinds where a completed effect may already exist for the stopped step.
+ *
+ * `OUTCOME_UNKNOWN` is the obvious one: the step started and never reported.
+ *
+ * `VERIFICATION` is the subtle one, and it is *stronger* than uncertainty. A
+ * verification failure means the action ran and its assertion did not hold —
+ * there was something to check precisely because the click or fill went through.
+ * The worker is careful about this within one attempt (it re-runs the assertion
+ * only, never the action), but an incident retry resets the step to PENDING and
+ * re-executes the whole thing under the original approval. For a mutating step
+ * that is a second Pay, and nothing was warning about it.
+ */
+const EFFECT_MAY_HAVE_LANDED: ReadonlySet<ExceptionKind> = new Set([
+  "OUTCOME_UNKNOWN",
+  "VERIFICATION",
+]);
+
 export function duplicateRiskFor(input: {
   /** Live classifier verdict, when already computed. */
   disposition?: ExceptionDisposition;
@@ -334,12 +352,32 @@ export function duplicateRiskFor(input: {
   /** The stopped-on step, when known. */
   step?: WorkflowStep;
 }): boolean {
-  const indeterminate =
-    input.disposition?.kind === "OUTCOME_UNKNOWN" ||
-    input.storedKind === "OUTCOME_UNKNOWN" ||
+  const landed =
+    (input.disposition && EFFECT_MAY_HAVE_LANDED.has(input.disposition.kind)) ||
+    (typeof input.storedKind === "string" &&
+      EFFECT_MAY_HAVE_LANDED.has(input.storedKind as ExceptionKind)) ||
     input.recordedOutcome === "UNKNOWN";
-  if (!indeterminate) return false;
+  if (!landed) return false;
   return input.step ? replaySafety(input.step) === "mutating" : true;
+}
+
+/**
+ * The full disposition for an explicitly known kind.
+ *
+ * Read paths store the engine's verdict in `Run.incidentKind` and show that as
+ * the label, but they also need the owner, headline, guidance and retry
+ * recommendation that belong *to that kind*. Re-deriving those from a fresh
+ * `classifyException` over the same reason text produces a mismatch whenever the
+ * two disagree — and they disagree immediately for compensation incidents, whose
+ * kind is asserted directly at the call site while their reason text carries no
+ * classifier prefix. The queue then showed `OUTCOME_UNKNOWN` next to
+ * "Unclassified failure" guidance, which is worse than either alone.
+ *
+ * `retryMayDuplicate` still needs the step, so it is not decided here — callers
+ * pass the result to `duplicateRiskFor`.
+ */
+export function dispositionForKind(kind: ExceptionKind): ExceptionDisposition {
+  return { kind, ...DISPOSITIONS[kind], retryMayDuplicate: false };
 }
 
 /** Every kind, for exhaustive UI rendering and tests. */

@@ -499,9 +499,20 @@ async function reverseOne({
     payload: { stepId: entry.stepId, actions: describeActions(entry.compensation) },
   });
 
+  // Has any reversal action landed, or been in flight, by the time we fail?
+  //
+  // This decides whether a failed reversal is safely re-runnable. Set *before*
+  // `applyStep` so an action that timed out mid-flight counts: a reversal click
+  // that timed out may well have reached the server, and pressing Undo again
+  // would send it twice. Only a failure before the very first action starts —
+  // an unresolvable expression on action 1 — leaves the reversal provably
+  // untouched.
+  let appliedOrInFlight = false;
+
   try {
     for (const action of entry.compensation.actions) {
       const step = resolveStep(actionAsStep(action, entry.stepId), scope);
+      appliedOrInFlight = true;
       await applyStep(session.page, step, { timeoutMs });
     }
 
@@ -577,7 +588,15 @@ async function reverseOne({
         status: "INCIDENT",
         cursor: entry.stepIndex,
         error: `reversal of step ${entry.stepIndex} failed: ${message}`,
-        ...freshIncidentRouting({ reason: message }),
+        // Classifying this from the message alone read a timed-out reversal as
+        // TRANSIENT — "just retry" — when a mutating reversal action that timed
+        // out may already have taken effect. Pressing Undo again would then
+        // re-execute it under the still-valid approval with no duplicate-risk
+        // acknowledgement, which is the exact double-execution the gate exists
+        // to prevent, reached from the reversal side.
+        ...freshIncidentRouting(
+          appliedOrInFlight ? { kind: "OUTCOME_UNKNOWN" } : { reason: message },
+        ),
       },
     });
     await appendAuditEvent(orgId, actorId, {

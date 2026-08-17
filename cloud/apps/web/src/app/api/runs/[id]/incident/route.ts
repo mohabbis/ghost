@@ -95,8 +95,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // would leave the queue showing an owner with no audit trail explaining how
     // they got it, while the caller was told the request failed. Either both
     // land or neither does. `appendAuditEvent` takes the tx for exactly this.
+    // Conditional on the run still being an INCIDENT, inside the transaction.
+    // The `findFirst` above is a read: a retry, skip, cancel or undo can resolve
+    // the incident between it and this write, and an id-only update would then
+    // assign an owner to a run that is no longer an exception — reporting
+    // success, and leaving a stale assignee to surface on the run's *next*
+    // incident.
+    let assigned = 0;
     await prisma.$transaction(async (tx) => {
-      await tx.run.update({ where: { id }, data: { incidentAssigneeId: assigneeId } });
+      const res = await tx.run.updateMany({
+        where: { id, orgId, status: "INCIDENT" },
+        data: { incidentAssigneeId: assigneeId },
+      });
+      assigned = res.count;
+      if (assigned !== 1) return;
       await appendAuditEvent(
         orgId,
         userId,
@@ -109,6 +121,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         tx,
       );
     });
+    if (assigned !== 1) {
+      return NextResponse.json(
+        { error: "this run is no longer an open exception" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ ok: true, assigneeId });
   }
 

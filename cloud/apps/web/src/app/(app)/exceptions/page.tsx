@@ -5,6 +5,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import {
   classifyException,
+  dispositionForKind,
   duplicateRiskFor,
   type ExceptionKind,
   type ExceptionOwner,
@@ -91,10 +92,9 @@ export default async function ExceptionsPage() {
   const stepRows =
     runs.length > 0
       ? await prisma.runStep.findMany({
-          where: {
-            runId: { in: runs.map((r) => r.id) },
-            index: { in: [...new Set(runs.map((r) => r.cursor))] },
-          },
+          // Paired, not two independent `IN`s — that is a cross product. See
+          // the exceptions API route.
+          where: { OR: runs.map((r) => ({ runId: r.id, index: r.cursor })) },
           select: {
             runId: true,
             index: true,
@@ -136,12 +136,15 @@ export default async function ExceptionsPage() {
     // should see; fall back to the live computation only for runs raised before
     // the column existed. Duplicate risk always takes the cautious answer.
     const kind = (run.incidentKind as ExceptionKind | null) ?? disposition.kind;
+    // Display fields come from the kind actually shown, never a mix of stored
+    // label and live classification — see the exceptions API route.
+    const shown = dispositionForKind(kind);
     return {
       run,
       kind,
-      owner: disposition.owner,
-      headline: disposition.headline,
-      guidance: disposition.guidance,
+      owner: shown.owner,
+      headline: shown.headline,
+      guidance: shown.guidance,
       retryMayDuplicate: duplicateRiskFor({
         disposition,
         storedKind: kind,

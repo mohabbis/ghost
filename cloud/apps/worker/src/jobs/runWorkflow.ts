@@ -979,6 +979,11 @@ async function raiseIncident(
       cursor: index,
       incidentKind: disposition.kind,
       incidentRaisedAt: new Date(),
+      // A newly raised incident is unassigned. Resolution already clears the
+      // assignee, so in the normal path this is a no-op; it closes the window
+      // where an assignment raced a resolution and left an owner attached to a
+      // run that then stopped again for an unrelated reason.
+      incidentAssigneeId: null,
     },
   });
   await appendAuditEvent(orgId, actorId, {

@@ -141,6 +141,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
+  // Snapshot the routing fields before clearing them. The catch below promises
+  // to give the claim back if scheduling fails, and a run returned to INCIDENT
+  // without its classification and owner has silently lost work — the exception
+  // reappears in the queue unassigned and labelled "Unclassified failure".
+  const priorRouting = {
+    incidentKind: run.incidentKind,
+    incidentAssigneeId: run.incidentAssigneeId,
+    incidentRaisedAt: run.incidentRaisedAt,
+  };
+
   // Conditional update: a double-clicked Undo enqueues once.
   const { count } = await prisma.run.updateMany({
     where: { id, orgId, status: { in: [...REVERSIBLE_STATES] as never } },
@@ -192,7 +202,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     await prisma.run
       .updateMany({
         where: { id, orgId, status: "COMPENSATING" },
-        data: { status: run.status, error: run.error, endedAt: run.endedAt },
+        // Including the routing fields the update above cleared. Restoring only
+        // status/error/endedAt returned an INCIDENT run to the queue stripped of
+        // its classification and its owner — "restore exactly what was there"
+        // has to mean all of it.
+        data: {
+          status: run.status,
+          error: run.error,
+          endedAt: run.endedAt,
+          ...priorRouting,
+        },
       })
       .catch(() => undefined);
     return NextResponse.json(

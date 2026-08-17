@@ -75,7 +75,7 @@ Set against Ghost's pipeline, the overlap is thin and the gap is structural:
 | Human approval before sensitive actions | Not evidenced | **Yes**, with expiry, single-use |
 | Per-step outcome verification | No | **Yes** |
 | Hash-chained audit log | No | **Yes**, two-level |
-| Incidents / undo / durable resume | No | **Yes** (undo designed, not built) |
+| Incidents / undo / durable resume | No | **Yes** — undo ships as approval-gated compensation, with documented limits (reversals run in a fresh unauthenticated context) |
 | Multi-tenant org isolation, RBAC | Single-user Mac app | **Yes** |
 | SOC 2 | **Yes** | **No** |
 | Self-serve free tier | **Yes** | **No** — implementation-led |

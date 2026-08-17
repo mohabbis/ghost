@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import {
   classifyException,
+  dispositionForKind,
   duplicateRiskFor,
   kindsForOwner,
   EXCEPTION_KINDS,
@@ -121,10 +122,13 @@ export async function GET(req: Request) {
   // per row. Prisma cannot filter a relation by a column of the parent row
   // (`index = run.cursor`), so the pairing is done here instead of in SQL — but
   // it is still a single round trip, which is the part that matters.
+  //
+  // Paired, not two independent `IN`s: `runId IN (…) AND index IN (…)` is a
+  // cross product, so 200 runs stopped at 200 distinct cursors would fetch up to
+  // 40,000 rows to shape 200 exceptions.
   const stepRows = await prisma.runStep.findMany({
     where: {
-      runId: { in: runs.map((r) => r.id) },
-      index: { in: [...new Set(runs.map((r) => r.cursor))] },
+      OR: runs.map((r) => ({ runId: r.id, index: r.cursor })),
     },
     select: {
       runId: true,
@@ -170,12 +174,16 @@ export async function GET(req: Request) {
             : null,
     });
 
-    // Trust the stored kind for the label — it is what the engine decided when
-    // the run stopped. Duplicate risk comes from the shared helper, which unions
-    // the live verdict with the stored label and then still requires the step to
-    // reach outside the browser, so an indeterminate *read* is not flagged as a
-    // possibly-repeated effect.
+    // The stored kind is what the engine decided when the run stopped, and it is
+    // what an auditor should see — so every *other* displayed field has to come
+    // from that same kind. Mixing a stored label with a freshly-classified
+    // owner/headline/guidance produced visible nonsense as soon as the two
+    // disagreed, which is immediately for compensation incidents: their kind is
+    // asserted at the call site while their reason text carries no prefix, so
+    // live classification says UNKNOWN and the row read "OUTCOME_UNKNOWN" beside
+    // "Unclassified failure".
     kind = kind ?? disposition.kind;
+    const shown = dispositionForKind(kind);
     const retryMayDuplicate = duplicateRiskFor({
       disposition,
       storedKind: kind,
@@ -190,10 +198,10 @@ export async function GET(req: Request) {
       stepIndex: run.cursor,
       stepLabel: recorded?.label ?? step?.label ?? step?.type ?? null,
       kind,
-      owner: disposition.owner,
-      headline: disposition.headline,
-      guidance: disposition.guidance,
-      retryUseful: disposition.retryUseful,
+      owner: shown.owner,
+      headline: shown.headline,
+      guidance: shown.guidance,
+      retryUseful: shown.retryUseful,
       retryMayDuplicate,
       error: run.error,
       // Prefer the recorded incident time; fall back to the step's end, then the

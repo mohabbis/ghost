@@ -5,6 +5,7 @@ import { loadActor } from "@/lib/members";
 import { parseWorkflowSteps } from "@ghost/core/schema/step";
 import {
   classifyException,
+  dispositionForKind,
   duplicateRiskFor,
   type ExceptionKind,
 } from "@ghost/core/classifier/exception";
@@ -146,12 +147,15 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
         recorded?.status === "UNKNOWN" ? "UNKNOWN" : recorded?.status === "FAILED" ? "FAILED" : null,
     });
     const kind = (run.incidentKind as ExceptionKind | null) ?? d.kind;
+    // Every displayed field comes from the kind actually shown — see the
+    // exceptions route for why mixing the two sources produced contradictions.
+    const shown = dispositionForKind(kind);
     exception = {
       kind,
-      owner: d.owner,
-      headline: d.headline,
-      guidance: d.guidance,
-      retryUseful: d.retryUseful,
+      owner: shown.owner,
+      headline: shown.headline,
+      guidance: shown.guidance,
+      retryUseful: shown.retryUseful,
       // Shared helper rather than an inline OR: forcing this true whenever the
       // kind or recorded status is UNKNOWN also fired it for an indeterminate
       // `verify` or `extract`, which are reads that cost nothing to repeat. The

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EXCEPTION_KINDS,
   classifyException,
+  dispositionForKind,
   duplicateRiskFor,
   kindsForOwner,
   needsAuthoring,
@@ -184,6 +185,69 @@ describe("duplicateRiskFor", () => {
 
   it("assumes risk when the step is unknown", () => {
     expect(duplicateRiskFor({ storedKind: "OUTCOME_UNKNOWN" })).toBe(true);
+  });
+});
+
+describe("a failed verification on a mutating step is duplicate risk", () => {
+  // The action ran — that is *why* there was something to assert — and the
+  // incident route's retry resets the step to PENDING and re-executes the whole
+  // step under the original approval. For a click on Pay that is a second
+  // payment, and nothing was warning about it. Stronger than uncertainty: here
+  // the effect is known to have landed.
+  it("flags a mutating step whose verification failed", () => {
+    expect(
+      duplicateRiskFor({
+        disposition: classifyException({ reason: "verification failed at step 3", step: click }),
+        step: click,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not flag a verification failure on a read", () => {
+    expect(
+      duplicateRiskFor({
+        disposition: classifyException({ reason: "verification failed at step 3", step: verify }),
+        step: verify,
+      }),
+    ).toBe(false);
+  });
+
+  it("flags it from the stored kind too", () => {
+    expect(duplicateRiskFor({ storedKind: "VERIFICATION", step: click })).toBe(true);
+  });
+
+  it("still leaves genuinely safe kinds unflagged", () => {
+    for (const kind of ["TRANSIENT", "TARGET_MISSING", "AUTH", "DATA", "UNKNOWN"] as const) {
+      expect(duplicateRiskFor({ storedKind: kind, step: click })).toBe(false);
+    }
+  });
+});
+
+describe("dispositionForKind", () => {
+  it("returns that kind's own owner, headline and guidance", () => {
+    const d = dispositionForKind("OUTCOME_UNKNOWN");
+    expect(d.kind).toBe("OUTCOME_UNKNOWN");
+    expect(d.owner).toBe("operator");
+    expect(d.headline).toMatch(/already/i);
+    expect(d.retryUseful).toBe(false);
+  });
+
+  it("never mixes one kind's label with another's guidance", () => {
+    // The display bug this exists to prevent: a compensation incident stores an
+    // explicit kind whose reason text carries no classifier prefix, so a live
+    // re-classification returns UNKNOWN and the row showed "OUTCOME_UNKNOWN"
+    // beside "Unclassified failure".
+    for (const kind of EXCEPTION_KINDS) {
+      const d = dispositionForKind(kind);
+      expect(d).toEqual(
+        expect.objectContaining({ kind, ...({} as Record<string, unknown>) }),
+      );
+      expect(d.headline).toBe(dispositionForKind(kind).headline);
+      expect(d.guidance).not.toBe("");
+    }
+    expect(dispositionForKind("UNKNOWN").headline).not.toBe(
+      dispositionForKind("OUTCOME_UNKNOWN").headline,
+    );
   });
 });
 
