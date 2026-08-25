@@ -46,29 +46,36 @@ export function ExceptionAssignee({
     setError(null);
     setValue(next);
     setSending(true);
-    const res = await fetch(`/api/runs/${runId}/incident`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        action: "assign",
-        assigneeId: next === "" ? null : next,
-      }),
-    });
-    // A response that has been overtaken must not touch state at all — not the
-    // value, not the error.
-    if (ticket !== latest.current) return;
-    setSending(false);
-
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+    try {
+      const res = await fetch(`/api/runs/${runId}/incident`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "assign",
+          assigneeId: next === "" ? null : next,
+        }),
+      });
+      // A response that has been overtaken must not touch state at all.
       if (ticket !== latest.current) return;
-      setError(body.error ?? "could not assign");
-      // Put the control back to the truth, so it never shows an assignment the
-      // server rejected.
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (ticket !== latest.current) return;
+        setError(body.error ?? "could not assign");
+        setValue(assignee?.id ?? "");
+        return;
+      }
+      startTransition(() => router.refresh());
+    } catch {
+      // A dropped connection rejects rather than returning a response. Without
+      // this the select stayed disabled until a page reload, and the rejection
+      // escaped as an unhandled promise error.
+      if (ticket !== latest.current) return;
+      setError("could not reach the server");
       setValue(assignee?.id ?? "");
-      return;
+    } finally {
+      if (ticket === latest.current) setSending(false);
     }
-    startTransition(() => router.refresh());
   }
 
   return (

@@ -128,6 +128,13 @@ export function RunTimeline({ runId }: { runId: string }) {
   const [confirmRetry, setConfirmRetry] = useState<
     { stepIndex: number; raisedAt: string | null } | null
   >(null);
+  // Same two-step confirmation for Undo. The route refuses to reschedule a
+  // reversal whose previous attempt may already have landed, and without this
+  // the Undo button — which posts `{}` — could never satisfy it, leaving a
+  // partially completed reversal unresumable from the browser.
+  const [confirmRevert, setConfirmRevert] = useState<
+    { stepIndex: number; raisedAt: string | null } | null
+  >(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
@@ -464,12 +471,59 @@ export function RunTimeline({ runId }: { runId: string }) {
                   size="sm"
                   variant="danger"
                   disabled={busy}
-                  onClick={() => post(`/api/runs/${run.id}/undo`, {})}
+                  onClick={() => {
+                    if (run.status === "INCIDENT" && run.exception?.retryMayDuplicate) {
+                      setConfirmRevert({
+                        stepIndex: run.cursor,
+                        raisedAt: run.exception.raisedAt ?? null,
+                      });
+                      return;
+                    }
+                    void post(`/api/runs/${run.id}/undo`, {});
+                  }}
                 >
                   Undo run
                 </Button>
               )}
             </div>
+            {confirmRevert &&
+              confirmRevert.stepIndex === run.cursor &&
+              confirmRevert.raisedAt === (run.exception?.raisedAt ?? null) && (
+                <div className="mt-2 space-y-2 rounded border border-[var(--color-danger)] p-2">
+                  <p className="text-xs font-medium text-[var(--color-danger)]">
+                    A previous reversal of this run may already have taken effect before it
+                    failed. Reversing again could repeat it. Confirm in the target system first.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={busy}
+                      onClick={() => {
+                        const confirmed = confirmRevert;
+                        setConfirmRevert(null);
+                        void post(`/api/runs/${run.id}/undo`, {
+                          acknowledgeDuplicateRisk: true,
+                          expectStepIndex: confirmed.stepIndex,
+                          ...(confirmed.raisedAt
+                            ? { expectIncidentRaisedAt: confirmed.raisedAt }
+                            : {}),
+                        });
+                      }}
+                    >
+                      Yes, reverse again — I checked
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => setConfirmRevert(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
 
             {undo.entries.length > 0 && (
               <ol className="space-y-2 text-xs">

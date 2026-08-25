@@ -198,7 +198,7 @@ const DISPOSITIONS: Record<
     owner: "operator",
     headline: "Outcome did not match expectation",
     guidance:
-      "The action ran but the result was not what the workflow asserted — so the effect has already happened, and retrying re-runs the action rather than just the check. Confirm in the target system: if the outcome is acceptable, skip the check; if not, reverse the run.",
+      "The action ran but the result was not what the workflow asserted — so the effect has already happened, and retrying re-runs the action rather than just the check. Confirm in the target system: if the outcome is acceptable, skip the check. If not, this step is NOT covered by Undo — the journal records it as failed, so compensation skips it — and it must be reversed by hand.",
     retryUseful: false,
   },
   OUTCOME_UNKNOWN: {

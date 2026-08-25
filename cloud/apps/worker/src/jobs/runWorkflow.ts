@@ -25,6 +25,7 @@ import { planRestore, type ExecutedRecord } from "../runtime/restore.js";
 import { claimSlot, recordThrottle, releaseSlot } from "../runtime/slots.js";
 import { classifyError } from "../runtime/errors.js";
 import { classifyException } from "@ghost/core/classifier/exception";
+import { replaySafety } from "@ghost/core/classifier/replay";
 import { effectiveRetry, effectiveTimeout, backoffFor } from "../runtime/policy.js";
 import {
   BrowserSession,
@@ -575,6 +576,7 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
       payload: { type: step.type, attempt },
     });
 
+    let actionLanded = false;
     try {
       let screenshotRef: string | null = null;
       let verification: { passed: boolean; detail: string } | null = null;
@@ -600,6 +602,13 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
         }
 
         const result = await runStep(session.page, step, { timeoutMs });
+        // The action itself has now returned. Everything after this point —
+        // artifact upload, verification, the commit transaction — is bookkeeping
+        // *about* an effect that already happened. If any of it throws, the
+        // catch below must not classify from that error's text: an upload
+        // failure reading as TRANSIENT would offer a one-click retry that
+        // re-clicks Pay. See `actionLanded` in the catch.
+        actionLanded = true;
         if (result.screenshot) {
           screenshotRef = await artifactStore().put(
             screenshotKey(runId, index),
@@ -701,6 +710,26 @@ async function executeStep(args: ExecuteArgs): Promise<StepOutcome> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       lastError = message;
+      // A mutating action that returned, followed by a failure in verification
+      // or evidence capture, leaves a landed effect the retry gate must know
+      // about.
+      if (actionLanded && replaySafety(step) === "mutating") {
+        await appendRunEvent(runId, {
+          type: RUN_EVENT_TYPES.stepOutcomeUnknown,
+          stepIndex: index,
+          payload: { reason: `post-action failure: ${message}` },
+        });
+        await raiseIncident(
+          runId,
+          orgId,
+          actorId,
+          index,
+          `OUTCOME_UNKNOWN: step ${index} completed its action, then failed during ` +
+            `verification or evidence capture — ${message}`,
+          step,
+        );
+        return { kind: "halt" };
+      }
 
       const errorClass =
         err instanceof ExpressionError ? "terminal" : classifyError(err, step);

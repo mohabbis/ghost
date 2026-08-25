@@ -111,6 +111,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // still works — it simply will not be treated as having acknowledged.
   const body = (await req.json().catch(() => ({}))) as {
     acknowledgeDuplicateRisk?: boolean;
+    expectStepIndex?: number;
+    expectIncidentRaisedAt?: string;
   };
 
   const loaded = await loadPlan(id, orgId);
@@ -167,22 +169,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // The step is not passed to `duplicateRiskFor` deliberately: the risky effect
   // here is the *reversal's* action, not the forward step at this cursor, and
   // omitting it fails closed.
-  if (
-    run.status === "INCIDENT" &&
-    duplicateRiskFor({ storedKind: run.incidentKind }) &&
-    body.acknowledgeDuplicateRisk !== true
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          "the previous reversal of this run may already have taken effect before it failed, " +
-          "so reversing again could repeat it. Confirm in the target system first, then retry " +
-          "with acknowledgeDuplicateRisk: true.",
-        kind: run.incidentKind,
-        requiresAcknowledgement: true,
-      },
-      { status: 409 },
-    );
+  const reversalMayDuplicate =
+    run.status === "INCIDENT" && duplicateRiskFor({ storedKind: run.incidentKind });
+
+  if (reversalMayDuplicate) {
+    if (body.acknowledgeDuplicateRisk !== true) {
+      return NextResponse.json(
+        {
+          error:
+            "the previous reversal of this run may already have taken effect before it failed, " +
+            "so reversing again could repeat it. Confirm in the target system first, then retry " +
+            "with acknowledgeDuplicateRisk: true.",
+          kind: run.incidentKind,
+          requiresAcknowledgement: true,
+        },
+        { status: 409 },
+      );
+    }
+    // Bound to the incident the caller actually read, like the forward gate:
+    // another operator can retry and re-park this run between the dialog opening
+    // and this request, and an unversioned boolean would then schedule actions
+    // whose outcome nobody reviewed.
+    const sameStep = body.expectStepIndex === run.cursor;
+    const sameIncident =
+      run.incidentRaisedAt !== null &&
+      body.expectIncidentRaisedAt !== undefined &&
+      new Date(body.expectIncidentRaisedAt).getTime() === run.incidentRaisedAt.getTime();
+    if (!sameStep || !sameIncident) {
+      return NextResponse.json(
+        {
+          error:
+            "this run's incident has changed since that confirmation was shown. Re-read the " +
+            "current exception before reversing.",
+          requiresAcknowledgement: true,
+          staleAcknowledgement: true,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const priorRouting = {
@@ -225,6 +249,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         requestedById: userId,
         reversible: remaining.length,
         irreversible: plan.irreversible.length,
+        // Present only when a human knowingly re-ran a reversal whose prior
+        // attempt may already have landed, so the audit log distinguishes that
+        // from an ordinary undo.
+        ...(reversalMayDuplicate
+          ? {
+              acknowledgedDuplicateRisk: true,
+              acknowledgedIncidentRaisedAt: body.expectIncidentRaisedAt,
+              priorIncidentKind: priorRouting.incidentKind,
+            }
+          : {}),
       },
     });
 

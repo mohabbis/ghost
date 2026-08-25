@@ -70,7 +70,16 @@ export async function reclaimStalledRuns(
       OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: cutoff } }],
       createdAt: { lt: cutoff },
     },
-    select: { id: true, orgId: true, cursor: true, attempt: true, leaseExpiresAt: true },
+    select: {
+      id: true,
+      orgId: true,
+      cursor: true,
+      attempt: true,
+      leaseExpiresAt: true,
+      // Needed to tell "died between steps" from "died with an action in
+      // flight" — see the incidentKind decision below.
+      steps: { where: { status: "RUNNING" }, select: { index: true }, take: 1 },
+    },
     // Bounded so one sweep cannot enqueue an unbounded burst after a long
     // outage; the next sweep takes the rest.
     take: 50,
@@ -91,14 +100,15 @@ export async function reclaimStalledRuns(
             "Ghost stopped restarting it automatically. Retry, skip the failing step, or cancel.",
           leaseOwner: null,
           leaseExpiresAt: null,
-          // Route it like any other exception. Without these the run lands in
-          // the queue with a null kind and a null raised-at — and because
-          // Postgres sorts nulls last in ASC, it would be pushed past the row
-          // cap and become invisible once an org has enough timestamped
-          // incidents. UNKNOWN rather than a guess: a run that stalled
-          // repeatedly may have had a step in flight, so its effect is not
-          // something this path can assert.
-          incidentKind: "UNKNOWN",
+          // Route it like any other exception, and be honest about the effect.
+          //
+          // A worker that died after `step.started` can have left a mutating
+          // click in flight. UNKNOWN does not gate, so filing every reclaim as
+          // UNKNOWN offered a one-click retry of a possibly-completed payment.
+          // A step still recorded RUNNING is exactly that case, and it is
+          // OUTCOME_UNKNOWN — the same verdict the engine reaches when a step
+          // starts and never reports back.
+          incidentKind: run.steps.length > 0 ? "OUTCOME_UNKNOWN" : "UNKNOWN",
           incidentAssigneeId: null,
           incidentRaisedAt: new Date(),
         },

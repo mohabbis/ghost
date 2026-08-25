@@ -307,17 +307,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // approving the *resolved* action rather than the template: the human must
     // be confirming the thing that actually runs.
     if (mayDuplicate && body.acknowledgeDuplicateRisk === true) {
-      const sameStep =
-        body.expectStepIndex === undefined || body.expectStepIndex === index;
+      // REQUIRED, not optional. Accepting an omitted field let any caller send
+      // a bare boolean and get the pre-binding behaviour back — which is the
+      // whole hole this check exists to close.
+      const sameStep = body.expectStepIndex === index;
       const sameIncident =
-        body.expectIncidentRaisedAt === undefined ||
-        (run.incidentRaisedAt !== null &&
-          new Date(body.expectIncidentRaisedAt).getTime() === run.incidentRaisedAt.getTime());
+        run.incidentRaisedAt !== null &&
+        body.expectIncidentRaisedAt !== undefined &&
+        new Date(body.expectIncidentRaisedAt).getTime() === run.incidentRaisedAt.getTime();
       if (!sameStep || !sameIncident) {
         return NextResponse.json(
           {
             error:
-              "this run has stopped on a different step since that confirmation was shown. " +
+              "a risky retry must name the incident it is acknowledging (expectStepIndex and " +
+              "expectIncidentRaisedAt), and they must still match the run's current incident. " +
               "Re-read the current exception before retrying.",
             requiresAcknowledgement: true,
             staleAcknowledgement: true,

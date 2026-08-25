@@ -182,9 +182,15 @@ describe.skipIf(!hasDb)("incident routing (Postgres)", () => {
         "OUTCOME_UNKNOWN: step 1 may or may not have taken effect — socket hang up",
     });
 
+    // The acknowledgement must name the incident it is for; a bare boolean is
+    // refused. This test previously sent only the flag, which is precisely the
+    // hole the identity binding closes.
+    const before = await prisma.run.findUnique({ where: { id: runId } });
     const res = await post(runId, {
       action: "retry",
       acknowledgeDuplicateRisk: true,
+      expectStepIndex: 1,
+      expectIncidentRaisedAt: before!.incidentRaisedAt!.toISOString(),
     });
     expect(res.status).toBe(200);
 
@@ -214,6 +220,16 @@ describe.skipIf(!hasDb)("incident routing (Postgres)", () => {
       acknowledgedDuplicateRisk?: boolean;
     } | null;
     expect(meta?.acknowledgedDuplicateRisk).toBe(true);
+  });
+
+  it("refuses a bare acknowledgement with no incident identity", async () => {
+    const runId = await incidentRun({
+      stepStatus: "UNKNOWN",
+      error: "OUTCOME_UNKNOWN: step 1 may or may not have taken effect",
+    });
+    const res = await post(runId, { action: "retry", acknowledgeDuplicateRisk: true });
+    expect(res.status).toBe(409);
+    expect(enqueueRunWorkflow).not.toHaveBeenCalled();
   });
 
   it("does not demand acknowledgement for an ordinary failure", async () => {
