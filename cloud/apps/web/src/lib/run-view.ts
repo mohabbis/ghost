@@ -2,6 +2,13 @@ import { prisma } from "@/lib/db";
 import { canApproveRun } from "@ghost/core/roles";
 import { throttleReason } from "@ghost/core/concurrency";
 import { loadActor } from "@/lib/members";
+import { parseWorkflowSteps } from "@ghost/core/schema/step";
+import {
+  classifyException,
+  dispositionForKind,
+  duplicateRiskFor,
+  type ExceptionKind,
+} from "@ghost/core/classifier/exception";
 
 /**
  * Build the run detail view: status, ordered steps, pending approvals, and
@@ -107,8 +114,68 @@ export async function buildRunView(orgId: string, viewerId: string, runId: strin
     }
   }
 
+  // Exception disposition, for an INCIDENT run only. Computed here so the
+  // timeline can lead with what kind of problem this is and whether retrying
+  // risks repeating an effect, instead of a raw driver error and two
+  // equal-weight buttons.
+  //
+  // The stored `incidentKind` is what the engine decided when it stopped and is
+  // what an auditor should see; the live computation supplies the guidance text
+  // and — always — the cautious answer on duplicate risk, so a stale stored
+  // label can never downgrade a warning.
+  let exception: {
+    kind: ExceptionKind;
+    owner: string;
+    headline: string;
+    guidance: string;
+    retryUseful: boolean;
+    retryMayDuplicate: boolean;
+    raisedAt: string | null;
+  } | null = null;
+
+  if (run.status === "INCIDENT") {
+    let stoppedStep;
+    try {
+      stoppedStep = parseWorkflowSteps(run.workflowVersion.steps)[run.cursor];
+    } catch {
+      stoppedStep = undefined;
+    }
+    const recorded = run.steps.find((s) => s.index === run.cursor);
+    const d = classifyException({
+      reason: run.error ?? "",
+      step: stoppedStep,
+      recordedOutcome:
+        recorded?.status === "UNKNOWN" ? "UNKNOWN" : recorded?.status === "FAILED" ? "FAILED" : null,
+    });
+    const kind = (run.incidentKind as ExceptionKind | null) ?? d.kind;
+    // Every displayed field comes from the kind actually shown — see the
+    // exceptions route for why mixing the two sources produced contradictions.
+    const shown = dispositionForKind(kind);
+    exception = {
+      kind,
+      owner: shown.owner,
+      headline: shown.headline,
+      guidance: shown.guidance,
+      retryUseful: shown.retryUseful,
+      // Shared helper rather than an inline OR: forcing this true whenever the
+      // kind or recorded status is UNKNOWN also fired it for an indeterminate
+      // `verify` or `extract`, which are reads that cost nothing to repeat. The
+      // confirmation prompt has to stay rare to stay meaningful.
+      // Identity of this incident, echoed back by the confirm dialog so the
+      // server can refuse an acknowledgement raised for a different one.
+      raisedAt: run.incidentRaisedAt?.toISOString() ?? null,
+      retryMayDuplicate: duplicateRiskFor({
+        disposition: d,
+        storedKind: kind,
+        recordedOutcome: recorded?.status === "UNKNOWN" ? "UNKNOWN" : null,
+        step: stoppedStep,
+      }),
+    };
+  }
+
   return {
     throttle,
+    exception,
     id: run.id,
     status: run.status,
     error: run.error,

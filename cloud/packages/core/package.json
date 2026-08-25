@@ -10,6 +10,7 @@
     "./schema/step": "./src/schema/step.ts",
     "./classifier": "./src/classifier/sensitive.ts",
     "./classifier/replay": "./src/classifier/replay.ts",
+    "./classifier/exception": "./src/classifier/exception.ts",
     "./queue": "./src/queue.ts",
     "./audit": "./src/audit.ts",
     "./audit-log": "./src/auditLog.ts",

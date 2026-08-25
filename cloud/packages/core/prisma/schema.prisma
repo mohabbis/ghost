@@ -39,6 +39,7 @@ model User {
   memberships         Membership[]
   createdFlows        Workflow[]        @relation("WorkflowCreatedBy")
   triggeredRuns       Run[]             @relation("RunTriggeredBy")
+  assignedIncidents   Run[]             @relation("RunIncidentAssignee")
   resolvedApprovals   Approval[]        @relation("ApprovalResolvedBy")
   agentCredentials    AgentCredential[]
   invitationsSent     Invitation[]      @relation("InvitationCreatedBy")
@@ -422,9 +423,42 @@ model Run {
   // retention window.
   artifactsPurgedAt DateTime?
 
+  // Exception routing. Both are denormalized caches for the queue view, in the
+  // same sense as `cursor`: written in the same transaction that raises the
+  // incident, never the source of truth for a control-flow decision.
+  //
+  // `incidentKind` is the deterministic classifier's verdict
+  // (packages/core/src/classifier/exception.ts) recorded at the moment the run
+  // stopped, so the queue filters and sorts in SQL instead of re-classifying
+  // every row on read. Stored rather than derived because the reason string it
+  // was computed from can be superseded by a later failure on the same run, and
+  // "what did Ghost think this was when it stopped?" deserves the answer from
+  // that moment.
+  //
+  // Both are cleared when the run leaves INCIDENT — a resolved exception must
+  // not linger in the queue, nor stay assigned to whoever finished with it.
+  incidentKind       String?
+  incidentAssigneeId String?
+
+  // When this run entered INCIDENT.
+  //
+  // The queue orders by this, NOT by `createdAt`: those differ, and the
+  // difference is the whole point of the ordering. A run created a week ago that
+  // fails in the last minute has been *parked* for a minute, and sorting it
+  // ahead of yesterday's stuck run — which is what `createdAt` does — buries
+  // exactly the row that has been waiting. It is also what the UI's "stopped Nm
+  // ago" reads, so an age of "6d" no longer means "this run is 6 days old."
+  //
+  // Rewritten on every fresh incident, including one raised by a failed
+  // reversal, so an inherited timestamp cannot make new work look stale.
+  incidentRaisedAt   DateTime?
+
   org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
   triggeredBy     User?           @relation("RunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  // SetNull, not Cascade: removing a person from the org must never delete the
+  // run they were looking at. The exception returns to unassigned.
+  incidentAssignee User?          @relation("RunIncidentAssignee", fields: [incidentAssigneeId], references: [id], onDelete: SetNull)
   steps           RunStep[]
   approvals       Approval[]
   events          RunEvent[]
@@ -432,6 +466,10 @@ model Run {
   @@index([orgId])
   @@index([workflowVersionId])
   @@index([status, leaseExpiresAt])
+  // The exception queue's own query: this org's open incidents, longest-parked
+  // first. Ordered on incidentRaisedAt, not createdAt — see that field.
+  @@index([orgId, status, incidentRaisedAt])
+  @@index([incidentAssigneeId])
   // Admission counts a workflow's in-flight runs on every start and resume.
   @@index([workflowVersionId, status])
   @@index([workflowVersionId, slotHeldAt])

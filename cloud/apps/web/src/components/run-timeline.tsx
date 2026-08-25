@@ -44,6 +44,17 @@ interface RunView {
    * this exists so nobody discovers the rule by having a click rejected.
    */
   canApprove: boolean;
+  /** Deterministic disposition of the stop. Non-null only for INCIDENT. */
+  exception: {
+    kind: string;
+    owner: string;
+    headline: string;
+    guidance: string;
+    retryUseful: boolean;
+    retryMayDuplicate: boolean;
+    /** When this incident was raised — echoed back to bind the confirmation. */
+    raisedAt: string | null;
+  } | null;
 }
 interface ChainView {
   org: { intact: boolean; count: number };
@@ -105,6 +116,18 @@ export function RunTimeline({ runId }: { runId: string }) {
   const [undo, setUndo] = useState<UndoView | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Two-step confirmation for a retry whose effect may already have happened.
+  //
+  // Holds the *identity* of the incident it was opened for, not just a boolean.
+  // The page is fed by SSE, so `run` changes underneath an open dialog: if
+  // another operator resolves this incident and the run then parks on a new
+  // risky step, a bare flag would let the still-open button acknowledge a step
+  // its clicker never read. The route refuses a mismatch; this keeps the UI
+  // honest too, by closing the dialog the moment it stops describing what is
+  // actually on screen.
+  const [confirmRetry, setConfirmRetry] = useState<
+    { stepIndex: number; raisedAt: string | null } | null
+  >(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
@@ -306,12 +329,19 @@ export function RunTimeline({ runId }: { runId: string }) {
               </span>
               {incidentStep?.label ? ` — ${incidentStep.label}` : ""}
             </div>
-            {incidentStep?.status === "UNKNOWN" && (
-              <p className="text-xs text-[var(--color-muted)]">
-                This step started but never reported an outcome, and its effect cannot safely be
-                repeated. Check the target system before retrying — Ghost will not guess whether it
-                took effect.
-              </p>
+            {run.exception && (
+              <div className="space-y-1">
+                <p
+                  className={
+                    run.exception.retryMayDuplicate
+                      ? "text-xs font-medium text-[var(--color-danger)]"
+                      : "text-xs font-medium text-[var(--color-warning)]"
+                  }
+                >
+                  {run.exception.headline}
+                </p>
+                <p className="text-xs text-[var(--color-muted)]">{run.exception.guidance}</p>
+              </div>
             )}
             {run.restoreScreenshotUrl && (
               <div className="space-y-1">
@@ -328,23 +358,85 @@ export function RunTimeline({ runId }: { runId: string }) {
                 />
               </div>
             )}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => post(`/api/runs/${run.id}/incident`, { action: "retry" })}
-              >
-                Retry step
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => post(`/api/runs/${run.id}/incident`, { action: "skip" })}
-              >
-                Skip step
-              </Button>
-            </div>
+            {/*
+              Retry is de-emphasised when the classifier says it cannot help (a
+              changed selector fails identically) and becomes a two-step
+              confirmation when it could repeat an effect that already happened.
+              The route enforces the same rule — it refuses an unacknowledged
+              risky retry with a 409 — so this is the honest affordance for a
+              decision the server will demand anyway, not a client-side guard
+              standing in for one.
+            */}
+            {confirmRetry &&
+            confirmRetry.stepIndex === run.cursor &&
+            confirmRetry.raisedAt === (run.exception?.raisedAt ?? null) ? (
+              <div className="space-y-2 rounded border border-[var(--color-danger)] p-2">
+                <p className="text-xs font-medium text-[var(--color-danger)]">
+                  Retry anyway? This step may already have taken effect, and retrying could repeat
+                  it. Confirm in the target system first.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => {
+                      const confirmed = confirmRetry;
+                      setConfirmRetry(null);
+                      void post(`/api/runs/${run.id}/incident`, {
+                        action: "retry",
+                        acknowledgeDuplicateRisk: true,
+                        // What the human actually read. The route rejects the
+                        // acknowledgement if the run has since stopped
+                        // somewhere else.
+                        expectStepIndex: confirmed.stepIndex,
+                        ...(confirmed.raisedAt
+                          ? { expectIncidentRaisedAt: confirmed.raisedAt }
+                          : {}),
+                      });
+                    }}
+                  >
+                    Yes, retry — I checked
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => setConfirmRetry(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={run.exception?.retryUseful === false ? "ghost" : "primary"}
+                  disabled={busy}
+                  onClick={() => {
+                    if (run.exception?.retryMayDuplicate) {
+                      setConfirmRetry({
+                        stepIndex: run.cursor,
+                        raisedAt: run.exception.raisedAt ?? null,
+                      });
+                      return;
+                    }
+                    void post(`/api/runs/${run.id}/incident`, { action: "retry" });
+                  }}
+                >
+                  Retry step
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => post(`/api/runs/${run.id}/incident`, { action: "skip" })}
+                >
+                  Skip step
+                </Button>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}
