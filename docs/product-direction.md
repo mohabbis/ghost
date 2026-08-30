@@ -39,6 +39,17 @@ First money: **implementation** of one painful, measurable, reversible workflow
 (+ seats). Distribution also rides agents via **MCP / HTTP tools** (see
 `cloud/docs/AGENT_PLUGIN.md`).
 
+## Competitive position
+
+Not uncontested. `competitive-landscape.md` names one head-on competitor
+(**Skyvern** — AGPL, SOC 2 Type II, HIPAA, named customers in bookkeeping and
+healthcare admin) and records that the browser-infrastructure layer below Ghost
+has started shipping human-in-the-loop as a platform primitive. Ghost's surviving
+differentiator is narrow and specific: the gate is a **pure function over a typed
+step schema**, the audit chain is **tamper-evident** rather than merely written,
+and verification plus compensation are part of the pipeline. Read that document
+before making a positioning claim here.
+
 ## Non-goals
 
 - Not a chatbot or “AI coworker” that acts unsupervised
@@ -57,4 +68,5 @@ First money: **implementation** of one painful, measurable, reversible workflow
 ## Authoritative docs
 
 `cloud/README.md` · `cloud/docs/PHASE_1_PLAN.md` · `cloud/docs/CURSOR_HANDOFF.md` ·
-`cloud/docs/AGENT_PLUGIN.md` · `AGENTS.md` · this file · `business-model.md`
+`cloud/docs/AGENT_PLUGIN.md` · `AGENTS.md` · this file · `business-model.md` ·
+`competitive-landscape.md`
