@@ -32,6 +32,10 @@ those tiers are live. Working name may change.
 
 - **Trust runtime** — agents cannot approve sensitive steps; Ghost owns the
   gate, verify, and audit. Generic agents become clients, not competitors.
+  *Qualified:* browser-automation competitors now sell human-in-the-loop as an
+  enterprise feature, and the infrastructure layer ships it as a primitive. What
+  is defensible is the narrower claim — a deterministic, non-model gate over a
+  typed schema plus a tamper-evident chain. See `competitive-landscape.md`.
 - **Hybrid execution** — APIs → browser → desktop → vision. Works where clean
   integrations don't exist.
 - **Accumulated workflow IP** — each configured, approved workflow raises
